@@ -1,34 +1,86 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
+import posthog from "posthog-js";
 import { LuPencil, LuCheck } from "react-icons/lu";
 import { formatSmartNumber, formatMarketCap, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
-import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt, FaTrophy, FaDice, FaUsers, FaChartBar, FaCrown, FaCrosshairs, FaFire } from "react-icons/fa";
+import {
+  FaRunning,
+  FaGasPump,
+  FaCoins,
+  FaBan,
+  FaCopy,
+  FaExternalLinkAlt,
+  FaTrophy,
+  FaDice,
+  FaUsers,
+  FaChartBar,
+  FaCrown,
+  FaCrosshairs,
+  FaFire,
+} from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
-import { createLimitOrder, tradeBuy, tradeSellPercentage, getLimitOrderExecutionResult, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import {
+  createLimitOrder,
+  tradeBuy,
+  tradeSellPercentage,
+  getLimitOrderExecutionResult,
+  SOL_MINT_ADDRESS,
+  ApiError,
+} from "~/utils/api";
 import { getTradeActivityByUser } from "~/utils/functions";
 import toast, { type ToastOptions } from "react-hot-toast";
-import {
-  showCenteredErrorToast,
-} from "~/utils/toast";
+import { showCenteredErrorToast } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { showOrderToast, ORDER_TOAST_STYLE } from "~/utils/tradeToast";
 import { useUser } from "~/components/UserContext";
-import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
-import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from "~/utils/preTradeValidation";
-import { checkAtaExists, getCachedAtaExists, prefetchAtaCheck } from "~/utils/ataCheck";
+import {
+  executeSolanaMultiBuy,
+  formatSolanaTxSummary,
+  buildSolanaWalletAllocations,
+} from "~/utils/solanaWalletAllocation";
+import {
+  validateSolanaBuy,
+  validateSolanaSell,
+  showTradeValidationError,
+} from "~/utils/preTradeValidation";
+import {
+  checkAtaExists,
+  getCachedAtaExists,
+  prefetchAtaCheck,
+} from "~/utils/ataCheck";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
-import type { SolanaTokenVolume, FirstBuyer, FirstBuyersSummary } from "~/hooks/useSolanaTokenWebSocket";
-import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
+import type {
+  SolanaTokenVolume,
+  FirstBuyer,
+  FirstBuyersSummary,
+} from "~/hooks/useSolanaTokenWebSocket";
+import {
+  extractTokenImage,
+  getResolvedTokenImage,
+  resolveTokenImage,
+} from "~/utils/images";
 import { SiSolana } from "react-icons/si";
 
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
-import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
-import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
+import {
+  listenForTradeEvents,
+  transformToastToError,
+} from "~/utils/createSolanaToastHandler";
+import {
+  broadcastTradeCompleted,
+  notifyTradePending,
+} from "~/utils/tradeEvents";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { useSolPrice } from "../SolPriceContext";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
@@ -72,12 +124,17 @@ const tabBtn =
 /* helpers */
 const num = (v: any) => (typeof v === "number" ? v : 0);
 const allowDecimal = (v: string) => /^\d*([.]\d{0,9})?$/.test(v);
-const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, v));
 
 const LOW_LIQUIDITY_WARNING_THRESHOLD = 1_000; // USD
 const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
-const LIMIT_ORDER_TOLERANCE_BPS = Number(process.env.NEXT_PUBLIC_LIMIT_ORDER_TOLERANCE_BPS ?? "100");
-const TOKEN_SERVICE_URL = (process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || "").replace(/\/$/, "");
+const LIMIT_ORDER_TOLERANCE_BPS = Number(
+  process.env.NEXT_PUBLIC_LIMIT_ORDER_TOLERANCE_BPS ?? "100",
+);
+const TOKEN_SERVICE_URL = (
+  process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || ""
+).replace(/\/$/, "");
 const LIMIT_ORDER_STATUS_EVENT = "limit-order-update";
 
 /** Normalize a raw order entity from createLimitOrder response into the shape getUserLimitOrders returns */
@@ -93,7 +150,9 @@ function normalizeOrderForEvent(rawOrder: any) {
     solAmount: Number(rawOrder.solAmount) || 0,
     tokenAmount: Number(rawOrder.tokenAmount) || 0,
     status: "Active" as const,
-    createdAt: rawOrder.createdAt ? new Date(rawOrder.createdAt).toISOString() : new Date().toISOString(),
+    createdAt: rawOrder.createdAt
+      ? new Date(rawOrder.createdAt).toISOString()
+      : new Date().toISOString(),
     slippage: Number(rawOrder.slippage) || 0,
     priorityFee: Number(rawOrder.priorityFee) || 0,
     bribe: Number(rawOrder.bribe) || 0,
@@ -119,19 +178,26 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Fallback to fetch pair address from token service when not available locally
  * Uses GET /v1/get-pair/{mint} endpoint with Redis cache-through pattern
  */
-async function fetchPairAddressFromTokenService(mintAddress: string): Promise<string | null> {
+async function fetchPairAddressFromTokenService(
+  mintAddress: string,
+): Promise<string | null> {
   if (!TOKEN_SERVICE_URL || !mintAddress) return null;
 
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10_000);
-    const response = await fetch(`${TOKEN_SERVICE_URL}/v1/get-pair/${mintAddress}`, {
-      signal: controller.signal,
-    });
+    const response = await fetch(
+      `${TOKEN_SERVICE_URL}/v1/get-pair/${mintAddress}`,
+      {
+        signal: controller.signal,
+      },
+    );
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.warn(`⚠️ Token service get-pair responded ${response.status} for ${mintAddress}`);
+      console.warn(
+        `⚠️ Token service get-pair responded ${response.status} for ${mintAddress}`,
+      );
       return null;
     }
 
@@ -153,19 +219,19 @@ function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
     window === "5m"
       ? num(t[`total_${s}s_5m`])
       : window === "1h"
-      ? num(t[`total_${s}s_1h`]) || num(t[`total_${s}s_60m`])
-      : window === "6h"
-      ? num(t[`total_${s}s_6h`]) || num(t[`total_${s}s_360m`])
-      : num(t[`total_${s}s_24h`]);
+        ? num(t[`total_${s}s_1h`]) || num(t[`total_${s}s_60m`])
+        : window === "6h"
+          ? num(t[`total_${s}s_6h`]) || num(t[`total_${s}s_360m`])
+          : num(t[`total_${s}s_24h`]);
 
   const vol =
     window === "5m"
       ? num(t[`total_${s}_volume_5m`])
       : window === "1h"
-      ? num(t[`total_${s}_volume_1h`]) || num(t[`total_${s}_volume_60m`])
-      : window === "6h"
-      ? num(t[`total_${s}_volume_6h`]) || num(t[`total_${s}_volume_360m`])
-      : num(t[`total_${s}_volume_24h`]);
+        ? num(t[`total_${s}_volume_1h`]) || num(t[`total_${s}_volume_60m`])
+        : window === "6h"
+          ? num(t[`total_${s}_volume_6h`]) || num(t[`total_${s}_volume_360m`])
+          : num(t[`total_${s}_volume_24h`]);
 
   return { count, vol };
 }
@@ -213,34 +279,36 @@ const AddressDisplay: React.FC<{
   if (!address) return null;
 
   return (
-    <div className="flex items-center justify-between px-3 py-2 border-b border-[#2A2B33]">
+    <div className="flex items-center justify-between border-b border-[#2A2B33] px-3 py-2">
       <div className="flex items-center gap-2">
         <div className="text-[#9CA3AF]">{icon}</div>
         <InterstateTooltip label={tooltip}>
-          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide cursor-help">
+          <span className="cursor-help text-[10px] font-semibold tracking-wide text-[#9CA3AF] uppercase">
             {label}:
           </span>
         </InterstateTooltip>
-        <span className="text-[#E6E7EA] text-[11px] font-mono">
+        <span className="font-mono text-[11px] text-[#E6E7EA]">
           {truncateAddress(address)}
         </span>
       </div>
       <div className="flex items-center gap-1">
         <button
           onClick={handleCopy}
-          className="p-1 hover:bg-[#2A2B33] rounded transition-colors"
+          className="rounded p-1 transition-colors hover:bg-[#2A2B33]"
           title="Copy address"
         >
-          <FaCopy className={`w-3 h-3 ${copied ? 'text-[#70E0B0]' : 'text-[#9CA3AF]'}`} />
+          <FaCopy
+            className={`h-3 w-3 ${copied ? "text-[#70E0B0]" : "text-[#9CA3AF]"}`}
+          />
         </button>
         <a
           href={solscanUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="p-1 hover:bg-[#2A2B33] rounded transition-colors"
+          className="rounded p-1 transition-colors hover:bg-[#2A2B33]"
           title="View on Solscan"
         >
-          <FaExternalLinkAlt className="w-3 h-3 text-[#9CA3AF]" />
+          <FaExternalLinkAlt className="h-3 w-3 text-[#9CA3AF]" />
         </a>
       </div>
     </div>
@@ -248,24 +316,37 @@ const AddressDisplay: React.FC<{
 };
 
 // Token Info Dropdown Component
-const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null; firstBuyers?: FirstBuyer[]; firstBuyersSummary?: FirstBuyersSummary | null }> = ({ token, liveMarketCapUsd, firstBuyers, firstBuyersSummary }) => {
+const TokenInfoDropdown: React.FC<{
+  token: any;
+  liveMarketCapUsd?: number | null;
+  firstBuyers?: FirstBuyer[];
+  firstBuyersSummary?: FirstBuyersSummary | null;
+}> = ({ token, liveMarketCapUsd, firstBuyers, firstBuyersSummary }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   // Get token metrics (using Codex fields if available, fallback to token-analytics)
   // Parse string values to numbers (backend returns decimals as strings)
   const parsePercentage = (val: any): number => {
     if (val == null) return 0;
-    const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+    const num = typeof val === "string" ? parseFloat(val) : Number(val);
     return isNaN(num) ? 0 : num;
   };
-  
-  const sniperPercent = parsePercentage(token?.sniper_held_percentage ?? token?.sniper_holding_percentage);
-  const bundlePercent = parsePercentage(token?.bundler_held_percentage ?? token?.bundle_holding_percentage);
-  const insiderPercent = parsePercentage(token?.insider_held_percentage ?? token?.insider_holding_percentage);
-  const devPercent = parsePercentage(token?.dev_held_percentage ?? token?.dev_holding_percentage);
+
+  const sniperPercent = parsePercentage(
+    token?.sniper_held_percentage ?? token?.sniper_holding_percentage,
+  );
+  const bundlePercent = parsePercentage(
+    token?.bundler_held_percentage ?? token?.bundle_holding_percentage,
+  );
+  const insiderPercent = parsePercentage(
+    token?.insider_held_percentage ?? token?.insider_holding_percentage,
+  );
+  const devPercent = parsePercentage(
+    token?.dev_held_percentage ?? token?.dev_holding_percentage,
+  );
   const top10Percent = parsePercentage(token?.top10_holding_percentage);
   const lpBurned = token?.lp_burned ?? true;
-  
+
   // Get counts from Codex
   const sniperCount = token?.sniper_count ?? undefined;
   const bundlerCount = token?.bundler_count ?? undefined;
@@ -276,15 +357,17 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
       <div className="flex items-center justify-between px-3 py-2">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-2 py-1 -mx-2 -my-1 rounded hover:bg-[#2A2B33] transition-colors"
+          className="-mx-2 -my-1 flex items-center gap-2 rounded px-2 py-1 transition-colors hover:bg-[#2A2B33]"
         >
-          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Token Info</span>
-          <svg 
-            width="12" 
-            height="12" 
-            viewBox="0 0 12 12" 
-            fill="none" 
-            className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          <span className="text-[10px] font-semibold tracking-wide text-[#9CA3AF] uppercase">
+            Token Info
+          </span>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
           >
             <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
           </svg>
@@ -293,9 +376,16 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           onClick={() => {
             // Refresh action could go here
           }}
-          className="p-1 rounded hover:bg-[#1E1F26] transition-colors"
+          className="rounded p-1 transition-colors hover:bg-[#1E1F26]"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
             <path d="M21 3v5h-5" />
             <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
@@ -305,7 +395,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
       </div>
 
       {isOpen && (
-        <div className="px-3 pb-3 space-y-2" style={{ backgroundColor: AX.bg }}>
+        <div className="space-y-2 px-3 pb-3" style={{ backgroundColor: AX.bg }}>
           {/* Tax Percentage - Large Display */}
           {/* <div className="rounded-md p-2.5 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
             <div className="text-center">
@@ -322,52 +412,102 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Token Metrics Grid - First Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Top 10 Holders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div
+              className="h-[68px] rounded-md border p-2"
+              style={{
+                backgroundColor: "rgba(30, 31, 38, 0.3)",
+                borderColor: AX.border,
+              }}
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 <div className="flex items-center gap-1.5">
                   <BsPersonGear size={16} style={{ color: AX.aiGreen }} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                    {top10Percent > 0 ? `${top10Percent.toFixed(2)}%` : '0%'}
+                  <div
+                    className="text-[12px] font-bold"
+                    style={{ color: AX.aiGreen }}
+                  >
+                    {top10Percent > 0 ? `${top10Percent.toFixed(2)}%` : "0%"}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Top 10 H.</div>
+                <div
+                  className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                  style={{ color: AX.muted }}
+                >
+                  Top 10 H.
+                </div>
               </div>
             </div>
 
             {/* Dev Holdings - with hover popout */}
-            <div className="relative group h-[68px]">
-              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div className="group relative h-[68px]">
+              <div
+                className="h-full cursor-pointer rounded-md border p-2 transition-colors hover:border-[#3A3B43]"
+                style={{
+                  backgroundColor: "rgba(30, 31, 38, 0.3)",
+                  borderColor: AX.border,
+                }}
+              >
+                <div className="flex h-full flex-col items-center justify-center gap-1">
                   <div className="flex items-center gap-1.5">
                     <LuChefHat size={16} style={{ color: AX.aiGreen }} />
-                    <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                      {devPercent > 0 ? `${devPercent.toFixed(1)}%` : '0%'}
+                    <div
+                      className="text-[12px] font-bold"
+                      style={{ color: AX.aiGreen }}
+                    >
+                      {devPercent > 0 ? `${devPercent.toFixed(1)}%` : "0%"}
                     </div>
                   </div>
-                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
+                  <div
+                    className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                    style={{ color: AX.muted }}
+                  >
+                    Dev H.
+                  </div>
                 </div>
               </div>
               {/* Dev Popout */}
-              <div className="absolute left-0 top-full mt-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none group-hover:pointer-events-auto">
-                <div className="rounded-lg border shadow-xl min-w-[220px]" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
+              <div className="pointer-events-none invisible absolute top-full left-0 z-50 mt-1 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+                <div
+                  className="min-w-[220px] rounded-lg border shadow-xl"
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                  }}
+                >
                   {/* Header */}
-                  <div className="px-3 py-2 border-b" style={{ borderColor: AX.border }}>
+                  <div
+                    className="border-b px-3 py-2"
+                    style={{ borderColor: AX.border }}
+                  >
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-semibold" style={{ color: AX.text }}>DEV Holds</span>
-                      <span className="text-[11px] font-bold" style={{ color: AX.aiGreen }}>
-                        {devPercent > 0 ? `${devPercent.toFixed(2)}%` : '0%'}
+                      <span
+                        className="text-[11px] font-semibold"
+                        style={{ color: AX.text }}
+                      >
+                        DEV Holds
+                      </span>
+                      <span
+                        className="text-[11px] font-bold"
+                        style={{ color: AX.aiGreen }}
+                      >
+                        {devPercent > 0 ? `${devPercent.toFixed(2)}%` : "0%"}
                       </span>
                     </div>
                   </div>
                   {/* Content */}
-                  <div className="px-3 py-2 space-y-1.5">
+                  <div className="space-y-1.5 px-3 py-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px]" style={{ color: AX.muted }}>Dev Wallet</span>
+                      <span className="text-[10px]" style={{ color: AX.muted }}>
+                        Dev Wallet
+                      </span>
                       <div className="flex items-center gap-1">
-                        <span className="text-[10px] font-mono" style={{ color: AX.text }}>
+                        <span
+                          className="font-mono text-[10px]"
+                          style={{ color: AX.text }}
+                        >
                           {token?.dev_wallet
                             ? `${token.dev_wallet.slice(0, 4)}...${token.dev_wallet.slice(-4)}`
-                            : '--'}
+                            : "--"}
                         </span>
                         {token?.dev_wallet && (
                           <a
@@ -376,35 +516,60 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
                             rel="noopener noreferrer"
                             className="hover:opacity-70"
                           >
-                            <FaExternalLinkAlt size={8} style={{ color: AX.muted }} />
+                            <FaExternalLinkAlt
+                              size={8}
+                              style={{ color: AX.muted }}
+                            />
                           </a>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px]" style={{ color: AX.muted }}>Bought</span>
-                      <span className="text-[10px]" style={{ color: AX.aiGreen }}>
-                        {token?.dev_bought_usd ? `$${formatSmartNumber(token.dev_bought_usd)}` : '$0'} / {token?.dev_buy_count || 0}TXs
+                      <span className="text-[10px]" style={{ color: AX.muted }}>
+                        Bought
+                      </span>
+                      <span
+                        className="text-[10px]"
+                        style={{ color: AX.aiGreen }}
+                      >
+                        {token?.dev_bought_usd
+                          ? `$${formatSmartNumber(token.dev_bought_usd)}`
+                          : "$0"}{" "}
+                        / {token?.dev_buy_count || 0}TXs
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px]" style={{ color: AX.muted }}>Sold</span>
+                      <span className="text-[10px]" style={{ color: AX.muted }}>
+                        Sold
+                      </span>
                       <span className="text-[10px]" style={{ color: AX.sell }}>
-                        {token?.dev_sold_usd ? `$${formatSmartNumber(token.dev_sold_usd)}` : '$0'} / {token?.dev_sell_count || 0}TXs
+                        {token?.dev_sold_usd
+                          ? `$${formatSmartNumber(token.dev_sold_usd)}`
+                          : "$0"}{" "}
+                        / {token?.dev_sell_count || 0}TXs
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px]" style={{ color: AX.muted }}>Balance</span>
+                      <span className="text-[10px]" style={{ color: AX.muted }}>
+                        Balance
+                      </span>
                       <span className="text-[10px]" style={{ color: AX.text }}>
-                        {token?.dev_balance_usd ? `$${formatSmartNumber(token.dev_balance_usd)}` : '$0'}
+                        {token?.dev_balance_usd
+                          ? `$${formatSmartNumber(token.dev_balance_usd)}`
+                          : "$0"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px]" style={{ color: AX.muted }}>Funding</span>
+                      <span className="text-[10px]" style={{ color: AX.muted }}>
+                        Funding
+                      </span>
                       <div className="flex items-center gap-1">
                         {token?.dev_funding_source ? (
                           <>
-                            <span className="text-[10px] font-mono" style={{ color: AX.text }}>
+                            <span
+                              className="font-mono text-[10px]"
+                              style={{ color: AX.text }}
+                            >
                               {`${token.dev_funding_source.slice(0, 4)}...${token.dev_funding_source.slice(-4)}`}
                             </span>
                             <a
@@ -413,34 +578,50 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
                               rel="noopener noreferrer"
                               className="hover:opacity-70"
                             >
-                              <FaExternalLinkAlt size={8} style={{ color: AX.muted }} />
+                              <FaExternalLinkAlt
+                                size={8}
+                                style={{ color: AX.muted }}
+                              />
                             </a>
                           </>
                         ) : (
-                          <span className="text-[10px]" style={{ color: AX.muted }}>--</span>
+                          <span
+                            className="text-[10px]"
+                            style={{ color: AX.muted }}
+                          >
+                            --
+                          </span>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px]" style={{ color: AX.muted }}>Transfer In</span>
+                      <span className="text-[10px]" style={{ color: AX.muted }}>
+                        Transfer In
+                      </span>
                       <span className="text-[10px]" style={{ color: AX.text }}>
-                        {token?.dev_transfer_in_sol ? `${formatSmartNumber(token.dev_transfer_in_sol)} SOL` : '--'}
+                        {token?.dev_transfer_in_sol
+                          ? `${formatSmartNumber(token.dev_transfer_in_sol)} SOL`
+                          : "--"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px]" style={{ color: AX.muted }}>Time</span>
+                      <span className="text-[10px]" style={{ color: AX.muted }}>
+                        Time
+                      </span>
                       <span className="text-[10px]" style={{ color: AX.text }}>
                         {token?.dev_first_activity
-                          ? new Date(token.dev_first_activity).toLocaleString('en-US', {
-                              year: 'numeric',
-                              month: '2-digit',
-                              day: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit',
-                              hour12: false
-                            }).replace(',', '')
-                          : '--'}
+                          ? new Date(token.dev_first_activity)
+                              .toLocaleString("en-US", {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                                hour12: false,
+                              })
+                              .replace(",", "")
+                          : "--"}
                       </span>
                     </div>
                   </div>
@@ -449,31 +630,63 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* Sniper Holdings - with first buyers hover popout */}
-            <div className="relative group/snipers h-[68px]">
-              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-                <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div className="group/snipers relative h-[68px]">
+              <div
+                className="h-full cursor-pointer rounded-md border p-2 transition-colors hover:border-[#3A3B43]"
+                style={{
+                  backgroundColor: "rgba(30, 31, 38, 0.3)",
+                  borderColor: AX.border,
+                }}
+              >
+                <div className="flex h-full flex-col items-center justify-center gap-1">
                   <div className="flex items-center gap-1.5">
                     <FaCrosshairs size={16} style={{ color: AX.aiGreen }} />
-                    <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                      {sniperPercent > 0 ? `${sniperPercent.toFixed(1)}%` : '0%'}
+                    <div
+                      className="text-[12px] font-bold"
+                      style={{ color: AX.aiGreen }}
+                    >
+                      {sniperPercent > 0
+                        ? `${sniperPercent.toFixed(1)}%`
+                        : "0%"}
                     </div>
                   </div>
-                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                  <div
+                    className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                    style={{ color: AX.muted }}
+                  >
                     Snipers H.
                     {sniperCount !== undefined && (
-                      <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({sniperCount})</div>
+                      <div
+                        className="mt-0.5 text-[9px]"
+                        style={{ color: AX.muted }}
+                      >
+                        ({sniperCount})
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
               {/* First Buyers Popout */}
               {firstBuyersSummary && firstBuyers && firstBuyers.length > 0 && (
-                <div className="absolute right-0 top-full mt-1 z-50 opacity-0 invisible group-hover/snipers:opacity-100 group-hover/snipers:visible transition-all duration-200 pointer-events-none group-hover/snipers:pointer-events-auto">
-                  <div className="rounded-lg border shadow-xl min-w-[260px] max-w-[300px]" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
+                <div className="pointer-events-none invisible absolute top-full right-0 z-50 mt-1 opacity-0 transition-all duration-200 group-hover/snipers:pointer-events-auto group-hover/snipers:visible group-hover/snipers:opacity-100">
+                  <div
+                    className="max-w-[300px] min-w-[260px] rounded-lg border shadow-xl"
+                    style={{
+                      backgroundColor: AX.surface,
+                      borderColor: AX.border,
+                    }}
+                  >
                     {/* Header */}
-                    <div className="px-3 py-2 border-b" style={{ borderColor: AX.border }}>
-                      <div className="text-[11px] font-semibold" style={{ color: AX.text }}>
-                        {token?.symbol || token?.name || 'Token'} First {firstBuyersSummary.total} buyers
+                    <div
+                      className="border-b px-3 py-2"
+                      style={{ borderColor: AX.border }}
+                    >
+                      <div
+                        className="text-[11px] font-semibold"
+                        style={{ color: AX.text }}
+                      >
+                        {token?.symbol || token?.name || "Token"} First{" "}
+                        {firstBuyersSummary.total} buyers
                       </div>
                     </div>
                     {/* Dots grid */}
@@ -481,35 +694,42 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
                       <div className="flex flex-wrap gap-[3px]">
                         {firstBuyers.map((buyer, i) => {
                           const dotColor =
-                            buyer.status === 'hold' ? '#14b080' :
-                            buyer.status === 'buy_more' ? '#3b82f6' :
-                            '#f25561';
-                          const isSellAll = buyer.status === 'sell_all';
+                            buyer.status === "hold"
+                              ? "#14b080"
+                              : buyer.status === "buy_more"
+                                ? "#3b82f6"
+                                : "#f25561";
+                          const isSellAll = buyer.status === "sell_all";
                           return (
                             <div
                               key={buyer.wallet || i}
                               className="relative"
                               style={{ width: 14, height: 14 }}
-                              title={`${buyer.wallet.slice(0, 4)}...${buyer.wallet.slice(-4)} · ${buyer.status.replace('_', ' ')}${buyer.is_sniper ? ' · sniper' : ''}`}
+                              title={`${buyer.wallet.slice(0, 4)}...${buyer.wallet.slice(-4)} · ${buyer.status.replace("_", " ")}${buyer.is_sniper ? " · sniper" : ""}`}
                             >
                               <div
                                 style={{
                                   width: 12,
                                   height: 12,
-                                  borderRadius: '50%',
-                                  backgroundColor: isSellAll ? 'transparent' : dotColor,
-                                  border: isSellAll ? `1.5px solid ${dotColor}` : 'none',
+                                  borderRadius: "50%",
+                                  backgroundColor: isSellAll
+                                    ? "transparent"
+                                    : dotColor,
+                                  border: isSellAll
+                                    ? `1.5px solid ${dotColor}`
+                                    : "none",
                                 }}
                               />
                               {buyer.is_sniper && (
                                 <FaCrosshairs
                                   size={7}
                                   style={{
-                                    position: 'absolute',
+                                    position: "absolute",
                                     top: -1,
                                     right: -2,
-                                    color: '#fff',
-                                    filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.8))',
+                                    color: "#fff",
+                                    filter:
+                                      "drop-shadow(0 0 1px rgba(0,0,0,0.8))",
                                   }}
                                 />
                               )}
@@ -519,51 +739,143 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
                       </div>
                     </div>
                     {/* Legend */}
-                    <div className="px-3 py-1.5 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 px-3 py-1.5">
                       <div className="flex items-center gap-1.5">
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#14b080' }} />
-                        <span className="text-[10px]" style={{ color: AX.muted }}>Hold: {firstBuyersSummary.hold}</span>
+                        <div
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: "50%",
+                            backgroundColor: "#14b080",
+                          }}
+                        />
+                        <span
+                          className="text-[10px]"
+                          style={{ color: AX.muted }}
+                        >
+                          Hold: {firstBuyersSummary.hold}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#3b82f6' }} />
-                        <span className="text-[10px]" style={{ color: AX.muted }}>Buy More: {firstBuyersSummary.buy_more}</span>
+                        <div
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: "50%",
+                            backgroundColor: "#3b82f6",
+                          }}
+                        />
+                        <span
+                          className="text-[10px]"
+                          style={{ color: AX.muted }}
+                        >
+                          Buy More: {firstBuyersSummary.buy_more}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f25561' }} />
-                        <span className="text-[10px]" style={{ color: AX.muted }}>Sell Partial: {firstBuyersSummary.sell_partial}</span>
+                        <div
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: "50%",
+                            backgroundColor: "#f25561",
+                          }}
+                        />
+                        <span
+                          className="text-[10px]"
+                          style={{ color: AX.muted }}
+                        >
+                          Sell Partial: {firstBuyersSummary.sell_partial}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', border: '1.5px solid #f25561', backgroundColor: 'transparent' }} />
-                        <span className="text-[10px]" style={{ color: AX.muted }}>Sell All: {firstBuyersSummary.sell_all}</span>
+                        <div
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: "50%",
+                            border: "1.5px solid #f25561",
+                            backgroundColor: "transparent",
+                          }}
+                        />
+                        <span
+                          className="text-[10px]"
+                          style={{ color: AX.muted }}
+                        >
+                          Sell All: {firstBuyersSummary.sell_all}
+                        </span>
                       </div>
                     </div>
                     {/* Stats */}
-                    <div className="px-3 py-2 border-t space-y-1" style={{ borderColor: AX.border }}>
+                    <div
+                      className="space-y-1 border-t px-3 py-2"
+                      style={{ borderColor: AX.border }}
+                    >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px]" style={{ color: AX.muted }}>Snipers Hold</span>
-                        <span className="text-[10px] font-semibold" style={{ color: AX.text }}>
-                          {firstBuyersSummary.snipers_hold_pct != null ? `${firstBuyersSummary.snipers_hold_pct.toFixed(2)}%` : '0%'}
+                        <span
+                          className="text-[10px]"
+                          style={{ color: AX.muted }}
+                        >
+                          Snipers Hold
+                        </span>
+                        <span
+                          className="text-[10px] font-semibold"
+                          style={{ color: AX.text }}
+                        >
+                          {firstBuyersSummary.snipers_hold_pct != null
+                            ? `${firstBuyersSummary.snipers_hold_pct.toFixed(2)}%`
+                            : "0%"}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px]" style={{ color: AX.muted }}>Current Total Holdings</span>
-                        <span className="text-[10px] font-semibold" style={{ color: AX.text }}>
-                          {firstBuyersSummary.current_holdings_pct != null ? `${firstBuyersSummary.current_holdings_pct.toFixed(2)}%` : '0%'}
+                        <span
+                          className="text-[10px]"
+                          style={{ color: AX.muted }}
+                        >
+                          Current Total Holdings
+                        </span>
+                        <span
+                          className="text-[10px] font-semibold"
+                          style={{ color: AX.text }}
+                        >
+                          {firstBuyersSummary.current_holdings_pct != null
+                            ? `${firstBuyersSummary.current_holdings_pct.toFixed(2)}%`
+                            : "0%"}
                         </span>
                       </div>
                       {firstBuyersSummary.top10_holders_pct != null && (
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px]" style={{ color: AX.muted }}>Top 10 holders</span>
-                          <span className="text-[10px] font-semibold" style={{ color: AX.text }}>
+                          <span
+                            className="text-[10px]"
+                            style={{ color: AX.muted }}
+                          >
+                            Top 10 holders
+                          </span>
+                          <span
+                            className="text-[10px] font-semibold"
+                            style={{ color: AX.text }}
+                          >
                             {firstBuyersSummary.top10_holders_pct.toFixed(2)}%
                           </span>
                         </div>
                       )}
                     </div>
                     {/* Interstate branding */}
-                    <div className="flex items-center justify-center gap-1.5 px-3 py-2 border-t" style={{ borderColor: AX.border }}>
-                      <img src="/interstate/logo.png" alt="Interstate" className="h-3.5 w-3.5 object-contain" />
-                      <span className="text-[10px] font-semibold !font-orbitron" style={{ color: AX.muted }}>interstate</span>
+                    <div
+                      className="flex items-center justify-center gap-1.5 border-t px-3 py-2"
+                      style={{ borderColor: AX.border }}
+                    >
+                      <img
+                        src="/interstate/logo.png"
+                        alt="Interstate"
+                        className="h-3.5 w-3.5 object-contain"
+                      />
+                      <span
+                        className="!font-orbitron text-[10px] font-semibold"
+                        style={{ color: AX.muted }}
+                      >
+                        interstate
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -574,51 +886,101 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Token Metrics Grid - Second Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Insider Holdings */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div
+              className="h-[68px] rounded-md border p-2"
+              style={{
+                backgroundColor: "rgba(30, 31, 38, 0.3)",
+                borderColor: AX.border,
+              }}
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 <div className="flex items-center gap-1.5">
                   <RiGhostLine size={16} style={{ color: AX.aiGreen }} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                    {insiderPercent > 0 ? `${insiderPercent.toFixed(1)}%` : '0%'}
+                  <div
+                    className="text-[12px] font-bold"
+                    style={{ color: AX.aiGreen }}
+                  >
+                    {insiderPercent > 0
+                      ? `${insiderPercent.toFixed(1)}%`
+                      : "0%"}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                <div
+                  className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                  style={{ color: AX.muted }}
+                >
                   Insiders
                   {insiderCount !== undefined && (
-                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({insiderCount})</div>
+                    <div
+                      className="mt-0.5 text-[9px]"
+                      style={{ color: AX.muted }}
+                    >
+                      ({insiderCount})
+                    </div>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Bundle Holdings */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div
+              className="h-[68px] rounded-md border p-2"
+              style={{
+                backgroundColor: "rgba(30, 31, 38, 0.3)",
+                borderColor: AX.border,
+              }}
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 <div className="flex items-center gap-1.5">
                   <FaDice size={16} style={{ color: AX.aiGreen }} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                    {bundlePercent > 0 ? `${bundlePercent.toFixed(2)}%` : '0%'}
+                  <div
+                    className="text-[12px] font-bold"
+                    style={{ color: AX.aiGreen }}
+                  >
+                    {bundlePercent > 0 ? `${bundlePercent.toFixed(2)}%` : "0%"}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                <div
+                  className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                  style={{ color: AX.muted }}
+                >
                   Bundlers
                   {bundlerCount !== undefined && (
-                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({bundlerCount})</div>
+                    <div
+                      className="mt-0.5 text-[9px]"
+                      style={{ color: AX.muted }}
+                    >
+                      ({bundlerCount})
+                    </div>
                   )}
                 </div>
               </div>
             </div>
 
             {/* LP Burned */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div
+              className="h-[68px] rounded-md border p-2"
+              style={{
+                backgroundColor: "rgba(30, 31, 38, 0.3)",
+                borderColor: AX.border,
+              }}
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 <div className="flex items-center gap-1.5">
                   <FaFire size={16} style={{ color: AX.aiGreen }} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                    {lpBurned ? '100%' : '0%'}
+                  <div
+                    className="text-[12px] font-bold"
+                    style={{ color: AX.aiGreen }}
+                  >
+                    {lpBurned ? "100%" : "0%"}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>LP Burned</div>
+                <div
+                  className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                  style={{ color: AX.muted }}
+                >
+                  LP Burned
+                </div>
               </div>
             </div>
           </div>
@@ -629,48 +991,90 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Additional Metrics - Third Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Holders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div
+              className="h-[68px] rounded-md border p-2"
+              style={{
+                backgroundColor: "rgba(30, 31, 38, 0.3)",
+                borderColor: AX.border,
+              }}
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 <div className="flex items-center gap-1.5">
                   <FaUsers className="text-white" size={16} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                  <div
+                    className="text-[12px] font-bold"
+                    style={{ color: AX.muted }}
+                  >
                     {token?.total_holders || 0}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Holders</div>
+                <div
+                  className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                  style={{ color: AX.muted }}
+                >
+                  Holders
+                </div>
               </div>
             </div>
 
             {/* Pro Traders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div
+              className="h-[68px] rounded-md border p-2"
+              style={{
+                backgroundColor: "rgba(30, 31, 38, 0.3)",
+                borderColor: AX.border,
+              }}
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 <div className="flex items-center gap-1.5">
                   <BiCandles className="text-white" size={16} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                  <div
+                    className="text-[12px] font-bold"
+                    style={{ color: AX.muted }}
+                  >
                     {token?.pro_traders || 0}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Pro Traders</div>
+                <div
+                  className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                  style={{ color: AX.muted }}
+                >
+                  Pro Traders
+                </div>
               </div>
             </div>
 
             {/* Dex Paid */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
-              <div className="flex flex-col items-center justify-center gap-1 h-full">
+            <div
+              className="h-[68px] rounded-md border p-2"
+              style={{
+                backgroundColor: "rgba(30, 31, 38, 0.3)",
+                borderColor: AX.border,
+              }}
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 <div className="flex items-center gap-1.5">
-                  <img 
-                    src="https://i.pinimg.com/736x/e6/2d/e6/e62de698746dfcb09d2d64f85371eed1.jpg" 
-                    alt="Dex" 
-                    style={{ 
-                      width: '16px', 
-                      height: '16px'
+                  <img
+                    src="https://i.pinimg.com/736x/e6/2d/e6/e62de698746dfcb09d2d64f85371eed1.jpg"
+                    alt="Dex"
+                    style={{
+                      width: "16px",
+                      height: "16px",
                     }}
                   />
-                  <div className="text-[12px] font-bold" style={{ color: token?.dex_paid ? AX.aiGreen : AX.red }}>
-                    {token?.dex_paid ? 'Paid' : 'Unpaid'}
+                  <div
+                    className="text-[12px] font-bold"
+                    style={{ color: token?.dex_paid ? AX.aiGreen : AX.red }}
+                  >
+                    {token?.dex_paid ? "Paid" : "Unpaid"}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dex Paid</div>
+                <div
+                  className="text-center text-[10px] leading-tight tracking-wide uppercase"
+                  style={{ color: AX.muted }}
+                >
+                  Dex Paid
+                </div>
               </div>
             </div>
           </div>
@@ -704,43 +1108,47 @@ const formatCompactNumber = (n: number | string): string => {
 /* ── Toast helpers (showOrderToast + ORDER_TOAST_STYLE imported from ~/utils/tradeToast) ── */
 
 // Pool Info Section Component
-const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; liveLiquidityUsd?: number | null }> = ({ token, liveMarketCapUsd, liveLiquidityUsd }) => {
+const PoolInfoSection: React.FC<{
+  token: any;
+  liveMarketCapUsd?: number | null;
+  liveLiquidityUsd?: number | null;
+}> = ({ token, liveMarketCapUsd, liveLiquidityUsd }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard');
+    toast.success("Copied to clipboard");
   };
 
   const formatDate = (dateStr: string | undefined) => {
-    if (!dateStr) return '--';
+    if (!dateStr) return "--";
     const date = new Date(dateStr);
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
     return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
   };
 
   const truncateAddress = (addr: string | undefined, start = 4, end = 4) => {
-    if (!addr) return '--';
+    if (!addr) return "--";
     return `${addr.slice(0, start)}...${addr.slice(-end)}`;
   };
 
   // Get token name for header - prefer symbol over name for meme tokens
   // Symbol is typically the recognizable ticker (e.g., "stickman") while name might be a description
-  const tokenName = token?.symbol || token?.name || 'Token';
+  const tokenName = token?.symbol || token?.name || "Token";
 
   return (
     <div className="border-t border-[#2A2B33]">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#1E1F26] transition-colors"
+        className="flex w-full items-center justify-between px-3 py-2 transition-colors hover:bg-[#1E1F26]"
       >
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
+          <span className="text-[10px] font-semibold tracking-wide text-[#9CA3AF] uppercase">
             {tokenName} Pool Info
           </span>
         </div>
@@ -749,7 +1157,7 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
           height="12"
           viewBox="0 0 12 12"
           fill="none"
-          className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
           style={{ color: AX.muted }}
         >
           <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
@@ -757,62 +1165,92 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
       </button>
 
       {isOpen && (
-        <div style={{ backgroundColor: '#111214' }}>
+        <div style={{ backgroundColor: "#111214" }}>
           {/* Liquidity Section */}
-          <div className="px-3 py-2.5 space-y-2">
+          <div className="space-y-2 px-3 py-2.5">
             {/* Total Liquidity */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total liq</span>
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                Total liq
+              </span>
               <div className="flex items-center gap-1">
-                <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                  ${formatSmartNumber(liveLiquidityUsd || token?.liquidity_usd || token?.total_liquidity_usd || 0)}
+                <span className="text-[11px] font-semibold text-[#E6E7EA]">
+                  $
+                  {formatSmartNumber(
+                    liveLiquidityUsd ||
+                      token?.liquidity_usd ||
+                      token?.total_liquidity_usd ||
+                      0,
+                  )}
                 </span>
                 <span className="text-[10px] text-[#9CA3AF]">
-                  ({formatSmartNumber((liveLiquidityUsd || token?.liquidity_usd || token?.total_liquidity_usd || 0) / 200)} SOL)
+                  (
+                  {formatSmartNumber(
+                    (liveLiquidityUsd ||
+                      token?.liquidity_usd ||
+                      token?.total_liquidity_usd ||
+                      0) / 200,
+                  )}{" "}
+                  SOL)
                 </span>
               </div>
             </div>
 
             {/* Pair Info */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                Pair
+              </span>
             </div>
 
             {/* Token Row */}
-            <div className="pl-3 space-y-1.5">
-              <div className="text-[11px] font-semibold text-[#E6E7EA]">{token?.symbol || 'TOKEN'}</div>
+            <div className="space-y-1.5 pl-3">
+              <div className="text-[11px] font-semibold text-[#E6E7EA]">
+                {token?.symbol || "TOKEN"}
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#9CA3AF]">Liq/Initial</span>
                 <div className="text-right">
-                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  <span className="text-[11px] font-semibold text-[#E6E7EA]">
                     {formatCompactNumber(token?.total_supply || 0)}
                   </span>
-                  <span className="text-[10px] text-[#9CA3AF] ml-1">
+                  <span className="ml-1 text-[10px] text-[#9CA3AF]">
                     (100%)
                   </span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#9CA3AF]">Value</span>
-                <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                  ${formatSmartNumber(liveMarketCapUsd || token?.market_cap_usd || 0)}
+                <span className="text-[11px] font-semibold text-[#E6E7EA]">
+                  $
+                  {formatSmartNumber(
+                    liveMarketCapUsd || token?.market_cap_usd || 0,
+                  )}
                 </span>
               </div>
             </div>
 
             {/* SOL Row */}
-            <div className="pl-3 space-y-1.5">
-              <div className="text-[11px] font-semibold text-[#E6E7EA]">SOL</div>
+            <div className="space-y-1.5 pl-3">
+              <div className="text-[11px] font-semibold text-[#E6E7EA]">
+                SOL
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#9CA3AF]">Liq</span>
-                <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                  {formatSmartNumber((liveLiquidityUsd || token?.liquidity_usd || 0) / 200)} SOL
+                <span className="text-[11px] font-semibold text-[#E6E7EA]">
+                  {formatSmartNumber(
+                    (liveLiquidityUsd || token?.liquidity_usd || 0) / 200,
+                  )}{" "}
+                  SOL
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-[#9CA3AF]">Value</span>
-                <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                  ${formatSmartNumber(liveLiquidityUsd || token?.liquidity_usd || 0)}
+                <span className="text-[11px] font-semibold text-[#E6E7EA]">
+                  $
+                  {formatSmartNumber(
+                    liveLiquidityUsd || token?.liquidity_usd || 0,
+                  )}
                 </span>
               </div>
             </div>
@@ -822,12 +1260,14 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
           <div className="border-t border-[#2A2B33]"></div>
 
           {/* Token Details Section */}
-          <div className="px-3 py-2.5 space-y-2">
+          <div className="space-y-2 px-3 py-2.5">
             {/* DEV */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">DEV</span>
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                DEV
+              </span>
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-[#E6E7EA] font-mono">
+                <span className="font-mono text-[11px] text-[#E6E7EA]">
                   {truncateAddress(token?.dev_wallet || token?.creator_address)}
                 </span>
                 {token?.dev_sol_balance !== undefined && (
@@ -838,20 +1278,24 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
                 {(token?.dev_wallet || token?.creator_address) && (
                   <>
                     <button
-                      onClick={() => copyToClipboard(token?.dev_wallet || token?.creator_address)}
-                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      onClick={() =>
+                        copyToClipboard(
+                          token?.dev_wallet || token?.creator_address,
+                        )
+                      }
+                      className="rounded p-0.5 transition-colors hover:bg-[#2A2B33]"
                       title="Copy dev address"
                     >
-                      <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                      <FaCopy className="h-2.5 w-2.5 text-[#9CA3AF]" />
                     </button>
                     <a
                       href={`https://solscan.io/account/${token?.dev_wallet || token?.creator_address}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      className="rounded p-0.5 transition-colors hover:bg-[#2A2B33]"
                       title="View on Solscan"
                     >
-                      <FaExternalLinkAlt className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                      <FaExternalLinkAlt className="h-2.5 w-2.5 text-[#9CA3AF]" />
                     </a>
                   </>
                 )}
@@ -860,16 +1304,18 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
 
             {/* Funding */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Funding</span>
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                Funding
+              </span>
               <div className="flex items-center gap-1.5">
                 {token?.dev_funding_source ? (
                   <>
-                    <span className="text-[11px] text-[#E6E7EA] font-mono">
+                    <span className="font-mono text-[11px] text-[#E6E7EA]">
                       {truncateAddress(token.dev_funding_source)}
                     </span>
                     {token?.dev_transfer_in_sol && (
                       <>
-                        <SiSolana className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                        <SiSolana className="h-2.5 w-2.5 text-[#9CA3AF]" />
                         <span className="text-[10px] text-[#E6E7EA]">
                           {formatSmartNumber(token.dev_transfer_in_sol)}
                         </span>
@@ -877,9 +1323,9 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
                     )}
                     <button
                       onClick={() => copyToClipboard(token.dev_funding_source)}
-                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      className="rounded p-0.5 transition-colors hover:bg-[#2A2B33]"
                     >
-                      <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                      <FaCopy className="h-2.5 w-2.5 text-[#9CA3AF]" />
                     </button>
                   </>
                 ) : (
@@ -890,16 +1336,23 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
 
             {/* Market cap */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Market cap</span>
-              <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                ${formatSmartNumber(liveMarketCapUsd || token?.market_cap_usd || 0)}
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                Market cap
+              </span>
+              <span className="text-[11px] font-semibold text-[#E6E7EA]">
+                $
+                {formatSmartNumber(
+                  liveMarketCapUsd || token?.market_cap_usd || 0,
+                )}
               </span>
             </div>
 
             {/* Holders */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holders</span>
-              <span className="text-[11px] text-[#E6E7EA] font-semibold">
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                Holders
+              </span>
+              <span className="text-[11px] font-semibold text-[#E6E7EA]">
                 {token?.total_holders || token?.unique_traders || 0}
               </span>
             </div>
@@ -907,8 +1360,10 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
             {/* Total supply */}
             {token?.total_supply && (
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total supply</span>
-                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                  Total supply
+                </span>
+                <span className="text-[11px] font-semibold text-[#E6E7EA]">
                   {formatCompactNumber(token.total_supply)}
                 </span>
               </div>
@@ -916,17 +1371,23 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
 
             {/* Pair Address */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                Pair
+              </span>
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-[#E6E7EA] font-mono">
+                <span className="font-mono text-[11px] text-[#E6E7EA]">
                   {truncateAddress(token?.pair_address || token?.pool_address)}
                 </span>
                 {(token?.pair_address || token?.pool_address) && (
                   <button
-                    onClick={() => copyToClipboard(token?.pair_address || token?.pool_address)}
-                    className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                    onClick={() =>
+                      copyToClipboard(
+                        token?.pair_address || token?.pool_address,
+                      )
+                    }
+                    className="rounded p-0.5 transition-colors hover:bg-[#2A2B33]"
                   >
-                    <FaCopy className="w-2.5 h-2.5 text-[#9CA3AF]" />
+                    <FaCopy className="h-2.5 w-2.5 text-[#9CA3AF]" />
                   </button>
                 )}
               </div>
@@ -934,7 +1395,9 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
 
             {/* Token created */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Token created</span>
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                Token created
+              </span>
               <span className="text-[11px] text-[#E6E7EA]">
                 {formatDate(token?.created_at || token?.token_created_at)}
               </span>
@@ -942,7 +1405,9 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
 
             {/* Pool created */}
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pool created</span>
+              <span className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+                Pool created
+              </span>
               <span className="text-[11px] text-[#E6E7EA]">
                 {formatDate(token?.pool_created_at || token?.created_at)}
               </span>
@@ -956,22 +1421,22 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
 
 // Meteora Migration Logo Component
 const MeteoraMigrationLogo: React.FC = () => (
-  <div className="flex items-center justify-center gap-1 mb-4">
+  <div className="mb-4 flex items-center justify-center gap-1">
     {/* Red Meteora Logo (left) */}
-    <div 
-      className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center relative" 
-      style={{ 
-        border: '0.5px solid #ff4662',
-        backgroundColor: 'transparent'
+    <div
+      className="relative flex h-6 w-6 items-center justify-center overflow-hidden rounded-full"
+      style={{
+        border: "0.5px solid #ff4662",
+        backgroundColor: "transparent",
       }}
     >
-      <img 
-        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
-        alt="Meteora" 
-        className="w-full h-full object-cover"
+      <img
+        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
+        alt="Meteora"
+        className="h-full w-full object-cover"
       />
     </div>
-    
+
     {/* 3 Green Chevron Arrows */}
     {[0, 1, 2].map((i) => (
       <svg
@@ -983,7 +1448,7 @@ const MeteoraMigrationLogo: React.FC = () => (
         className="animate-pulse"
         style={{
           animationDelay: `${i * 0.2}s`,
-          animationDuration: '1s'
+          animationDuration: "1s",
         }}
       >
         <path
@@ -995,20 +1460,22 @@ const MeteoraMigrationLogo: React.FC = () => (
         />
       </svg>
     ))}
-    
+
     {/* Yellow Meteora Logo (right) */}
-    <div 
-      className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center relative" 
-      style={{ 
-        border: '0.5px solid #fbbf24',
-        backgroundColor: 'transparent'
+    <div
+      className="relative flex h-6 w-6 items-center justify-center overflow-hidden rounded-full"
+      style={{
+        border: "0.5px solid #fbbf24",
+        backgroundColor: "transparent",
       }}
     >
-      <img 
-        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
-        alt="Meteora" 
-        className="w-full h-full object-cover"
-        style={{ filter: 'sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)' }}
+      <img
+        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
+        alt="Meteora"
+        className="h-full w-full object-cover"
+        style={{
+          filter: "sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)",
+        }}
       />
     </div>
   </div>
@@ -1049,7 +1516,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // No token data yet — reserve layout space with invisible placeholder (no skeleton flicker)
   if (!token || (!token.name && !token.symbol && !token.mint)) {
     return (
-      <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
+      <div className="hidden min-w-[260px] flex-shrink-0 basis-[280px] md:basis-[310px] lg:block lg:basis-[330px]">
         <div className="h-full rounded-lg p-4" />
       </div>
     );
@@ -1057,16 +1524,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   // Determine the pool address to use: migrated_pool_address if available, otherwise pair_address
   const effectivePoolAddress = useMemo(() => {
-    return token.migrated_pool_address || token.pair_address || '';
+    return token.migrated_pool_address || token.pair_address || "";
   }, [token.migrated_pool_address, token.pair_address]);
 
   // Internal state with fallback to external props
-  const [mode, setMode] = useState<"buy" | "sell">(externalTradeParams?.mode || "buy");
-  const [tab, setTab] = useState<"market" | "limit" | "adv">(externalTradeParams?.tab || "market");
-  const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange as TimeRange || "5m");
+  const [mode, setMode] = useState<"buy" | "sell">(
+    externalTradeParams?.mode || "buy",
+  );
+  const [tab, setTab] = useState<"market" | "limit" | "adv">(
+    externalTradeParams?.tab || "market",
+  );
+  const [timeRange, setTimeRange] = useState<TimeRange>(
+    (externalTradeParams?.timeRange as TimeRange) || "5m",
+  );
   const [amount, setAmount] = useState(externalTradeParams?.amount || "");
   const [targetMC, setTargetMC] = useState(externalTradeParams?.targetMC || "");
-  const [sliderPct, setSliderPct] = useState<number | string>(externalTradeParams?.sliderPct || 0);
+  const [sliderPct, setSliderPct] = useState<number | string>(
+    externalTradeParams?.sliderPct || 0,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [sniperAmount, setSniperAmount] = useState("");
@@ -1078,7 +1553,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const isMountedRef = useRef(true);
   const manualTargetOverrideRef = useRef<boolean>(false);
   const lastSliderBaseRef = useRef<number | null>(null);
-  const { prefetch: prefetchOrder, prefetchImmediate: prefetchOrderImmediate } = usePrefetchOrder();
+  const { prefetch: prefetchOrder, prefetchImmediate: prefetchOrderImmediate } =
+    usePrefetchOrder();
 
   useEffect(() => {
     return () => {
@@ -1097,7 +1573,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // High slippage warning dialog state
   const [showSlippageWarning, setShowSlippageWarning] = useState(false);
   const [showLiquidityWarning, setShowLiquidityWarning] = useState(false);
-  const [pendingTradeOptions, setPendingTradeOptions] = useState<{ skipLiquidity?: boolean; skipSlippage?: boolean } | null>(null);
+  const [pendingTradeOptions, setPendingTradeOptions] = useState<{
+    skipLiquidity?: boolean;
+    skipSlippage?: boolean;
+  } | null>(null);
   const tradeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Position data for this token
@@ -1155,19 +1634,34 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         sliderPct,
       });
     }
-  }, [mode, tab, timeRange, amount, targetMC, sliderPct, setExternalTradeParams]);
+  }, [
+    mode,
+    tab,
+    timeRange,
+    amount,
+    targetMC,
+    sliderPct,
+    setExternalTradeParams,
+  ]);
 
   // Debounce external updates to avoid loops
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       updateExternalParams();
     }, 100);
-    
+
     return () => clearTimeout(timeoutId);
   }, [mode, tab, timeRange, amount, targetMC, sliderPct, updateExternalParams]);
 
   const { presets: qbPresets, activePreset } = useQuickBuy();
-  const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const {
+    user,
+    solBalance,
+    refreshBalance,
+    walletList,
+    walletBalances,
+    selectedWalletIds,
+  } = useUser();
 
   // Prefetch ATA existence so buy validation is instant (cache warms on mount)
   useEffect(() => {
@@ -1184,37 +1678,49 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     fakeTime: string;
     startTime: number;
     timerHandle?: number;
-    totalSelectedWallets: number
+    totalSelectedWallets: number;
   } | null>(null);
 
   // WebSocket for Solana position updates AND instant txHash
-  const tokenAddress = token?.mint || '';
+  const tokenAddress = token?.mint || "";
 
   // Callback for instant txHash update via WebSocket (fires before HTTP response)
-  const handleSolanaWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
-    const pending = pendingSolanaToastRef.current;
-    if (!pending || data.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase()) return;
+  const handleSolanaWsTxHash = useCallback(
+    (data: {
+      txHash: string;
+      tokenAddress: string;
+      tradeType: "buy" | "sell";
+      explorerUrl: string;
+    }) => {
+      const pending = pendingSolanaToastRef.current;
+      if (
+        !pending ||
+        data.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase()
+      )
+        return;
 
-    // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
-    // For single wallet: Update the link element with clickable Solana logo
-    if (pending.totalSelectedWallets === 1) {
-      const linkEl = document.getElementById(`link-${pending.id}`);
-      if (linkEl) {
-        linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+      // For multi-wallet trades: Don't update the toast (count was already shown at timer cap)
+      // For single wallet: Update the link element with clickable Solana logo
+      if (pending.totalSelectedWallets === 1) {
+        const linkEl = document.getElementById(`link-${pending.id}`);
+        if (linkEl) {
+          linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+        }
       }
-    }
 
-    // Set duration for auto-dismiss after 10s
-    setTimeout(() => {
-      if (pendingSolanaToastRef.current?.id === pending.id) {
-        toast.dismiss(pending.id);
-        pendingSolanaToastRef.current = null;
-      }
-    }, 10000);
-  }, [tokenAddress]);
+      // Set duration for auto-dismiss after 10s
+      setTimeout(() => {
+        if (pendingSolanaToastRef.current?.id === pending.id) {
+          toast.dismiss(pending.id);
+          pendingSolanaToastRef.current = null;
+        }
+      }, 10000);
+    },
+    [tokenAddress],
+  );
 
   // Use the shared single WebSocket connection from context (no duplicate connection)
-  useTxHashCallback('trade-action-panel', handleSolanaWsTxHash);
+  useTxHashCallback("trade-action-panel", handleSolanaWsTxHash);
 
   // Calculate position data from trade activity (like Activity tab does)
   useEffect(() => {
@@ -1233,43 +1739,45 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         setPositionData(emptyData);
         return;
       }
-      
+
       try {
         // Get all trade activity for this user (like Activity tab)
         const trades = await getTradeActivityByUser(user.id.toString());
-        
+
         // Filter trades for this specific token (case-insensitive comparison)
-        const tokenMint = (token.mint || '').toLowerCase();
-        const tokenTrades = trades.filter((trade: any) =>
-          (trade.tokenAddress || '').toLowerCase() === tokenMint
+        const tokenMint = (token.mint || "").toLowerCase();
+        const tokenTrades = trades.filter(
+          (trade: any) =>
+            (trade.tokenAddress || "").toLowerCase() === tokenMint,
         );
-        
+
         if (tokenTrades.length > 0) {
           // Calculate position from individual trades
           let bought = 0;
           let boughtUsdValue = 0;
           let sold = 0;
           let soldUsdValue = 0;
-          
+
           tokenTrades.forEach((trade: any) => {
-            if (trade.type === 'Buy') {
+            if (trade.type === "Buy") {
               bought += Number(trade.tokenAmount) || 0;
               boughtUsdValue += Number(trade.usdValue) || 0;
-            } else if (trade.type === 'Sell') {
+            } else if (trade.type === "Sell") {
               sold += Number(trade.tokenAmount) || 0;
               soldUsdValue += Number(trade.usdValue) || 0;
             }
           });
-          
+
           const remaining = bought - sold;
-          
+
           // Calculate PnL: (sold value + remaining value) - bought value
           // For remaining value, we'll use the average price of remaining tokens
           const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
           const remainingUsdValue = remaining * avgBoughtPrice;
-          const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
-          const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
-          
+          const pnl = soldUsdValue + remainingUsdValue - boughtUsdValue;
+          const pnlPercentage =
+            boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+
           const newData = {
             bought,
             boughtUsdValue,
@@ -1280,7 +1788,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             pnl,
             pnlPercentage,
           };
-          
+
           setPositionData(newData);
         } else {
           // No trades found for this token
@@ -1296,7 +1804,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           });
         }
       } catch (error) {
-        console.error('Error calculating position from trades:', error);
+        console.error("Error calculating position from trades:", error);
         setPositionData({
           bought: 0,
           boughtUsdValue: 0,
@@ -1309,24 +1817,28 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         });
       }
     };
-    
+
     calculatePositionFromTrades();
-    
+
     // Refresh position data every 10 seconds
     const interval = setInterval(calculatePositionFromTrades, 10000);
     return () => clearInterval(interval);
   }, [user?.id, token?.mint]);
-  
+
   // Use external QuickBuy settings if available, otherwise use internal context
-  const settings = externalQuickBuySettings || (
-    mode === "buy"
+  const settings =
+    externalQuickBuySettings ||
+    (mode === "buy"
       ? qbPresets[activePreset].quickBuySettings
-      : qbPresets[activePreset].quickSellSettings
-  );
+      : qbPresets[activePreset].quickSellSettings);
 
   const baseMarketCap: number = useMemo(() => {
     // Priority: live chart/WS data > token prop
-    if (typeof liveMarketCapUsd === "number" && Number.isFinite(liveMarketCapUsd) && liveMarketCapUsd > 0) {
+    if (
+      typeof liveMarketCapUsd === "number" &&
+      Number.isFinite(liveMarketCapUsd) &&
+      liveMarketCapUsd > 0
+    ) {
       return liveMarketCapUsd;
     }
 
@@ -1339,7 +1851,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           t.marketcap ??
           t.fdv_usd ??
           t.fdv ??
-          0
+          0,
       ) || 0
     );
   }, [liveMarketCapUsd, token]);
@@ -1354,7 +1866,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       return baseMarketCap / (supply * solUsd);
     }
     // Strong fallback: live chart price / SOL price (works even without supply)
-    const chartPrice = typeof livePriceUsd === "number" && Number.isFinite(livePriceUsd) ? livePriceUsd : 0;
+    const chartPrice =
+      typeof livePriceUsd === "number" && Number.isFinite(livePriceUsd)
+        ? livePriceUsd
+        : 0;
     if (chartPrice > 0 && solUsd > 0) {
       return chartPrice / solUsd;
     }
@@ -1365,7 +1880,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
     // Last resort: static sol_price (ensure numeric)
     return Number(token?.sol_price) || 0;
-  }, [baseMarketCap, circulatingSupply, token?.total_supply, token?.usd_price, token?.sol_price, liveSolPrice, livePriceUsd, tokenPriceUsdField]);
+  }, [
+    baseMarketCap,
+    circulatingSupply,
+    token?.total_supply,
+    token?.usd_price,
+    token?.sol_price,
+    liveSolPrice,
+    livePriceUsd,
+    tokenPriceUsdField,
+  ]);
 
   // Token price in SOL at the limit order's target market cap
   const limitTokenPriceInSol = useMemo(() => {
@@ -1380,16 +1904,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, [tab, circulatingSupply, token?.total_supply, liveSolPrice, targetMC]);
 
   // For buy estimates: use target price in limit tab, current price in market tab
-  const effectiveBuyTokenPrice = tab === "limit" && limitTokenPriceInSol > 0
-    ? limitTokenPriceInSol
-    : liveTokenPriceInSol;
+  const effectiveBuyTokenPrice =
+    tab === "limit" && limitTokenPriceInSol > 0
+      ? limitTokenPriceInSol
+      : liveTokenPriceInSol;
 
   const sliderBaseMarketCap = useMemo(() => {
     if (baseMarketCap > 0) {
       return baseMarketCap;
     }
     const numericTarget = Number(targetMC);
-    return Number.isFinite(numericTarget) && numericTarget > 0 ? numericTarget : null;
+    return Number.isFinite(numericTarget) && numericTarget > 0
+      ? numericTarget
+      : null;
   }, [baseMarketCap, targetMC]);
 
   // Derive % change from base MC -> targetMC (used to display slider value)
@@ -1401,7 +1928,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       // Calculate what percentage would result in 0 market cap
       return -100;
     }
-    return clamp(Math.round(((t - baseMarketCap) / baseMarketCap) * 100), -100, 100);
+    return clamp(
+      Math.round(((t - baseMarketCap) / baseMarketCap) * 100),
+      -100,
+      100,
+    );
   }, [targetMC, baseMarketCap]);
 
   // Initialize target market cap on entering Limit tab if empty/zero
@@ -1423,7 +1954,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (baseMarketCap && targetMC) {
       const t = Number(targetMC);
       if (Number.isFinite(t) && t > 0) {
-        const calculatedPct = Math.round(((t - baseMarketCap) / baseMarketCap) * 100);
+        const calculatedPct = Math.round(
+          ((t - baseMarketCap) / baseMarketCap) * 100,
+        );
         const clampedPct = clamp(calculatedPct, -100, 100);
         setSliderPct(clampedPct);
         manualTargetOverrideRef.current = false;
@@ -1440,10 +1973,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     // First priority: Use wsVolume from unified token WebSocket (most reliable)
     if (wsVolume) {
       // Map timeRange to wsVolume keys
-      const volumeKey = timeRange === '5m' ? 'volume_5m'
-        : timeRange === '1h' ? 'volume_1h'
-        : timeRange === '6h' ? 'volume_6h'
-        : 'volume_24h';
+      const volumeKey =
+        timeRange === "5m"
+          ? "volume_5m"
+          : timeRange === "1h"
+            ? "volume_1h"
+            : timeRange === "6h"
+              ? "volume_6h"
+              : "volume_24h";
 
       const volumeData = wsVolume[volumeKey];
       if (volumeData) {
@@ -1451,7 +1988,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         const buyVolumeUsd = (volumeData.buy_volume_sol || 0) * SOL_PRICE_USD;
         const sellVolumeUsd = (volumeData.sell_volume_sol || 0) * SOL_PRICE_USD;
         const totalVolumeUsd = buyVolumeUsd + sellVolumeUsd;
-        const buyPct = totalVolumeUsd > 0 ? (buyVolumeUsd / totalVolumeUsd) * 100 : 50;
+        const buyPct =
+          totalVolumeUsd > 0 ? (buyVolumeUsd / totalVolumeUsd) * 100 : 50;
         const sellPct = 100 - buyPct;
         const netVolumeUsd = buyVolumeUsd - sellVolumeUsd;
 
@@ -1489,11 +2027,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, [wsVolume, timeRange, token, liveSolPrice]);
 
   // Extract stats for easier access
-  const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
+  const {
+    buys,
+    sells,
+    volume,
+    buyVolume,
+    sellVolume,
+    netVolume,
+    buyPercentage,
+    sellPercentage,
+  } = realTimeStats;
 
   const liquidityUsd = useMemo(() => {
     // Priority 1: Real-time WS data (same source as trade header)
-    if (typeof liveLiquidityUsd === "number" && Number.isFinite(liveLiquidityUsd) && liveLiquidityUsd > 0) {
+    if (
+      typeof liveLiquidityUsd === "number" &&
+      Number.isFinite(liveLiquidityUsd) &&
+      liveLiquidityUsd > 0
+    ) {
       return liveLiquidityUsd;
     }
     // Priority 2: Token prop values
@@ -1519,26 +2070,30 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     const fetchCreatorAddress = async () => {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint || ''}&limit=1`
+          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint || ""}&limit=1`,
         );
         if (response.ok) {
           const data = await response.json();
           if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
-            const creatorAddr = data.filterTokens.results[0].token.creatorAddress;
+            const creatorAddr =
+              data.filterTokens.results[0].token.creatorAddress;
             setCreatorAddress(creatorAddr);
           }
         } else {
-          console.warn('⚠️ Creator address fetch failed with status:', response.status);
+          console.warn(
+            "⚠️ Creator address fetch failed with status:",
+            response.status,
+          );
         }
       } catch (error) {
         console.error("❌ Failed to fetch creator address:", error);
       }
     };
-    
-    if (token.mint || '') {
+
+    if (token.mint || "") {
       fetchCreatorAddress();
     }
-  }, [token.mint || '']);
+  }, [token.mint || ""]);
 
   // Also use dev_wallet from WebSocket holderSummary if available
   useEffect(() => {
@@ -1550,8 +2105,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   // amount presets - different for buy vs sell (load from localStorage or use defaults)
   const [buyPresets, setBuyPresets] = useState<number[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('tradeActionPanelBuyPresets');
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("tradeActionPanelBuyPresets");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -1567,8 +2122,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   });
 
   const [sellPresets, setSellPresets] = useState<number[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('tradeActionPanelSellPresets');
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("tradeActionPanelSellPresets");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -1585,40 +2140,45 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   const [amountPresets, setAmountPresets] = useState<number[]>(buyPresets);
   const [editingPresets, setEditingPresets] = useState(false);
-  const [presetDrafts, setPresetDrafts] = useState<string[]>(buyPresets.map(String));
+  const [presetDrafts, setPresetDrafts] = useState<string[]>(
+    buyPresets.map(String),
+  );
 
   // Listen for preset updates from other components (like InstantTradeModal)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
     const handlePresetUpdate = (e: CustomEvent) => {
-      if (e.detail?.type === 'buy' && Array.isArray(e.detail.presets)) {
+      if (e.detail?.type === "buy" && Array.isArray(e.detail.presets)) {
         setBuyPresets(e.detail.presets);
         // Always update current presets if we're in buy mode
-        if (mode === 'buy') {
+        if (mode === "buy") {
           setAmountPresets(e.detail.presets);
           setPresetDrafts(e.detail.presets.map(String));
         }
-      } else if (e.detail?.type === 'sell' && Array.isArray(e.detail.presets)) {
+      } else if (e.detail?.type === "sell" && Array.isArray(e.detail.presets)) {
         setSellPresets(e.detail.presets);
         // Always update current presets if we're in sell mode
-        if (mode === 'sell') {
+        if (mode === "sell") {
           setAmountPresets(e.detail.presets);
           setPresetDrafts(e.detail.presets.map(String));
         }
       }
     };
 
-    window.addEventListener('tradePresetsUpdated', handlePresetUpdate as EventListener);
-    
+    window.addEventListener(
+      "tradePresetsUpdated",
+      handlePresetUpdate as EventListener,
+    );
+
     // Also listen for storage events as a fallback (in case event doesn't fire)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'tradeActionPanelBuyPresets' && e.newValue) {
+      if (e.key === "tradeActionPanelBuyPresets" && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed) && parsed.length === 4) {
             setBuyPresets(parsed);
-            if (mode === 'buy') {
+            if (mode === "buy") {
               setAmountPresets(parsed);
               setPresetDrafts(parsed.map(String));
             }
@@ -1626,12 +2186,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         } catch (err) {
           // Ignore parse errors
         }
-      } else if (e.key === 'tradeActionPanelSellPresets' && e.newValue) {
+      } else if (e.key === "tradeActionPanelSellPresets" && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed) && parsed.length === 4) {
             setSellPresets(parsed);
-            if (mode === 'sell') {
+            if (mode === "sell") {
               setAmountPresets(parsed);
               setPresetDrafts(parsed.map(String));
             }
@@ -1642,14 +2202,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
-    
+    window.addEventListener("storage", handleStorageChange);
+
     return () => {
-      window.removeEventListener('tradePresetsUpdated', handlePresetUpdate as EventListener);
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener(
+        "tradePresetsUpdated",
+        handlePresetUpdate as EventListener,
+      );
+      window.removeEventListener("storage", handleStorageChange);
     };
   }, [mode]);
-  
+
   // Update presets when mode changes OR when buyPresets/sellPresets change (from InstantTradeModal)
   useEffect(() => {
     const newPresets = mode === "sell" ? sellPresets : buyPresets;
@@ -1658,7 +2221,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     // Only clear amount when switching modes, not when presets update
     // setAmount(""); // Commented out to preserve user input when presets change
   }, [mode, buyPresets, sellPresets]);
-  
+
   // Clear amount only when mode changes (not when presets update)
   const prevModeRef = useRef<"buy" | "sell">(mode);
   useEffect(() => {
@@ -1670,16 +2233,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   // Prefetch 100% sell order immediately when user switches to sell mode
   useEffect(() => {
-    if (mode !== 'sell' || !token?.mint) return;
-    prefetchOrderImmediate({ baseMint: token.mint, amount: 100, side: 'sell' });
+    if (mode !== "sell" || !token?.mint) return;
+    prefetchOrderImmediate({ baseMint: token.mint, amount: 100, side: "sell" });
   }, [mode, token?.mint, prefetchOrderImmediate]);
 
   // Prefetch sell order on percentage change (debounced)
   useEffect(() => {
-    if (mode !== 'sell' || !token?.mint || !amount) return;
+    if (mode !== "sell" || !token?.mint || !amount) return;
     const pct = Number(amount);
     if (pct > 0 && pct <= 100) {
-      prefetchOrder({ baseMint: token.mint, amount: pct, side: 'sell' });
+      prefetchOrder({ baseMint: token.mint, amount: pct, side: "sell" });
     }
   }, [mode, amount, token?.mint, prefetchOrder]);
 
@@ -1698,25 +2261,35 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     setEditingPresets(false);
     // Force re-render by updating the drafts
     setPresetDrafts(next.map(String));
-    
+
     // Update the appropriate preset array and save to localStorage
     if (mode === "buy") {
       setBuyPresets(next);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('tradeActionPanelBuyPresets', JSON.stringify(next));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          "tradeActionPanelBuyPresets",
+          JSON.stringify(next),
+        );
         // Dispatch event to notify other components
-        window.dispatchEvent(new CustomEvent('tradePresetsUpdated', {
-          detail: { type: 'buy', presets: next }
-        }));
+        window.dispatchEvent(
+          new CustomEvent("tradePresetsUpdated", {
+            detail: { type: "buy", presets: next },
+          }),
+        );
       }
     } else {
       setSellPresets(next);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('tradeActionPanelSellPresets', JSON.stringify(next));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          "tradeActionPanelSellPresets",
+          JSON.stringify(next),
+        );
         // Dispatch event to notify other components
-        window.dispatchEvent(new CustomEvent('tradePresetsUpdated', {
-          detail: { type: 'sell', presets: next }
-        }));
+        window.dispatchEvent(
+          new CustomEvent("tradePresetsUpdated", {
+            detail: { type: "sell", presets: next },
+          }),
+        );
       }
     }
   };
@@ -1743,7 +2316,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       const symbolLabel = token?.symbol || token?.name || "Token";
 
-      for (let attempt = 0; attempt < LIMIT_ORDER_MAX_POLLS && isMountedRef.current; attempt++) {
+      for (
+        let attempt = 0;
+        attempt < LIMIT_ORDER_MAX_POLLS && isMountedRef.current;
+        attempt++
+      ) {
         if (attempt > 0) {
           await delay(LIMIT_ORDER_POLL_INTERVAL_MS);
           if (!isMountedRef.current) {
@@ -1752,9 +2329,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         }
 
         try {
-          const result: any = await getLimitOrderExecutionResult(orderId, user.bearerToken);
-          const status = (result?.status || result?.order?.status) as string | undefined;
-          const resolvedTriggerType: "marketCap" | "bonding" | "devSell" | undefined =
+          const result: any = await getLimitOrderExecutionResult(
+            orderId,
+            user.bearerToken,
+          );
+          const status = (result?.status || result?.order?.status) as
+            | string
+            | undefined;
+          const resolvedTriggerType:
+            | "marketCap"
+            | "bonding"
+            | "devSell"
+            | undefined =
             (result?.triggerType as any) ??
             (result?.order?.triggerType as any) ??
             triggerType;
@@ -1764,16 +2350,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               : typeof result?.bondingTarget === "number"
                 ? result.bondingTarget
                 : bondingTarget;
-          const normalizedBondingTarget = Number.isFinite(Number(resolvedBondingTarget))
+          const normalizedBondingTarget = Number.isFinite(
+            Number(resolvedBondingTarget),
+          )
             ? Number(resolvedBondingTarget)
             : undefined;
 
           if (status === "Completed") {
             const resolvedSol = Number(
-              result?.actualSolAmount ?? result?.amount ?? submittedSolAmount ?? 0
+              result?.actualSolAmount ??
+                result?.amount ??
+                submittedSolAmount ??
+                0,
             );
             const resolvedTokens = Number(
-              result?.actualTokenAmount ?? submittedTokenAmount ?? 0
+              result?.actualTokenAmount ?? submittedTokenAmount ?? 0,
             );
             const txHash =
               result?.txid ||
@@ -1787,15 +2378,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 : `${resolvedTokens.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbolLabel}`;
 
             const descriptionParts = [amountLabel];
-            if (resolvedTriggerType === "bonding" && typeof normalizedBondingTarget === "number") {
-              descriptionParts.push(`Bonding Target ${normalizedBondingTarget.toFixed(2)}%`);
+            if (
+              resolvedTriggerType === "bonding" &&
+              typeof normalizedBondingTarget === "number"
+            ) {
+              descriptionParts.push(
+                `Bonding Target ${normalizedBondingTarget.toFixed(2)}%`,
+              );
             } else if (
               resolvedTriggerType === "marketCap" &&
               typeof targetMarketCap === "number" &&
               Number.isFinite(targetMarketCap) &&
               targetMarketCap > 0
             ) {
-              descriptionParts.push(`Target $${Math.round(targetMarketCap).toLocaleString()}`);
+              descriptionParts.push(
+                `Target $${Math.round(targetMarketCap).toLocaleString()}`,
+              );
             } else if (resolvedTriggerType === "devSell") {
               descriptionParts.push("Triggered by Dev Sell");
             }
@@ -1820,7 +2418,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     triggerType: resolvedTriggerType,
                     bondingTarget: normalizedBondingTarget,
                   },
-                })
+                }),
               );
             }
 
@@ -1834,25 +2432,36 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               result?.message ||
               "Limit order failed to execute.";
 
-            toast.error(failureReason, { duration: 6000, style: ORDER_TOAST_STYLE });
+            toast.error(failureReason, {
+              duration: 6000,
+              style: ORDER_TOAST_STYLE,
+            });
 
             if (typeof window !== "undefined") {
               window.dispatchEvent(
                 new CustomEvent(LIMIT_ORDER_STATUS_EVENT, {
-                  detail: { orderId, status, triggerType: resolvedTriggerType, bondingTarget: normalizedBondingTarget },
-                })
+                  detail: {
+                    orderId,
+                    status,
+                    triggerType: resolvedTriggerType,
+                    bondingTarget: normalizedBondingTarget,
+                  },
+                }),
               );
             }
 
             return;
           }
         } catch (err) {
-          console.warn("[TradeActionPanel] Failed to poll limit order execution result:", err);
+          console.warn(
+            "[TradeActionPanel] Failed to poll limit order execution result:",
+            err,
+          );
           return;
         }
       }
     },
-    [user?.bearerToken, token?.symbol, token?.name]
+    [user?.bearerToken, token?.symbol, token?.name],
   );
 
   const handleCreateSniperOrder = useCallback(async () => {
@@ -1866,9 +2475,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       showEnhancedToast("error", "Enter a valid sniper amount", {
         title: "Invalid Amount",
-        description: mode === "buy" 
-          ? "Provide a positive SOL amount before arming the sniper."
-          : "Provide a percentage between 1 and 100 before arming the sniper.",
+        description:
+          mode === "buy"
+            ? "Provide a positive SOL amount before arming the sniper."
+            : "Provide a percentage between 1 and 100 before arming the sniper.",
       });
       return;
     }
@@ -1884,7 +2494,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
     }
 
-    const poolAddress = effectivePoolAddress || token.pair_address || token.migrated_pool_address || "";
+    const poolAddress =
+      effectivePoolAddress ||
+      token.pair_address ||
+      token.migrated_pool_address ||
+      "";
     if (!poolAddress) {
       showEnhancedToast("error", "Pool information unavailable", {
         title: "Cannot Arm Sniper",
@@ -1895,7 +2509,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
     const targetBonding = 100;
     const sanitizeNumber = (value: unknown, fallback: number): number => {
-      const numeric = typeof value === "string" ? Number(value) : (value as number);
+      const numeric =
+        typeof value === "string" ? Number(value) : (value as number);
       return Number.isFinite(numeric) ? numeric : fallback;
     };
 
@@ -1909,15 +2524,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       typeof quickSettings.mevMode === "string" ? quickSettings.mevMode : "off";
     const autoFeeValue = Boolean(quickSettings.autoFee);
     const rpcValue =
-      typeof quickSettings.rpc === "string" && quickSettings.rpc.trim().length > 0
+      typeof quickSettings.rpc === "string" &&
+      quickSettings.rpc.trim().length > 0
         ? quickSettings.rpc.trim()
         : undefined;
 
     const latestMarketCap = baseMarketCap;
 
-    const formattedAmount = mode === "buy"
-      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
-      : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+    const formattedAmount =
+      mode === "buy"
+        ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+        : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
 
     const tokenName = token.symbol || token.name || "Token";
 
@@ -1948,7 +2565,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           maxFee: maxFeeValue,
           rpc: rpcValue,
         },
-        user.bearerToken
+        user.bearerToken,
       );
 
       showOrderToast({
@@ -1958,7 +2575,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       });
 
       // Notify chart + orders tab — include normalized order for optimistic insert
-      window.dispatchEvent(new CustomEvent(LIMIT_ORDER_STATUS_EVENT, { detail: { status: "Pending", newOrder: normalizeOrderForEvent(response?.order) } }));
+      window.dispatchEvent(
+        new CustomEvent(LIMIT_ORDER_STATUS_EVENT, {
+          detail: {
+            status: "Pending",
+            newOrder: normalizeOrderForEvent(response?.order),
+          },
+        }),
+      );
       window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_CLEAR_EVENT));
 
       if (response?.order?.id) {
@@ -2005,7 +2629,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (!creatorAddress) {
       showEnhancedToast("error", "Developer wallet unavailable", {
         title: "Cannot Arm Dev Mirror",
-        description: "We couldn't determine the developer wallet for this token yet."
+        description:
+          "We couldn't determine the developer wallet for this token yet.",
       });
       return;
     }
@@ -2014,9 +2639,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       showEnhancedToast("error", "Enter a valid amount", {
         title: "Invalid Amount",
-        description: mode === "sell"
-          ? "Provide a percentage between 1 and 100 before arming the dev mirror."
-          : "Provide a positive SOL amount before arming the dev mirror.",
+        description:
+          mode === "sell"
+            ? "Provide a percentage between 1 and 100 before arming the dev mirror."
+            : "Provide a positive SOL amount before arming the dev mirror.",
       });
       return;
     }
@@ -2029,7 +2655,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       return;
     }
 
-    const poolAddress = effectivePoolAddress || token.pair_address || token.migrated_pool_address || "";
+    const poolAddress =
+      effectivePoolAddress ||
+      token.pair_address ||
+      token.migrated_pool_address ||
+      "";
     if (!poolAddress) {
       showEnhancedToast("error", "Pool information unavailable", {
         title: "Cannot Arm Dev Mirror",
@@ -2039,7 +2669,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
 
     const sanitizeNumber = (value: unknown, fallback: number): number => {
-      const numeric = typeof value === "string" ? Number(value) : (value as number);
+      const numeric =
+        typeof value === "string" ? Number(value) : (value as number);
       return Number.isFinite(numeric) ? numeric : fallback;
     };
 
@@ -2049,23 +2680,27 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     const priorityFeeValue = sanitizeNumber(quickSettings.priority, 0.0001);
     const bribeValue = sanitizeNumber(quickSettings.bribe, 0);
     const maxFeeValue = sanitizeNumber(quickSettings.maxFee, 0);
-    const mevModeValue = typeof quickSettings.mevMode === "string" ? quickSettings.mevMode : "off";
+    const mevModeValue =
+      typeof quickSettings.mevMode === "string" ? quickSettings.mevMode : "off";
     const autoFeeValue = Boolean(quickSettings.autoFee);
     const mevProtectionValue = mevModeValue !== "off";
     const rpcValue =
-      typeof quickSettings.rpc === "string" && quickSettings.rpc.trim().length > 0
+      typeof quickSettings.rpc === "string" &&
+      quickSettings.rpc.trim().length > 0
         ? quickSettings.rpc.trim()
         : undefined;
 
     const latestMarketCap = baseMarketCap;
 
     const actionLabel = mode === "buy" ? "Buy on Dev Sell" : "Sell on Dev Sell";
-    const formattedAmount = mode === "buy"
-      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
-      : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
-    const shortDev = creatorAddress.length > 12
-      ? `${creatorAddress.slice(0, 4)}...${creatorAddress.slice(-4)}`
-      : creatorAddress;
+    const formattedAmount =
+      mode === "buy"
+        ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+        : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+    const shortDev =
+      creatorAddress.length > 12
+        ? `${creatorAddress.slice(0, 4)}...${creatorAddress.slice(-4)}`
+        : creatorAddress;
 
     const devTokenName = token.symbol || token.name || "Token";
 
@@ -2080,7 +2715,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           triggerType: "devSell",
           devWallet: creatorAddress,
           targetMC: latestMarketCap ?? 0,
-          currentMarketCap: latestMarketCap ?? token.market_cap_usd ?? token.fully_diluted_value,
+          currentMarketCap:
+            latestMarketCap ??
+            token.market_cap_usd ??
+            token.fully_diluted_value,
           currentPrice: token.usd_price,
           tokenName: token.name,
           tokenSymbol: token.symbol,
@@ -2097,7 +2735,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           maxFee: maxFeeValue,
           rpc: rpcValue,
         },
-        user.bearerToken
+        user.bearerToken,
       );
 
       showOrderToast({
@@ -2107,7 +2745,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       });
 
       // Notify chart + orders tab — include normalized order for optimistic insert
-      window.dispatchEvent(new CustomEvent(LIMIT_ORDER_STATUS_EVENT, { detail: { status: "Pending", newOrder: normalizeOrderForEvent(response?.order) } }));
+      window.dispatchEvent(
+        new CustomEvent(LIMIT_ORDER_STATUS_EVENT, {
+          detail: {
+            status: "Pending",
+            newOrder: normalizeOrderForEvent(response?.order),
+          },
+        }),
+      );
       window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_CLEAR_EVENT));
 
       if (response?.order?.id) {
@@ -2116,16 +2761,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           orderId: normalizedOrderId,
           orderType: response.order.type,
           triggerType: "devSell",
-          targetMarketCap: Number(response.order.targetMC ?? latestMarketCap ?? 0),
-          submittedSolAmount: mode === "buy" ? Number(response.order.solAmount ?? numericAmount) : undefined,
-          submittedTokenAmount: mode === "sell" ? Number(response.order.tokenAmount ?? numericAmount) : undefined,
+          targetMarketCap: Number(
+            response.order.targetMC ?? latestMarketCap ?? 0,
+          ),
+          submittedSolAmount:
+            mode === "buy"
+              ? Number(response.order.solAmount ?? numericAmount)
+              : undefined,
+          submittedTokenAmount:
+            mode === "sell"
+              ? Number(response.order.tokenAmount ?? numericAmount)
+              : undefined,
         });
       }
 
       setAmount("");
     } catch (error: any) {
       const message =
-        error?.message?.length > 80 ? `${error.message.substring(0, 77)}…` : error?.message || "Failed to arm dev mirror";
+        error?.message?.length > 80
+          ? `${error.message.substring(0, 77)}…`
+          : error?.message || "Failed to arm dev mirror";
       toast.error(message, { duration: 6000, style: ORDER_TOAST_STYLE });
     } finally {
       setDevSubmitting(false);
@@ -2196,13 +2851,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             bribe: settings.bribe || 0,
           });
           // Use cached ATA result if available, otherwise assume it doesn't exist (overestimates cost)
-          const cachedAta = getCachedAtaExists(token?.mint, user?.publicKey) ?? false;
+          const cachedAta =
+            getCachedAtaExists(token?.mint, user?.publicKey) ?? false;
           const preValidation = validateSolanaBuy(
-            buyAmountPreCheck, preAllocations, walletBalances, walletList,
-            selectedWalletIds?.sol || [], settings.priority, settings.bribe, cachedAta
+            buyAmountPreCheck,
+            preAllocations,
+            walletBalances,
+            walletList,
+            selectedWalletIds?.sol || [],
+            settings.priority,
+            settings.bribe,
+            cachedAta,
           );
           if (!preValidation.valid) {
-            showTradeValidationError(preValidation.error, getResolvedTokenImage(token), token?.symbol || token?.name || 'Token');
+            showTradeValidationError(
+              preValidation.error,
+              getResolvedTokenImage(token),
+              token?.symbol || token?.name || "Token",
+            );
             return { success: false };
           }
         }
@@ -2215,21 +2881,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       // For SELL: Jupiter Ultra routes by token address, pool is optional.
       // Backend SDK fallback (if Jupiter Ultra fails) has its own lazy pool discovery.
       let resolvedPoolAddress = effectivePoolAddress;
-      const userWalletAddress = user?.publicKey || '';
+      const userWalletAddress = user?.publicKey || "";
 
-      if (mode !== 'sell') {
+      if (mode !== "sell") {
         if (!resolvedPoolAddress && token.mint) {
-          const fetchedPairAddress = await fetchPairAddressFromTokenService(token.mint);
+          const fetchedPairAddress = await fetchPairAddressFromTokenService(
+            token.mint,
+          );
           if (fetchedPairAddress) {
             resolvedPoolAddress = fetchedPairAddress;
           }
         }
 
         // Validate pool address - check if it looks invalid (equals wallet or token address)
-        const poolLooksInvalid = resolvedPoolAddress === userWalletAddress ||
-                                 resolvedPoolAddress === token.mint ||
-                                 !resolvedPoolAddress ||
-                                 resolvedPoolAddress.length < 30;
+        const poolLooksInvalid =
+          resolvedPoolAddress === userWalletAddress ||
+          resolvedPoolAddress === token.mint ||
+          !resolvedPoolAddress ||
+          resolvedPoolAddress.length < 30;
 
         // DexScreener fallback if pool address looks invalid
         if (poolLooksInvalid && token.mint) {
@@ -2239,7 +2908,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
             const dexResponse = await fetch(
               `https://api.dexscreener.com/latest/dex/tokens/${token.mint}`,
-              { signal: controller.signal }
+              { signal: controller.signal },
             );
             clearTimeout(timeoutId);
 
@@ -2248,8 +2917,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               if (dexData?.pairs && dexData.pairs.length > 0) {
                 // Filter for Solana pairs and sort by liquidity
                 const solanaPairs = dexData.pairs
-                  .filter((pair: any) => pair.chainId === 'solana' && pair.pairAddress)
-                  .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+                  .filter(
+                    (pair: any) =>
+                      pair.chainId === "solana" && pair.pairAddress,
+                  )
+                  .sort(
+                    (a: any, b: any) =>
+                      (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0),
+                  );
 
                 if (solanaPairs.length > 0) {
                   const bestPair = solanaPairs[0];
@@ -2258,7 +2933,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               }
             }
           } catch (dexError: any) {
-            console.warn(`[TradeActionPanel] DexScreener fallback failed:`, dexError?.message || dexError);
+            console.warn(
+              `[TradeActionPanel] DexScreener fallback failed:`,
+              dexError?.message || dexError,
+            );
           }
         }
       }
@@ -2266,7 +2944,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       if (tab === "limit") {
         if (!amount || !targetMC) {
           setSuccessMessage(null);
-          showCenteredErrorToast("Amount and Target Market Cap are required for limit orders.");
+          showCenteredErrorToast(
+            "Amount and Target Market Cap are required for limit orders.",
+          );
           setIsLoading(false);
           return;
         }
@@ -2295,7 +2975,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             if (mode === "sell" && tab === "limit") {
               return "Above";
             }
-            if (!Number.isFinite(numericTargetMc) || !Number.isFinite(baseMarketCap) || baseMarketCap <= 0) {
+            if (
+              !Number.isFinite(numericTargetMc) ||
+              !Number.isFinite(baseMarketCap) ||
+              baseMarketCap <= 0
+            ) {
               return "Above";
             }
             return numericTargetMc >= baseMarketCap ? "Above" : "Below";
@@ -2304,29 +2988,35 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             mode === "buy"
               ? `${Number.isFinite(numericAmount) ? numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 }) : amount} SOL`
               : `${Number.isFinite(numericAmount) ? numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 }) : amount}%`;
-          const formattedTarget =
-            Number.isFinite(numericTargetMc)
-              ? `$${Math.round(numericTargetMc).toLocaleString()}`
-              : `${targetMC}`;
+          const formattedTarget = Number.isFinite(numericTargetMc)
+            ? `$${Math.round(numericTargetMc).toLocaleString()}`
+            : `${targetMC}`;
           const limitTokenName = token.symbol || token.name || "Token";
 
           const sanitizeNumber = (value: unknown, fallback: number): number => {
-            const numeric = typeof value === "string" ? Number(value) : (value as number);
+            const numeric =
+              typeof value === "string" ? Number(value) : (value as number);
             return Number.isFinite(numeric) ? numeric : fallback;
           };
 
           const quickSettings = settings ?? {};
           const computedPoolType = getPoolTypeFromToken(token);
           const slippageValue = sanitizeNumber(quickSettings.maxSlippage, 0.2);
-          const priorityFeeValue = sanitizeNumber(quickSettings.priority, 0.0001);
+          const priorityFeeValue = sanitizeNumber(
+            quickSettings.priority,
+            0.0001,
+          );
           const bribeValue = sanitizeNumber(quickSettings.bribe, 0);
           const maxFeeValue = sanitizeNumber(quickSettings.maxFee, 0);
           const mevModeValue =
-            typeof quickSettings.mevMode === "string" ? quickSettings.mevMode : "off";
+            typeof quickSettings.mevMode === "string"
+              ? quickSettings.mevMode
+              : "off";
           const autoFeeValue = Boolean(quickSettings.autoFee);
           const mevProtectionValue = mevModeValue !== "off";
           const rpcValue =
-            typeof quickSettings.rpc === "string" && quickSettings.rpc.trim().length > 0
+            typeof quickSettings.rpc === "string" &&
+            quickSettings.rpc.trim().length > 0
               ? quickSettings.rpc.trim()
               : undefined;
 
@@ -2337,10 +3027,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           const isZeroDelta =
             Number.isFinite(effectiveLiveMc) &&
             Number.isFinite(numericTargetMc) &&
-            Math.abs((effectiveLiveMc || 0) - numericTargetMc) <= Math.abs(effectiveLiveMc || 0) * 0.005;
+            Math.abs((effectiveLiveMc || 0) - numericTargetMc) <=
+              Math.abs(effectiveLiveMc || 0) * 0.005;
 
           if (isZeroDelta) {
-            toast.error("Target matches current price — adjust target above or below live MC.", { duration: 6000, style: ORDER_TOAST_STYLE });
+            toast.error(
+              "Target matches current price — adjust target above or below live MC.",
+              { duration: 6000, style: ORDER_TOAST_STYLE },
+            );
             setIsLoading(false);
             setPendingTradeOptions(null);
             return;
@@ -2358,7 +3052,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               direction,
               targetMC: Number(targetMC),
               currentPrice: token.usd_price,
-              currentMarketCap: latestMarketCap ?? token.market_cap_usd ?? token.fully_diluted_value,
+              currentMarketCap:
+                latestMarketCap ??
+                token.market_cap_usd ??
+                token.fully_diluted_value,
               tokenName: token.name,
               tokenSymbol: token.symbol,
               tokenDecimals: token.decimals,
@@ -2374,7 +3071,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               maxFee: maxFeeValue,
               rpc: rpcValue,
             },
-            user.bearerToken
+            user.bearerToken,
           );
           // --- Low liquidity warning temporarily disabled ---
           // if (!options.skipLiquidity && liquidityUsd && liquidityUsd < LOW_LIQUIDITY_WARNING_THRESHOLD) {
@@ -2387,26 +3084,63 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             tokenName: limitTokenName,
           });
           // Notify chart + orders tab — include normalized order for optimistic insert
-          window.dispatchEvent(new CustomEvent(LIMIT_ORDER_STATUS_EVENT, { detail: { status: "Pending", newOrder: normalizeOrderForEvent(limitOrderResponse?.order) } }));
+          window.dispatchEvent(
+            new CustomEvent(LIMIT_ORDER_STATUS_EVENT, {
+              detail: {
+                status: "Pending",
+                newOrder: normalizeOrderForEvent(limitOrderResponse?.order),
+              },
+            }),
+          );
           window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_CLEAR_EVENT));
           if (limitOrderResponse?.order?.id) {
             const normalizedOrderId = String(limitOrderResponse.order.id);
             void monitorLimitOrderExecution({
               orderId: normalizedOrderId,
               orderType: limitOrderResponse.order.type,
-              triggerType: limitOrderResponse.order.triggerType as "marketCap" | "bonding" | "devSell" | undefined,
-              bondingTarget: Number(limitOrderResponse.order.bondingTarget ?? NaN),
-              targetMarketCap: Number(limitOrderResponse.order.targetMC ?? numericTargetMc),
-              submittedSolAmount: Number(limitOrderResponse.order.solAmount ?? numericAmount),
-              submittedTokenAmount: Number(limitOrderResponse.order.tokenAmount ?? 0),
+              triggerType: limitOrderResponse.order.triggerType as
+                | "marketCap"
+                | "bonding"
+                | "devSell"
+                | undefined,
+              bondingTarget: Number(
+                limitOrderResponse.order.bondingTarget ?? NaN,
+              ),
+              targetMarketCap: Number(
+                limitOrderResponse.order.targetMC ?? numericTargetMc,
+              ),
+              submittedSolAmount: Number(
+                limitOrderResponse.order.solAmount ?? numericAmount,
+              ),
+              submittedTokenAmount: Number(
+                limitOrderResponse.order.tokenAmount ?? 0,
+              ),
             });
           }
-          setSuccessMessage(`Limit order for ${token.symbol} created successfully!`);
+          posthog.capture("limit_order_created", {
+            token_mint: token.mint,
+            token_symbol: token.symbol,
+            direction,
+            type: mode === "buy" ? "Buy" : "Sell",
+            target_mc: Number(targetMC),
+            amount: Number(amount),
+            pool_type: computedPoolType,
+          });
+
+          setSuccessMessage(
+            `Limit order for ${token.symbol} created successfully!`,
+          );
           setAmount("");
           setTargetMC("");
         } catch (error: any) {
+          posthog.captureException(error, {
+            token_mint: token.mint,
+            trade_type: "limit_order",
+          });
           const errorMsg =
-            error?.message?.length > 60 ? `${error.message.substring(0, 57)}...` : error?.message || "Failed to create limit order";
+            error?.message?.length > 60
+              ? `${error.message.substring(0, 57)}...`
+              : error?.message || "Failed to create limit order";
           toast.error(errorMsg, { duration: 6000, style: ORDER_TOAST_STYLE });
           setSuccessMessage(null);
         } finally {
@@ -2453,13 +3187,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         // Pre-validate sell before showing toast
         const sellValidation = validateSolanaSell(sellPercentage);
         if (!sellValidation.valid) {
-          showTradeValidationError(sellValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+          showTradeValidationError(
+            sellValidation.error,
+            getResolvedTokenImage(token),
+            token.symbol || token.name || "Token",
+          );
           setIsLoading(false);
           return { success: false };
         }
 
         // Generate random timer cap (0.40-0.60s)
-        const timerCap = 0.30 + Math.random() * 0.20;
+        const timerCap = 0.3 + Math.random() * 0.2;
         const uniqueToastId = `solana-sell-${Date.now()}-${Math.random()}`;
         const startTime = Date.now();
         let timerFinished = false;
@@ -2467,8 +3205,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
         // Extract token image
         const tokenImage = getResolvedTokenImage(token);
-        const tokenName = token.symbol || token.name || 'Token';
-        const SOLANA_LOGO = 'https://avatars.githubusercontent.com/u/92743431?s=200&v=4';
+        const tokenName = token.symbol || token.name || "Token";
+        const SOLANA_LOGO =
+          "https://avatars.githubusercontent.com/u/92743431?s=200&v=4";
 
         // Show animated toast with timer (same style as buy)
         toast(
@@ -2478,37 +3217,41 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <img
                   src={tokenImage}
                   alt={tokenName}
-                  className="w-6 h-6 rounded-full flex-shrink-0"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  className="h-6 w-6 flex-shrink-0 rounded-full"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
                 />
               )}
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-sm text-neutral-200 truncate">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="truncate text-sm text-neutral-200">
                   Selling {tokenName}
                 </span>
                 <span
                   id={`timer-${uniqueToastId}`}
-                  className="text-xs text-neutral-400 flex-shrink-0"
+                  className="flex-shrink-0 text-xs text-neutral-400"
                 >
                   (0.00s)
                 </span>
                 <span
                   id={`check-${uniqueToastId}`}
-                  className="text-green-400 flex-shrink-0"
-                  style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
+                  className="flex-shrink-0 text-green-400"
+                  style={{
+                    display: timerFinished && !tradeErrored ? "inline" : "none",
+                  }}
                 >
                   ✓
                 </span>
                 <span
                   id={`link-${uniqueToastId}`}
                   className="flex-shrink-0"
-                  style={{ display: 'inline-flex' }}
+                  style={{ display: "inline-flex" }}
                 >
                   <img
                     src={SOLANA_LOGO}
                     alt="Solana"
-                    className="w-4 h-4 rounded-full opacity-70"
-                    style={{ cursor: 'default' }}
+                    className="h-4 w-4 rounded-full opacity-70"
+                    style={{ cursor: "default" }}
                   />
                 </span>
               </div>
@@ -2518,12 +3261,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             id: uniqueToastId,
             duration: Infinity,
             style: {
-              background: '#1a1a1a',
-              border: '1px solid #333',
-              borderRadius: '8px',
-              padding: '12px',
+              background: "#1a1a1a",
+              border: "1px solid #333",
+              borderRadius: "8px",
+              padding: "12px",
             },
-          }
+          },
         );
 
         // Start timer animation
@@ -2540,7 +3283,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             if (!tradeErrored) {
               const checkEl = document.getElementById(`check-${uniqueToastId}`);
               if (checkEl) {
-                checkEl.style.display = 'block';
+                checkEl.style.display = "block";
               }
             }
             timerHandle = null as any;
@@ -2558,18 +3301,25 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           fakeTime: timerCap.toFixed(2),
           startTime,
           timerHandle,
-          totalSelectedWallets: 1
+          totalSelectedWallets: 1,
         };
 
-        const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+        const cleanupTradeListener = listenForTradeEvents(
+          token.mint || "",
+          uniqueToastId,
+          (v) => {
+            tradeErrored = v;
+          },
+          "solana",
+        );
 
         try {
           const sellResult = await tradeSellPercentage(
             {
-              tokenAddress: token.mint || '',
+              tokenAddress: token.mint || "",
               percentageToSell: sellPercentage,
               poolAddress: resolvedPoolAddress,
-              baseMint: token.mint || '',
+              baseMint: token.mint || "",
               quoteMint: SOL_MINT_ADDRESS,
               poolType,
               originalPairAddress: resolvedPoolAddress,
@@ -2577,7 +3327,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               priorityFee: settings.priority ?? 0.0001,
               bribe: settings.bribe ?? 0,
             },
-            user.bearerToken
+            user.bearerToken,
           );
 
           // Stop timer
@@ -2594,10 +3344,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             }
             const checkEl = document.getElementById(`check-${uniqueToastId}`);
             if (checkEl) {
-              checkEl.style.display = 'block';
+              checkEl.style.display = "block";
             }
 
             setSuccessMessage(`✅ Sold ${sellPercentage}% of ${tokenName}`);
+
+            posthog.capture("token_sell_submitted", {
+              token_mint: token.mint,
+              token_symbol: token.symbol,
+              token_name: token.name,
+              sell_percentage: sellPercentage,
+              pool_type: poolType,
+              tx_hash: sellResult.hash,
+            });
 
             // Clear pending ref (WS may have already updated, or HTTP response just did)
             pendingSolanaToastRef.current = null;
@@ -2608,26 +3367,32 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             // Broadcast trade completion immediately for portfolio auto-refresh
             broadcastTradeCompleted({
               tokenAddress: token.mint,
-              tradeType: 'sell',
-              chain: 'sol',
+              tradeType: "sell",
+              chain: "sol",
               txHash: sellResult?.hash || undefined,
               sellPercentage,
             });
 
             // Dispatch event to refresh chart price lines immediately
             if (typeof window !== "undefined" && token.mint) {
-              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+              window.dispatchEvent(
+                new CustomEvent("solanaQuickTrade", {
+                  detail: { tokenAddress: token.mint },
+                }),
+              );
             }
 
             // Refresh header + portfolio balance immediately
-            dispatchBalanceRefresh('sol');
+            dispatchBalanceRefresh("sol");
 
             // Refresh position data for the token detail page's position card
             setTimeout(async () => {
               try {
                 const trades = await getTradeActivityByUser(user.id.toString());
                 const tokenTrades = trades.filter(
-                  (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+                  (trade: any) =>
+                    trade.tokenAddress?.toLowerCase() ===
+                    (token.mint || "").toLowerCase(),
                 );
 
                 if (tokenTrades.length > 0) {
@@ -2647,10 +3412,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   });
 
                   const remaining = bought - sold;
-                  const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
+                  const avgBoughtPrice =
+                    bought > 0 ? boughtUsdValue / bought : 0;
                   const remainingUsdValue = remaining * avgBoughtPrice;
                   const pnl = soldUsdValue + remainingUsdValue - boughtUsdValue;
-                  const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+                  const pnlPercentage =
+                    boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
 
                   setPositionData({
                     bought,
@@ -2678,7 +3445,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           } else {
             // Sell returned but no hash
             pendingSolanaToastRef.current = null;
-            transformToastToError(uniqueToastId, sellResult?.message || 'Sell failed', tokenImage, tokenName);
+            transformToastToError(
+              uniqueToastId,
+              sellResult?.message || "Sell failed",
+              tokenImage,
+              tokenName,
+            );
             setSuccessMessage(null);
             setIsLoading(false);
             return { success: false };
@@ -2697,20 +3469,43 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
           // Side effects for specific codes (clear stale position data)
           const errorCode = error?.code || error?.response?.data?.code;
-          const rawMessage = error?.message || '';
-          if (errorCode === 'NO_HOLDINGS' || rawMessage.includes('Insufficient token')) {
+          const rawMessage = error?.message || "";
+          if (
+            errorCode === "NO_HOLDINGS" ||
+            rawMessage.includes("Insufficient token")
+          ) {
             setPositionData({
-              bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
-              remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
+              bought: 0,
+              boughtUsdValue: 0,
+              sold: 0,
+              soldUsdValue: 0,
+              remaining: 0,
+              remainingUsdValue: 0,
+              pnl: 0,
+              pnlPercentage: 0,
             });
-          } else if (errorCode === 'NO_LIQUIDITY' || rawMessage.includes('no liquidity across all')) {
+          } else if (
+            errorCode === "NO_LIQUIDITY" ||
+            rawMessage.includes("no liquidity across all")
+          ) {
             setPositionData({
-              bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
-              remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
+              bought: 0,
+              boughtUsdValue: 0,
+              sold: 0,
+              soldUsdValue: 0,
+              remaining: 0,
+              remainingUsdValue: 0,
+              pnl: 0,
+              pnlPercentage: 0,
             });
           }
 
-          transformToastToError(uniqueToastId, errorMessage, tokenImage, tokenName);
+          transformToastToError(
+            uniqueToastId,
+            errorMessage,
+            tokenImage,
+            tokenName,
+          );
           console.error("❌ Sell failed:", error);
           setSuccessMessage(null);
           setIsLoading(false);
@@ -2736,16 +3531,31 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       const isMultiWallet = walletsWithBalance > 1;
 
       // Pre-validate before showing toast
-      const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
-      const buyValidation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
+      const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(
+        () => null,
+      );
+      const buyValidation = validateSolanaBuy(
+        buyAmount,
+        allocations,
+        walletBalances,
+        walletList,
+        selectedWalletIds?.sol || [],
+        settings.priority,
+        settings.bribe,
+        ataExists,
+      );
       if (!buyValidation.valid) {
-        showTradeValidationError(buyValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+        showTradeValidationError(
+          buyValidation.error,
+          getResolvedTokenImage(token),
+          token.symbol || token.name || "Token",
+        );
         setIsLoading(false);
         return { success: false };
       }
 
       // Generate random timer cap (0.40-0.60s)
-      const timerCap = 0.30 + Math.random() * 0.20;
+      const timerCap = 0.3 + Math.random() * 0.2;
       const uniqueToastId = `solana-buy-${Date.now()}-${Math.random()}`;
       const startTime = Date.now();
       let timerFinished = false;
@@ -2753,7 +3563,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       // Extract token image
       const tokenImage = getResolvedTokenImage(token);
-      const tokenName = token.symbol || token.name || 'Token';
+      const tokenName = token.symbol || token.name || "Token";
 
       // Show animated toast with timer
       toast(
@@ -2763,53 +3573,57 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               <img
                 src={tokenImage}
                 alt={tokenName}
-                className="w-6 h-6 rounded-full flex-shrink-0"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                className="h-6 w-6 flex-shrink-0 rounded-full"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
               />
             )}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-sm text-neutral-200 truncate">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate text-sm text-neutral-200">
                 Buying {tokenName}
               </span>
               <span
                 id={`timer-${uniqueToastId}`}
-                className="text-xs text-neutral-400 flex-shrink-0"
+                className="flex-shrink-0 text-xs text-neutral-400"
               >
                 (0.00s)
               </span>
-            <span
-              id={`check-${uniqueToastId}`}
-              className="text-green-400 flex-shrink-0"
-              style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
-            >
-              ✓
-            </span>
-            <span
-              id={`link-${uniqueToastId}`}
-              className="flex-shrink-0"
-              style={{ display: 'inline-flex' }}
-            >
-              {/* Default Solana avatar (becomes clickable once tx hash arrives) */}
-              <img
-                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
-                alt="Solana"
-                className="w-4 h-4 rounded-full opacity-70"
-                style={{ cursor: 'default' }}
-              />
-            </span>
+              <span
+                id={`check-${uniqueToastId}`}
+                className="flex-shrink-0 text-green-400"
+                style={{
+                  display: timerFinished && !tradeErrored ? "inline" : "none",
+                }}
+              >
+                ✓
+              </span>
+              <span
+                id={`link-${uniqueToastId}`}
+                className="flex-shrink-0"
+                style={{ display: "inline-flex" }}
+              >
+                {/* Default Solana avatar (becomes clickable once tx hash arrives) */}
+                <img
+                  src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                  alt="Solana"
+                  className="h-4 w-4 rounded-full opacity-70"
+                  style={{ cursor: "default" }}
+                />
+              </span>
+            </div>
           </div>
-        </div>
         ),
         {
           id: uniqueToastId,
           duration: Infinity,
           style: {
-            background: '#1a1a1a',
-            border: '1px solid #333',
-            borderRadius: '8px',
-            padding: '12px',
+            background: "#1a1a1a",
+            border: "1px solid #333",
+            borderRadius: "8px",
+            padding: "12px",
           },
-        }
+        },
       );
 
       // Start timer animation - update every 50ms, show checkmark when cap is reached
@@ -2827,7 +3641,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           if (!tradeErrored) {
             const checkEl = document.getElementById(`check-${uniqueToastId}`);
             if (checkEl) {
-              checkEl.style.display = 'block';
+              checkEl.style.display = "block";
             }
           }
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -2835,7 +3649,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             if (isMultiWallet) {
               // Show wallet count immediately for multi-wallet
               linkEl.textContent = `${walletsWithBalance}/${total}`;
-              linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+              linkEl.className =
+                "text-xs text-blue-400 font-medium flex-shrink-0";
             }
             // For single wallet, leave empty - will be filled by WebSocket with logo
           }
@@ -2855,26 +3670,37 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         fakeTime: timerCap.toFixed(2),
         startTime,
         timerHandle,
-        totalSelectedWallets: walletsWithBalance
+        totalSelectedWallets: walletsWithBalance,
       };
 
-      const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+      const cleanupTradeListener = listenForTradeEvents(
+        token.mint || "",
+        uniqueToastId,
+        (v) => {
+          tradeErrored = v;
+        },
+        "solana",
+      );
 
       try {
         const poolAddress = resolvedPoolAddress;
-        const baseMint = token.mint || '';
+        const baseMint = token.mint || "";
         const quoteMint = SOL_MINT_ADDRESS;
 
-        notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
+        notifyTradePending({
+          tokenAddress: baseMint,
+          tradeType: "buy",
+          chain: "sol",
+        });
         const multiResult = await executeSolanaMultiBuy({
           poolAddress,
           baseMint,
           quoteMint,
           amountSOL: buyAmount,
           poolType,
-        originalPairAddress: token.pair_address || resolvedPoolAddress,
-        slippage: settings.maxSlippage,
-        priorityFee: settings.priority,
+          originalPairAddress: token.pair_address || resolvedPoolAddress,
+          slippage: settings.maxSlippage,
+          priorityFee: settings.priority,
           bribe: settings.bribe,
           mevMode: settings.mevMode,
           autoFee: settings.autoFee,
@@ -2882,7 +3708,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           rpc: settings.rpc,
           tokenName: token.name,
           tokenSymbol: token.symbol,
-          imageUrl: await resolveTokenImage(token) || undefined,
+          imageUrl: (await resolveTokenImage(token)) || undefined,
           authToken: user.bearerToken,
           walletList,
           walletBalances,
@@ -2893,26 +3719,34 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               if (linkEl) {
                 const explorerUrl = `https://solscan.io/tx/${txHash}`;
                 linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-                linkEl.className = '';
+                linkEl.className = "";
               }
               // Fire early so Portfolio refetches immediately when Solscan link appears
-              broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: amount });
+              broadcastTradeCompleted({
+                tokenAddress: baseMint,
+                tradeType: "buy",
+                chain: "sol",
+                txHash,
+                tokenName: token.name,
+                tokenSymbol: token.symbol,
+                imageUrl: tokenImage,
+                solAmountSpent: amount,
+              });
             }
           },
         });
 
         // If single wallet and we have a tx hash, show clickable Solana icon immediately
-        const firstTxHash =
-          (multiResult?.results || [])
-            .map((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)
-            .find(Boolean);
+        const firstTxHash = (multiResult?.results || [])
+          .map((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)
+          .find(Boolean);
 
         if (firstTxHash && !isMultiWallet) {
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
           if (linkEl) {
             const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
             linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-            linkEl.className = '';
+            linkEl.className = "";
           }
           if (timerHandle) {
             cancelAnimationFrame(timerHandle);
@@ -2927,7 +3761,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           try {
             const trades = await getTradeActivityByUser(user.id.toString());
             const tokenTrades = trades.filter(
-              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+              (trade: any) =>
+                trade.tokenAddress?.toLowerCase() ===
+                (token.mint || "").toLowerCase(),
             );
 
             if (tokenTrades.length > 0) {
@@ -2950,7 +3786,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
               const remainingUsdValue = remaining * avgBoughtPrice;
               const pnl = soldUsdValue + remainingUsdValue - boughtUsdValue;
-              const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+              const pnlPercentage =
+                boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
 
               const newData = {
                 bought,
@@ -2968,18 +3805,45 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
             // Dispatch event to refresh chart price lines
             if (typeof window !== "undefined" && token.mint) {
-              window.dispatchEvent(new CustomEvent("solanaQuickTrade", { detail: { tokenAddress: token.mint } }));
+              window.dispatchEvent(
+                new CustomEvent("solanaQuickTrade", {
+                  detail: { tokenAddress: token.mint },
+                }),
+              );
             }
           } catch (error) {
             console.error("Error refreshing position data:", error);
           }
         }, 2000);
 
-        broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol', tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: amount });
+        broadcastTradeCompleted({
+          tokenAddress: token.mint,
+          tradeType: "buy",
+          chain: "sol",
+          tokenName: token.name,
+          tokenSymbol: token.symbol,
+          imageUrl: tokenImage,
+          solAmountSpent: amount,
+        });
+
+        posthog.capture("token_buy_submitted", {
+          token_mint: token.mint,
+          token_symbol: token.symbol,
+          token_name: token.name,
+          amount_sol: buyAmount,
+          pool_type: poolType,
+          slippage: settings.maxSlippage,
+          mev_mode: settings.mevMode,
+        });
+
         setSuccessMessage(`✅ Bought ${tokenName} successfully!`);
         setIsLoading(false);
         return { success: true };
       } catch (error: any) {
+        posthog.captureException(error, {
+          token_mint: token.mint,
+          trade_type: "buy",
+        });
         tradeErrored = true;
         cleanupTradeListener();
         // Stop timer on error
@@ -2990,7 +3854,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         // Transform pending toast to error in-place
         console.error("❌ Solana buy failed:", error);
         if (pendingSolanaToastRef.current) {
-          transformToastToError(pendingSolanaToastRef.current.id, mapTradeErrorMessage(error), tokenImage, tokenName);
+          transformToastToError(
+            pendingSolanaToastRef.current.id,
+            mapTradeErrorMessage(error),
+            tokenImage,
+            tokenName,
+          );
           pendingSolanaToastRef.current = null;
         }
 
@@ -3010,7 +3879,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       user,
       effectivePoolAddress,
       monitorLimitOrderExecution,
-    ]
+    ],
   );
 
   // High slippage warning handlers
@@ -3044,10 +3913,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   return (
     <div
       className="flex flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#111214', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
+      style={{
+        backgroundColor: "#111214",
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif',
+        paddingBottom: "100px",
+      }}
     >
       {/* ===== A. Time buttons ===== */}
-      <div className="px-3 pt-2 pb-2 border-neutral-800">
+      <div className="border-neutral-800 px-3 pt-2 pb-2">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
           <div className="flex rounded-xl border border-neutral-700">
             {(["5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
@@ -3079,16 +3953,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   onClick={() => setTimeRange(rng)}
                   aria-pressed={timeRange === rng}
                   className={cx(
-                    "flex-1 text-center flex flex-col items-center justify-center cursor-pointer px-2 py-2 border-neutral-700",
-                    timeRange === rng ? "bg-neutral-700 ring-1 ring-white/10" : "hover:bg-neutral-700",
+                    "flex flex-1 cursor-pointer flex-col items-center justify-center border-neutral-700 px-2 py-2 text-center",
+                    timeRange === rng
+                      ? "bg-neutral-700 ring-1 ring-white/10"
+                      : "hover:bg-neutral-700",
                     rng == "5m" ? `rounded-tl-xl rounded-bl-xl` : ``,
-                    rng == "24h" ? `rounded-tr-xl rounded-br-xl` : `border-r`
+                    rng == "24h" ? `rounded-tr-xl rounded-br-xl` : `border-r`,
                   )}
                 >
                   <span
                     className={cx(
-                      "text-[11px] tracking-wide uppercase font-semibold",
-                      timeRange === rng ? "text-[#E6E7EA]" : "text-[#9CA3AF]"
+                      "text-[11px] font-semibold tracking-wide uppercase",
+                      timeRange === rng ? "text-[#E6E7EA]" : "text-[#9CA3AF]",
                     )}
                   >
                     {rng}
@@ -3107,60 +3983,87 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== B. Real-time Stats ===== */}
-      <div className="px-3 py-1.5 border-b border-[#2A2B33]">
+      <div className="border-b border-[#2A2B33] px-3 py-1.5">
         <div className="grid grid-cols-4 gap-3 tabular-nums">
           <div>
-            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide whitespace-nowrap">
+            <div className="text-[10px] tracking-wide whitespace-nowrap text-[#9CA3AF] uppercase">
               {timeRange} Vol
             </div>
-            <div className="text-[#E6E7EA] whitespace-nowrap text-[11px]">${formatCompactNumber(Math.round(volume || 0))}</div>
+            <div className="text-[11px] whitespace-nowrap text-[#E6E7EA]">
+              ${formatCompactNumber(Math.round(volume || 0))}
+            </div>
           </div>
           <div>
-            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Buys</div>
-            <div className="whitespace-nowrap tabular-nums text-[#70E0B0] flex items-baseline gap-0.5 text-[11px]">
+            <div className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+              Buys
+            </div>
+            <div className="flex items-baseline gap-0.5 text-[11px] whitespace-nowrap text-[#70E0B0] tabular-nums">
               <span>{formatCompactNumber(Math.round(buys ?? 0))}</span>
               <span className="text-[#9CA3AF]">/</span>
-              <span className="text-[#70E0B0]">${formatCompactNumber(Math.round(buyVolume || 0))}</span>
+              <span className="text-[#70E0B0]">
+                ${formatCompactNumber(Math.round(buyVolume || 0))}
+              </span>
             </div>
           </div>
           <div>
-            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Sells</div>
-            <div className="whitespace-nowrap tabular-nums text-[#FF4D7F] flex items-baseline gap-0.5 text-[11px]">
+            <div className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+              Sells
+            </div>
+            <div className="flex items-baseline gap-0.5 text-[11px] whitespace-nowrap text-[#FF4D7F] tabular-nums">
               <span>{formatCompactNumber(Math.round(sells ?? 0))}</span>
               <span className="text-[#9CA3AF]">/</span>
-              <span className="text-[#FF4D7F]">${formatCompactNumber(Math.round(sellVolume || 0))}</span>
+              <span className="text-[#FF4D7F]">
+                ${formatCompactNumber(Math.round(sellVolume || 0))}
+              </span>
             </div>
           </div>
           <div>
-            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Net</div>
-            <div className={cx("whitespace-nowrap tabular-nums text-[11px]", netVolume >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
-              {netVolume >= 0 ? "+" : "-"}${formatCompactNumber(Math.round(Math.abs(netVolume)))}
+            <div className="text-[10px] tracking-wide text-[#9CA3AF] uppercase">
+              Net
+            </div>
+            <div
+              className={cx(
+                "text-[11px] whitespace-nowrap tabular-nums",
+                netVolume >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]",
+              )}
+            >
+              {netVolume >= 0 ? "+" : "-"}$
+              {formatCompactNumber(Math.round(Math.abs(netVolume)))}
             </div>
           </div>
         </div>
-        <div className="mt-1 h-0.5 w-full rounded-full bg-[#25282B] relative overflow-hidden">
-          <div className="absolute left-0 top-0 h-full" style={{ width: `${buyPercentage}%`, background: AX.mint }} />
-          <div className="absolute right-0 top-0 h-full" style={{ width: `${sellPercentage}%`, background: AX.sell }} />
+        <div className="relative mt-1 h-0.5 w-full overflow-hidden rounded-full bg-[#25282B]">
+          <div
+            className="absolute top-0 left-0 h-full"
+            style={{ width: `${buyPercentage}%`, background: AX.mint }}
+          />
+          <div
+            className="absolute top-0 right-0 h-full"
+            style={{ width: `${sellPercentage}%`, background: AX.sell }}
+          />
         </div>
       </div>
 
       {/* ===== C. Buy/Sell switcher ===== */}
-      <div className="px-3 py-1.5 -mt-px border-b border-[#2A2B33]">
-        <div className="mx-auto w-full max-w-xl relative">
-          <div className="relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
+      <div className="-mt-px border-b border-[#2A2B33] px-3 py-1.5">
+        <div className="relative mx-auto w-full max-w-xl">
+          <div className="relative h-9 overflow-hidden rounded-lg border border-[#2A2B33] bg-[#1E1F26]">
             <div
               className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
               style={{
-                transform: mode === "sell" ? "translateX(100%)" : "translateX(0%)",
+                transform:
+                  mode === "sell" ? "translateX(100%)" : "translateX(0%)",
                 background: mode === "buy" ? AX.mint : AX.sell,
               }}
             />
-            <div className="relative z-10 grid grid-cols-2 h-full">
+            <div className="relative z-10 grid h-full grid-cols-2">
               <button
                 className={cx(
-                  "cursor-pointer select-none text-[13px] font-semibold",
-                  "flex items-center justify-center h-full",
-                  mode === "buy" ? "text-black" : "text-[#C7CBD1] hover:text-white"
+                  "cursor-pointer text-[13px] font-semibold select-none",
+                  "flex h-full items-center justify-center",
+                  mode === "buy"
+                    ? "text-black"
+                    : "text-[#C7CBD1] hover:text-white",
                 )}
                 onClick={() => setMode("buy")}
               >
@@ -3168,9 +4071,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               </button>
               <button
                 className={cx(
-                  "cursor-pointer select-none text-[13px] font-semibold",
-                  "flex items-center justify-center h-full",
-                  mode === "sell" ? "text-black" : "text-[#C7CBD1] hover:text-white"
+                  "cursor-pointer text-[13px] font-semibold select-none",
+                  "flex h-full items-center justify-center",
+                  mode === "sell"
+                    ? "text-black"
+                    : "text-[#C7CBD1] hover:text-white",
                 )}
                 onClick={() => setMode("sell")}
               >
@@ -3182,16 +4087,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== D. Tabs ===== */}
-      <div className="px-3 pt-1 pb-1.5 border-b border-[#2A2B33]">
+      <div className="border-b border-[#2A2B33] px-3 pt-1 pb-1.5">
         <div className="flex items-center gap-6">
           {(["market", "limit", "adv"] as const).map((t) => (
             <button
               key={t}
               className={cx(
-                tabBtn, 
-                "hover:text-[#E6E7EA]", 
-                tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]",
-                isMigratingToken && t === "market" && "opacity-50 cursor-not-allowed blur-sm"
+                tabBtn,
+                "hover:text-[#E6E7EA]",
+                tab === t && "border-b-2 border-[#70E0B0] text-[#70E0B0]",
+                isMigratingToken &&
+                  t === "market" &&
+                  "cursor-not-allowed opacity-50 blur-sm",
               )}
               onClick={() => {
                 if (isMigratingToken && t === "market") return; // Disable market tab for migrating tokens
@@ -3210,8 +4117,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         <div className="px-3 pt-4 pb-2">
           <div className="text-center">
             <MeteoraMigrationLogo />
-            <p className="text-white text-sm leading-relaxed">
-              This pair is currently migrating. This may take up to 30 minutes. In the meantime, you can still place limit orders, and buy or sell on migration!
+            <p className="text-sm leading-relaxed text-white">
+              This pair is currently migrating. This may take up to 30 minutes.
+              In the meantime, you can still place limit orders, and buy or sell
+              on migration!
             </p>
           </div>
         </div>
@@ -3220,20 +4129,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       {/* ===== E. Migration/Dev Sell Toggle ===== */}
       {tab === "adv" && (
         <div className="px-3 pt-2">
-          <div className="mx-auto w-full max-w-xs relative rounded-md border border-[#2A2B33] bg-[#1E1F26] p-0.5">
+          <div className="relative mx-auto w-full max-w-xs rounded-md border border-[#2A2B33] bg-[#1E1F26] p-0.5">
             <div
               className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
               style={{
-                transform: migrationMode ? "translateX(0%)" : "translateX(100%)",
-                background: '#4B5563',
+                transform: migrationMode
+                  ? "translateX(0%)"
+                  : "translateX(100%)",
+                background: "#4B5563",
               }}
             />
             <div className="relative flex">
               <button
                 type="button"
                 className={cx(
-                  "flex-1 py-1.5 text-[12px] font-medium transition-colors duration-200 rounded-md flex items-center justify-center gap-1",
-                  migrationMode ? "text-[#70E0B0]" : "text-[#9CA3AF]"
+                  "flex flex-1 items-center justify-center gap-1 rounded-md py-1.5 text-[12px] font-medium transition-colors duration-200",
+                  migrationMode ? "text-[#70E0B0]" : "text-[#9CA3AF]",
                 )}
                 onClick={() => {
                   setMigrationMode(true);
@@ -3246,8 +4157,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               <button
                 type="button"
                 className={cx(
-                  "flex-1 py-1.5 text-[12px] font-medium transition-colors duration-200 rounded-md flex items-center justify-center gap-1",
-                  devSellMode ? "text-[#70E0B0]" : "text-[#9CA3AF]"
+                  "flex flex-1 items-center justify-center gap-1 rounded-md py-1.5 text-[12px] font-medium transition-colors duration-200",
+                  devSellMode ? "text-[#70E0B0]" : "text-[#9CA3AF]",
                 )}
                 onClick={() => {
                   setDevSellMode(true);
@@ -3260,8 +4171,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
           </div>
           {devSellMode && !creatorAddress && (
-            <div className="mt-2 text-[11px] text-[#FFB347] text-center">
-              Developer wallet not detected yet. Connect to token service to enable dev sell mirroring.
+            <div className="mt-2 text-center text-[11px] text-[#FFB347]">
+              Developer wallet not detected yet. Connect to token service to
+              enable dev sell mirroring.
             </div>
           )}
         </div>
@@ -3269,20 +4181,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== F. Amount ===== */}
       <div className="px-3 pt-2">
-        <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B]">
+        <div className="relative mx-auto w-full max-w-xl rounded-lg border border-[#2A2B33] bg-[#25282B]">
           <div className="flex items-center justify-between gap-3 px-3 py-1.5">
             <div className="flex items-center gap-1">
-              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
+              <span className="text-[10px] font-semibold tracking-wide text-[#9CA3AF] uppercase">
                 {isSniperMode ? "Sniper Amount" : "Amount"}
               </span>
               <input
                 type="text"
                 inputMode="decimal"
                 pattern="[0-9]*[.,]?[0-9]*"
-                className="h-8 w-20 bg-transparent border-none text-left pl-2
-                           text-[12px] font-normal text-[#E6E7EA] tabular-nums
-                           placeholder:text-[#9CA3AF] focus:outline-none"
-                style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                className="h-8 w-20 border-none bg-transparent pl-2 text-left text-[12px] font-normal text-[#E6E7EA] tabular-nums placeholder:text-[#9CA3AF] focus:outline-none"
+                style={{
+                  fontFamily:
+                    'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                }}
                 placeholder="0.00"
                 value={isSniperMode ? sniperAmount : amount}
                 onChange={(e) => {
@@ -3298,152 +4211,209 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   if (isSniperMode) return;
                   const value = Number(e.target.value);
                   if (mode === "buy" && value > 0) {
-                    const poolType = (getPoolTypeFromToken(token) || token?.launchpad_protocol || '').toLowerCase();
+                    const poolType = (
+                      getPoolTypeFromToken(token) ||
+                      token?.launchpad_protocol ||
+                      ""
+                    ).toLowerCase();
                     const minimums: Record<string, number> = {
                       "meteora amm v2": 0.0001,
                       "meteora amm v1": 0.0001,
                       "raydium cpmm": 0.0001,
                       "raydium amm": 0.0001,
-                      "pumpamm": 0.0001,
-                      "pumpfun": 0.0001,
+                      pumpamm: 0.0001,
+                      pumpfun: 0.0001,
                       "meteora dbc": 0.0001,
-                      "meteora": 0.0001,
+                      meteora: 0.0001,
                     };
                     const minAmount = minimums[poolType] ?? 0.0001;
 
                     if (value < minAmount) {
-                      showEnhancedToast('error', `Minimum trade size is ${minAmount} SOL`, {
-                        title: 'Amount Too Small',
-                        description: `Increase the amount to at least ${minAmount} SOL before placing the order.`,
-                      });
+                      showEnhancedToast(
+                        "error",
+                        `Minimum trade size is ${minAmount} SOL`,
+                        {
+                          title: "Amount Too Small",
+                          description: `Increase the amount to at least ${minAmount} SOL before placing the order.`,
+                        },
+                      );
                     }
                   }
                 }}
               />
             </div>
-            <div className="flex items-center justify-center w-5 h-5">
+            <div className="flex h-5 w-5 items-center justify-center">
               {mode === "sell" ? (
-                <span className="text-[14px] font-semibold text-[#E6E7EA]">%</span>
+                <span className="text-[14px] font-semibold text-[#E6E7EA]">
+                  %
+                </span>
               ) : (
-                <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
-                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
-                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear)"/>
-                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear)"/>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 397.7 311.7"
+                  fill="none"
+                >
+                  <path
+                    d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z"
+                    fill="url(#paint0_linear)"
+                  />
+                  <path
+                    d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
+                    fill="url(#paint1_linear)"
+                  />
+                  <path
+                    d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
+                    fill="url(#paint2_linear)"
+                  />
                   <defs>
-                    <linearGradient id="paint0_linear" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
+                    <linearGradient
+                      id="paint0_linear"
+                      x1="360.8"
+                      y1="351.5"
+                      x2="141.44"
+                      y2="132.14"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop offset="0" stopColor="#00FFA3" />
+                      <stop offset="1" stopColor="#DC1FFF" />
                     </linearGradient>
-                    <linearGradient id="paint1_linear" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
+                    <linearGradient
+                      id="paint1_linear"
+                      x1="264.8"
+                      y1="116.2"
+                      x2="45.44"
+                      y2="-103.16"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop offset="0" stopColor="#00FFA3" />
+                      <stop offset="1" stopColor="#DC1FFF" />
                     </linearGradient>
-                    <linearGradient id="paint2_linear" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
+                    <linearGradient
+                      id="paint2_linear"
+                      x1="312.5"
+                      y1="233.9"
+                      x2="93.14"
+                      y2="14.54"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop offset="0" stopColor="#00FFA3" />
+                      <stop offset="1" stopColor="#DC1FFF" />
                     </linearGradient>
                   </defs>
                 </svg>
               )}
             </div>
           </div>
-          
+
           {/* Minimum hint removed per request */}
 
           {/* Presets */}
           {(() => {
-            const isSellWithPosition = mode === "sell" && positionData && positionData.remaining > 0;
+            const isSellWithPosition =
+              mode === "sell" && positionData && positionData.remaining > 0;
             const isBuyWithPrice = mode === "buy" && effectiveBuyTokenPrice > 0;
             const showSubtext = isSellWithPosition || isBuyWithPrice;
             const presetRowHeight = showSubtext ? "h-12" : "h-9";
             return (
-          <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
-            <div className="grid grid-cols-5">
-              {amountPresets.map((opt, i) => {
-                const currentValue = editingPresets ? (presetDrafts[i] || "") : String(opt);
-                const active = (isSniperMode ? sniperAmount : amount) === currentValue;
-                const tokenAmountForPreset = isSellWithPosition
-                  ? (opt / 100) * positionData.remaining
-                  : isBuyWithPrice
-                    ? opt / effectiveBuyTokenPrice
-                    : null;
-                if (editingPresets) {
-                  return (
-                    <div key={i} className={`${presetRowHeight} border-r border-[#000] last:border-r-0 min-w-0`}>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        className="h-full w-full bg-[#25282B] text-center text-[12px] font-semibold text-[#E6E7EA]
-                                   outline-none focus:bg-[#1E1F26]"
-                        value={presetDrafts[i] ?? ""}
-                        onChange={(e) => {
-                          const v = e.target.value.replace(/,/g, ".");
-                          if (allowDecimal(v)) {
-                            setPresetDrafts((d) => d.map((x, idx) => (idx === i ? v : x)));
+              <div className="overflow-hidden rounded-b-lg border-t border-[#000]">
+                <div className="grid grid-cols-5">
+                  {amountPresets.map((opt, i) => {
+                    const currentValue = editingPresets
+                      ? presetDrafts[i] || ""
+                      : String(opt);
+                    const active =
+                      (isSniperMode ? sniperAmount : amount) === currentValue;
+                    const tokenAmountForPreset = isSellWithPosition
+                      ? (opt / 100) * positionData.remaining
+                      : isBuyWithPrice
+                        ? opt / effectiveBuyTokenPrice
+                        : null;
+                    if (editingPresets) {
+                      return (
+                        <div
+                          key={i}
+                          className={`${presetRowHeight} min-w-0 border-r border-[#000] last:border-r-0`}
+                        >
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="h-full w-full bg-[#25282B] text-center text-[12px] font-semibold text-[#E6E7EA] outline-none focus:bg-[#1E1F26]"
+                            value={presetDrafts[i] ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/,/g, ".");
+                              if (allowDecimal(v)) {
+                                setPresetDrafts((d) =>
+                                  d.map((x, idx) => (idx === i ? v : x)),
+                                );
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                commitPresetDrafts();
+                              }
+                            }}
+                          />
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        className={cx(
+                          `${presetRowHeight} border-r border-[#000] text-[12px] font-semibold tabular-nums last:border-r-0`,
+                          active
+                            ? "bg-[#2A2B33] text-[#E6E7EA]"
+                            : "bg-[#25282B] text-[#E6E7EA] hover:bg-[#1E1F26]",
+                        )}
+                        onClick={() => {
+                          if (isSniperMode) {
+                            setSniperAmount(String(opt));
+                          } else {
+                            setAmount(String(opt));
                           }
                         }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            commitPresetDrafts();
-                          }
-                        }}
-                      />
-                    </div>
-                  );
-                }
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    className={cx(
-                      `${presetRowHeight} border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums`,
-                      active
-                        ? "bg-[#2A2B33] text-[#E6E7EA]"
-                        : "bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
-                    )}
-                    onClick={() => {
-                      if (isSniperMode) {
-                        setSniperAmount(String(opt));
-                      } else {
-                        setAmount(String(opt));
-                      }
-                    }}
-                  >
-                    {tokenAmountForPreset !== null ? (
-                      <div className="flex flex-col items-center justify-center leading-tight">
-                        <span>{opt}{mode === "sell" ? "%" : ""}</span>
-                        <span className="text-[9px] text-[#9CA3AF] font-normal">
-                          {mode === "buy" ? "~" : ""}{formatCompactNumber(tokenAmountForPreset)}
-                        </span>
-                      </div>
-                    ) : (
-                      opt
-                    )}
-                  </button>
-                );
-              })}
-              {!editingPresets ? (
-                <button
-                  type="button"
-                  onClick={() => setEditingPresets(true)}
-                  className={`${presetRowHeight} bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]`}
-                  title="Edit preset values"
-                >
-                  <LuPencil className="mx-auto h-4 w-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={commitPresetDrafts}
-                  className={`${presetRowHeight} bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#25282B]`}
-                  title="Done"
-                >
-                  <LuCheck className="mx-auto h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
+                      >
+                        {tokenAmountForPreset !== null ? (
+                          <div className="flex flex-col items-center justify-center leading-tight">
+                            <span>
+                              {opt}
+                              {mode === "sell" ? "%" : ""}
+                            </span>
+                            <span className="text-[9px] font-normal text-[#9CA3AF]">
+                              {mode === "buy" ? "~" : ""}
+                              {formatCompactNumber(tokenAmountForPreset)}
+                            </span>
+                          </div>
+                        ) : (
+                          opt
+                        )}
+                      </button>
+                    );
+                  })}
+                  {!editingPresets ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingPresets(true)}
+                      className={`${presetRowHeight} bg-[#25282B] text-[#E6E7EA] hover:bg-[#1E1F26]`}
+                      title="Edit preset values"
+                    >
+                      <LuPencil className="mx-auto h-4 w-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={commitPresetDrafts}
+                      className={`${presetRowHeight} bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#25282B]`}
+                      title="Done"
+                    >
+                      <LuCheck className="mx-auto h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
             );
           })()}
         </div>
@@ -3451,21 +4421,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== F. LIMIT FIELDS (with SLIDER) ===== */}
       {tab === "limit" && (
-        <div className="px-3 pt-2 space-y-3">
+        <div className="space-y-3 px-3 pt-2">
           {/* Market cap input */}
-          <div className=" pt-2 pb-3">
-            <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B] mb-3">
+          <div className="pt-2 pb-3">
+            <div className="relative mx-auto mb-3 w-full max-w-xl rounded-lg border border-[#2A2B33] bg-[#25282B]">
               <div className="flex items-center justify-between gap-3 px-3 py-1.5">
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">MKT CAP</span>
+                  <span className="text-[10px] font-semibold tracking-wide text-[#9CA3AF] uppercase">
+                    MKT CAP
+                  </span>
                   <input
                     type="text"
                     inputMode="decimal"
                     pattern="[0-9]*[.,]?[0-9]*"
-                    className="h-8 w-20 bg-transparent border-none text-left pl-2
-                               text-[12px] font-normal text-[#E6E7EA] tabular-nums
-                               placeholder:text-[#9CA3AF] focus:outline-none"
-                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                    className="h-8 w-20 border-none bg-transparent pl-2 text-left text-[12px] font-normal text-[#E6E7EA] tabular-nums placeholder:text-[#9CA3AF] focus:outline-none"
+                    style={{
+                      fontFamily:
+                        'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                    }}
                     placeholder="0"
                     value={targetMC}
                     onChange={(e) => {
@@ -3476,34 +4449,40 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                         if (tab === "limit") {
                           const num = Number(v);
                           if (Number.isFinite(num) && num > 0) {
-                            window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_EVENT, { detail: { targetMC: num } }));
+                            window.dispatchEvent(
+                              new CustomEvent(LIMIT_PREVIEW_EVENT, {
+                                detail: { targetMC: num },
+                              }),
+                            );
                           }
                         }
                       }
                     }}
                   />
                 </div>
-                <span className="text-[11px] font-normal text-[#9CA3AF]">$</span>
+                <span className="text-[11px] font-normal text-[#9CA3AF]">
+                  $
+                </span>
               </div>
             </div>
 
             {/* Slider row */}
-            <div className="flex items-center gap-3 ml-2">
+            <div className="ml-2 flex items-center gap-3">
               {/* slider + ticks */}
               <div className="flex-1">
-                <div className="relative h-4 flex items-center">
+                <div className="relative flex h-4 items-center">
                   {/* Base track */}
-                  <div className="absolute top-1/2 left-0 w-full h-0.5 bg-[#2A2B33] rounded-lg"></div>
-                  
+                  <div className="absolute top-1/2 left-0 h-0.5 w-full rounded-lg bg-[#2A2B33]"></div>
+
                   {/* Markings */}
-                  <div className="absolute top-1/2 left-0 w-full h-0.5 flex justify-between items-center pointer-events-none">
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1.5 bg-[#E6E7EA] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
+                  <div className="pointer-events-none absolute top-1/2 left-0 flex h-0.5 w-full items-center justify-between">
+                    <div className="-mt-0.5 h-1 w-px bg-[#9CA3AF]"></div>
+                    <div className="-mt-0.5 h-1 w-px bg-[#9CA3AF]"></div>
+                    <div className="-mt-0.5 h-1.5 w-px bg-[#E6E7EA]"></div>
+                    <div className="-mt-0.5 h-1 w-px bg-[#9CA3AF]"></div>
+                    <div className="-mt-0.5 h-1 w-px bg-[#9CA3AF]"></div>
                   </div>
-                  
+
                   <input
                     type="range"
                     min={-100}
@@ -3513,27 +4492,34 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     onChange={(e) => {
                       const p = clamp(Number(e.target.value), -100, 100);
                       setSliderPct(p);
-                      const baseForSlider = (sliderBaseMarketCap ?? Number(targetMC)) || 0;
+                      const baseForSlider =
+                        (sliderBaseMarketCap ?? Number(targetMC)) || 0;
                       if (baseForSlider > 0) {
                         lastSliderBaseRef.current = baseForSlider;
                         manualTargetOverrideRef.current = false;
                         const raw = baseForSlider * (1 + p / 100);
-                        const next = baseForSlider < 10
-                          ? Math.round(raw * 100) / 100
-                          : baseForSlider < 1000
-                            ? Math.round(raw * 10) / 10
-                            : Math.round(raw);
+                        const next =
+                          baseForSlider < 10
+                            ? Math.round(raw * 100) / 100
+                            : baseForSlider < 1000
+                              ? Math.round(raw * 10) / 10
+                              : Math.round(raw);
                         setTargetMC(String(Math.max(0, next)));
-                        window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_EVENT, { detail: { targetMC: Math.max(0, next) } }));
+                        window.dispatchEvent(
+                          new CustomEvent(LIMIT_PREVIEW_EVENT, {
+                            detail: { targetMC: Math.max(0, next) },
+                          }),
+                        );
                       }
                     }}
-                    className="w-full h-0.5 appearance-none cursor-pointer slider relative z-10 bg-transparent"
+                    className="slider relative z-10 h-0.5 w-full cursor-pointer appearance-none bg-transparent"
                     style={{
                       background: `linear-gradient(to right, 
-                        ${Number(sliderPct) >= 0
-                          ? `#2A2B33 0%, #2A2B33 50%, #526fff 50%, #526fff ${50 + (Number(sliderPct) / 2)}%, #2A2B33 ${50 + (Number(sliderPct) / 2)}%, #2A2B33 100%`
-                          : `#2A2B33 0%, #2A2B33 ${50 + (Number(sliderPct) / 2)}%, #FF4D7F ${50 + (Number(sliderPct) / 2)}%, #FF4D7F 50%, #2A2B33 50%, #2A2B33 100%`
-                        }`
+                        ${
+                          Number(sliderPct) >= 0
+                            ? `#2A2B33 0%, #2A2B33 50%, #526fff 50%, #526fff ${50 + Number(sliderPct) / 2}%, #2A2B33 ${50 + Number(sliderPct) / 2}%, #2A2B33 100%`
+                            : `#2A2B33 0%, #2A2B33 ${50 + Number(sliderPct) / 2}%, #FF4D7F ${50 + Number(sliderPct) / 2}%, #FF4D7F 50%, #2A2B33 50%, #2A2B33 100%`
+                        }`,
                     }}
                   />
                   <style jsx>{`
@@ -3567,7 +4553,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   `}</style>
                 </div>
                 {/* tick labels */}
-                <div className="mt-2 flex justify-between text-[9px] text-[#9CA3AF] font-normal">
+                <div className="mt-2 flex justify-between text-[9px] font-normal text-[#9CA3AF]">
                   <span>-100%</span>
                   <span>-50%</span>
                   <span>0%</span>
@@ -3594,35 +4580,43 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       const p = clamp(Number(raw), -100, 100);
                       if (Number.isNaN(p)) return;
                       setSliderPct(p);
-                      const baseForSlider = (sliderBaseMarketCap ?? Number(targetMC)) || 0;
+                      const baseForSlider =
+                        (sliderBaseMarketCap ?? Number(targetMC)) || 0;
                       if (baseForSlider > 0) {
                         lastSliderBaseRef.current = baseForSlider;
                         manualTargetOverrideRef.current = false;
                         const raw = baseForSlider * (1 + p / 100);
-                        const next = baseForSlider < 10
-                          ? Math.round(raw * 100) / 100
-                          : baseForSlider < 1000
-                            ? Math.round(raw * 10) / 10
-                            : Math.round(raw);
+                        const next =
+                          baseForSlider < 10
+                            ? Math.round(raw * 100) / 100
+                            : baseForSlider < 1000
+                              ? Math.round(raw * 10) / 10
+                              : Math.round(raw);
                         setTargetMC(String(Math.max(0, next)));
-                        window.dispatchEvent(new CustomEvent(LIMIT_PREVIEW_EVENT, { detail: { targetMC: Math.max(0, next) } }));
+                        window.dispatchEvent(
+                          new CustomEvent(LIMIT_PREVIEW_EVENT, {
+                            detail: { targetMC: Math.max(0, next) },
+                          }),
+                        );
                       }
                     }}
-                    className="h-8 w-full rounded border border-[#2A2B33] bg-[#101114] px-2 pr-5 text-[12px] font-semibold text-[#E6E7EA] outline-none focus:border-[#52c5ff] focus:ring-1 focus:ring-[#52c5ff]/20 transition-all duration-200"
+                    className="h-8 w-full rounded border border-[#2A2B33] bg-[#101114] px-2 pr-5 text-[12px] font-semibold text-[#E6E7EA] transition-all duration-200 outline-none focus:border-[#52c5ff] focus:ring-1 focus:ring-[#52c5ff]/20"
                   />
-                  <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[#9CA3AF] font-normal">%</span>
+                  <span className="pointer-events-none absolute top-1/2 right-1.5 -translate-y-1/2 text-[9px] font-normal text-[#9CA3AF]">
+                    %
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* helper if base MC is unknown */}
             {!sliderBaseMarketCap ? (
-              <div className="mt-2 text-[9px] text-[#9CA3AF] font-normal">
-                Current market cap unavailable — enter a target value directly to enable the slider.
+              <div className="mt-2 text-[9px] font-normal text-[#9CA3AF]">
+                Current market cap unavailable — enter a target value directly
+                to enable the slider.
               </div>
             ) : null}
           </div>
-
         </div>
       )}
 
@@ -3654,68 +4648,131 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         >
           <span className="flex items-center gap-1 text-[#9CA3AF]">
             <FaGasPump className="opacity-90" /> {settings.priority}
-            {settings.priority < 0.01 ? <span className="text-[#FF4D7F]">⚠</span> : null}
+            {settings.priority < 0.01 ? (
+              <span className="text-[#FF4D7F]">⚠</span>
+            ) : null}
           </span>
         </InterstateTooltip>
         <InterstateTooltip label="Bribe">
           <span className="flex items-center gap-1 text-[#9CA3AF]">
-            <FaCoins className="opacity-90" /> {settings.bribe} <span className="text-[#FF4D7F]">⚠</span>
+            <FaCoins className="opacity-90" /> {settings.bribe}{" "}
+            <span className="text-[#FF4D7F]">⚠</span>
           </span>
         </InterstateTooltip>
         <InterstateTooltip label="MEV Protection">
           <span
             className={cx(
               "flex items-center gap-1",
-              settings.mevMode === "off" ? "text-[#9CA3AF]" : settings.mevMode === "reduced" ? "text-[#9CA3AF]" : "text-[#70E0B0]"
+              settings.mevMode === "off"
+                ? "text-[#9CA3AF]"
+                : settings.mevMode === "reduced"
+                  ? "text-[#9CA3AF]"
+                  : "text-[#70E0B0]",
             )}
           >
             <FaBan className="opacity-90" />
-            {settings.mevMode === "off" ? "Off" : settings.mevMode === "reduced" ? "Reduced" : "Secure"}
+            {settings.mevMode === "off"
+              ? "Off"
+              : settings.mevMode === "reduced"
+                ? "Reduced"
+                : "Secure"}
           </span>
         </InterstateTooltip>
-        </div>
+      </div>
 
       {/* Feedback */}
       {/* Previously showed inline success/error messages; replaced by centered toasts */}
 
       {/* Helper line */}
       {!isSniperMode && (
-        <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
+        <div className="mt-1.5 px-3 text-right text-[11px] text-[#9CA3AF]">
           {amount ? (
             <>
-              You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span>
+              You'll {mode === "buy" ? "spend" : "sell"}{" "}
+              <span className="font-semibold text-[#E6E7EA]">{amount}</span>
               {mode === "sell" ? (
                 <>
-                  <span className="text-[#E6E7EA] font-semibold">%</span>
-                  {positionData && positionData.remaining > 0 && Number(amount) > 0 && (
-                    <span className="text-[#9CA3AF]"> ({formatCompactNumber((Number(amount) / 100) * positionData.remaining)} tokens)</span>
-                  )}
+                  <span className="font-semibold text-[#E6E7EA]">%</span>
+                  {positionData &&
+                    positionData.remaining > 0 &&
+                    Number(amount) > 0 && (
+                      <span className="text-[#9CA3AF]">
+                        {" "}
+                        (
+                        {formatCompactNumber(
+                          (Number(amount) / 100) * positionData.remaining,
+                        )}{" "}
+                        tokens)
+                      </span>
+                    )}
                 </>
               ) : (
                 <>
-                  <div className="inline-block w-3 h-3 ml-1 align-middle">
-                    <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
-                      <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
-                      <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
-                      <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
+                  <div className="ml-1 inline-block h-3 w-3 align-middle">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 397.7 311.7"
+                      fill="none"
+                    >
+                      <path
+                        d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z"
+                        fill="url(#paint0_linear_helper)"
+                      />
+                      <path
+                        d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
+                        fill="url(#paint1_linear_helper)"
+                      />
+                      <path
+                        d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
+                        fill="url(#paint2_linear_helper)"
+                      />
                       <defs>
-                        <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                          <stop offset="0" stopColor="#00FFA3"/>
-                          <stop offset="1" stopColor="#DC1FFF"/>
+                        <linearGradient
+                          id="paint0_linear_helper"
+                          x1="360.8"
+                          y1="351.5"
+                          x2="141.44"
+                          y2="132.14"
+                          gradientUnits="userSpaceOnUse"
+                        >
+                          <stop offset="0" stopColor="#00FFA3" />
+                          <stop offset="1" stopColor="#DC1FFF" />
                         </linearGradient>
-                        <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                          <stop offset="0" stopColor="#00FFA3"/>
-                          <stop offset="1" stopColor="#DC1FFF"/>
+                        <linearGradient
+                          id="paint1_linear_helper"
+                          x1="264.8"
+                          y1="116.2"
+                          x2="45.44"
+                          y2="-103.16"
+                          gradientUnits="userSpaceOnUse"
+                        >
+                          <stop offset="0" stopColor="#00FFA3" />
+                          <stop offset="1" stopColor="#DC1FFF" />
                         </linearGradient>
-                        <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                          <stop offset="0" stopColor="#00FFA3"/>
-                          <stop offset="1" stopColor="#DC1FFF"/>
+                        <linearGradient
+                          id="paint2_linear_helper"
+                          x1="312.5"
+                          y1="233.9"
+                          x2="93.14"
+                          y2="14.54"
+                          gradientUnits="userSpaceOnUse"
+                        >
+                          <stop offset="0" stopColor="#00FFA3" />
+                          <stop offset="1" stopColor="#DC1FFF" />
                         </linearGradient>
                       </defs>
                     </svg>
                   </div>
                   {effectiveBuyTokenPrice > 0 && Number(amount) > 0 && (
-                    <span className="text-[#9CA3AF]"> (~{formatCompactNumber(Number(amount) / effectiveBuyTokenPrice)} tokens)</span>
+                    <span className="text-[#9CA3AF]">
+                      {" "}
+                      (~
+                      {formatCompactNumber(
+                        Number(amount) / effectiveBuyTokenPrice,
+                      )}{" "}
+                      tokens)
+                    </span>
                   )}
                 </>
               )}
@@ -3725,14 +4782,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       )}
 
       {/* Est. receive row for buy mode */}
-      {mode === "buy" && effectiveBuyTokenPrice > 0 && Number(isSniperMode ? sniperAmount : amount) > 0 && (
-        <div className="mx-3 mt-1 flex items-center justify-between rounded-md bg-[#1A1B1E] px-3 py-1.5">
-          <span className="text-[11px] text-[#9CA3AF]">Est. receive</span>
-          <span className="text-[12px] font-semibold text-[#E6E7EA] tabular-nums">
-            ~{formatCompactNumber(Number(isSniperMode ? sniperAmount : amount) / effectiveBuyTokenPrice)} {token.symbol}
-          </span>
-        </div>
-      )}
+      {mode === "buy" &&
+        effectiveBuyTokenPrice > 0 &&
+        Number(isSniperMode ? sniperAmount : amount) > 0 && (
+          <div className="mx-3 mt-1 flex items-center justify-between rounded-md bg-[#1A1B1E] px-3 py-1.5">
+            <span className="text-[11px] text-[#9CA3AF]">Est. receive</span>
+            <span className="text-[12px] font-semibold text-[#E6E7EA] tabular-nums">
+              ~
+              {formatCompactNumber(
+                Number(isSniperMode ? sniperAmount : amount) /
+                  effectiveBuyTokenPrice,
+              )}{" "}
+              {token.symbol}
+            </span>
+          </div>
+        )}
 
       {/* Primary action */}
       <div className="px-3 py-2">
@@ -3741,16 +4805,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           type="button"
           className={cx(
             baseBtn,
-            "w-full h-10 rounded-full text-[14px] cursor-pointer",
+            "h-10 w-full cursor-pointer rounded-full text-[14px]",
             mode === "buy"
               ? "bg-[#70E0B0] text-black hover:bg-[#58B890]"
-              : "bg-[#FF4D7F] text-black hover:opacity-90"
+              : "bg-[#FF4D7F] text-black hover:opacity-90",
           )}
-          disabled={isSniperMode
-            ? !sniperAmount || Number(sniperAmount) <= 0 || sniperSubmitting
-            : isDevSellMode
-              ? !amount || Number(amount) <= 0 || devSubmitting || !creatorAddress
-              : !amount || (tab === "limit" && !targetMC)}
+          disabled={
+            isSniperMode
+              ? !sniperAmount || Number(sniperAmount) <= 0 || sniperSubmitting
+              : isDevSellMode
+                ? !amount ||
+                  Number(amount) <= 0 ||
+                  devSubmitting ||
+                  !creatorAddress
+                : !amount || (tab === "limit" && !targetMC)
+          }
           onClick={() => {
             if (isSniperMode) {
               void handleCreateSniperOrder();
@@ -3769,9 +4838,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 Arm Sniper {token.symbol}
                 {prettyAmt(sniperAmount) && (
                   <>
-                    {" "}{prettyAmt(sniperAmount)}
+                    {" "}
+                    {prettyAmt(sniperAmount)}
                     {mode === "buy" ? (
-                      <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                      <SiSolana className="-mt-px h-4 w-4" aria-hidden="true" />
                     ) : (
                       <span className="ml-0.5">%</span>
                     )}
@@ -3784,32 +4854,60 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               "Arming…"
             ) : (
               <span className="inline-flex items-center gap-1">
-                {mode === "buy" ? "Arm Buy on Dev Sell" : "Arm Sell on Dev Sell"}
+                {mode === "buy"
+                  ? "Arm Buy on Dev Sell"
+                  : "Arm Sell on Dev Sell"}
                 {prettyAmt(amount) && (
                   <>
-                    {" "}{prettyAmt(amount)}
-                    {mode === "sell" ? <span>%</span> : <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />}
+                    {" "}
+                    {prettyAmt(amount)}
+                    {mode === "sell" ? (
+                      <span>%</span>
+                    ) : (
+                      <SiSolana className="-mt-px h-4 w-4" aria-hidden="true" />
+                    )}
                   </>
                 )}
               </span>
             )
           ) : (
             <span className="inline-flex items-center gap-1">
-              {isMigratingToken && mode === "buy" ? "Snipe" : mode === "buy" ? "Buy" : "Sell"}
-              {mode === "sell" && positionData && positionData.remaining > 0 && Number(amount) > 0 && (
-                <> {formatCompactNumber((Number(amount) / 100) * positionData.remaining)}</>
-              )}
-              {mode === "buy" && effectiveBuyTokenPrice > 0 && Number(amount) > 0 && (
-                <> ~{formatCompactNumber(Number(amount) / effectiveBuyTokenPrice)}</>
-              )}
-              {" "}{token.symbol}
+              {isMigratingToken && mode === "buy"
+                ? "Snipe"
+                : mode === "buy"
+                  ? "Buy"
+                  : "Sell"}
+              {mode === "sell" &&
+                positionData &&
+                positionData.remaining > 0 &&
+                Number(amount) > 0 && (
+                  <>
+                    {" "}
+                    {formatCompactNumber(
+                      (Number(amount) / 100) * positionData.remaining,
+                    )}
+                  </>
+                )}
+              {mode === "buy" &&
+                effectiveBuyTokenPrice > 0 &&
+                Number(amount) > 0 && (
+                  <>
+                    {" "}
+                    ~
+                    {formatCompactNumber(
+                      Number(amount) / effectiveBuyTokenPrice,
+                    )}
+                  </>
+                )}{" "}
+              {token.symbol}
               {prettyAmt(amount) && (
                 <>
-                  {" "}{prettyAmt(amount)}
+                  {" "}
+                  {prettyAmt(amount)}
                   {mode === "sell" ? (
                     <span>%</span>
                   ) : (
-                    <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                    <SiSolana className="-mt-px h-4 w-4" aria-hidden="true" />
                   )}
                 </>
               )}
@@ -3819,126 +4917,270 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* footer mini stats */}
-      <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
+      <div
+        className="grid grid-cols-4 gap-1 p-3"
+        style={{ borderTop: `1px solid ${AX.border}` }}
+      >
+        <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-[#2A2B33] bg-[#25282B] p-2">
+          <span className="text-[9px] tracking-wide text-[#9CA3AF] uppercase">
+            Bought
+          </span>
           <div className="flex items-center gap-1">
-            <div className="w-2.5 h-2.5">
+            <div className="h-2.5 w-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
-                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_bought)"/>
-                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_bought)"/>
-                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_bought)"/>
+                <path
+                  d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z"
+                  fill="url(#paint0_linear_bought)"
+                />
+                <path
+                  d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
+                  fill="url(#paint1_linear_bought)"
+                />
+                <path
+                  d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
+                  fill="url(#paint2_linear_bought)"
+                />
                 <defs>
-                  <linearGradient id="paint0_linear_bought" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint0_linear_bought"
+                    x1="360.8"
+                    y1="351.5"
+                    x2="141.44"
+                    y2="132.14"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
-                  <linearGradient id="paint1_linear_bought" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint1_linear_bought"
+                    x1="264.8"
+                    y1="116.2"
+                    x2="45.44"
+                    y2="-103.16"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
-                  <linearGradient id="paint2_linear_bought" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint2_linear_bought"
+                    x1="312.5"
+                    y1="233.9"
+                    x2="93.14"
+                    y2="14.54"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[10px] font-semibold">
-              ${positionData ? formatCompactNumber(positionData.boughtUsdValue) : '0'}
+            <span className="text-[10px] font-semibold text-[#70E0B0]">
+              $
+              {positionData
+                ? formatCompactNumber(positionData.boughtUsdValue)
+                : "0"}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
+        <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-[#2A2B33] bg-[#25282B] p-2">
+          <span className="text-[9px] tracking-wide text-[#9CA3AF] uppercase">
+            Sold
+          </span>
           <div className="flex items-center gap-1">
-            <div className="w-2.5 h-2.5">
+            <div className="h-2.5 w-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
-                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_sold)"/>
-                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_sold)"/>
-                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_sold)"/>
+                <path
+                  d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z"
+                  fill="url(#paint0_linear_sold)"
+                />
+                <path
+                  d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
+                  fill="url(#paint1_linear_sold)"
+                />
+                <path
+                  d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
+                  fill="url(#paint2_linear_sold)"
+                />
                 <defs>
-                  <linearGradient id="paint0_linear_sold" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint0_linear_sold"
+                    x1="360.8"
+                    y1="351.5"
+                    x2="141.44"
+                    y2="132.14"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
-                  <linearGradient id="paint1_linear_sold" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint1_linear_sold"
+                    x1="264.8"
+                    y1="116.2"
+                    x2="45.44"
+                    y2="-103.16"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
-                  <linearGradient id="paint2_linear_sold" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint2_linear_sold"
+                    x1="312.5"
+                    y1="233.9"
+                    x2="93.14"
+                    y2="14.54"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
                 </defs>
               </svg>
             </div>
-            <span className="text-[#FF4D7F] text-[10px] font-semibold">
-              ${positionData ? formatCompactNumber(positionData.soldUsdValue) : '0'}
+            <span className="text-[10px] font-semibold text-[#FF4D7F]">
+              $
+              {positionData
+                ? formatCompactNumber(positionData.soldUsdValue)
+                : "0"}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
+        <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-[#2A2B33] bg-[#25282B] p-2">
+          <span className="text-[9px] tracking-wide text-[#9CA3AF] uppercase">
+            Holding
+          </span>
           <div className="flex items-center gap-1">
-            <div className="w-2.5 h-2.5">
+            <div className="h-2.5 w-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
-                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_holding)"/>
-                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_holding)"/>
-                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_holding)"/>
+                <path
+                  d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z"
+                  fill="url(#paint0_linear_holding)"
+                />
+                <path
+                  d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
+                  fill="url(#paint1_linear_holding)"
+                />
+                <path
+                  d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
+                  fill="url(#paint2_linear_holding)"
+                />
                 <defs>
-                  <linearGradient id="paint0_linear_holding" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint0_linear_holding"
+                    x1="360.8"
+                    y1="351.5"
+                    x2="141.44"
+                    y2="132.14"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
-                  <linearGradient id="paint1_linear_holding" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint1_linear_holding"
+                    x1="264.8"
+                    y1="116.2"
+                    x2="45.44"
+                    y2="-103.16"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
-                  <linearGradient id="paint2_linear_holding" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint2_linear_holding"
+                    x1="312.5"
+                    y1="233.9"
+                    x2="93.14"
+                    y2="14.54"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
                 </defs>
               </svg>
             </div>
-            <span className="text-[#E6E7EA] text-[10px] font-semibold">
-              ${positionData ? formatCompactNumber(positionData.remainingUsdValue) : '0'}
+            <span className="text-[10px] font-semibold text-[#E6E7EA]">
+              $
+              {positionData
+                ? formatCompactNumber(positionData.remainingUsdValue)
+                : "0"}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">PnL</span>
+        <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-[#2A2B33] bg-[#17191E] p-2">
+          <span className="text-[9px] tracking-wide text-[#9CA3AF] uppercase">
+            PnL
+          </span>
           <div className="flex items-center gap-1">
-            <div className="w-2.5 h-2.5">
+            <div className="h-2.5 w-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
-                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_pnl)"/>
-                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_pnl)"/>
-                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_pnl)"/>
+                <path
+                  d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z"
+                  fill="url(#paint0_linear_pnl)"
+                />
+                <path
+                  d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
+                  fill="url(#paint1_linear_pnl)"
+                />
+                <path
+                  d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
+                  fill="url(#paint2_linear_pnl)"
+                />
                 <defs>
-                  <linearGradient id="paint0_linear_pnl" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint0_linear_pnl"
+                    x1="360.8"
+                    y1="351.5"
+                    x2="141.44"
+                    y2="132.14"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
-                  <linearGradient id="paint1_linear_pnl" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint1_linear_pnl"
+                    x1="264.8"
+                    y1="116.2"
+                    x2="45.44"
+                    y2="-103.16"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
-                  <linearGradient id="paint2_linear_pnl" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
+                  <linearGradient
+                    id="paint2_linear_pnl"
+                    x1="312.5"
+                    y1="233.9"
+                    x2="93.14"
+                    y2="14.54"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0" stopColor="#00FFA3" />
+                    <stop offset="1" stopColor="#DC1FFF" />
                   </linearGradient>
                 </defs>
               </svg>
             </div>
-            <div className={`text-[9px] font-semibold ${positionData && positionData.pnl >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
+            <div
+              className={`text-[9px] font-semibold ${positionData && positionData.pnl >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]"}`}
+            >
               {positionData ? (
                 <div className="flex flex-col items-center leading-tight">
                   <div className="mb-0.5">
-                    {positionData.pnl >= 0 ? '+' : ''}${formatCompactNumber(Math.abs(positionData.pnl))}
+                    {positionData.pnl >= 0 ? "+" : ""}$
+                    {formatCompactNumber(Math.abs(positionData.pnl))}
                   </div>
                   <div>
-                    ({positionData.pnl >= 0 ? '+' : ''}{Number(positionData.pnlPercentage).toFixed(1)}%)
+                    ({positionData.pnl >= 0 ? "+" : ""}
+                    {Number(positionData.pnlPercentage).toFixed(1)}%)
                   </div>
                 </div>
               ) : (
@@ -3952,37 +5194,57 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
       </div>
 
-      <div className="w-full overflow-hidden" style={{ borderTop: `1px solid ${AX.border}` }}>
-        <QuickBuy hideActionButton className="rounded-none border-none bg-transparent" />
+      <div
+        className="w-full overflow-hidden"
+        style={{ borderTop: `1px solid ${AX.border}` }}
+      >
+        <QuickBuy
+          hideActionButton
+          className="rounded-none border-none bg-transparent"
+        />
       </div>
 
       {/* ===== Contract Address ===== */}
       <div className="border-t border-[#2A2B33]">
         <AddressDisplay
           label="CA"
-          address={token.mint || ''}
+          address={token.mint || ""}
           icon={
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14,2 14,8 20,8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10,9 9,9 8,9"/>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14,2 14,8 20,8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10,9 9,9 8,9" />
             </svg>
           }
-          solscanUrl={`https://solscan.io/token/${token.mint || ''}`}
+          solscanUrl={`https://solscan.io/token/${token.mint || ""}`}
           tooltip="Contract Address - The token's smart contract address on Solana"
         />
-        
+
         {/* Dev Address */}
         {creatorAddress && (
           <AddressDisplay
             label="DA"
             address={creatorAddress}
             icon={
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
               </svg>
             }
             solscanUrl={`https://solscan.io/account/${creatorAddress}`}
@@ -3992,10 +5254,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== Token Info ===== */}
-      <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} firstBuyers={firstBuyers} firstBuyersSummary={firstBuyersSummary} />
+      <TokenInfoDropdown
+        token={token}
+        liveMarketCapUsd={liveMarketCapUsd}
+        firstBuyers={firstBuyers}
+        firstBuyersSummary={firstBuyersSummary}
+      />
 
       {/* ===== Pool Info Section ===== */}
-      <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} liveLiquidityUsd={liveLiquidityUsd} />
+      <PoolInfoSection
+        token={token}
+        liveMarketCapUsd={liveMarketCapUsd}
+        liveLiquidityUsd={liveLiquidityUsd}
+      />
 
       {/* High Slippage Warning Dialog */}
       <HighSlippageWarningDialog

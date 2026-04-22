@@ -8,6 +8,7 @@
  * Lifetime), top-3 podium, your position, and the full standings list.
  */
 
+import posthog from "posthog-js";
 import React, { useState, useMemo, useEffect } from "react";
 import Head from "next/head";
 import Header from "~/components/Header";
@@ -302,7 +303,12 @@ export default function LeaderboardPage() {
                         return (
                           <button
                             key={key}
-                            onClick={() => setType(key)}
+                            onClick={() => {
+                              setType(key);
+                              posthog.capture("leaderboard_category_changed", {
+                                category: key,
+                              });
+                            }}
                             className={`rounded-full px-4 py-2 text-sm transition-all ${
                               active
                                 ? "bg-gradient-to-r from-amber-500 to-yellow-500 font-semibold text-black"
@@ -335,7 +341,15 @@ export default function LeaderboardPage() {
                         return (
                           <button
                             key={season.key}
-                            onClick={() => !locked && setPeriod(season.key)}
+                            onClick={() => {
+                              if (!locked) {
+                                setPeriod(season.key);
+                                posthog.capture(
+                                  "leaderboard_category_changed",
+                                  { period: season.key },
+                                );
+                              }
+                            }}
                             disabled={locked}
                             aria-label={ariaLabel}
                             title={
@@ -352,9 +366,7 @@ export default function LeaderboardPage() {
                             }`}
                           >
                             {season.label}
-                            {locked && (
-                              <span aria-hidden="true"> 🔒</span>
-                            )}
+                            {locked && <span aria-hidden="true"> 🔒</span>}
                           </button>
                         );
                       })}
