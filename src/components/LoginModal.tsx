@@ -307,7 +307,7 @@ export default function LoginModal({
         ...(user.name && { username: user.name }),
       });
     }
-  }, [user?.id]);
+  }, [user?.id, user?.email, user?.name]);
 
   // Track if we're in the middle of a login flow to prevent auto-close
   const isInNewUserFlowRef = useRef(false);
@@ -497,94 +497,6 @@ export default function LoginModal({
     }
   }
 
-  //   async function handleGoogleSuccess(resp: CredentialResponse) {
-  //   setGoogleLoading(true);
-  //   setError(null);
-  //   setSuccess(null);
-
-  //   try {
-  //     const publicKey = pubKeyRef.current;
-  //     if (!publicKey) {
-  //       throw new Error("Google login is not ready yet. Please try again.");
-  //     }
-
-  //     if (!resp?.credential) {
-  //       throw new Error("Google login did not return a credential.");
-  //     }
-
-  //     if (!turnkey?.completeOauth) {
-  //       throw new Error("Turnkey OAuth is not available right now.");
-  //     }
-
-  //     // -------- Decode Google ID token to extract optional metadata ----------
-  //     isDev && console.log("Google credential:", resp.credential);
-  //     const createSubOrgParams = (() => {
-  //       try {
-  //         const [, payloadSegment] = resp.credential.split(".");
-  //         if (!payloadSegment) return undefined;
-
-  //         const payloadJson = atob(
-  //           payloadSegment.replace(/-/g, "+").replace(/_/g, "/")
-  //         );
-  //         const payload = JSON.parse(payloadJson);
-  //         console.log("Decoded Google token payload:", payload);
-  //         const email =
-  //           typeof payload?.email === "string" ? payload.email : undefined;
-  //         const name =
-  //           typeof payload?.name === "string"
-  //             ? payload.name
-  //             : typeof payload?.given_name === "string"
-  //             ? payload.given_name
-  //             : undefined;
-
-  //         if (!email && !name) return undefined;
-
-  //         return {
-  //           ...(name && { userName: name }),
-  //           ...(email && { userEmail: email }),
-  //         };
-  //       } catch (err) {
-  //         console.warn("Could not decode Google token for signup metadata", err);
-  //         return undefined;
-  //       }
-  //     })();
-
-  //     isDev && console.log("createSubOrgParams:", createSubOrgParams);
-
-  //     // -------- Build OAuth parameters for Turnkey --------
-  //     const oauthParams: any = {
-  //       oidcToken: resp.credential,
-  //       publicKey,
-  //       providerName: "Google"
-  //     };
-  //     console.log("OAuth params before sub-org:", oauthParams);
-  //     if (createSubOrgParams) {
-  //     oauthParams.createSubOrgParams = createSubOrgParams;
-  //     }
-  //     isDev && console.log("Final OAuth params:", oauthParams);
-
-  //     // -------- SUPER IMPORTANT: Use completeWithOauth --------
-  //     const sessionResult = await turnkey.completeOauth(oauthParams);
-
-  //     isDev && console.log("Turnkey OAuth result:", sessionResult);
-  //     setSuccess("Google sign-in complete!");
-
-  //   } catch (err: any) {
-  //     console.error("Turnkey Google OAuth failed:", err);
-
-  //     const message =
-  //       err?.message ||
-  //       err?.response?.data?.message ||
-  //       "Google OAuth login failed";
-
-  //     setError(message);
-  //     createdNonceRef.current = false;
-  //     setGoogleNonce(null);
-
-  //   } finally {
-  //     setGoogleLoading(false);
-  //   }
-  // }
 
   async function handleGoogleSuccess(resp: CredentialResponse) {
     setGoogleLoading(true);
