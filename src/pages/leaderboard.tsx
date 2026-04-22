@@ -19,12 +19,7 @@ import ArenaPageToggle from "~/components/ArenaPageToggle";
 import type { LeaderboardEntry } from "~/utils/arenaApi";
 
 import { GiTrophy } from "react-icons/gi";
-import {
-  FiSearch,
-  FiChevronLeft,
-  FiChevronRight,
-  FiAlertCircle,
-} from "react-icons/fi";
+import { FiSearch, FiAlertCircle } from "react-icons/fi";
 
 type LeaderboardType = "points" | "pnl" | "volume";
 type LeaderboardPeriod = "DAILY" | "MONTHLY" | "LIFETIME";
@@ -119,23 +114,21 @@ export default function LeaderboardPage() {
   const [mounted, setMounted] = useState(false);
   const [type, setType] = useState<LeaderboardType>("points");
   const [period, setPeriod] = useState<LeaderboardPeriod>("DAILY");
-  const [page, setPage] = useState(1);
   // Uncontrolled input text — debounced below before flowing into the query
   // so every keystroke doesn't fire a fresh backend request.
   const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebouncedValue(searchInput, 300);
-  const pageSize = 50;
+  // Leaderboard caps at top 10 per product direction (Irfan + Hujoe,
+  // Slack Apr 21). Pagination is retired — "your position" row for
+  // users outside top 10 will land with the seasons migration.
+  const pageSize = 10;
+  const TOP_N = 10;
 
   useEffect(() => setMounted(true), []);
 
-  // Reset to the first page whenever the debounced search term changes.
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch]);
-
   const { leaderboard, position, top3 } = useLeaderboardPageData(type, period, {
     limit: pageSize,
-    offset: (page - 1) * pageSize,
+    offset: 0,
     search: debouncedSearch || undefined,
   });
 
@@ -156,9 +149,6 @@ export default function LeaderboardPage() {
   const top3Data: LeaderboardEntry[] = top3.data ?? [];
   const leaderboardEntries: LeaderboardEntry[] =
     leaderboard.data?.entries ?? [];
-  const totalEntries = leaderboard.data?.total ?? 0;
-  const totalPages = Math.ceil(totalEntries / pageSize);
-
   const isInitialLoading =
     leaderboard.isLoading && leaderboardEntries.length === 0;
   const isLeaderboardError = leaderboard.isError;
@@ -299,10 +289,7 @@ export default function LeaderboardPage() {
                         return (
                           <button
                             key={key}
-                            onClick={() => {
-                              setType(key);
-                              setPage(1);
-                            }}
+                            onClick={() => setType(key)}
                             className={`rounded-full px-4 py-2 text-sm transition-all ${
                               active
                                 ? "bg-gradient-to-r from-amber-500 to-yellow-500 font-semibold text-black"
@@ -324,10 +311,7 @@ export default function LeaderboardPage() {
                         return (
                           <button
                             key={p}
-                            onClick={() => {
-                              setPeriod(p);
-                              setPage(1);
-                            }}
+                            onClick={() => setPeriod(p)}
                             className={`rounded-full px-4 py-1.5 text-xs font-medium tracking-wider uppercase transition-colors ${
                               active
                                 ? "bg-white/[0.1] text-white"
@@ -601,8 +585,8 @@ export default function LeaderboardPage() {
                         </div>
                       ))
                     ) : leaderboardEntries.length > 0 ? (
-                      leaderboardEntries.map((entry, idx) => {
-                        const pos = (page - 1) * pageSize + idx + 1;
+                      leaderboardEntries.slice(0, TOP_N).map((entry, idx) => {
+                        const pos = idx + 1;
                         const displayName = entry.userName || "User";
                         const initial = (displayName[0] || "?").toUpperCase();
                         const value = getEntryValue(entry);
@@ -658,41 +642,6 @@ export default function LeaderboardPage() {
                     )}
                   </div>
 
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between border-t border-white/[0.08] px-5 py-3 text-[11px]">
-                      <div className="text-neutral-500">
-                        Page{" "}
-                        <span className="font-mono font-semibold text-white tabular-nums">
-                          {page}
-                        </span>{" "}
-                        of{" "}
-                        <span className="font-mono text-neutral-400 tabular-nums">
-                          {totalPages}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setPage(Math.max(1, page - 1))}
-                          disabled={page === 1}
-                          className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-white hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          <FiChevronLeft className="h-3 w-3" />
-                          Prev
-                        </button>
-                        <button
-                          onClick={() =>
-                            setPage(Math.min(totalPages, page + 1))
-                          }
-                          disabled={page === totalPages}
-                          className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-white hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          Next
-                          <FiChevronRight className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* FAQs */}
