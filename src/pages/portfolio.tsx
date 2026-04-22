@@ -1,11 +1,4 @@
-import posthog from "posthog-js";
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-} from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import Header from "../components/Header";
@@ -27,17 +20,7 @@ import { getWithdrawalHistory } from "~/utils/api";
 import { formatSmartNumber, formatSmallPrice } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
 import type { UnifiedTokenMetadata } from "~/utils/tokenMetadata";
-import {
-  FaSearch,
-  FaEye,
-  FaUpload,
-  FaTimes,
-  FaInfoCircle,
-  FaStar,
-  FaRegStar,
-  FaTrash,
-  FaSync,
-} from "react-icons/fa";
+import { FaSearch, FaEye, FaUpload, FaTimes, FaInfoCircle, FaStar, FaRegStar, FaTrash, FaSync } from "react-icons/fa";
 import { IoIosGitNetwork } from "react-icons/io";
 import { PiNetwork } from "react-icons/pi";
 import { SiSolana } from "react-icons/si";
@@ -47,65 +30,40 @@ import ImportSolanaWalletModal from "../components/ImportSolanaWalletModal";
 import ImportEvmWalletModal from "../components/ImportEvmWalletModal";
 import { SolanaIcon } from "../components/Footer";
 import ExportWalletModal from "../components/ExportWalletModal";
-import RealizedPnlChart, {
-  type PnlChartDataPoint,
-} from "~/components/charts/RealizedPnlChart";
+import RealizedPnlChart, { type PnlChartDataPoint } from "~/components/charts/RealizedPnlChart";
 
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Area,
-  AreaChart,
-} from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
-import {
-  TRADE_COMPLETED_EVENT,
-  consumePendingTradeRefreshes,
-  type TradeCompletedDetail,
-} from "~/utils/tradeEvents";
+import { TRADE_COMPLETED_EVENT, consumePendingTradeRefreshes, type TradeCompletedDetail } from "~/utils/tradeEvents";
 import { redistributeWalletFunds } from "~/utils/api";
 import { deleteUserWallet } from "~/utils/api";
-import {
-  PredictionPositions,
-  UnifiedPortfolio,
-  PolygonWalletCard,
-} from "~/components/predictions";
+import { PredictionPositions, UnifiedPortfolio, PolygonWalletCard } from "~/components/predictions";
 import { useSolanaPositionWebSocketContext } from "~/contexts/SolanaPositionWebSocketContext";
+import posthog from "posthog-js";
 
-const isDev = process.env.NODE_ENV !== "production";
+const isDev = process.env.NODE_ENV !== 'production';
 
 // Interactive Balance Chart Component
-const BalanceChart = ({
-  data,
-  chain,
-  initialBalance,
-}: {
-  data: Array<{ timestamp: number; balance: number; balanceChange: number }>;
+const BalanceChart = ({ 
+  data, 
+  chain, 
+  initialBalance 
+}: { 
+  data: Array<{ timestamp: number; balance: number; balanceChange: number }>; 
   chain: string;
   initialBalance: number;
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const gradientId = `balanceGradient-${chain}-${Date.now()}`;
-
+  
   const chartData = data.map((entry, index) => {
     const date = new Date(entry.timestamp);
-    const timeLabel = date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const timeLabel = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     const balanceChangeFromInitial = entry.balance - initialBalance;
-    const balanceChangePercent =
-      initialBalance > 0
-        ? (balanceChangeFromInitial / initialBalance) * 100
-        : 0;
-
+    const balanceChangePercent = initialBalance > 0 ? ((balanceChangeFromInitial / initialBalance) * 100) : 0;
+    
     return {
       time: timeLabel,
       timestamp: entry.timestamp,
@@ -121,45 +79,21 @@ const BalanceChart = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div
-          className="pointer-events-none z-50 rounded-lg border border-white/[0.06] bg-black/90 p-3 shadow-lg backdrop-blur-xl"
-          style={{
-            position: "absolute",
-            transform: "translateY(-100%)",
-            marginTop: "-10px",
-          }}
-        >
-          <p className="mb-2 text-xs font-medium text-[#6B7280]">{data.time}</p>
+        <div className="bg-black/90 backdrop-blur-xl border border-white/[0.06] rounded-lg p-3 shadow-lg z-50 pointer-events-none" style={{
+          position: 'absolute',
+          transform: 'translateY(-100%)',
+          marginTop: '-10px'
+        }}>
+          <p className="text-[#6B7280] text-xs mb-2 font-medium">{data.time}</p>
           <div className="space-y-1">
-            <p
-              className="text-sm font-medium"
-              style={{
-                color:
-                  data.balanceChangeFromInitial >= 0 ? "#70E0B0" : "#FF4D7F",
-              }}
-            >
-              Balance: {formatSmartNumber(data.balance)}{" "}
-              {chain === "monad" ? "MON" : "SOL"}
+            <p className="text-sm font-medium" style={{ color: data.balanceChangeFromInitial >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+              Balance: {formatSmartNumber(data.balance)} {chain === 'monad' ? 'MON' : 'SOL'}
             </p>
-            <p
-              className="text-xs"
-              style={{
-                color:
-                  data.balanceChangeFromInitial >= 0 ? "#70E0B0" : "#FF4D7F",
-              }}
-            >
-              Change: {data.balanceChangeFromInitial >= 0 ? "+" : ""}
-              {formatSmartNumber(Math.abs(data.balanceChangeFromInitial))}{" "}
-              {chain === "monad" ? "MON" : "SOL"}
+            <p className="text-xs" style={{ color: data.balanceChangeFromInitial >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+              Change: {data.balanceChangeFromInitial >= 0 ? "+" : ""}{formatSmartNumber(Math.abs(data.balanceChangeFromInitial))} {chain === 'monad' ? 'MON' : 'SOL'}
             </p>
-            <p
-              className="text-xs"
-              style={{
-                color: data.balanceChangePercent >= 0 ? "#70E0B0" : "#FF4D7F",
-              }}
-            >
-              {data.balanceChangePercent >= 0 ? "+" : ""}
-              {data.balanceChangePercent.toFixed(2)}%
+            <p className="text-xs" style={{ color: data.balanceChangePercent >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+              {data.balanceChangePercent >= 0 ? "+" : ""}{data.balanceChangePercent.toFixed(2)}%
             </p>
           </div>
         </div>
@@ -170,19 +104,18 @@ const BalanceChart = ({
 
   if (chartData.length === 0) return null;
 
-  const isPositive =
-    chartData[chartData.length - 1]?.balanceChangeFromInitial >= 0;
+  const isPositive = chartData[chartData.length - 1]?.balanceChangeFromInitial >= 0;
   const strokeColor = isPositive ? "#70E0B0" : "#FF4D7F";
 
   // Calculate fixed domain for Y-axis to prevent chart from moving
-  const allValues = chartData.map((d) => d.balanceChangeFromInitial);
+  const allValues = chartData.map(d => d.balanceChangeFromInitial);
   const minValue = Math.min(...allValues, 0);
   const maxValue = Math.max(...allValues, 0);
   const padding = Math.max(Math.abs(minValue), Math.abs(maxValue)) * 0.1; // 10% padding
   const yDomain = [minValue - padding, maxValue + padding];
 
   return (
-    <div className="h-full min-h-[120px] w-full sm:min-h-[160px]">
+    <div className="w-full h-full min-h-[120px] sm:min-h-[160px]">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={chartData}
@@ -200,24 +133,20 @@ const BalanceChart = ({
               <stop offset="95%" stopColor={strokeColor} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="rgba(255,255,255,0.06)"
-            opacity={0.5}
-          />
-          <XAxis
-            dataKey="time"
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" opacity={0.5} />
+          <XAxis 
+            dataKey="time" 
             stroke="#6B7280"
             fontSize={8}
-            tick={{ fill: "#6B7280" }}
+            tick={{ fill: '#6B7280' }}
             interval={Math.floor(chartData.length / 5)}
-            tickLine={{ stroke: "rgba(255,255,255,0.06)" }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
           />
-          <YAxis
+          <YAxis 
             stroke="#6B7280"
             fontSize={8}
-            tick={{ fill: "#6B7280" }}
-            tickLine={{ stroke: "rgba(255,255,255,0.06)" }}
+            tick={{ fill: '#6B7280' }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
             domain={yDomain}
             allowDataOverflow={false}
             width={40}
@@ -227,13 +156,9 @@ const BalanceChart = ({
               return value.toFixed(4);
             }}
           />
-          <Tooltip
+          <Tooltip 
             content={<CustomTooltip />}
-            cursor={{
-              stroke: strokeColor,
-              strokeWidth: 1,
-              strokeDasharray: "5 5",
-            }}
+            cursor={{ stroke: strokeColor, strokeWidth: 1, strokeDasharray: '5 5' }}
             position={{ y: -10 }}
           />
           <Area
@@ -243,11 +168,11 @@ const BalanceChart = ({
             strokeWidth={2}
             fill={`url(#${gradientId})`}
             dot={false}
-            activeDot={{
-              r: 5,
+            activeDot={{ 
+              r: 5, 
               fill: strokeColor,
-              stroke: "rgba(0,0,0,0.8)",
-              strokeWidth: 2,
+              stroke: 'rgba(0,0,0,0.8)',
+              strokeWidth: 2
             }}
             animationDuration={300}
           />
@@ -260,20 +185,17 @@ const BalanceChart = ({
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
   <InterstateTooltip label="Tokens held">
-    <div className="flex cursor-pointer items-center gap-2 transition-opacity hover:opacity-80">
-      <div
-        className="relative flex items-center"
-        style={{ width: "32px", height: "16px" }}
-      >
+    <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+      <div className="flex items-center relative" style={{ width: "32px", height: "16px" }}>
         {[0, 1, 2].map((index) => (
           <div
             key={index}
-            className={`absolute h-4 w-4 rounded-sm ${
+            className={`absolute w-4 h-4 rounded-sm ${
               index === 0
                 ? "bg-[#4B5563]"
                 : index === 1
-                  ? "bg-[#6B7280]"
-                  : "bg-[#9CA3AF]"
+                ? "bg-[#6B7280]"
+                : "bg-[#9CA3AF]"
             }`}
             style={{
               left: `${index * 6}px`,
@@ -288,32 +210,26 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
 );
 
 // Dynamic chain icon component (Solana or Monad)
-const ChainIcon = ({
-  chain = "sol",
-  size = "small",
-}: {
-  chain?: string;
-  size?: "small" | "medium" | "large";
-}) => {
+const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: 'small' | 'medium' | 'large' }) => {
   const sizeClasses = {
-    small: "h-3 w-3",
-    medium: "h-4 w-4",
-    large: "h-5 w-5",
+    small: 'h-3 w-3',
+    medium: 'h-4 w-4',
+    large: 'h-5 w-5',
   };
-
-  if (chain === "monad") {
+  
+  if (chain === 'monad') {
     return (
       <img
         src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
         alt="Monad"
-        className={`${sizeClasses[size]} mx-0.5 -mt-0.5 inline-block rounded`}
-        style={{ objectFit: "contain" }}
+        className={`${sizeClasses[size]} inline-block -mt-0.5 mx-0.5 rounded`}
+        style={{ objectFit: 'contain' }}
       />
     );
   }
   return (
     <SiSolana
-      className={`${sizeClasses[size]} mx-0.5 -mt-0.5 inline-block`}
+      className={`${sizeClasses[size]} inline-block -mt-0.5 mx-0.5`}
       aria-hidden="true"
       style={{
         color: "unset",
@@ -353,13 +269,14 @@ const isValidSolanaAddress = (address?: string | null) =>
 
 const normalizeWalletFromApi = (
   wallet: any,
-  fallbackIndex?: number,
+  fallbackIndex?: number
 ): UserWallet => {
   const rawAddress =
     typeof wallet?.address === "string" ? wallet.address.trim() : "";
-  const solanaAddress = isValidSolanaAddress(wallet?.solanaAddress)
-    ? wallet.solanaAddress.trim()
-    : isValidSolanaAddress(rawAddress)
+  const solanaAddress =
+    isValidSolanaAddress(wallet?.solanaAddress)
+      ? wallet.solanaAddress.trim()
+      : isValidSolanaAddress(rawAddress)
       ? rawAddress
       : "";
   const ethereumAddress =
@@ -370,8 +287,7 @@ const normalizeWalletFromApi = (
   let label = typeof wallet?.label === "string" ? wallet.label : undefined;
   if (!label) {
     if (typeof fallbackIndex === "number") {
-      label =
-        fallbackIndex === 0 ? "Interstate Main" : `Wallet ${fallbackIndex + 1}`;
+      label = fallbackIndex === 0 ? "Interstate Main" : `Wallet ${fallbackIndex + 1}`;
     } else {
       label = "Wallet";
     }
@@ -383,8 +299,7 @@ const normalizeWalletFromApi = (
     solanaAddress: solanaAddress,
     ethereumAddress,
     balance: typeof wallet?.balance === "number" ? wallet.balance : 0,
-    holdingsCount:
-      typeof wallet?.holdingsCount === "number" ? wallet.holdingsCount : 0,
+    holdingsCount: typeof wallet?.holdingsCount === "number" ? wallet.holdingsCount : 0,
     isArchived: Boolean(wallet?.isArchived),
     isPrimary: Boolean(wallet?.isPrimary),
     walletId: wallet?.walletId ?? null, // Turnkey wallet ID
@@ -412,42 +327,16 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const CACHE_KEY = "tokenMetadataCache";
 
 export default function PortfolioPage() {
-  const [activeSection, setActiveSectionState] = useState<
-    "spot" | "predictions" | "wallet" | "perpetuals"
-  >("spot");
-  const setActiveSection = (
-    section: "spot" | "predictions" | "wallet" | "perpetuals",
-  ) => {
+  const [activeSection, setActiveSectionState] = useState<"spot" | "predictions" | "wallet" | "perpetuals">("spot");
+  const setActiveSection = (section: "spot" | "predictions" | "wallet" | "perpetuals") => {
     setActiveSectionState(section);
     // Notify Header about section change so it can toggle prediction balance display
-    window.dispatchEvent(
-      new CustomEvent("portfolio-section-change", { detail: { section } }),
-    );
+    window.dispatchEvent(new CustomEvent('portfolio-section-change', { detail: { section } }));
   };
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const {
-    user,
-    loading: userLoading,
-    solBalance,
-    usdcBalance,
-    refreshBalance,
-    refreshAllBalances,
-    chainBalances,
-    primaryWalletAddresses,
-    walletBalances: contextWalletBalances,
-    walletList: contextWalletList,
-    walletListLoading,
-    refreshWalletList,
-    refreshUser,
-    selectedWalletIds,
-    selectAllWalletsForChain,
-    selectWalletsWithFunds,
-    clearSelectedWallets,
-    setSelectedWalletsForChain,
-  } = useUser();
-  const { requestSnapshot, connected: wsConnected } =
-    useSolanaPositionWebSocketContext();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
+  const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
   const { solPrice: contextSolPrice, monPrice } = useSolPrice();
   const router = useRouter();
   // Get chain from URL first, then localStorage, then default to solana
@@ -455,45 +344,40 @@ export default function PortfolioPage() {
     if (router.query.chain) {
       return router.query.chain as string;
     }
-    if (typeof window !== "undefined") {
-      const savedChain = localStorage.getItem("selected-chain");
-      if (savedChain === "sol" || savedChain === "monad") {
+    if (typeof window !== 'undefined') {
+      const savedChain = localStorage.getItem('selected-chain');
+      if (savedChain === 'sol' || savedChain === 'monad') {
         return savedChain;
       }
     }
-    return "sol";
+    return 'sol';
   })();
   const monBalance = chainBalances?.monad || 0;
-  const chainBalance =
-    chainBalances?.[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
-  const chainPrice =
-    currentChain === "monad" ? monPrice || 0 : contextSolPrice || 0;
+  const chainBalance = chainBalances?.[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
+  const chainPrice = currentChain === 'monad' ? (monPrice || 0) : (contextSolPrice || 0);
   const [walletChecked, setWalletChecked] = useState(false);
   // Incremented when a trade-completed event fires, triggers re-fetch of history/activity
   const [tradeRefreshCounter, setTradeRefreshCounter] = useState(0);
   // Cache keys for trade history and activity (user-specific and chain-specific)
   const tradeHistoryCacheKey = useMemo(() => {
-    return `trade_history_cache_${user?.id || "anonymous"}_${currentChain}`;
+    return `trade_history_cache_${user?.id || 'anonymous'}_${currentChain}`;
   }, [user?.id, currentChain]);
 
   const tradeActivityCacheKey = useMemo(() => {
-    return `trade_activity_cache_${user?.id || "anonymous"}_${currentChain}`;
+    return `trade_activity_cache_${user?.id || 'anonymous'}_${currentChain}`;
   }, [user?.id, currentChain]);
 
   // Initialize trade history from localStorage cache for instant display
   // No TTL gating — background fetch always runs on mount and replaces cached data within seconds
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>(() => {
-    if (!user?.id || typeof window === "undefined") return [];
+    if (!user?.id || typeof window === 'undefined') return [];
     try {
       const cacheKey = `trade_history_cache_${user.id}_${currentChain}`;
       const cached = window.localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          isDev &&
-            console.log(
-              `[Trade History] ✅ Restored ${parsed.data.length} trades from cache for instant display`,
-            );
+          isDev && console.log(`[Trade History] ✅ Restored ${parsed.data.length} trades from cache for instant display`);
           return parsed.data as TradeRow[];
         }
       }
@@ -503,7 +387,7 @@ export default function PortfolioPage() {
     return [];
   });
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(() => {
-    if (!user?.id || typeof window === "undefined") return true;
+    if (!user?.id || typeof window === 'undefined') return true;
     try {
       const cacheKey = `trade_history_cache_${user.id}_${currentChain}`;
       const cached = window.localStorage.getItem(cacheKey);
@@ -511,26 +395,21 @@ export default function PortfolioPage() {
         const parsed = JSON.parse(cached);
         if (parsed?.data?.length > 0) return false;
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     return true;
   });
-
+  
   // Initialize trade activity from localStorage cache for instant display
   // No TTL gating — background fetch always runs on mount and replaces cached data within seconds
   const [tradeActivity, setTradeActivity] = useState<TradeRow[]>(() => {
-    if (!user?.id || typeof window === "undefined") return [];
+    if (!user?.id || typeof window === 'undefined') return [];
     try {
       const cacheKey = `trade_activity_cache_${user.id}_${currentChain}`;
       const cached = window.localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          isDev &&
-            console.log(
-              `[Trade Activity] ✅ Restored ${parsed.data.length} trades from cache for instant display`,
-            );
+          isDev && console.log(`[Trade Activity] ✅ Restored ${parsed.data.length} trades from cache for instant display`);
           return parsed.data as TradeRow[];
         }
       }
@@ -540,7 +419,7 @@ export default function PortfolioPage() {
     return [];
   });
   const [loadingTradeActivity, setLoadingTradeActivity] = useState(() => {
-    if (!user?.id || typeof window === "undefined") return true;
+    if (!user?.id || typeof window === 'undefined') return true;
     try {
       const cacheKey = `trade_activity_cache_${user.id}_${currentChain}`;
       const cached = window.localStorage.getItem(cacheKey);
@@ -548,26 +427,21 @@ export default function PortfolioPage() {
         const parsed = JSON.parse(cached);
         if (parsed?.data?.length > 0) return false;
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
     return true;
   });
-
+  
   // Load from cache when cache keys change (e.g., user or chain changes)
   useEffect(() => {
-    if (!user?.id || typeof window === "undefined") return;
-
+    if (!user?.id || typeof window === 'undefined') return;
+    
     // Load trade history from cache
     try {
       const cached = window.localStorage.getItem(tradeHistoryCacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          isDev &&
-            console.log(
-              `[Trade History] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`,
-            );
+          isDev && console.log(`[Trade History] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`);
           setTradeHistory(parsed.data as TradeRow[]);
           setLoadingTradeHistory(false);
         }
@@ -582,10 +456,7 @@ export default function PortfolioPage() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
-          isDev &&
-            console.log(
-              `[Trade Activity] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`,
-            );
+          isDev && console.log(`[Trade Activity] ✅ Loaded ${parsed.data.length} trades from cache (cache key changed)`);
           setTradeActivity(parsed.data as TradeRow[]);
           setLoadingTradeActivity(false);
         }
@@ -599,39 +470,31 @@ export default function PortfolioPage() {
   const [totalPnl, setTotalPnl] = useState(0);
   const [totalPnlPercentage, setTotalPnlPercentage] = useState(0);
   const [actualBalanceChangePnl, setActualBalanceChangePnl] = useState(0);
-  const [
-    actualBalanceChangePnlPercentage,
-    setActualBalanceChangePnlPercentage,
-  ] = useState(0);
+  const [actualBalanceChangePnlPercentage, setActualBalanceChangePnlPercentage] = useState(0);
   const [actualBalanceChangeNative, setActualBalanceChangeNative] = useState(0); // Native balance change (MON or SOL)
-  const [
-    actualBalanceChangeNativePercentage,
-    setActualBalanceChangeNativePercentage,
-  ] = useState(0); // Native percentage change
-  const [balanceHistory, setBalanceHistory] = useState<
-    Array<{ timestamp: number; balance: number; balanceChange: number }>
-  >([]);
+  const [actualBalanceChangeNativePercentage, setActualBalanceChangeNativePercentage] = useState(0); // Native percentage change
+  const [balanceHistory, setBalanceHistory] = useState<Array<{ timestamp: number; balance: number; balanceChange: number }>>([]);
   const [pnlChartData, setPnlChartData] = useState<PnlChartDataPoint[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   // Track previous balances to detect sales - persist across page reloads
   const previousBalancesRef = useRef<Record<string, number>>({});
-
+  
   // Track cumulative realized PNL (persists across reloads)
   const cumulativeRealizedPnlRef = useRef<number>(0);
-
+  
   // Track initial native balance (MON for Monad, SOL for Solana) for actual PNL calculation
   const initialNativeBalanceRef = useRef<number | null>(null);
-
+  
   // Track if balance refresh should be forced (e.g., when wallets are updated)
   const forceBalanceRefreshRef = useRef(false);
   const activityLoadedRef = useRef(false);
   const pendingWsTradesRef = useRef<any[]>([]);
-
+  
   // Helper to get localStorage keys (computed based on user and chain)
   const getStorageKeys = () => ({
-    previousBalances: `previousBalances_${user?.id || "anonymous"}_${currentChain}`,
-    cumulativeRealizedPnl: `cumulativeRealizedPnl_${user?.id || "anonymous"}_${currentChain}`,
-    initialNativeBalance: `initialNativeBalance_${user?.id || "anonymous"}_${currentChain}`,
+    previousBalances: `previousBalances_${user?.id || 'anonymous'}_${currentChain}`,
+    cumulativeRealizedPnl: `cumulativeRealizedPnl_${user?.id || 'anonymous'}_${currentChain}`,
+    initialNativeBalance: `initialNativeBalance_${user?.id || 'anonymous'}_${currentChain}`,
   });
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
@@ -641,7 +504,7 @@ export default function PortfolioPage() {
   const [sortByUSD, setSortByUSD] = useState(false);
   // Calculate native price for current chain
   const nativePriceForDisplay = useMemo(() => {
-    if (currentChain === "monad") {
+    if (currentChain === 'monad') {
       return monPrice || 0.025;
     } else {
       return contextSolPrice || 0;
@@ -664,20 +527,14 @@ export default function PortfolioPage() {
   const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
   const [walletRenameValue, setWalletRenameValue] = useState("");
   const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
-  const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
-    {},
-  );
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [showImportSolanaModal, setShowImportSolanaModal] = useState(false);
   const [showImportEvmModal, setShowImportEvmModal] = useState(false);
   const [showImportDropdown, setShowImportDropdown] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportWalletId, setExportWalletId] = useState<string | null>(null);
-  const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(
-    null,
-  );
-  const [forceExportChain, setForceExportChain] = useState<
-    "sol" | "monad" | null
-  >(null);
+  const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
+  const [forceExportChain, setForceExportChain] = useState<"sol" | "monad" | null>(null);
   const [walletSearchQuery, setWalletSearchQuery] = useState("");
   const [redistributing, setRedistributing] = useState(false);
   const [deletingWalletId, setDeletingWalletId] = useState<string | null>(null);
@@ -693,10 +550,10 @@ export default function PortfolioPage() {
     }
   };
 
+
   // Shared token metadata cache across all tabs
-  const [tokenMetadataCache, setTokenMetadataCache] = useState<
-    Record<string, TokenMetadataCache>
-  >({});
+  const [tokenMetadataCache, setTokenMetadataCache] =
+    useState<Record<string, TokenMetadataCache>>({});
   const tokenMetadataCacheRef = useRef<Record<string, TokenMetadataCache>>({});
 
   // Load cache from localStorage on mount
@@ -704,8 +561,7 @@ export default function PortfolioPage() {
     try {
       const savedCache = localStorage.getItem(CACHE_KEY);
       if (savedCache) {
-        const parsed: Record<string, TokenMetadataCache> =
-          JSON.parse(savedCache);
+        const parsed: Record<string, TokenMetadataCache> = JSON.parse(savedCache);
         // Filter out expired entries
         const now = Date.now();
         const validCache: Record<string, TokenMetadataCache> = {};
@@ -717,10 +573,9 @@ export default function PortfolioPage() {
         if (Object.keys(validCache).length > 0) {
           setTokenMetadataCache(validCache);
           tokenMetadataCacheRef.current = validCache;
-          isDev &&
-            console.log(
-              `📦 Loaded ${Object.keys(validCache).length} cached tokens from localStorage`,
-            );
+          isDev && console.log(
+            `📦 Loaded ${Object.keys(validCache).length} cached tokens from localStorage`,
+          );
         }
       }
     } catch (error) {
@@ -745,13 +600,16 @@ export default function PortfolioPage() {
       // ignore storage issues
     }
 
-    const primary = wallets.find((w) => w.isPrimary) || wallets[0];
+    const primary =
+      wallets.find((w) => w.isPrimary) ||
+      wallets[0];
 
     if (primary) {
       setExportWalletId(primary.walletId || primary.id);
       setExportWalletAddress(getAddressForChain(primary, "sol"));
       setForceExportChain("sol");
       setShowExportModal(true);
+      posthog.capture("wallet_export_initiated", { chain: currentChain });
     }
   }, [currentChain, showExportModal, user?.id, wallets]);
 
@@ -772,7 +630,10 @@ export default function PortfolioPage() {
 
   // Helper function to update cache
   const updateTokenMetadataCache = useCallback(
-    (tokenAddress: string, metadata: Omit<TokenMetadataCache, "timestamp">) => {
+    (
+      tokenAddress: string,
+      metadata: Omit<TokenMetadataCache, "timestamp">,
+    ) => {
       setTokenMetadataCache((prev) => ({
         ...prev,
         [tokenAddress]: {
@@ -814,7 +675,7 @@ export default function PortfolioPage() {
     const map: Record<string, PositionRow> = {};
 
     // Filter out split trades (multi-wallet children) to avoid double-counting
-    const nonSplitTrades = tradeHistory.filter((t) => !t.isSplitTrade);
+    const nonSplitTrades = tradeHistory.filter(t => !t.isSplitTrade);
 
     nonSplitTrades.forEach((trade) => {
       const tokenKey = trade.tokenAddress?.toLowerCase();
@@ -852,8 +713,7 @@ export default function PortfolioPage() {
 
       entry.remaining = entry.bought - entry.sold;
       entry.remainingUsdValue = entry.boughtUsdValue - entry.soldUsdValue;
-      entry.pnl =
-        entry.soldUsdValue + entry.remainingUsdValue - entry.boughtUsdValue;
+      entry.pnl = entry.soldUsdValue + entry.remainingUsdValue - entry.boughtUsdValue;
       entry.pnlPercentage =
         entry.boughtUsdValue > 0 ? (entry.pnl / entry.boughtUsdValue) * 100 : 0;
     });
@@ -890,16 +750,12 @@ export default function PortfolioPage() {
       if (user?.id) {
         // Check cache to determine if we should show loading
         let hasValidCache = false;
-        if (typeof window !== "undefined") {
+        if (typeof window !== 'undefined') {
           try {
             const cached = window.localStorage.getItem(tradeHistoryCacheKey);
             if (cached) {
               const parsed = JSON.parse(cached);
-              if (
-                parsed &&
-                Array.isArray(parsed.data) &&
-                parsed.data.length > 0
-              ) {
+              if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
                 hasValidCache = true;
               }
             }
@@ -912,20 +768,12 @@ export default function PortfolioPage() {
         if (!hasValidCache) {
           setLoadingTradeHistory(true);
         } else {
-          isDev &&
-            console.log(
-              `[Trade History] 🔄 Refreshing trade history in background (cache available for instant display)`,
-            );
+          isDev && console.log(`[Trade History] 🔄 Refreshing trade history in background (cache available for instant display)`);
         }
 
         try {
           // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
-          const blockchain =
-            currentChain === "monad"
-              ? "monad"
-              : currentChain === "sol"
-                ? "solana"
-                : undefined;
+          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
           // Use getTradeActivityByUser to get raw trades with PNL fields (pricePerToken, costBasis, realizedPnl, etc.)
           const history = await getTradeActivityByUser(user.id, blockchain);
           const filteredHistory = Array.isArray(history)
@@ -935,36 +783,26 @@ export default function PortfolioPage() {
           // Merge WS trades that REST hasn't confirmed yet
           const now = Date.now();
           const restIds = new Set(filteredHistory.map((t: any) => t.id));
-          pendingWsTradesRef.current = pendingWsTradesRef.current.filter(
-            (t: any) => {
-              if (restIds.has(t.id)) return false; // REST confirmed
-              if (now - (t._wsTimestamp || 0) > 60000) return false; // Expired
-              return true;
-            },
-          );
+          pendingWsTradesRef.current = pendingWsTradesRef.current.filter((t: any) => {
+            if (restIds.has(t.id)) return false; // REST confirmed
+            if (now - (t._wsTimestamp || 0) > 60000) return false; // Expired
+            return true;
+          });
 
           let finalHistory = filteredHistory;
           if (pendingWsTradesRef.current.length > 0) {
-            const wsIds = new Set(
-              pendingWsTradesRef.current.map((t: any) => t.id),
-            );
-            const dedupedRest = filteredHistory.filter(
-              (t: any) => !wsIds.has(t.id),
-            );
+            const wsIds = new Set(pendingWsTradesRef.current.map((t: any) => t.id));
+            const dedupedRest = filteredHistory.filter((t: any) => !wsIds.has(t.id));
             finalHistory = [...pendingWsTradesRef.current, ...dedupedRest];
           }
           setTradeHistory(finalHistory);
 
           // Save to localStorage cache for instant loading when navigating back
-          if (typeof window !== "undefined") {
+          if (typeof window !== 'undefined') {
             try {
-              window.localStorage.setItem(
-                tradeHistoryCacheKey,
-                JSON.stringify({
-                  data: finalHistory,
-                  timestamp: Date.now(),
-                }),
-              );
+              window.localStorage.setItem(tradeHistoryCacheKey, JSON.stringify({
+                data: finalHistory, timestamp: Date.now(),
+              }));
             } catch {}
           }
         } catch (error) {
@@ -977,13 +815,7 @@ export default function PortfolioPage() {
     };
 
     fetchTradeHistory();
-  }, [
-    user?.id,
-    currentChain,
-    isTradeOnCurrentChain,
-    tradeHistoryCacheKey,
-    tradeRefreshCounter,
-  ]);
+  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeHistoryCacheKey, tradeRefreshCounter]);
 
   // Fetch trade activity — always fetch on tradeRefreshCounter change (event-driven),
   // but only auto-poll every 5s when the Activity tab is visible.
@@ -995,16 +827,12 @@ export default function PortfolioPage() {
 
       // Check cache to determine if we should show loading
       let hasValidCache = false;
-      if (typeof window !== "undefined") {
+      if (typeof window !== 'undefined') {
         try {
           const cached = window.localStorage.getItem(tradeActivityCacheKey);
           if (cached) {
             const parsed = JSON.parse(cached);
-            if (
-              parsed &&
-              Array.isArray(parsed.data) &&
-              parsed.data.length > 0
-            ) {
+            if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
               hasValidCache = true;
             }
           }
@@ -1017,99 +845,66 @@ export default function PortfolioPage() {
       if (isInitialLoad && !hasValidCache && !activityLoadedRef.current) {
         setLoadingTradeActivity(true);
       } else if (hasValidCache) {
-        isDev &&
-          console.log(
-            `[Trade Activity] 🔄 Refreshing trade activity in background (cache available for instant display)`,
-          );
+        isDev && console.log(`[Trade Activity] 🔄 Refreshing trade activity in background (cache available for instant display)`);
       }
 
       try {
         // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
-        const blockchain =
-          currentChain === "monad"
-            ? "monad"
-            : currentChain === "sol"
-              ? "solana"
-              : undefined;
+        const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
         const result = await fetchTradeActivity(user.id, blockchain);
 
         if (!result.ok) {
           // Error/timeout — preserve existing tradeActivity, don't wipe to []
-          console.warn(
-            `[Trade Activity] Fetch failed (${(result as { ok: false; data: null; error: string }).error}), keeping existing data`,
-          );
+          console.warn(`[Trade Activity] Fetch failed (${(result as { ok: false; data: null; error: string }).error}), keeping existing data`);
         } else {
           const filteredActivity = result.data.filter(isTradeOnCurrentChain);
 
           // Merge WS trades that REST hasn't confirmed yet
           const now = Date.now();
           const restIds = new Set(filteredActivity.map((t: any) => t.id));
-          pendingWsTradesRef.current = pendingWsTradesRef.current.filter(
-            (t: any) => {
-              if (restIds.has(t.id)) return false; // REST confirmed
-              if (now - (t._wsTimestamp || 0) > 60000) return false; // Expired
-              return true;
-            },
-          );
+          pendingWsTradesRef.current = pendingWsTradesRef.current.filter((t: any) => {
+            if (restIds.has(t.id)) return false; // REST confirmed
+            if (now - (t._wsTimestamp || 0) > 60000) return false; // Expired
+            return true;
+          });
 
           let finalActivity = filteredActivity;
           if (pendingWsTradesRef.current.length > 0) {
-            const wsIds = new Set(
-              pendingWsTradesRef.current.map((t: any) => t.id),
-            );
-            const dedupedRest = filteredActivity.filter(
-              (t: any) => !wsIds.has(t.id),
-            );
+            const wsIds = new Set(pendingWsTradesRef.current.map((t: any) => t.id));
+            const dedupedRest = filteredActivity.filter((t: any) => !wsIds.has(t.id));
             finalActivity = [...pendingWsTradesRef.current, ...dedupedRest];
           }
           // Preserve recent optimistic entries (negative id) that REST hasn't confirmed yet
           const mergedActivity = finalActivity;
           setTradeActivity((prev) => {
             const now = Date.now();
-            const recentOptimistic = prev.filter(
-              (t: any) =>
-                t.id < 0 &&
-                now + t.id < 10000 && // id is -Date.now(), so age = now + id
-                (!t.transactionHash ||
-                  !mergedActivity.some(
-                    (r: any) => r.transactionHash === t.transactionHash,
-                  )),
+            const recentOptimistic = prev.filter((t: any) =>
+              t.id < 0 && (now + t.id) < 10000 // id is -Date.now(), so age = now + id
+              && (!t.transactionHash || !mergedActivity.some((r: any) => r.transactionHash === t.transactionHash))
             );
             if (recentOptimistic.length === 0) return mergedActivity;
             return [...recentOptimistic, ...mergedActivity];
           });
 
           // Clean up pending_ws_trades localStorage too
-          if (typeof window !== "undefined") {
+          if (typeof window !== 'undefined') {
             try {
-              const lsRaw = localStorage.getItem("pending_ws_trades");
+              const lsRaw = localStorage.getItem('pending_ws_trades');
               if (lsRaw) {
                 const lsTrades = JSON.parse(lsRaw);
-                const cleaned = lsTrades.filter(
-                  (t: any) =>
-                    !restIds.has(t.id) && now - (t._wsTimestamp || 0) < 60000,
-                );
-                if (cleaned.length === 0)
-                  localStorage.removeItem("pending_ws_trades");
-                else
-                  localStorage.setItem(
-                    "pending_ws_trades",
-                    JSON.stringify(cleaned),
-                  );
+                const cleaned = lsTrades.filter((t: any) => !restIds.has(t.id) && now - (t._wsTimestamp || 0) < 60000);
+                if (cleaned.length === 0) localStorage.removeItem('pending_ws_trades');
+                else localStorage.setItem('pending_ws_trades', JSON.stringify(cleaned));
               }
             } catch {}
           }
 
           // Save to localStorage cache for instant loading when navigating back
-          if (typeof window !== "undefined") {
+          if (typeof window !== 'undefined') {
             try {
-              window.localStorage.setItem(
-                tradeActivityCacheKey,
-                JSON.stringify({
-                  data: finalActivity,
-                  timestamp: Date.now(),
-                }),
-              );
+              window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify({
+                data: finalActivity, timestamp: Date.now(),
+              }));
             } catch {}
           }
         }
@@ -1131,14 +926,7 @@ export default function PortfolioPage() {
     const pollMs = wsConnected ? 30000 : 10000;
     const activityPollId = setInterval(loadTradeActivity, pollMs);
     return () => clearInterval(activityPollId);
-  }, [
-    user?.id,
-    currentChain,
-    isTradeOnCurrentChain,
-    tradeActivityCacheKey,
-    tradeRefreshCounter,
-    wsConnected,
-  ]);
+  }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter, wsConnected]);
 
   // Listen for trade-completed events and consume pending refreshes on mount
   useEffect(() => {
@@ -1152,20 +940,13 @@ export default function PortfolioPage() {
 
     // On mount: consume any pending trade refreshes from other pages (cross-navigation)
     const pending = consumePendingTradeRefreshes();
-    const relevantPending = pending.filter(
-      (p) =>
-        (currentChain === "monad" && p.chain === "monad") ||
-        (currentChain !== "monad" && p.chain === "sol"),
+    const relevantPending = pending.filter((p) =>
+      (currentChain === 'monad' && p.chain === 'monad') ||
+      (currentChain !== 'monad' && p.chain === 'sol')
     );
     if (relevantPending.length > 0) {
-      isDev &&
-        console.log(
-          `[Portfolio] Consuming ${relevantPending.length} pending trade refresh(es)`,
-        );
-      refreshBalance({
-        chain: currentChain === "monad" ? "monad" : "sol",
-        force: true,
-      }).catch(() => {});
+      isDev && console.log(`[Portfolio] Consuming ${relevantPending.length} pending trade refresh(es)`);
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
       setTradeRefreshCounter((c) => c + 1);
       // Retry to catch trades still being saved (buy API still processing or Pumpfun async save)
       setTimeout(() => setTradeRefreshCounter((c) => c + 1), 500);
@@ -1176,7 +957,7 @@ export default function PortfolioPage() {
     // Consume any WS-pushed trades that arrived while portfolio was unmounted
     // These come from the global WS hook (always mounted) and are guaranteed post-DB-save
     try {
-      const wsKey = "pending_ws_trades";
+      const wsKey = 'pending_ws_trades';
       const pendingRaw = localStorage.getItem(wsKey);
       if (pendingRaw) {
         localStorage.removeItem(wsKey); // consume immediately
@@ -1185,54 +966,34 @@ export default function PortfolioPage() {
         // Filter: only trades from last 60s, matching current chain
         const relevant = pendingTrades.filter((t: any) => {
           if (now - (t._wsTimestamp || 0) > 60000) return false;
-          const chain = (t.blockchain || "solana").toLowerCase();
-          return (
-            (currentChain === "monad" && chain === "monad") ||
-            (currentChain !== "monad" && chain === "solana")
-          );
+          const chain = (t.blockchain || 'solana').toLowerCase();
+          return (currentChain === 'monad' && chain === 'monad') ||
+                 (currentChain !== 'monad' && chain === 'solana');
         });
         if (relevant.length > 0) {
-          isDev &&
-            console.log(
-              `[Portfolio] Consuming ${relevant.length} pending WS trade(s) from localStorage`,
-            );
+          isDev && console.log(`[Portfolio] Consuming ${relevant.length} pending WS trade(s) from localStorage`);
           // Add to ref for merge protection against REST overwrites
           pendingWsTradesRef.current = [
-            ...pendingWsTradesRef.current.filter(
-              (t: any) => !relevant.some((r: any) => r.id === t.id),
-            ),
-            ...relevant.map((t: any) => ({
-              ...t,
-              _wsTimestamp: t._wsTimestamp || Date.now(),
-            })),
+            ...pendingWsTradesRef.current.filter((t: any) => !relevant.some((r: any) => r.id === t.id)),
+            ...relevant.map((t: any) => ({ ...t, _wsTimestamp: t._wsTimestamp || Date.now() })),
           ];
-          setTradeActivity((prev) => {
+          setTradeActivity(prev => {
             const existingIds = new Set(prev.map((t: any) => t.id));
-            const newTrades = relevant.filter(
-              (t: any) => !existingIds.has(t.id),
-            );
+            const newTrades = relevant.filter((t: any) => !existingIds.has(t.id));
             if (newTrades.length === 0) return prev;
             const updated = [...newTrades, ...prev];
             try {
-              localStorage.setItem(
-                tradeActivityCacheKey,
-                JSON.stringify({ data: updated, timestamp: now }),
-              );
+              localStorage.setItem(tradeActivityCacheKey, JSON.stringify({ data: updated, timestamp: now }));
             } catch {}
             return updated;
           });
-          setTradeHistory((prev) => {
+          setTradeHistory(prev => {
             const existingIds = new Set(prev.map((t: any) => t.id));
-            const newTrades = relevant.filter(
-              (t: any) => !existingIds.has(t.id),
-            );
+            const newTrades = relevant.filter((t: any) => !existingIds.has(t.id));
             if (newTrades.length === 0) return prev;
             const updated = [...newTrades, ...prev];
             try {
-              localStorage.setItem(
-                tradeHistoryCacheKey,
-                JSON.stringify({ data: updated, timestamp: now }),
-              );
+              localStorage.setItem(tradeHistoryCacheKey, JSON.stringify({ data: updated, timestamp: now }));
             } catch {}
             return updated;
           });
@@ -1245,45 +1006,35 @@ export default function PortfolioPage() {
       const detail = (event as CustomEvent<TradeCompletedDetail>).detail;
       // Filter: only refresh if the trade's chain matches the currently viewed chain
       const isRelevant =
-        (currentChain === "monad" && detail?.chain === "monad") ||
-        (currentChain !== "monad" && detail?.chain === "sol");
+        (currentChain === 'monad' && detail?.chain === 'monad') ||
+        (currentChain !== 'monad' && detail?.chain === 'sol');
       if (!isRelevant) return;
 
-      isDev &&
-        console.log(
-          `[Portfolio] Trade completed: ${detail?.tradeType} on ${detail?.chain}`,
-        );
+      isDev && console.log(`[Portfolio] Trade completed: ${detail?.tradeType} on ${detail?.chain}`);
       // Force balance refresh
-      refreshBalance({
-        chain: currentChain === "monad" ? "monad" : "sol",
-        force: true,
-      }).catch(() => {});
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
 
       // Optimistic buy entry: show in Activity tab immediately (before DB record arrives via REST/WS)
-      if (detail?.tradeType === "buy" && detail.tokenAddress) {
+      if (detail?.tradeType === 'buy' && detail.tokenAddress) {
         const optimisticTrade: TradeRow = {
           id: -Date.now(),
           tokenAddress: detail.tokenAddress,
           tokenName: detail.tokenName || undefined,
           tokenSymbol: detail.tokenSymbol || undefined,
           imageUrl: detail.imageUrl || null,
-          type: "Buy" as const,
+          type: 'Buy' as const,
           marketCap: 0,
           solAmount: detail.solAmountSpent || 0,
           tokenAmount: 0,
           usdValue: detail.solAmountSpent || 0,
-          transactionHash: detail.txHash || "",
-          blockchain: detail.chain === "monad" ? "monad" : "solana",
+          transactionHash: detail.txHash || '',
+          blockchain: detail.chain === 'monad' ? 'monad' : 'solana',
           createdAt: new Date().toISOString(),
           tradeTime: new Date().toTimeString().split(" ")[0],
         };
         setTradeActivity((prev) => {
           // Deduplicate by txHash (allows multi-buys of same token)
-          if (
-            detail.txHash &&
-            prev.some((t: any) => t.transactionHash === detail.txHash)
-          )
-            return prev;
+          if (detail.txHash && prev.some((t: any) => t.transactionHash === detail.txHash)) return prev;
           return [optimisticTrade, ...prev];
         });
       }
@@ -1297,22 +1048,16 @@ export default function PortfolioPage() {
 
     // Listen for WS-driven position change signals
     const handlePositionsChanged = () => {
-      refreshBalance({
-        chain: currentChain === "monad" ? "monad" : "sol",
-        force: true,
-      }).catch(() => {});
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
       setTradeRefreshCounter((c) => c + 1);
     };
-    window.addEventListener("solanaPositionsChanged", handlePositionsChanged);
+    window.addEventListener('solanaPositionsChanged', handlePositionsChanged);
 
     // Listen for WS-pushed full position data (balance may have changed)
     const handlePositionUpdate = () => {
-      refreshBalance({
-        chain: currentChain === "monad" ? "monad" : "sol",
-        force: true,
-      }).catch(() => {});
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
     };
-    window.addEventListener("solanaPositionUpdate", handlePositionUpdate);
+    window.addEventListener('solanaPositionUpdate', handlePositionUpdate);
 
     // Listen for WS-pushed new trade records (instant Activity/History update)
     const handleNewTrade = (event: Event) => {
@@ -1320,23 +1065,16 @@ export default function PortfolioPage() {
       if (!trade?.tokenAddress) return;
 
       // Chain filter: only process trades for the currently viewed chain
-      const tradeChain = (trade.blockchain || "solana").toLowerCase();
+      const tradeChain = (trade.blockchain || 'solana').toLowerCase();
       const isRelevant =
-        (currentChain === "monad" && tradeChain === "monad") ||
-        (currentChain !== "monad" && tradeChain === "solana");
+        (currentChain === 'monad' && tradeChain === 'monad') ||
+        (currentChain !== 'monad' && tradeChain === 'solana');
       if (!isRelevant) return;
 
       // Track in ref so REST fetches don't discard it
-      if (
-        trade.id &&
-        !pendingWsTradesRef.current.some((t: any) => t.id === trade.id)
-      ) {
+      if (trade.id && !pendingWsTradesRef.current.some((t: any) => t.id === trade.id)) {
         pendingWsTradesRef.current.push({ ...trade, _wsTimestamp: Date.now() });
-        if (pendingWsTradesRef.current.length > 20)
-          pendingWsTradesRef.current.splice(
-            0,
-            pendingWsTradesRef.current.length - 20,
-          );
+        if (pendingWsTradesRef.current.length > 20) pendingWsTradesRef.current.splice(0, pendingWsTradesRef.current.length - 20);
       }
 
       // Prepend to tradeActivity (Activity tab) — deduplicate by id
@@ -1346,7 +1084,7 @@ export default function PortfolioPage() {
         try {
           window.localStorage.setItem(
             tradeActivityCacheKey,
-            JSON.stringify({ data: updated, timestamp: Date.now() }),
+            JSON.stringify({ data: updated, timestamp: Date.now() })
           );
         } catch {}
         return updated;
@@ -1359,88 +1097,56 @@ export default function PortfolioPage() {
         try {
           window.localStorage.setItem(
             tradeHistoryCacheKey,
-            JSON.stringify({ data: updated, timestamp: Date.now() }),
+            JSON.stringify({ data: updated, timestamp: Date.now() })
           );
         } catch {}
         return updated;
       });
     };
-    window.addEventListener("solanaNewTrade", handleNewTrade);
+    window.addEventListener('solanaNewTrade', handleNewTrade);
 
     // Listen for WS activity snapshot — instant Activity tab data on connection
     const handleActivitySnapshot = (event: Event) => {
       const detail = (event as CustomEvent).detail;
-      if (
-        !detail?.activity ||
-        !Array.isArray(detail.activity) ||
-        detail.activity.length === 0
-      )
-        return;
+      if (!detail?.activity || !Array.isArray(detail.activity) || detail.activity.length === 0) return;
 
-      const expectedBC =
-        currentChain === "monad"
-          ? "monad"
-          : currentChain === "sol"
-            ? "solana"
-            : "all";
+      const expectedBC = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : 'all';
       if (detail.blockchain !== expectedBC) return;
 
       // Only apply if activity hasn't loaded via REST yet
       if (activityLoadedRef.current) return;
 
-      isDev &&
-        console.log(
-          `[Portfolio] WS activity snapshot: ${detail.activity.length} trades`,
-        );
+      isDev && console.log(`[Portfolio] WS activity snapshot: ${detail.activity.length} trades`);
       const filteredActivity = detail.activity.filter(isTradeOnCurrentChain);
       setTradeActivity(filteredActivity);
       setLoadingTradeActivity(false);
       activityLoadedRef.current = true;
 
       try {
-        window.localStorage.setItem(
-          tradeActivityCacheKey,
-          JSON.stringify({
-            data: filteredActivity,
-            timestamp: Date.now(),
-          }),
-        );
+        window.localStorage.setItem(tradeActivityCacheKey, JSON.stringify({
+          data: filteredActivity,
+          timestamp: Date.now(),
+        }));
       } catch {}
     };
-    window.addEventListener("solanaActivitySnapshot", handleActivitySnapshot);
+    window.addEventListener('solanaActivitySnapshot', handleActivitySnapshot);
 
     // Refresh all data when WS reconnects (may have missed updates while disconnected)
     const handleWsReconnected = () => {
       setTradeRefreshCounter((c) => c + 1);
-      refreshBalance({
-        chain: currentChain === "monad" ? "monad" : "sol",
-        force: true,
-      }).catch(() => {});
+      refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
     };
-    window.addEventListener("solanaWsReconnected", handleWsReconnected);
+    window.addEventListener('solanaWsReconnected', handleWsReconnected);
 
     return () => {
       window.removeEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
-      window.removeEventListener(
-        "solanaPositionsChanged",
-        handlePositionsChanged,
-      );
-      window.removeEventListener("solanaPositionUpdate", handlePositionUpdate);
-      window.removeEventListener("solanaNewTrade", handleNewTrade);
-      window.removeEventListener(
-        "solanaActivitySnapshot",
-        handleActivitySnapshot,
-      );
-      window.removeEventListener("solanaWsReconnected", handleWsReconnected);
+      window.removeEventListener('solanaPositionsChanged', handlePositionsChanged);
+      window.removeEventListener('solanaPositionUpdate', handlePositionUpdate);
+      window.removeEventListener('solanaNewTrade', handleNewTrade);
+      window.removeEventListener('solanaActivitySnapshot', handleActivitySnapshot);
+      window.removeEventListener('solanaWsReconnected', handleWsReconnected);
     };
-  }, [
-    currentChain,
-    refreshBalance,
-    tradeActivityCacheKey,
-    tradeHistoryCacheKey,
-    isTradeOnCurrentChain,
-    requestSnapshot,
-  ]);
+  }, [currentChain, refreshBalance, tradeActivityCacheKey, tradeHistoryCacheKey, isTradeOnCurrentChain, requestSnapshot]);
 
   // Note: Initial balance is set once when first detected and persists
   // It does NOT auto-reset to prevent wallet balance change from going to 0
@@ -1452,14 +1158,14 @@ export default function PortfolioPage() {
         positions
           .filter((pos) => pos.remaining > 0)
           .map((pos) => pos.tokenAddress)
-          .filter(Boolean),
-      ),
+          .filter(Boolean)
+      )
     );
   }, [positions]);
 
   // Get wallet address for current chain
   const walletAddress = useMemo(() => {
-    if (currentChain === "monad") {
+    if (currentChain === 'monad') {
       return primaryWalletAddresses?.ethereum || user?.publicKey || null;
     }
     return primaryWalletAddresses?.solana || user?.publicKey || null;
@@ -1484,12 +1190,12 @@ export default function PortfolioPage() {
       enabled: activeTokenAddresses.length > 0 && !!walletAddress,
       refreshInterval: 3000, // Update every 3 seconds for faster updates
       chain: currentChain,
-    },
+    }
   );
 
   // Load persisted data on mount or chain change
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return;
 
     // Reset chain-scoped refs/state when switching chains to avoid cross-chain bleed
     initialNativeBalanceRef.current = null;
@@ -1498,44 +1204,27 @@ export default function PortfolioPage() {
     cumulativeRealizedPnlRef.current = 0;
 
     const storageKeys = getStorageKeys();
-
+    
     try {
       // Load previous balances from localStorage
       const savedBalances = localStorage.getItem(storageKeys.previousBalances);
       if (savedBalances) {
         previousBalancesRef.current = JSON.parse(savedBalances);
-        isDev &&
-          console.log(
-            "📊 Loaded previous balances from localStorage:",
-            previousBalancesRef.current,
-          );
+        isDev && console.log("📊 Loaded previous balances from localStorage:", previousBalancesRef.current);
       }
-
+      
       // Load cumulative realized PNL
-      const savedCumulative = localStorage.getItem(
-        storageKeys.cumulativeRealizedPnl,
-      );
+      const savedCumulative = localStorage.getItem(storageKeys.cumulativeRealizedPnl);
       if (savedCumulative) {
         cumulativeRealizedPnlRef.current = parseFloat(savedCumulative) || 0;
-        isDev &&
-          console.log(
-            "📊 Loaded cumulative realized PNL:",
-            cumulativeRealizedPnlRef.current,
-          );
+        isDev && console.log("📊 Loaded cumulative realized PNL:", cumulativeRealizedPnlRef.current);
       }
-
+      
       // Load initial native balance
-      const savedInitialBalance = localStorage.getItem(
-        storageKeys.initialNativeBalance,
-      );
+      const savedInitialBalance = localStorage.getItem(storageKeys.initialNativeBalance);
       if (savedInitialBalance) {
         initialNativeBalanceRef.current = parseFloat(savedInitialBalance);
-        isDev &&
-          console.log(
-            "📊 Loaded initial native balance:",
-            initialNativeBalanceRef.current,
-            currentChain === "monad" ? "MON" : "SOL",
-          );
+        isDev && console.log("📊 Loaded initial native balance:", initialNativeBalanceRef.current, currentChain === "monad" ? "MON" : "SOL");
       }
     } catch (error) {
       console.error("Error loading persisted data:", error);
@@ -1548,24 +1237,17 @@ export default function PortfolioPage() {
       // Only initialize if we don't have saved data
       if (Object.keys(previousBalancesRef.current).length === 0) {
         // Initialize with positions' remaining amounts as baseline
-        positions.forEach((pos) => {
+        positions.forEach(pos => {
           if (pos.tokenAddress && pos.remaining > 0) {
             previousBalancesRef.current[pos.tokenAddress] = pos.remaining;
           }
         });
-        isDev &&
-          console.log(
-            "📊 Initialized previous balances from positions:",
-            previousBalancesRef.current,
-          );
-
+        isDev && console.log("📊 Initialized previous balances from positions:", previousBalancesRef.current);
+        
         // Save to localStorage
         try {
           const storageKeys = getStorageKeys();
-          localStorage.setItem(
-            storageKeys.previousBalances,
-            JSON.stringify(previousBalancesRef.current),
-          );
+          localStorage.setItem(storageKeys.previousBalances, JSON.stringify(previousBalancesRef.current));
         } catch (error) {
           console.error("Error saving previous balances:", error);
         }
@@ -1586,25 +1268,21 @@ export default function PortfolioPage() {
   useEffect(() => {
     if (Object.keys(actualBalances).length > 0) {
       let updated = false;
-
+      
       // Update balances that exist, but keep previous values for comparison
-      Object.keys(actualBalances).forEach((tokenAddress) => {
+      Object.keys(actualBalances).forEach(tokenAddress => {
         if (previousBalancesRef.current[tokenAddress] === undefined) {
           // New token we're tracking, initialize with current balance
-          previousBalancesRef.current[tokenAddress] =
-            actualBalances[tokenAddress];
+          previousBalancesRef.current[tokenAddress] = actualBalances[tokenAddress];
           updated = true;
         }
       });
-
+      
       // Save to localStorage if updated
       if (updated) {
         try {
           const storageKeys = getStorageKeys();
-          localStorage.setItem(
-            storageKeys.previousBalances,
-            JSON.stringify(previousBalancesRef.current),
-          );
+          localStorage.setItem(storageKeys.previousBalances, JSON.stringify(previousBalancesRef.current));
         } catch (error) {
           console.error("Error saving previous balances:", error);
         }
@@ -1653,10 +1331,7 @@ export default function PortfolioPage() {
             correctedSoldUsdValue = pos.boughtUsdValue * Math.min(sellRatio, 1);
           }
         }
-        if (
-          pos.sold > pos.bought &&
-          correctedSoldUsdValue > pos.boughtUsdValue
-        ) {
+        if (pos.sold > pos.bought && correctedSoldUsdValue > pos.boughtUsdValue) {
           correctedSoldUsdValue = pos.boughtUsdValue;
         }
 
@@ -1679,28 +1354,24 @@ export default function PortfolioPage() {
 
         // Get actual balance from wallet (real blockchain state)
         const actualBalance = actualBalances[pos.tokenAddress] ?? null;
-        const actualRemaining =
-          actualBalance !== null ? actualBalance : correctedRemaining;
-
+        const actualRemaining = actualBalance !== null ? actualBalance : correctedRemaining;
+        
         // Use actual balance if available, otherwise use backend-reported balance
         const remainingToUse = actualRemaining;
-
+        
         // Use live price if available, otherwise use corrected remaining value
         const currentPrice = livePrices[pos.tokenAddress] || 0;
-        const liveRemainingValue =
-          currentPrice > 0
-            ? remainingToUse * currentPrice
-            : actualBalance !== null && correctedBought > 0
-              ? remainingToUse * (pos.boughtUsdValue / correctedBought) // Use average buy price
-              : correctedRemainingUsdValue;
+        const liveRemainingValue = currentPrice > 0 
+          ? remainingToUse * currentPrice 
+          : (actualBalance !== null && correctedBought > 0) 
+            ? (remainingToUse * (pos.boughtUsdValue / correctedBought)) // Use average buy price
+            : correctedRemainingUsdValue;
 
         // Recalculate PnL using actual balances and live prices
         const correctedPnl =
           correctedSoldUsdValue + liveRemainingValue - pos.boughtUsdValue;
         const correctedPnlPercentage =
-          pos.boughtUsdValue > 0
-            ? (correctedPnl / pos.boughtUsdValue) * 100
-            : 0;
+          pos.boughtUsdValue > 0 ? (correctedPnl / pos.boughtUsdValue) * 100 : 0;
 
         return {
           ...pos,
@@ -1713,10 +1384,7 @@ export default function PortfolioPage() {
         };
       });
 
-      const totalUnrealizedPnl = correctedPositions.reduce(
-        (acc, pos) => acc + pos.pnl,
-        0,
-      );
+      const totalUnrealizedPnl = correctedPositions.reduce((acc, pos) => acc + pos.pnl, 0);
       const totalRemainingValue = correctedPositions.reduce(
         (acc, pos) => acc + pos.remainingUsdValue,
         0,
@@ -1731,10 +1399,9 @@ export default function PortfolioPage() {
       );
       // Use appropriate balance based on current chain
       // For Monad: convert MON to USD, for Solana: solBalance is already in USD
-      const currentBalanceUsd =
-        currentChain === "monad"
-          ? monBalance * (monPrice || 0.025) // Convert MON to USD using MON price
-          : solBalance; // solBalance is already in USD
+      const currentBalanceUsd = currentChain === 'monad'
+        ? monBalance * (monPrice || 0.025) // Convert MON to USD using MON price
+        : solBalance; // solBalance is already in USD
       setTotalValue(currentBalanceUsd + totalRemainingValue);
 
       // Create top 100 positions sorted by corrected USD value
@@ -1749,15 +1416,7 @@ export default function PortfolioPage() {
       setTotalPnl(0);
       setTotalPnlPercentage(0);
     }
-  }, [
-    positions,
-    solBalance,
-    monBalance,
-    currentChain,
-    monPrice,
-    livePrices,
-    actualBalances,
-  ]);
+  }, [positions, solBalance, monBalance, currentChain, monPrice, livePrices, actualBalances]);
 
   // Search filtering using useMemo for better performance and reactivity
   const filteredPositions = useMemo(() => {
@@ -1907,14 +1566,12 @@ export default function PortfolioPage() {
       }
 
       const cutoffTime =
-        timeframeDays === Infinity
-          ? 0
-          : currentTime - timeframeDays * 24 * 60 * 60 * 1000;
+        timeframeDays === Infinity ? 0 : currentTime - timeframeDays * 24 * 60 * 60 * 1000;
 
       // Calculate winning and losing trades based on positions
       let winningTrades = 0;
       let losingTrades = 0;
-
+      
       // COMPREHENSIVE REALIZED PNL CALCULATION
       // Calculate from multiple sources: balance changes, trade history, and backend data
       let totalRealizedPnl = 0;
@@ -1929,147 +1586,113 @@ export default function PortfolioPage() {
         tokenSymbol: string;
         tokenName: string;
       }> = [];
-
+      
       // 1. Calculate from TRADE HISTORY (most accurate - actual sell transactions)
       // Normalize token addresses for matching (case-insensitive)
       const normalizeAddress = (addr: string | undefined) => {
-        if (!addr) return "";
+        if (!addr) return '';
         return addr.toLowerCase().trim();
       };
 
       // Parse trade timestamp safely — tradeTime is a time-only column ("14:30:00")
       // which produces NaN from new Date(). Use createdAt (full datetime) as primary.
-      const parseTradeTimestamp = (trade: {
-        tradeTime?: string;
-        createdAt?: string;
-      }) => {
-        let t = new Date(trade.createdAt || "").getTime();
+      const parseTradeTimestamp = (trade: { tradeTime?: string; createdAt?: string }) => {
+        let t = new Date(trade.createdAt || '').getTime();
         if (!isNaN(t)) return t;
-        t = new Date(trade.tradeTime || "").getTime();
+        t = new Date(trade.tradeTime || '').getTime();
         if (!isNaN(t)) return t;
         return Date.now();
       };
 
       // Filter out split trades (multi-wallet children) to avoid double-counting in PnL
-      const nonSplitTrades = tradeHistory.filter((t) => !t.isSplitTrade);
+      const nonSplitTrades = tradeHistory.filter(t => !t.isSplitTrade);
 
-      const sellTrades = nonSplitTrades.filter((t) => {
+      const sellTrades = nonSplitTrades.filter(t => {
         const type = t.type?.toLowerCase();
         return type === "sell" || type === "s";
       });
 
-      const buyTradesByToken = new Map<
-        string,
-        Array<{
-          amount: number;
-          usdValue: number;
-          pricePerToken: number; // Price per token for accurate cost basis
-          timestamp: number;
-          tradeId: string;
-          consumed: number; // Track how much of this buy has been used
-        }>
-      >();
+      const buyTradesByToken = new Map<string, Array<{
+        amount: number;
+        usdValue: number;
+        pricePerToken: number; // Price per token for accurate cost basis
+        timestamp: number;
+        tradeId: string;
+        consumed: number; // Track how much of this buy has been used
+      }>>();
 
       // Group buys by token (normalized address)
-      nonSplitTrades
-        .filter((t) => {
-          const type = t.type?.toLowerCase();
-          return type === "buy" || type === "b";
-        })
-        .forEach((buy) => {
-          const tokenAddress = normalizeAddress(buy.tokenAddress);
-          if (!tokenAddress) return;
-
-          const tokenAmount =
-            typeof buy.tokenAmount === "string"
-              ? parseFloat(buy.tokenAmount)
-              : buy.tokenAmount || 0;
-          const usdValue =
-            typeof buy.usdValue === "string"
-              ? parseFloat(buy.usdValue)
-              : buy.usdValue || 0;
-          const timestamp = parseTradeTimestamp(buy);
-          const tradeId =
-            buy.transactionHash || `${buy.tokenAddress}_${timestamp}`;
-
-          if (tokenAmount > 0 && usdValue > 0) {
-            if (!buyTradesByToken.has(tokenAddress)) {
-              buyTradesByToken.set(tokenAddress, []);
-            }
-            // Use stored pricePerToken if available, otherwise calculate
-            const pricePerToken = buy.pricePerToken || usdValue / tokenAmount;
-            buyTradesByToken.get(tokenAddress)!.push({
-              amount: tokenAmount,
-              usdValue,
-              pricePerToken, // Store price per token for accurate cost basis calculation
-              timestamp,
-              tradeId,
-              consumed: 0,
-            });
+      nonSplitTrades.filter(t => {
+        const type = t.type?.toLowerCase();
+        return type === "buy" || type === "b";
+      }).forEach(buy => {
+        const tokenAddress = normalizeAddress(buy.tokenAddress);
+        if (!tokenAddress) return;
+        
+        const tokenAmount = typeof buy.tokenAmount === 'string' ? parseFloat(buy.tokenAmount) : (buy.tokenAmount || 0);
+        const usdValue = typeof buy.usdValue === 'string' ? parseFloat(buy.usdValue) : (buy.usdValue || 0);
+        const timestamp = parseTradeTimestamp(buy);
+        const tradeId = buy.transactionHash || `${buy.tokenAddress}_${timestamp}`;
+        
+        if (tokenAmount > 0 && usdValue > 0) {
+          if (!buyTradesByToken.has(tokenAddress)) {
+            buyTradesByToken.set(tokenAddress, []);
           }
-        });
-
+          // Use stored pricePerToken if available, otherwise calculate
+          const pricePerToken = buy.pricePerToken || (usdValue / tokenAmount);
+          buyTradesByToken.get(tokenAddress)!.push({ 
+            amount: tokenAmount, 
+            usdValue,
+            pricePerToken, // Store price per token for accurate cost basis calculation
+            timestamp,
+            tradeId,
+            consumed: 0,
+          });
+        }
+      });
+      
       // Sort all buys by timestamp (oldest first for FIFO)
       buyTradesByToken.forEach((buys, tokenAddress) => {
         buys.sort((a, b) => a.timestamp - b.timestamp);
       });
-
+      
       // Track which trades we've already counted (to avoid double-counting)
       const processedSellTrades = new Set<string>();
-
+      
       // Calculate realized PNL from sell trades
       // PRIORITY: Use stored realizedPnl from database if available (more accurate)
-      sellTrades.forEach((sell) => {
+      sellTrades.forEach(sell => {
         const tokenAddress = normalizeAddress(sell.tokenAddress);
         if (!tokenAddress) return;
-
-        const tradeId =
-          sell.transactionHash ||
-          `${sell.tokenAddress}_${parseTradeTimestamp(sell)}`;
-
+        
+        const tradeId = sell.transactionHash || `${sell.tokenAddress}_${parseTradeTimestamp(sell)}`;
+        
         // Skip if already processed
         if (processedSellTrades.has(tradeId)) return;
         processedSellTrades.add(tradeId);
-
-        const soldAmount =
-          typeof sell.tokenAmount === "string"
-            ? parseFloat(sell.tokenAmount)
-            : sell.tokenAmount || 0;
-        const saleValueUsd =
-          typeof sell.usdValue === "string"
-            ? parseFloat(sell.usdValue)
-            : sell.usdValue || 0;
+        
+        const soldAmount = typeof sell.tokenAmount === 'string' ? parseFloat(sell.tokenAmount) : (sell.tokenAmount || 0);
+        const saleValueUsd = typeof sell.usdValue === 'string' ? parseFloat(sell.usdValue) : (sell.usdValue || 0);
 
         // Check stored PnL first — cleanup sells have usdValue=0 but valid stored PnL
-        const storedRealizedPnl =
-          typeof sell.realizedPnl === "string"
-            ? parseFloat(sell.realizedPnl)
-            : sell.realizedPnl != null
-              ? Number(sell.realizedPnl)
-              : null;
+        const storedRealizedPnl = typeof sell.realizedPnl === 'string'
+          ? parseFloat(sell.realizedPnl)
+          : (sell.realizedPnl != null ? Number(sell.realizedPnl) : null);
 
         if (soldAmount <= 0) return;
-        if (
-          saleValueUsd <= 0 &&
-          (storedRealizedPnl === null || isNaN(storedRealizedPnl))
-        )
-          return;
-        const storedCostBasis =
-          typeof sell.costBasis === "string"
-            ? parseFloat(sell.costBasis)
-            : sell.costBasis || null;
-
+        if (saleValueUsd <= 0 && (storedRealizedPnl === null || isNaN(storedRealizedPnl))) return;
+        const storedCostBasis = typeof sell.costBasis === 'string'
+          ? parseFloat(sell.costBasis)
+          : (sell.costBasis || null);
+        
         let saleRealizedPnl: number;
         let totalCostBasis: number;
-
-        if (
-          storedRealizedPnl !== null &&
-          storedRealizedPnl !== undefined &&
-          !isNaN(storedRealizedPnl)
-        ) {
+        
+        if (storedRealizedPnl !== null && storedRealizedPnl !== undefined && !isNaN(storedRealizedPnl)) {
           // Use stored values from database (calculated at trade time)
           saleRealizedPnl = storedRealizedPnl;
-          totalCostBasis = storedCostBasis || saleValueUsd - saleRealizedPnl;
+          totalCostBasis = storedCostBasis || (saleValueUsd - saleRealizedPnl);
+          
         } else {
           // Fallback: Calculate using FIFO matching (for older trades without stored PNL)
           const buys = buyTradesByToken.get(tokenAddress) || [];
@@ -2081,30 +1704,26 @@ export default function PortfolioPage() {
             });
             return;
           }
-
+          
           // Match sold amount with buys (FIFO) - track consumed amounts
           let remainingToSell = soldAmount;
           totalCostBasis = 0;
-
+          
           for (const buy of buys) {
             if (remainingToSell <= 0) break;
-
+            
             const availableFromThisBuy = buy.amount - buy.consumed;
             if (availableFromThisBuy <= 0) continue; // This buy is fully consumed
-
-            const buyPricePerToken =
-              buy.pricePerToken || buy.usdValue / buy.amount;
-            const amountFromThisBuy = Math.min(
-              remainingToSell,
-              availableFromThisBuy,
-            );
+            
+            const buyPricePerToken = buy.pricePerToken || (buy.usdValue / buy.amount);
+            const amountFromThisBuy = Math.min(remainingToSell, availableFromThisBuy);
             const costBasisForThisAmount = amountFromThisBuy * buyPricePerToken;
-
+            
             totalCostBasis += costBasisForThisAmount;
             buy.consumed += amountFromThisBuy; // Mark as consumed
             remainingToSell -= amountFromThisBuy;
           }
-
+          
           // If we couldn't match all sold amount, use average buy price as fallback
           if (remainingToSell > 0) {
             const totalBuyAmount = buys.reduce((sum, b) => sum + b.amount, 0);
@@ -2112,282 +1731,216 @@ export default function PortfolioPage() {
             if (totalBuyAmount > 0) {
               const avgBuyPrice = totalBuyValue / totalBuyAmount;
               totalCostBasis += remainingToSell * avgBuyPrice;
-              console.warn(
-                "⚠️ Partial match for sale, using average buy price for remainder:",
-                {
-                  tokenAddress: sell.tokenAddress,
-                  remainingToSell,
-                  avgBuyPrice,
-                },
-              );
+              console.warn("⚠️ Partial match for sale, using average buy price for remainder:", {
+                tokenAddress: sell.tokenAddress,
+                remainingToSell,
+                avgBuyPrice,
+              });
             }
           }
-
+          
           // Calculate realized PNL for this sale
           saleRealizedPnl = saleValueUsd - totalCostBasis;
+          
         }
-
+        
         totalRealizedPnl += saleRealizedPnl;
-
+        
         salesDetected.push({
           tokenAddress: sell.tokenAddress || tokenAddress,
           soldAmount,
           salePrice: saleValueUsd / soldAmount,
           costBasis: totalCostBasis,
           realizedPnl: saleRealizedPnl,
-          source:
-            storedRealizedPnl !== null
-              ? "trade_history_stored"
-              : "trade_history",
+          source: storedRealizedPnl !== null ? 'trade_history_stored' : 'trade_history',
           timestamp: parseTradeTimestamp(sell),
-          tokenSymbol: sell.tokenSymbol || "",
-          tokenName: sell.tokenName || "",
+          tokenSymbol: sell.tokenSymbol || '',
+          tokenName: sell.tokenName || '',
         });
       });
-
+      
       // 2. Calculate from balance decreases (for recent sales not yet in trade history)
       // This catches sales that happened but aren't in trade history yet
       const allTrackedTokens = new Set([
-        ...positions.map((p) => normalizeAddress(p.tokenAddress)),
-        ...Object.keys(actualBalances).map((addr) => normalizeAddress(addr)),
+        ...positions.map(p => normalizeAddress(p.tokenAddress)),
+        ...Object.keys(actualBalances).map(addr => normalizeAddress(addr)),
       ]);
-
+      
       allTrackedTokens.forEach((normalizedTokenAddress) => {
         // Find the original token address (for matching)
-        const originalTokenAddress =
-          positions.find(
-            (p) => normalizeAddress(p.tokenAddress) === normalizedTokenAddress,
-          )?.tokenAddress ||
-          Object.keys(actualBalances).find(
-            (addr) => normalizeAddress(addr) === normalizedTokenAddress,
-          ) ||
-          normalizedTokenAddress;
-
-        const currentBalance =
-          actualBalances[originalTokenAddress] ??
-          actualBalances[normalizedTokenAddress] ??
-          0;
-        const previousBalance =
-          previousBalancesRef.current[originalTokenAddress] ??
-          previousBalancesRef.current[normalizedTokenAddress] ??
-          undefined;
-
+        const originalTokenAddress = positions.find(p => normalizeAddress(p.tokenAddress) === normalizedTokenAddress)?.tokenAddress 
+          || Object.keys(actualBalances).find(addr => normalizeAddress(addr) === normalizedTokenAddress)
+          || normalizedTokenAddress;
+        
+        const currentBalance = actualBalances[originalTokenAddress] ?? actualBalances[normalizedTokenAddress] ?? 0;
+        const previousBalance = previousBalancesRef.current[originalTokenAddress] 
+          ?? previousBalancesRef.current[normalizedTokenAddress]
+          ?? undefined;
+        
         // If balance decreased significantly, tokens were sold
-        if (
-          previousBalance !== undefined &&
-          currentBalance < previousBalance - 0.0001
-        ) {
+        if (previousBalance !== undefined && currentBalance < previousBalance - 0.0001) {
           const soldAmount = previousBalance - currentBalance;
-
+          
           // Check if this sale was already counted from trade history
-          const alreadyCounted = salesDetected.some((s) => {
+          const alreadyCounted = salesDetected.some(s => {
             const sAddr = normalizeAddress(s.tokenAddress);
-            return (
-              (sAddr === normalizedTokenAddress ||
-                sAddr === normalizeAddress(originalTokenAddress)) &&
-              Math.abs(s.soldAmount - soldAmount) <
-                Math.max(soldAmount * 0.1, 0.0001) && // Allow 10% tolerance
-              s.source === "trade_history"
-            );
+            return (sAddr === normalizedTokenAddress || sAddr === normalizeAddress(originalTokenAddress)) &&
+              Math.abs(s.soldAmount - soldAmount) < Math.max(soldAmount * 0.1, 0.0001) && // Allow 10% tolerance
+              s.source === 'trade_history';
           });
-
+          
           if (alreadyCounted) {
             // Already counted from trade history, just update balance
             previousBalancesRef.current[originalTokenAddress] = currentBalance;
-            previousBalancesRef.current[normalizedTokenAddress] =
-              currentBalance;
+            previousBalancesRef.current[normalizedTokenAddress] = currentBalance;
             return;
           }
-
+          
           // Find the position to get buy price
-          const position = positions.find(
-            (p) =>
-              normalizeAddress(p.tokenAddress) === normalizedTokenAddress ||
-              p.tokenAddress === originalTokenAddress,
+          const position = positions.find(p => 
+            normalizeAddress(p.tokenAddress) === normalizedTokenAddress || 
+            p.tokenAddress === originalTokenAddress
           );
-
+          
           if (position && position.bought > 0 && position.boughtUsdValue > 0) {
             const avgBuyPrice = position.boughtUsdValue / position.bought;
-            const currentPrice =
-              livePrices[originalTokenAddress] ||
-              livePrices[normalizedTokenAddress] ||
-              0;
+            const currentPrice = livePrices[originalTokenAddress] || livePrices[normalizedTokenAddress] || 0;
             let salePrice = currentPrice;
-
+            
             // Try to get sale price from position data
-            if (
-              salePrice <= 0 &&
-              position.soldUsdValue > 0 &&
-              position.sold > 0
-            ) {
+            if (salePrice <= 0 && position.soldUsdValue > 0 && position.sold > 0) {
               salePrice = position.soldUsdValue / position.sold;
             }
-
+            
             // If still no price, try to estimate from recent trade history
             if (salePrice <= 0) {
               const recentSells = sellTrades
-                .filter(
-                  (s) =>
-                    normalizeAddress(s.tokenAddress) === normalizedTokenAddress,
-                )
+                .filter(s => normalizeAddress(s.tokenAddress) === normalizedTokenAddress)
                 .sort((a, b) => {
                   const aTime = parseTradeTimestamp(a);
                   const bTime = parseTradeTimestamp(b);
                   return bTime - aTime; // Most recent first
                 });
-
+              
               if (recentSells.length > 0) {
                 const recentSell = recentSells[0];
-                const recentSoldAmount =
-                  typeof recentSell.tokenAmount === "string"
-                    ? parseFloat(recentSell.tokenAmount)
-                    : recentSell.tokenAmount || 0;
-                const recentSaleValue =
-                  typeof recentSell.usdValue === "string"
-                    ? parseFloat(recentSell.usdValue)
-                    : recentSell.usdValue || 0;
-
+                const recentSoldAmount = typeof recentSell.tokenAmount === 'string' 
+                  ? parseFloat(recentSell.tokenAmount) 
+                  : (recentSell.tokenAmount || 0);
+                const recentSaleValue = typeof recentSell.usdValue === 'string' 
+                  ? parseFloat(recentSell.usdValue) 
+                  : (recentSell.usdValue || 0);
+                
                 if (recentSoldAmount > 0) {
                   salePrice = recentSaleValue / recentSoldAmount;
                 }
               }
             }
-
+            
             // Last resort: use buy price (break-even assumption)
             if (salePrice <= 0) {
               salePrice = avgBuyPrice;
             }
-
+            
             const saleValueUsd = soldAmount * salePrice;
             const costBasisOfSold = soldAmount * avgBuyPrice;
             const saleRealizedPnl = saleValueUsd - costBasisOfSold;
-
+            
             totalRealizedPnl += saleRealizedPnl;
-
+            
             salesDetected.push({
               tokenAddress: originalTokenAddress,
               soldAmount,
               salePrice,
               costBasis: costBasisOfSold,
               realizedPnl: saleRealizedPnl,
-              source: "balance_change",
+              source: 'balance_change',
               timestamp: Date.now(),
-              tokenSymbol:
-                position?.tokenSymbol || tokenNames[originalTokenAddress] || "",
-              tokenName: position?.tokenName || "",
+              tokenSymbol: position?.tokenSymbol || tokenNames[originalTokenAddress] || '',
+              tokenName: position?.tokenName || '',
             });
+            
           } else {
             // No position found - might be fully sold, try to find in trade history
-            isDev &&
-              console.log("⚠️ Balance decreased but no position found:", {
-                tokenAddress: originalTokenAddress,
-                normalizedTokenAddress,
-                previousBalance,
-                currentBalance,
-                soldAmount,
-              });
+            isDev && console.log("⚠️ Balance decreased but no position found:", {
+              tokenAddress: originalTokenAddress,
+              normalizedTokenAddress,
+              previousBalance,
+              currentBalance,
+              soldAmount,
+            });
           }
         }
-
+        
         // Always update previous balance for next check (even if no sale detected)
         previousBalancesRef.current[originalTokenAddress] = currentBalance;
         previousBalancesRef.current[normalizedTokenAddress] = currentBalance;
       });
-
+      
       // Save updated balances to localStorage
       try {
         const storageKeys = getStorageKeys();
-        localStorage.setItem(
-          storageKeys.previousBalances,
-          JSON.stringify(previousBalancesRef.current),
-        );
+        localStorage.setItem(storageKeys.previousBalances, JSON.stringify(previousBalancesRef.current));
       } catch (error) {
         console.error("Error saving previous balances:", error);
       }
-
+      
       // 3. Calculate from backend-reported sales (for positions with sold > 0)
       // Only count if not already counted from trade history or balance changes
       positions.forEach((pos) => {
         if (pos.sold > 0 && pos.bought > 0 && pos.boughtUsdValue > 0) {
           // Check if already counted
-          const alreadyCounted = salesDetected.some(
-            (s) =>
-              s.tokenAddress === pos.tokenAddress &&
-              (s.source === "trade_history" ||
-                s.source === "trade_history_stored" ||
-                s.source === "balance_change"),
+          const alreadyCounted = salesDetected.some(s =>
+            s.tokenAddress === pos.tokenAddress &&
+            (s.source === 'trade_history' || s.source === 'trade_history_stored' || s.source === 'balance_change')
           );
-
+          
           if (alreadyCounted) return;
-
+          
           const avgBuyPrice = pos.boughtUsdValue / pos.bought;
           const costBasisOfSold = pos.sold * avgBuyPrice;
-          const saleValueUsd =
-            pos.soldUsdValue ||
-            pos.sold * (livePrices[pos.tokenAddress] || avgBuyPrice);
+          const saleValueUsd = pos.soldUsdValue || (pos.sold * (livePrices[pos.tokenAddress] || avgBuyPrice));
           const saleRealizedPnl = saleValueUsd - costBasisOfSold;
-
+          
           totalRealizedPnl += saleRealizedPnl;
-
+          
           salesDetected.push({
             tokenAddress: pos.tokenAddress,
             soldAmount: pos.sold,
             salePrice: saleValueUsd / pos.sold,
             costBasis: costBasisOfSold,
             realizedPnl: saleRealizedPnl,
-            source: "backend",
+            source: 'backend',
             timestamp: Date.now(),
-            tokenSymbol: pos.tokenSymbol || "",
-            tokenName: pos.tokenName || "",
+            tokenSymbol: pos.tokenSymbol || '',
+            tokenName: pos.tokenName || '',
           });
+          
         }
       });
 
       // Build PNL chart data from salesDetected (same array that produced totalRealizedPnl)
-      const filteredSales = salesDetected.filter(
-        (s) => s.timestamp >= cutoffTime,
-      );
+      const filteredSales = salesDetected.filter(s => s.timestamp >= cutoffTime);
       if (filteredSales.length > 0) {
-        const sorted = [...filteredSales].sort(
-          (a, b) => a.timestamp - b.timestamp,
-        );
+        const sorted = [...filteredSales].sort((a, b) => a.timestamp - b.timestamp);
         let cumulative = 0;
         const chartPoints: PnlChartDataPoint[] = [];
         const firstDate = new Date(sorted[0].timestamp);
         chartPoints.push({
-          time: firstDate.toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          }),
-          date: "Start",
-          cumulativePnl: 0,
-          tradePnl: 0,
-          tokenSymbol: "",
-          tokenName: "",
-          index: 0,
+          time: firstDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: 'Start', cumulativePnl: 0, tradePnl: 0,
+          tokenSymbol: '', tokenName: '', index: 0,
         });
         sorted.forEach((sale, i) => {
           const tradeDate = new Date(sale.timestamp);
-          const timeLabel = tradeDate.toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          });
-          const dateLabel =
-            timeLabel +
-            ", " +
-            tradeDate.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
+          const timeLabel = tradeDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const dateLabel = timeLabel + ', ' + tradeDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
           cumulative += sale.realizedPnl;
           chartPoints.push({
-            time: timeLabel,
-            date: dateLabel,
+            time: timeLabel, date: dateLabel,
             cumulativePnl: Math.round(cumulative * 1e6) / 1e6,
             tradePnl: Math.round(sale.realizedPnl * 1e6) / 1e6,
-            tokenSymbol: sale.tokenSymbol,
-            tokenName: sale.tokenName,
-            index: i + 1,
+            tokenSymbol: sale.tokenSymbol, tokenName: sale.tokenName, index: i + 1,
           });
         });
         setPnlChartData(chartPoints);
@@ -2398,14 +1951,11 @@ export default function PortfolioPage() {
       // Update cumulative realized PNL (persists across reloads)
       // Store the total calculated from all sources
       cumulativeRealizedPnlRef.current = totalRealizedPnl;
-
+      
       // Save cumulative realized PNL to localStorage
       try {
         const storageKeys = getStorageKeys();
-        localStorage.setItem(
-          storageKeys.cumulativeRealizedPnl,
-          totalRealizedPnl.toString(),
-        );
+        localStorage.setItem(storageKeys.cumulativeRealizedPnl, totalRealizedPnl.toString());
       } catch (error) {
         console.error("Error saving realized PNL data:", error);
       }
@@ -2442,47 +1992,35 @@ export default function PortfolioPage() {
 
       // For now, use the overall unrealized PNL since positions don't have timestamps
       const unrealizedPnlForTimeframe = unrealizedPnl;
-
+      
       // Calculate total PNL (realized + unrealized)
       const totalPnlForTimeframe = totalRealizedPnl + unrealizedPnlForTimeframe;
-
+      
       // Calculate total cost basis (for percentage calculation)
       // For REALIZED PNL percentage, use cost basis of SOLD tokens only (not all buys)
       // This gives accurate percentage: realizedPnl / costBasisOfSoldTokens
-      const totalCostBasisOfSoldTokens = salesDetected.reduce(
-        (acc, sale) => acc + (sale.costBasis || 0),
-        0,
-      );
-
+      const totalCostBasisOfSoldTokens = salesDetected.reduce((acc, sale) => acc + (sale.costBasis || 0), 0);
+      
       // For TOTAL PNL percentage, use all buy trades (includes unrealized positions)
       const totalCostBasisFromTrades = nonSplitTrades
-        .filter((t) => t.type === "Buy")
+        .filter(t => t.type === "Buy")
         .reduce((acc, buy) => {
-          const usdValue =
-            typeof buy.usdValue === "string"
-              ? parseFloat(buy.usdValue)
-              : buy.usdValue;
+          const usdValue = typeof buy.usdValue === 'string' ? parseFloat(buy.usdValue) : buy.usdValue;
           return acc + (usdValue || 0);
         }, 0);
-
-      const totalCostBasisFromPositions = positions.reduce(
-        (acc, pos) => acc + (pos.boughtUsdValue || 0),
-        0,
-      );
-      const totalCostBasis = Math.max(
-        totalCostBasisFromTrades,
-        totalCostBasisFromPositions,
-      );
-
-      const totalPnlPercentageForTimeframe =
-        totalCostBasis > 0 ? (totalPnlForTimeframe / totalCostBasis) * 100 : 0;
-
+      
+      const totalCostBasisFromPositions = positions.reduce((acc, pos) => acc + (pos.boughtUsdValue || 0), 0);
+      const totalCostBasis = Math.max(totalCostBasisFromTrades, totalCostBasisFromPositions);
+      
+      const totalPnlPercentageForTimeframe = totalCostBasis > 0 
+        ? (totalPnlForTimeframe / totalCostBasis) * 100 
+        : 0;
+      
       // Calculate realized PNL percentage using cost basis of SOLD tokens only
       // This is the correct way: realizedPnl / costBasisOfSoldTokens
-      const realizedPnlPercentage =
-        totalCostBasisOfSoldTokens > 0
-          ? (totalRealizedPnl / totalCostBasisOfSoldTokens) * 100
-          : 0;
+      const realizedPnlPercentage = totalCostBasisOfSoldTokens > 0 
+        ? (totalRealizedPnl / totalCostBasisOfSoldTokens) * 100 
+        : 0;
 
       setTimeframeMetrics({
         unrealizedPnl: unrealizedPnlForTimeframe,
@@ -2491,7 +2029,7 @@ export default function PortfolioPage() {
         winningTrades,
         losingTrades,
       });
-
+      
       // Update total PNL state
       setTotalPnl(totalPnlForTimeframe);
       setTotalPnlPercentage(totalPnlPercentageForTimeframe);
@@ -2499,108 +2037,81 @@ export default function PortfolioPage() {
       // ROBUST ACTUAL BALANCE CHANGE PNL CALCULATION
       // Formula: Trading PNL = Current Balance - Initial Balance - (Deposits - Withdrawals)
       // This excludes external deposits/withdrawals to show pure trading performance
-      const currentNativeBalance =
-        currentChain === "monad" ? chainBalances?.monad || 0 : solBalance || 0;
-
+      const currentNativeBalance = currentChain === 'monad' 
+        ? (chainBalances?.monad || 0)
+        : (solBalance || 0);
+      
       // Use correct price for the chain
-      const nativePrice =
-        currentChain === "monad" ? monPrice || 0.025 : contextSolPrice;
-
+      const nativePrice = currentChain === 'monad' ? (monPrice || 0.025) : contextSolPrice;
+      
       // Initialize initial balance if not set (first time we see a balance) - per chain
-      if (
-        initialNativeBalanceRef.current === null &&
-        currentNativeBalance > 0
-      ) {
+      if (initialNativeBalanceRef.current === null && currentNativeBalance > 0) {
         initialNativeBalanceRef.current = currentNativeBalance;
         const storageKeys = getStorageKeys();
         try {
-          localStorage.setItem(
-            storageKeys.initialNativeBalance,
-            currentNativeBalance.toString(),
-          );
-          isDev &&
-            console.log(
-              "📊 Initialized initial native balance:",
-              currentNativeBalance,
-              currentChain === "monad" ? "MON" : "SOL",
-            );
+          localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
+          isDev && console.log("📊 Initialized initial native balance:", currentNativeBalance, currentChain === "monad" ? "MON" : "SOL");
         } catch (error) {
           console.error("Error saving initial balance:", error);
         }
       }
-
+      
       // VALIDATION: Detect if initial balance seems incorrect
       // If current balance is significantly larger than stored initial, it might be wrong
       // This can happen if initial balance was set when balance was very low
-      if (
-        initialNativeBalanceRef.current !== null &&
-        initialNativeBalanceRef.current > 0 &&
-        currentNativeBalance > 0 &&
-        currentNativeBalance > initialNativeBalanceRef.current * 10
-      ) {
+      if (initialNativeBalanceRef.current !== null && 
+          initialNativeBalanceRef.current > 0 && 
+          currentNativeBalance > 0 &&
+          currentNativeBalance > initialNativeBalanceRef.current * 10) {
         // Current balance is 10x+ larger than initial - this suggests initial was set incorrectly
         // However, don't auto-update - let user reset manually to avoid false positives
-        console.warn(
-          "⚠️ Initial balance seems unusually small compared to current balance:",
-          {
-            initialBalance: initialNativeBalanceRef.current,
-            currentBalance: currentNativeBalance,
-            ratio: currentNativeBalance / initialNativeBalanceRef.current,
-            recommendation:
-              "Consider resetting initial balance if this seems incorrect",
-          },
-        );
+        console.warn("⚠️ Initial balance seems unusually small compared to current balance:", {
+          initialBalance: initialNativeBalanceRef.current,
+          currentBalance: currentNativeBalance,
+          ratio: currentNativeBalance / initialNativeBalanceRef.current,
+          recommendation: "Consider resetting initial balance if this seems incorrect",
+        });
       }
-
+      
       // Calculate actual balance change PNL
       const storedInitialBalance = initialNativeBalanceRef.current;
-
-      if (
-        storedInitialBalance !== null &&
-        storedInitialBalance > 0 &&
-        user?.bearerToken
-      ) {
+      
+      if (storedInitialBalance !== null && storedInitialBalance > 0 && user?.bearerToken) {
         // Fetch all transactions to get deposits and withdrawals
         getWithdrawalHistory(user.bearerToken)
           .then((withdrawalData) => {
             // Get all transactions for this chain (both deposits and withdrawals)
-            const allChainTransactions = (
-              withdrawalData?.transactions || []
-            ).filter((tx: any) => {
+            const allChainTransactions = (withdrawalData?.transactions || []).filter((tx: any) => {
               // For withdrawals, check destination address format
               if (tx.destinationAddress) {
                 const addr = String(tx.destinationAddress).trim();
-                if (currentChain === "monad") {
-                  return addr.startsWith("0x") && addr.length === 42;
+                if (currentChain === 'monad') {
+                  return addr.startsWith('0x') && addr.length === 42;
                 } else {
-                  return (
-                    !addr.startsWith("0x") &&
-                    addr.length >= 32 &&
-                    addr.length <= 44
-                  );
+                  return !addr.startsWith('0x') && addr.length >= 32 && addr.length <= 44;
                 }
               }
               // For deposits, include them (they might not have destinationAddress)
-              return tx.type === "deposit";
+              return tx.type === 'deposit';
             });
-
+            
             // Calculate total deposits and withdrawals (completed only)
             let totalDeposits = 0;
             let totalWithdrawals = 0;
-
+            
             allChainTransactions.forEach((tx: any) => {
-              if (tx.status !== "completed") return;
-
-              if (tx.type === "deposit") {
+              if (tx.status !== 'completed') return;
+              
+              if (tx.type === 'deposit') {
                 totalDeposits += Number(tx.amount) || 0;
-              } else if (tx.type === "withdraw" || tx.type === "withdrawal") {
+              } else if (tx.type === 'withdraw' || tx.type === 'withdrawal') {
                 totalWithdrawals += Number(tx.amount) || 0;
               }
             });
-
+            
             // ROBUST CALCULATION:
             // Trading PNL = Current Balance - Initial Balance - (Deposits - Withdrawals)
-            //
+            // 
             // Explanation:
             // - Current Balance = Initial + Deposits - Withdrawals + Trading PNL
             // - Therefore: Trading PNL = Current - Initial - Deposits + Withdrawals
@@ -2614,43 +2125,36 @@ export default function PortfolioPage() {
             // - Net Deposits = 0.2 - 0.3 = -0.1 (net withdrawal)
             // - Trading PNL = 0.145 - 0.5 - (-0.1) = 0.145 - 0.5 + 0.1 = -0.255 MON
             // This means you lost 0.255 MON from trading
-
+            
             const netDeposits = totalDeposits - totalWithdrawals; // Positive = money added, negative = money removed
-            const tradingBalanceChange =
-              currentNativeBalance - storedInitialBalance - netDeposits;
-
+            const tradingBalanceChange = currentNativeBalance - storedInitialBalance - netDeposits;
+            
             const tradingBalanceChangeUsd = tradingBalanceChange * nativePrice;
             const storedInitialBalanceUsd = storedInitialBalance * nativePrice;
-
+            
             // Calculate percentage - only show if initial balance is reasonable (>= $1.00 to avoid huge percentages)
             let tradingBalanceChangePercentage = 0;
-            if (storedInitialBalanceUsd >= 1.0) {
-              tradingBalanceChangePercentage =
-                (tradingBalanceChangeUsd / storedInitialBalanceUsd) * 100;
+            if (storedInitialBalanceUsd >= 1.00) {
+              tradingBalanceChangePercentage = (tradingBalanceChangeUsd / storedInitialBalanceUsd) * 100;
             } else {
               // If initial balance is too small, percentage will be unreliable - don't show it
-              console.warn(
-                "⚠️ Initial balance too small for accurate percentage:",
-                {
-                  initialBalance: storedInitialBalance,
-                  initialBalanceUsd: storedInitialBalanceUsd,
-                  threshold: 1.0,
-                  recommendation:
-                    "Reset initial balance or wait until you have more balance",
-                },
-              );
+              console.warn("⚠️ Initial balance too small for accurate percentage:", {
+                initialBalance: storedInitialBalance,
+                initialBalanceUsd: storedInitialBalanceUsd,
+                threshold: 1.00,
+                recommendation: "Reset initial balance or wait until you have more balance",
+              });
               tradingBalanceChangePercentage = 0;
             }
-
+            
             setActualBalanceChangePnl(tradingBalanceChangeUsd);
             setActualBalanceChangePnlPercentage(tradingBalanceChangePercentage);
             setActualBalanceChangeNative(tradingBalanceChange); // Store native balance change (MON or SOL)
-
+            
             // Calculate native percentage change - guard against near-zero initial balance
             let nativePercentageChange = 0;
-            if (storedInitialBalance > 0 && storedInitialBalanceUsd >= 1.0) {
-              nativePercentageChange =
-                (tradingBalanceChange / storedInitialBalance) * 100;
+            if (storedInitialBalance > 0 && storedInitialBalanceUsd >= 1.00) {
+              nativePercentageChange = (tradingBalanceChange / storedInitialBalance) * 100;
             }
             setActualBalanceChangeNativePercentage(nativePercentageChange);
 
@@ -2665,32 +2169,28 @@ export default function PortfolioPage() {
               // Keep last 100 data points
               return updated.slice(-100);
             });
+            
           })
           .catch((error) => {
-            console.error(
-              "Failed to fetch transaction history for PNL calculation:",
-              error,
-            );
+            console.error("Failed to fetch transaction history for PNL calculation:", error);
             // Fallback: calculate raw balance change (without deposits/withdrawals adjustment)
             const balanceChange = currentNativeBalance - storedInitialBalance;
             const balanceChangeUsd = balanceChange * nativePrice;
             const storedInitialBalanceUsd = storedInitialBalance * nativePrice;
-
+            
             let balanceChangePercentage = 0;
-            if (storedInitialBalanceUsd >= 1.0) {
-              balanceChangePercentage =
-                (balanceChangeUsd / storedInitialBalanceUsd) * 100;
+            if (storedInitialBalanceUsd >= 1.00) {
+              balanceChangePercentage = (balanceChangeUsd / storedInitialBalanceUsd) * 100;
             }
-
+            
             setActualBalanceChangePnl(balanceChangeUsd);
             setActualBalanceChangePnlPercentage(balanceChangePercentage);
             setActualBalanceChangeNative(balanceChange); // Store native balance change (MON or SOL)
-
+            
             // Calculate native percentage change - guard against near-zero initial balance
             let nativePercentageChange = 0;
-            if (storedInitialBalance > 0 && storedInitialBalanceUsd >= 1.0) {
-              nativePercentageChange =
-                (balanceChange / storedInitialBalance) * 100;
+            if (storedInitialBalance > 0 && storedInitialBalanceUsd >= 1.00) {
+              nativePercentageChange = (balanceChange / storedInitialBalance) * 100;
             }
             setActualBalanceChangeNativePercentage(nativePercentageChange);
 
@@ -2705,21 +2205,15 @@ export default function PortfolioPage() {
               // Keep last 100 data points
               return updated.slice(-100);
             });
+            
           });
       } else if (storedInitialBalance === null && currentNativeBalance > 0) {
         // No stored initial balance - initialize with current balance (first time user)
         initialNativeBalanceRef.current = currentNativeBalance;
         const storageKeys = getStorageKeys();
         try {
-          localStorage.setItem(
-            storageKeys.initialNativeBalance,
-            currentNativeBalance.toString(),
-          );
-          isDev &&
-            console.log(
-              "📊 Initialized initial native balance (first time):",
-              currentNativeBalance,
-            );
+          localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
+          isDev && console.log("📊 Initialized initial native balance (first time):", currentNativeBalance);
         } catch (error) {
           console.error("Error saving initial balance:", error);
         }
@@ -2741,24 +2235,12 @@ export default function PortfolioPage() {
         between0AndMinus50,
         belowMinus50,
       });
+
     };
 
     calculateTimeframeMetrics();
-  }, [
-    selectedTimeframe,
-    tradeHistory,
-    positions,
-    unrealizedPnl,
-    actualBalances,
-    livePrices,
-    user?.id,
-    user?.bearerToken,
-    currentChain,
-    chainBalances,
-    solBalance,
-    contextSolPrice,
-    monPrice,
-  ]);
+  }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl, actualBalances, livePrices, user?.id, user?.bearerToken, currentChain, chainBalances, solBalance, contextSolPrice, monPrice]);
+
 
   // Export performance data as CSV
   const exportPerformanceData = () => {
@@ -2773,10 +2255,7 @@ export default function PortfolioPage() {
       ["Unrealized PnL", timeframeMetrics.unrealizedPnl],
       ["Realized PnL", timeframeMetrics.realizedPnl],
       ["Total PnL", totalPnl],
-      [
-        "Total PnL %",
-        `${totalPnlPercentage >= 0 ? "+" : ""}${totalPnlPercentage.toFixed(2)}%`,
-      ],
+      ["Total PnL %", `${totalPnlPercentage >= 0 ? "+" : ""}${totalPnlPercentage.toFixed(2)}%`],
       ["Winning Trades", timeframeMetrics.winningTrades],
       ["Losing Trades", timeframeMetrics.losingTrades],
       [
@@ -2827,9 +2306,9 @@ export default function PortfolioPage() {
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      `portfolio-performance-${selectedTimeframe}-${
-        new Date().toISOString().split("T")[0]
-      }.csv`,
+      `portfolio-performance-${selectedTimeframe}-${new Date()
+        .toISOString()
+        .split("T")[0]}.csv`,
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
@@ -2841,8 +2320,8 @@ export default function PortfolioPage() {
   // Portfolio keeps its own state for local operations (editing, etc.)
   useEffect(() => {
     if (contextWalletList.length > 0) {
-      const mappedWallets: UserWallet[] = contextWalletList.map(
-        (w: any, index: number) => normalizeWalletFromApi(w, index),
+      const mappedWallets: UserWallet[] = contextWalletList.map((w: any, index: number) =>
+        normalizeWalletFromApi(w, index)
       );
       setWallets(mappedWallets);
       return;
@@ -2922,10 +2401,9 @@ export default function PortfolioPage() {
 
   // Sync local walletBalances from UserContext whenever contextWalletBalances changes
   useEffect(() => {
-    if (!wallets.length || Object.keys(contextWalletBalances).length === 0)
-      return;
+    if (!wallets.length || Object.keys(contextWalletBalances).length === 0) return;
 
-    setWalletBalances((prev) => {
+    setWalletBalances(prev => {
       const updated = { ...prev };
       let hasChanges = false;
 
@@ -2950,8 +2428,7 @@ export default function PortfolioPage() {
     if (typeof window === "undefined") return;
 
     const handleWalletsUpdated = () => {
-      isDev &&
-        console.log("🔄 Wallets updated event - forcing balance refresh");
+      isDev && console.log("🔄 Wallets updated event - forcing balance refresh");
       forceBalanceRefreshRef.current = true;
     };
 
@@ -2964,62 +2441,50 @@ export default function PortfolioPage() {
 
   // Filter wallets based on search query and archived status
   const filteredWallets = useMemo(() => {
-    return wallets.filter((w) => {
-      // Hide wallets that don't have an address for the current chain
-      const addrForChain = getAddressForChain(w, currentChain);
-      if (!addrForChain) return false;
+    return wallets
+      .filter((w) => {
+        // Hide wallets that don't have an address for the current chain
+        const addrForChain = getAddressForChain(w, currentChain);
+        if (!addrForChain) return false;
 
-      // Filter by archived status
-      if (!showHidden && w.isArchived) return false;
-
-      // Filter by search query
-      if (walletSearchQuery.trim()) {
-        const query = walletSearchQuery.toLowerCase().trim();
-        const label = (w.label || "").toLowerCase();
-        const solanaAddr = (w.solanaAddress || "").toLowerCase();
-        const ethereumAddr = (w.ethereumAddress || "").toLowerCase();
-        const address = (w.address || "").toLowerCase();
-        const displayAddr = addrForChain.toLowerCase();
-
-        return (
-          label.includes(query) ||
-          solanaAddr.includes(query) ||
-          ethereumAddr.includes(query) ||
-          address.includes(query) ||
-          displayAddr.includes(query)
-        );
-      }
-
-      return true;
-    });
+        // Filter by archived status
+        if (!showHidden && w.isArchived) return false;
+        
+        // Filter by search query
+        if (walletSearchQuery.trim()) {
+          const query = walletSearchQuery.toLowerCase().trim();
+          const label = (w.label || "").toLowerCase();
+          const solanaAddr = (w.solanaAddress || "").toLowerCase();
+          const ethereumAddr = (w.ethereumAddress || "").toLowerCase();
+          const address = (w.address || "").toLowerCase();
+          const displayAddr = addrForChain.toLowerCase();
+          
+          return (
+            label.includes(query) ||
+            solanaAddr.includes(query) ||
+            ethereumAddr.includes(query) ||
+            address.includes(query) ||
+            displayAddr.includes(query)
+          );
+        }
+        
+        return true;
+      });
   }, [wallets, showHidden, walletSearchQuery, currentChain]);
 
   const selectedSolWalletIds = selectedWalletIds?.sol || [];
-  const selectedSolSet = useMemo(
-    () => new Set(selectedSolWalletIds),
-    [selectedSolWalletIds],
-  );
+  const selectedSolSet = useMemo(() => new Set(selectedSolWalletIds), [selectedSolWalletIds]);
   const selectedMonWalletIds = selectedWalletIds?.monad || [];
-  const selectedMonSet = useMemo(
-    () => new Set(selectedMonWalletIds),
-    [selectedMonWalletIds],
-  );
-  const isAllSolSelected =
-    currentChain === "sol" &&
-    filteredWallets.length > 0 &&
-    selectedSolSet.size === filteredWallets.length;
-  const isAllMonSelected =
-    currentChain === "monad" &&
-    filteredWallets.length > 0 &&
-    selectedMonSet.size === filteredWallets.length;
+  const selectedMonSet = useMemo(() => new Set(selectedMonWalletIds), [selectedMonWalletIds]);
+  const isAllSolSelected = currentChain === "sol" && filteredWallets.length > 0 && selectedSolSet.size === filteredWallets.length;
+  const isAllMonSelected = currentChain === "monad" && filteredWallets.length > 0 && selectedMonSet.size === filteredWallets.length;
 
   const handleRedistributeFunds = async (mode: "split" | "consolidate") => {
     if (!user?.bearerToken) {
       toast.error("Please log in first");
       return;
     }
-    const ids =
-      currentChain === "sol" ? selectedSolWalletIds : selectedMonWalletIds;
+    const ids = currentChain === "sol" ? selectedSolWalletIds : selectedMonWalletIds;
     if (!ids || ids.length === 0) {
       toast.error("Select at least one wallet first");
       return;
@@ -3029,7 +2494,7 @@ export default function PortfolioPage() {
     try {
       const response = await redistributeWalletFunds(
         { chain: currentChain as "sol" | "monad", mode, walletIds: ids },
-        user.bearerToken,
+        user.bearerToken
       );
 
       const { summary, results } = response || {};
@@ -3043,13 +2508,12 @@ export default function PortfolioPage() {
         const label = uniqueFrom
           .slice(0, 3)
           .map((addr) =>
-            addr.length > 10 ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : addr,
+            addr.length > 10 ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : addr
           )
           .join(", ");
-        const more =
-          uniqueFrom.length > 3 ? ` +${uniqueFrom.length - 3} more` : "";
+        const more = uniqueFrom.length > 3 ? ` +${uniqueFrom.length - 3} more` : "";
         toast.success(
-          `Consolidation queued: moved from ${uniqueFrom.length} wallet(s)${label ? ` (${label}${more})` : ""}`,
+          `Consolidation queued: moved from ${uniqueFrom.length} wallet(s)${label ? ` (${label}${more})` : ""}`
         );
       } else {
         toast.success("Split successful");
@@ -3063,17 +2527,10 @@ export default function PortfolioPage() {
 
       const primaryAddress =
         currentChain === "sol"
-          ? primaryWalletAddresses.solana ||
-            getAddressForChain(
-              wallets.find((w) => w.isPrimary) || wallets[0] || ({} as any),
-              "sol",
-            )
+          ? primaryWalletAddresses.solana || getAddressForChain(wallets.find((w) => w.isPrimary) || wallets[0] || ({} as any), "sol")
           : primaryWalletAddresses.ethereum ||
             normalizeMonadAddress(
-              getAddressForChain(
-                wallets.find((w) => w.isPrimary) || wallets[0] || ({} as any),
-                "monad",
-              ),
+              getAddressForChain(wallets.find((w) => w.isPrimary) || wallets[0] || ({} as any), "monad")
             );
 
       const refreshSet = new Set(addresses);
@@ -3107,7 +2564,7 @@ export default function PortfolioPage() {
       if (addresses.length) {
         await refreshAllBalances(
           addresses.map((address) => ({ address, chain: currentChain })),
-          true,
+          true
         );
       }
       const primaryAddress =
@@ -3143,12 +2600,12 @@ export default function PortfolioPage() {
       if (currentChain === "sol") {
         setSelectedWalletsForChain(
           selectedSolWalletIds.filter((id) => id !== deleteTarget.id),
-          "sol",
+          "sol"
         );
       } else {
         setSelectedWalletsForChain(
           selectedMonWalletIds.filter((id) => id !== deleteTarget.id),
-          "monad",
+          "monad"
         );
       }
 
@@ -3156,11 +2613,7 @@ export default function PortfolioPage() {
 
       // Refresh balances to update header/chain balances
       await refreshAllBalances([], true); // noop but keeps contract
-      await refreshBalance({
-        chain: currentChain,
-        force: true,
-        updateChainBalance: true,
-      });
+      await refreshBalance({ chain: currentChain, force: true, updateChainBalance: true });
 
       toast.success("Wallet deleted");
     } catch (error: any) {
@@ -3173,7 +2626,7 @@ export default function PortfolioPage() {
     }
   };
 
-  const handleCreateWallet = async () => {
+    const handleCreateWallet = async () => {
     if (!user?.id) {
       toast.error("Please log in first");
       return;
@@ -3187,19 +2640,19 @@ export default function PortfolioPage() {
       // - return the new wallet with balance = 0 (or computed)
       isDev && console.log("Creating new wallet for user:", user.id);
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${user.bearerToken}`,
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            // you can optionally send: label, chain, etc.
-          }),
-        },
-      );
+  `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${user.bearerToken}`,
+    },
+    body: JSON.stringify({
+      userId: user.id,
+      // you can optionally send: label, chain, etc.
+    }),
+  }
+);
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
@@ -3212,7 +2665,7 @@ export default function PortfolioPage() {
       // Initialize the new wallet with balance 0 immediately
       const nextIndex = wallets.length;
       const newWallet = normalizeWalletFromApi(newWalletData, nextIndex);
-
+      
       // Set balance to 0 for the new wallet immediately (before fetching from API/chain)
       setWalletBalances((prev) => ({
         ...prev,
@@ -3221,14 +2674,14 @@ export default function PortfolioPage() {
 
       setWallets((prev) => [...prev, newWallet]);
       notifyWalletsUpdated();
-
+      
       // Fetch all wallets to get the latest state, then refresh balances
       await fetchWallets();
-
+      
       // Immediately fetch the actual balance for the new wallet from the chain
       // This ensures it shows the correct balance (which should be 0 for a new wallet)
       const newWalletAddress = getAddressForChain(newWallet, currentChain);
-
+      
       if (newWalletAddress) {
         try {
           const balanceResult = await refreshBalance({
@@ -3236,7 +2689,7 @@ export default function PortfolioPage() {
             address: newWalletAddress,
             force: true, // Force refresh to get actual balance from chain
           });
-
+          
           if (balanceResult?.balance !== undefined) {
             setWalletBalances((prev) => ({
               ...prev,
@@ -3244,10 +2697,7 @@ export default function PortfolioPage() {
             }));
           }
         } catch (error) {
-          console.error(
-            `Failed to fetch balance for new wallet ${newWallet.id}:`,
-            error,
-          );
+          console.error(`Failed to fetch balance for new wallet ${newWallet.id}:`, error);
           // Keep balance at 0 if fetch fails
         }
       }
@@ -3278,22 +2728,19 @@ export default function PortfolioPage() {
       toast.error("Wallet not found");
       return;
     }
-
+    
     // Check if this is a Turnkey wallet (has walletId) or imported wallet
     if (!wallet.walletId) {
-      toast.error(
-        "Imported wallets cannot be exported. Only Turnkey-managed wallets can be exported.",
-      );
+      toast.error("Imported wallets cannot be exported. Only Turnkey-managed wallets can be exported.");
       return;
     }
-
+    
     const address = getAddressForChain(wallet, currentChain);
     // Use the Turnkey walletId, not the database id
     setExportWalletId(wallet.walletId);
     setExportWalletAddress(address);
     setForceExportChain(null);
     setShowExportModal(true);
-    posthog.capture("wallet_export_initiated", { chain: currentChain });
   };
 
   const handleExported = useCallback(() => {
@@ -3350,32 +2797,30 @@ export default function PortfolioPage() {
             userId: user.id,
             walletId: editingWalletId,
           }),
-        },
+        }
       );
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
-        throw new Error(errorText || `Failed to rename wallet (${res.status})`);
+        throw new Error(
+          errorText || `Failed to rename wallet (${res.status})`
+        );
       }
 
       const data = await res.json().catch(() => ({}));
       if (Array.isArray(data?.wallets)) {
         setWallets(
-          data.wallets.map((w: any, index: number) =>
-            normalizeWalletFromApi(w, index),
-          ),
+          data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
         );
       } else if (data?.wallet) {
         setWallets((prev) => {
-          const currentIndex = prev.findIndex(
-            (wallet) => wallet.id === editingWalletId,
-          );
+          const currentIndex = prev.findIndex((wallet) => wallet.id === editingWalletId);
           const normalized = normalizeWalletFromApi(
             data.wallet,
-            currentIndex >= 0 ? currentIndex : undefined,
+            currentIndex >= 0 ? currentIndex : undefined
           );
           return prev.map((wallet) =>
-            wallet.id === editingWalletId ? normalized : wallet,
+            wallet.id === editingWalletId ? normalized : wallet
           );
         });
       } else {
@@ -3383,8 +2828,8 @@ export default function PortfolioPage() {
           prev.map((wallet) =>
             wallet.id === editingWalletId
               ? { ...wallet, label: trimmed }
-              : wallet,
-          ),
+              : wallet
+          )
         );
       }
       notifyWalletsUpdated();
@@ -3395,14 +2840,14 @@ export default function PortfolioPage() {
     } catch (err) {
       console.error("Failed to rename wallet:", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to rename wallet",
+        err instanceof Error ? err.message : "Failed to rename wallet"
       );
     } finally {
       setRenamingWalletId(null);
     }
   };
 
-  const handleSetPrimaryWallet = async (walletId: string) => {
+    const handleSetPrimaryWallet = async (walletId: string) => {
     if (!user?.id) {
       toast.error("Please log in first");
       return;
@@ -3417,7 +2862,7 @@ export default function PortfolioPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${user.bearerToken}`,
           },
-        },
+        }
       );
 
       if (!res.ok) {
@@ -3434,7 +2879,7 @@ export default function PortfolioPage() {
       // backend setPrimaryWallet returns: { success, message, wallets }
       if (Array.isArray(data.wallets)) {
         mappedWallets = data.wallets.map((w: any, index: number) =>
-          normalizeWalletFromApi(w, index),
+          normalizeWalletFromApi(w, index)
         );
       } else {
         // API didn't include wallets - optimistically flip local state
@@ -3451,22 +2896,16 @@ export default function PortfolioPage() {
       try {
         await refreshWalletList(true);
       } catch (refreshErr) {
-        console.error(
-          "Failed to refresh wallet list after setting primary:",
-          refreshErr,
-        );
+        console.error("Failed to refresh wallet list after setting primary:", refreshErr);
       }
-
+      
       // Immediately refresh the new primary wallet's balance to update Header
       const newPrimaryWallet =
         mappedWallets.find((w) => w.isPrimary) ??
         mappedWallets.find((w) => w.id === walletId);
       if (newPrimaryWallet) {
-        const newPrimaryAddress = getAddressForChain(
-          newPrimaryWallet,
-          currentChain,
-        );
-
+        const newPrimaryAddress = getAddressForChain(newPrimaryWallet, currentChain);
+        
         if (newPrimaryAddress) {
           // Force immediate refresh to update Header balance right away
           // Use updateChainBalance to ensure chainBalances is updated even though
@@ -3478,7 +2917,7 @@ export default function PortfolioPage() {
               force: true, // Force refresh to bypass cooldown
               updateChainBalance: true, // Force update chainBalances[chain] for Header
             });
-
+            
             if (balanceResult?.balance !== undefined) {
               // Balance is now updated in chainBalances, which Header will read
               // Also update the walletBalances for consistency
@@ -3488,14 +2927,11 @@ export default function PortfolioPage() {
               }));
             }
           } catch (error) {
-            console.error(
-              `Failed to refresh balance for new primary wallet:`,
-              error,
-            );
+            console.error(`Failed to refresh balance for new primary wallet:`, error);
           }
         }
       }
-
+      
       toast.success("Primary wallet updated");
     } catch (err) {
       console.error("Error setting primary wallet:", err);
@@ -3509,71 +2945,55 @@ export default function PortfolioPage() {
         <title>Portfolio | Interstate Memeboard</title>
       </Head>
       <div className="flex min-h-screen flex-col bg-[#050608] text-[#E6E7EA]">
-        <div className="relative z-[10000]">
-          <Header />
-        </div>
+        <div className="relative z-[10000]"><Header /></div>
         <DockedPanelMarginWrapper>
-          <div className="p-1 sm:p-1.5">
-            <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
-              {/* Background Image with multi-layer fade */}
-              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-                <div
-                  className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-                  style={{ backgroundImage: "url(/ranks/Background2.png)" }}
-                />
-                <div className="absolute inset-0 bg-black/30" />
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background:
-                      "linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)",
-                  }}
-                />
-                <div
-                  className="absolute inset-x-0 top-1/4 bottom-0"
-                  style={{
-                    background:
-                      "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)",
-                  }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
-              </div>
-              {/* Content */}
-              <div className="relative z-10 px-3 pt-4 pb-6 sm:px-4 sm:pt-6 md:px-6">
-                {/* Section Tabs */}
-                <div className="mb-4 flex flex-col items-start justify-between gap-3 px-2 sm:flex-row sm:items-center sm:gap-0">
-                  <div className="flex gap-2 sm:gap-4">
-                    <button
-                      className={`cursor-pointer text-xl font-medium transition ${
-                        activeSection === "spot"
-                          ? "text-white"
-                          : "text-[#6B7280] hover:text-white"
-                      }`}
-                      onClick={() => setActiveSection("spot")}
-                    >
-                      Spot
-                    </button>
-                    <button
-                      className={`cursor-pointer text-xl font-medium transition ${
-                        activeSection === "predictions"
-                          ? "text-white"
-                          : "text-[#6B7280] hover:text-white"
-                      }`}
-                      onClick={() => setActiveSection("predictions")}
-                    >
-                      Predictions
-                    </button>
-                    <button
-                      className={`cursor-pointer text-xl font-medium transition ${
-                        activeSection === "wallet"
-                          ? "text-white"
-                          : "text-[#6B7280] hover:text-white"
-                      }`}
-                      onClick={() => setActiveSection("wallet")}
-                    >
-                      Wallets
-                    </button>
-                    {/* <button
+        <div className="p-1 sm:p-1.5">
+          <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] min-h-[calc(100vh-80px)]">
+            {/* Background Image with multi-layer fade */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+              <div className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat" style={{ backgroundImage: 'url(/ranks/Background2.png)' }} />
+              <div className="absolute inset-0 bg-black/30" />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)' }} />
+              <div className="absolute inset-x-0 top-1/4 bottom-0" style={{ background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)' }} />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+            </div>
+            {/* Content */}
+            <div className="relative z-10 px-3 sm:px-4 md:px-6 pt-4 sm:pt-6 pb-6">
+
+          {/* Section Tabs */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 px-2 gap-3 sm:gap-0">
+            <div className="flex gap-2 sm:gap-4">
+              <button
+                className={`text-xl font-medium transition cursor-pointer ${
+                  activeSection === "spot"
+                    ? "text-white"
+                    : "text-[#6B7280] hover:text-white"
+                }`}
+                onClick={() => setActiveSection("spot")}
+              >
+                Spot
+              </button>
+              <button
+                className={`text-xl font-medium transition cursor-pointer ${
+                  activeSection === "predictions"
+                    ? "text-white"
+                    : "text-[#6B7280] hover:text-white"
+                }`}
+                onClick={() => setActiveSection("predictions")}
+              >
+                Predictions
+              </button>
+              <button
+                className={`text-xl font-medium transition cursor-pointer ${
+                  activeSection === "wallet"
+                    ? "text-white"
+                    : "text-[#6B7280] hover:text-white"
+                }`}
+                onClick={() => setActiveSection("wallet")}
+              >
+                Wallets
+              </button>
+              {/* <button
                 className={`text-base sm:text-lg font-light transition cursor-pointer ${
                   activeSection === "perpetuals"
                     ? "text-[#f0f5f5]"
@@ -3583,145 +3003,136 @@ export default function PortfolioPage() {
               >
                 Perpetuals
               </button> */}
-                  </div>
+            </div>
 
-                  {/* Right side controls for Spot section */}
-                  {activeSection === "spot" && (
-                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-4">
-                      <InterstateTooltip
-                        label={
-                          currentChain === "monad"
-                            ? "MON Balance"
-                            : "SOL Balance"
-                        }
-                      >
-                        <div className="flex cursor-pointer items-center gap-2 transition-opacity hover:opacity-80">
-                          {currentChain === "monad" ? (
-                            <img
-                              src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                              alt="Monad"
-                              className="-mt-px h-6 w-6 rounded"
-                              style={{ objectFit: "contain" }}
-                            />
-                          ) : (
-                            <SiSolana
-                              className="-mt-px h-4 w-4"
-                              aria-hidden="true"
-                              style={{
-                                color: "unset",
-                                fill: "url(#solana-gradient)",
-                                filter: "none",
-                              }}
-                            />
-                          )}
-                          <svg className="absolute h-0 w-0">
-                            <defs>
-                              <linearGradient
-                                id="solana-gradient"
-                                x1="0%"
-                                y1="0%"
-                                x2="100%"
-                                y2="0%"
-                              >
-                                <stop offset="0%" stopColor="#9945FF" />
-                                <stop offset="100%" stopColor="#14F195" />
-                              </linearGradient>
-                              <linearGradient
-                                id="solana-gradient-inline"
-                                x1="0%"
-                                y1="0%"
-                                x2="100%"
-                                y2="0%"
-                              >
-                                <stop offset="0%" stopColor="#9945FF" />
-                                <stop offset="100%" stopColor="#14F195" />
-                              </linearGradient>
-                            </defs>
-                          </svg>
-                          <span className="text-sm text-[#9CA3AF]">
-                            {formatBalance(chainBalance)}{" "}
-                            {currentChain === "monad" ? "MON" : "SOL"}
-                          </span>
-                        </div>
-                      </InterstateTooltip>
-                      <StackedTokenBoxes count={positions.length} />
-                      <div className="flex items-center gap-2">
-                        {/* <FaSearch className="text-[#9CA3AF]" />
+            {/* Right side controls for Spot section */}
+            {activeSection === "spot" && (
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+                <InterstateTooltip label={currentChain === 'monad' ? 'MON Balance' : 'SOL Balance'}>
+                  <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                    {currentChain === 'monad' ? (
+                      <img
+                        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                        alt="Monad"
+                        className="h-6 w-6 -mt-px rounded"
+                        style={{ objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <SiSolana
+                        className="h-4 w-4 -mt-px"
+                        aria-hidden="true"
+                        style={{
+                          color: "unset",
+                          fill: "url(#solana-gradient)",
+                          filter: "none",
+                        }}
+                      />
+                    )}
+                    <svg className="absolute w-0 h-0">
+                      <defs>
+                        <linearGradient
+                          id="solana-gradient"
+                          x1="0%"
+                          y1="0%"
+                          x2="100%"
+                          y2="0%"
+                        >
+                          <stop offset="0%" stopColor="#9945FF" />
+                          <stop offset="100%" stopColor="#14F195" />
+                        </linearGradient>
+                        <linearGradient
+                          id="solana-gradient-inline"
+                          x1="0%"
+                          y1="0%"
+                          x2="100%"
+                          y2="0%"
+                        >
+                          <stop offset="0%" stopColor="#9945FF" />
+                          <stop offset="100%" stopColor="#14F195" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <span className="text-sm text-[#9CA3AF]">
+                      {formatBalance(chainBalance)} {currentChain === "monad" ? "MON" : "SOL"}
+                    </span>
+                  </div>
+                </InterstateTooltip>
+                <StackedTokenBoxes count={positions.length} />
+                <div className="flex items-center gap-2">
+                  {/* <FaSearch className="text-[#9CA3AF]" />
                   <input
                     type="text"
                     placeholder="Search for other wallets..."
                     className="bg-transparent text-sm text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none"
                   /> */}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setSelectedTimeframe("1d")}
+                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
+                      selectedTimeframe === "1d"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                    }`}
+                  >
+                    1d
+                  </button>
+                  <button
+                    onClick={() => setSelectedTimeframe("7d")}
+                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
+                      selectedTimeframe === "7d"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                    }`}
+                  >
+                    7d
+                  </button>
+                  <button
+                    onClick={() => setSelectedTimeframe("30d")}
+                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
+                      selectedTimeframe === "30d"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                    }`}
+                  >
+                    30d
+                  </button>
+                  <button
+                    onClick={() => setSelectedTimeframe("Max")}
+                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
+                      selectedTimeframe === "Max"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                    }`}
+                  >
+                    Max
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Spot Section */}
+          {activeSection === "spot" && (
+            <div className="space-y-4 sm:space-y-6">
+              {/* Top Panels */}
+              <div className={`grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${initialNativeBalanceRef.current !== null ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
+                {/* Balance */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
+                  <div className="mb-3 sm:mb-4 text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                    Balance
+                  </div>
+                  <div className="space-y-3 sm:space-y-4">
+                    <div>
+                      <div className="text-[#6B7280] text-xs sm:text-sm font-light">
+                        Available Balance in $
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setSelectedTimeframe("1d")}
-                          className={`cursor-pointer px-2 py-1 text-xs transition-colors sm:px-3 ${
-                            selectedTimeframe === "1d"
-                              ? "text-[#f0f5f5]"
-                              : "text-[#9CA3AF] hover:text-[#f0f5f5]"
-                          }`}
-                        >
-                          1d
-                        </button>
-                        <button
-                          onClick={() => setSelectedTimeframe("7d")}
-                          className={`cursor-pointer px-2 py-1 text-xs transition-colors sm:px-3 ${
-                            selectedTimeframe === "7d"
-                              ? "text-[#f0f5f5]"
-                              : "text-[#9CA3AF] hover:text-[#f0f5f5]"
-                          }`}
-                        >
-                          7d
-                        </button>
-                        <button
-                          onClick={() => setSelectedTimeframe("30d")}
-                          className={`cursor-pointer px-2 py-1 text-xs transition-colors sm:px-3 ${
-                            selectedTimeframe === "30d"
-                              ? "text-[#f0f5f5]"
-                              : "text-[#9CA3AF] hover:text-[#f0f5f5]"
-                          }`}
-                        >
-                          30d
-                        </button>
-                        <button
-                          onClick={() => setSelectedTimeframe("Max")}
-                          className={`cursor-pointer px-2 py-1 text-xs transition-colors sm:px-3 ${
-                            selectedTimeframe === "Max"
-                              ? "text-[#f0f5f5]"
-                              : "text-[#9CA3AF] hover:text-[#f0f5f5]"
-                          }`}
-                        >
-                          Max
-                        </button>
+                      <div className="text-xl sm:text-2xl font-light text-[#f0f5f5]">
+                        ${formatCurrency(chainBalance * chainPrice)}
                       </div>
                     </div>
-                  )}
-                </div>
-
-                {/* Spot Section */}
-                {activeSection === "spot" && (
-                  <div className="space-y-4 sm:space-y-6">
-                    {/* Top Panels */}
-                    <div
-                      className={`grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 ${initialNativeBalanceRef.current !== null ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
-                    >
-                      {/* Balance */}
-                      <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 backdrop-blur-xl sm:p-6">
-                        <div className="mb-3 cursor-pointer text-xs font-medium text-[#f0f5f5] transition-colors hover:text-[#70E0B0] sm:mb-4 sm:text-sm">
-                          Balance
-                        </div>
-                        <div className="space-y-3 sm:space-y-4">
-                          <div>
-                            <div className="text-xs font-light text-[#6B7280] sm:text-sm">
-                              Available Balance in $
-                            </div>
-                            <div className="text-xl font-light text-[#f0f5f5] sm:text-2xl">
-                              ${formatCurrency(chainBalance * chainPrice)}
-                            </div>
-                          </div>
-                          {/* Unrealized PNL - Commented out */}
-                          {/* <div>
+                    {/* Unrealized PNL - Commented out */}
+                    {/* <div>
                       <div className="text-[#6B7280] text-xs sm:text-sm font-light flex items-center gap-1">
                         Unrealized PNL
                         <InterstateTooltip label="Profit/loss from positions you still hold (tokens you haven't sold yet). This changes as token prices change.">
@@ -3737,22 +3148,20 @@ export default function PortfolioPage() {
                         </div>
                       )}
                     </div> */}
-                          <div>
-                            <div className="text-xs font-light text-[#6B7280] sm:text-sm">
-                              Available Balance in{" "}
-                              {currentChain === "monad" ? "MON" : "SOL"}
-                            </div>
-                            <div className="flex items-center gap-1 text-xl font-light text-[#f0f5f5] sm:text-2xl">
-                              <ChainIcon chain={currentChain} size="medium" />
-                              {formatBalance(chainBalance)}{" "}
-                              {currentChain === "monad" ? "MON" : "SOL"}
-                            </div>
-                          </div>
-                        </div>
+                    <div>
+                      <div className="text-[#6B7280] text-xs sm:text-sm font-light">
+                        Available Balance in {currentChain === "monad" ? "MON" : "SOL"}
                       </div>
+                      <div className="text-xl sm:text-2xl font-light text-[#f0f5f5] flex items-center gap-1">
+                        <ChainIcon chain={currentChain} size="medium" />
+                        {formatBalance(chainBalance)} {currentChain === "monad" ? "MON" : "SOL"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                      {/* Total PNL - Commented out */}
-                      {/* <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
+                {/* Total PNL - Commented out */}
+                {/* <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
                   <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                     Total PNL
                   </div>
@@ -3792,137 +3201,93 @@ export default function PortfolioPage() {
                   </div>
                 </div> */}
 
-                      {/* Wallet Balance Change */}
-                      {initialNativeBalanceRef.current !== null && (
-                        <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 backdrop-blur-xl sm:p-6">
-                          <div className="mb-3 cursor-pointer text-xs font-medium text-[#f0f5f5] transition-colors hover:text-[#70E0B0] sm:mb-4 sm:text-sm">
-                            Wallet Balance Change (
-                            {currentChain === "monad" ? "MON" : "SOL"})
+                {/* Wallet Balance Change */}
+                {initialNativeBalanceRef.current !== null && (
+                  <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
+                    <div className="mb-3 sm:mb-4 text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                      Wallet Balance Change ({currentChain === "monad" ? "MON" : "SOL"})
+                    </div>
+                    <div className="flex flex-col">
+                      <div
+                        className="text-xl sm:text-2xl font-light mb-2"
+                        style={{
+                          color: actualBalanceChangePnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                        }}
+                      >
+                        {sortByUSD && nativePriceForDisplay > 0 ? (
+                          <>
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(Math.abs(actualBalanceChangePnl) / (nativePriceForDisplay || 1))}
+                          </>
+                        ) : (
+                          `${actualBalanceChangePnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(actualBalanceChangePnl))}`
+                        )}
+                      </div>
+                      {/* Show native balance change (MON or SOL) */}
+                      <div 
+                        className="text-sm mb-1"
+                        style={{
+                          color: actualBalanceChangeNative >= 0 ? "#70E0B0" : "#FF4D7F",
+                        }}
+                      >
+                        {actualBalanceChangeNative >= 0 ? "+" : "-"}
+                        {formatSmartNumber(Math.abs(actualBalanceChangeNative))} {currentChain === 'monad' ? 'MON' : 'SOL'}
+                      </div>
+                      {/* Show native percentage change (clamped to ±999.99%) */}
+                      {actualBalanceChangeNativePercentage !== 0 && (() => {
+                        const clampedNativePct = Math.max(-999.99, Math.min(999.99, actualBalanceChangeNativePercentage));
+                        const isNativeClamped = Math.abs(actualBalanceChangeNativePercentage) > 999.99;
+                        return (
+                          <div
+                            className="text-sm mb-2"
+                            style={{
+                              color: actualBalanceChangeNativePercentage >= 0 ? "#70E0B0" : "#FF4D7F",
+                            }}
+                          >
+                            {isNativeClamped
+                              ? (actualBalanceChangeNativePercentage > 0 ? ">+999.99%" : "<-999.99%")
+                              : `${clampedNativePct >= 0 ? "+" : ""}${formatSmallPrice(clampedNativePct)}%`
+                            }
                           </div>
-                          <div className="flex flex-col">
-                            <div
-                              className="mb-2 text-xl font-light sm:text-2xl"
-                              style={{
-                                color:
-                                  actualBalanceChangePnl >= 0
-                                    ? "#70E0B0"
-                                    : "#FF4D7F",
-                              }}
-                            >
-                              {sortByUSD && nativePriceForDisplay > 0 ? (
-                                <>
-                                  <ChainIcon
-                                    chain={currentChain}
-                                    size="medium"
-                                  />
-                                  {formatSmartNumber(
-                                    Math.abs(actualBalanceChangePnl) /
-                                      (nativePriceForDisplay || 1),
-                                  )}
-                                </>
-                              ) : (
-                                `${actualBalanceChangePnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(actualBalanceChangePnl))}`
-                              )}
-                            </div>
-                            {/* Show native balance change (MON or SOL) */}
-                            <div
-                              className="mb-1 text-sm"
-                              style={{
-                                color:
-                                  actualBalanceChangeNative >= 0
-                                    ? "#70E0B0"
-                                    : "#FF4D7F",
-                              }}
-                            >
-                              {actualBalanceChangeNative >= 0 ? "+" : "-"}
-                              {formatSmartNumber(
-                                Math.abs(actualBalanceChangeNative),
-                              )}{" "}
-                              {currentChain === "monad" ? "MON" : "SOL"}
-                            </div>
-                            {/* Show native percentage change (clamped to ±999.99%) */}
-                            {actualBalanceChangeNativePercentage !== 0 &&
-                              (() => {
-                                const clampedNativePct = Math.max(
-                                  -999.99,
-                                  Math.min(
-                                    999.99,
-                                    actualBalanceChangeNativePercentage,
-                                  ),
-                                );
-                                const isNativeClamped =
-                                  Math.abs(
-                                    actualBalanceChangeNativePercentage,
-                                  ) > 999.99;
-                                return (
-                                  <div
-                                    className="mb-2 text-sm"
-                                    style={{
-                                      color:
-                                        actualBalanceChangeNativePercentage >= 0
-                                          ? "#70E0B0"
-                                          : "#FF4D7F",
-                                    }}
-                                  >
-                                    {isNativeClamped
-                                      ? actualBalanceChangeNativePercentage > 0
-                                        ? ">+999.99%"
-                                        : "<-999.99%"
-                                      : `${clampedNativePct >= 0 ? "+" : ""}${formatSmallPrice(clampedNativePct)}%`}
-                                  </div>
-                                );
-                              })()}
-                            {actualBalanceChangePnlPercentage !== 0 &&
-                              (() => {
-                                const clampedUsdPct = Math.max(
-                                  -999.99,
-                                  Math.min(
-                                    999.99,
-                                    actualBalanceChangePnlPercentage,
-                                  ),
-                                );
-                                const isUsdClamped =
-                                  Math.abs(actualBalanceChangePnlPercentage) >
-                                  999.99;
-                                return (
-                                  <div
-                                    className={`mb-3 text-sm ${actualBalanceChangePnlPercentage >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                                  >
-                                    {isUsdClamped
-                                      ? actualBalanceChangePnlPercentage > 0
-                                        ? ">+999.99% (USD)"
-                                        : "<-999.99% (USD)"
-                                      : `${clampedUsdPct >= 0 ? "+" : ""}${formatSmallPrice(clampedUsdPct)}% (USD)`}
-                                  </div>
-                                );
-                              })()}
-                            {/* Interactive Chart */}
-                            {balanceHistory.length > 0 && (
-                              <div className="mt-2 h-32 w-full sm:h-40">
-                                <BalanceChart
-                                  data={balanceHistory}
-                                  chain={currentChain}
-                                  initialBalance={
-                                    initialNativeBalanceRef.current || 0
-                                  }
-                                />
-                              </div>
-                            )}
+                        );
+                      })()}
+                      {actualBalanceChangePnlPercentage !== 0 && (() => {
+                        const clampedUsdPct = Math.max(-999.99, Math.min(999.99, actualBalanceChangePnlPercentage));
+                        const isUsdClamped = Math.abs(actualBalanceChangePnlPercentage) > 999.99;
+                        return (
+                          <div className={`text-sm mb-3 ${actualBalanceChangePnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {isUsdClamped
+                              ? (actualBalanceChangePnlPercentage > 0 ? ">+999.99% (USD)" : "<-999.99% (USD)")
+                              : `${clampedUsdPct >= 0 ? "+" : ""}${formatSmallPrice(clampedUsdPct)}% (USD)`
+                            }
                           </div>
+                        );
+                      })()}
+                      {/* Interactive Chart */}
+                      {balanceHistory.length > 0 && (
+                        <div className="mt-2 h-32 sm:h-40 w-full">
+                          <BalanceChart 
+                            data={balanceHistory} 
+                            chain={currentChain}
+                            initialBalance={initialNativeBalanceRef.current || 0}
+                          />
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
 
-                      {/* Realized PNL */}
-                      <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 backdrop-blur-xl sm:p-6">
-                        <div className="mb-3 flex items-center justify-between sm:mb-4">
-                          <div className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[#f0f5f5] transition-colors hover:text-[#70E0B0] sm:text-sm">
-                            Realized PNL
-                            <InterstateTooltip label="Profit/loss from completed trades (tokens you've sold). This is locked in and won't change unless you make more trades.">
-                              <FiInfo className="h-3.5 w-3.5 cursor-help text-xs text-[#6B7280] transition-colors hover:text-[#9CA3AF]" />
-                            </InterstateTooltip>
-                          </div>
-                          {/* Calendar icon commented out */}
-                          {/* <InterstateTooltip label="View realized profit/loss over time">
+                {/* Realized PNL */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
+                  <div className="mb-3 sm:mb-4 flex items-center justify-between">
+                    <div className="text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors flex items-center gap-2">
+                      Realized PNL
+                      <InterstateTooltip label="Profit/loss from completed trades (tokens you've sold). This is locked in and won't change unless you make more trades.">
+                        <FiInfo className="text-[#6B7280] hover:text-[#9CA3AF] cursor-help text-xs w-3.5 h-3.5 transition-colors" />
+                      </InterstateTooltip>
+                    </div>
+                    {/* Calendar icon commented out */}
+                    {/* <InterstateTooltip label="View realized profit/loss over time">
                       <svg className="w-4 h-4 text-[#9CA3AF] cursor-pointer hover:text:white transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                         <line x1="16" y1="2" x2="16" y2="6"/>
@@ -3931,361 +3296,322 @@ export default function PortfolioPage() {
                         <rect x="7" y="14" width="3" height="3" fill="currentColor"/>
                       </svg>
                     </InterstateTooltip> */}
-                        </div>
-                        <div className="flex flex-col">
-                          <div
-                            className="mb-2 text-xl font-light sm:text-2xl"
-                            style={{
-                              color:
-                                timeframeMetrics.realizedPnl >= 0
-                                  ? "#70E0B0"
-                                  : "#FF4D7F",
-                            }}
-                          >
-                            {sortByUSD && contextSolPrice > 0 ? (
-                              <>
-                                <ChainIcon chain={currentChain} size="medium" />
-                                {formatSmartNumber(
-                                  Math.abs(timeframeMetrics.realizedPnl) /
-                                    contextSolPrice,
-                                )}
-                              </>
-                            ) : (
-                              `${
-                                timeframeMetrics.realizedPnl >= 0 ? "+" : "-"
-                              }$${formatSmallPrice(
-                                Math.abs(timeframeMetrics.realizedPnl),
-                              )}`
-                            )}
-                          </div>
-                          {/* Realized PNL Percentage - Always show */}
-                          <div
-                            className={`mb-2 text-sm ${timeframeMetrics.realizedPnlPercentage >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                          >
-                            {timeframeMetrics.realizedPnlPercentage >= 0
-                              ? "+"
-                              : ""}
-                            {formatSmallPrice(
-                              timeframeMetrics.realizedPnlPercentage,
-                            )}
-                            %
-                          </div>
-                          {/* Interactive Realized PNL Chart */}
-                          {pnlChartData.length > 1 ? (
-                            <div className="h-40 w-full sm:h-48">
-                              <RealizedPnlChart data={pnlChartData} />
-                            </div>
-                          ) : (
-                            <div className="flex h-40 w-full items-center justify-center sm:h-48">
-                              <p className="text-xs text-[#6B7280]">
-                                No realized trades yet
-                              </p>
-                            </div>
+                  </div>
+                  <div className="flex flex-col">
+                    <div
+                      className="text-xl sm:text-2xl font-light mb-2"
+                      style={{
+                        color:
+                          timeframeMetrics.realizedPnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                      }}
+                    >
+                      {sortByUSD && contextSolPrice > 0 ? (
+                        <>
+                          <ChainIcon chain={currentChain} size="medium" />
+                          {formatSmartNumber(
+                            Math.abs(timeframeMetrics.realizedPnl) / contextSolPrice,
                           )}
-                        </div>
+                        </>
+                      ) : (
+                        `${
+                          timeframeMetrics.realizedPnl >= 0 ? "+" : "-"
+                        }$${formatSmallPrice(
+                          Math.abs(timeframeMetrics.realizedPnl),
+                        )}`
+                      )}
+                    </div>
+                    {/* Realized PNL Percentage - Always show */}
+                    <div className={`text-sm mb-2 ${timeframeMetrics.realizedPnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {timeframeMetrics.realizedPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(timeframeMetrics.realizedPnlPercentage)}%
+                    </div>
+                    {/* Interactive Realized PNL Chart */}
+                    {pnlChartData.length > 1 ? (
+                      <div className="h-40 sm:h-48 w-full">
+                        <RealizedPnlChart data={pnlChartData} />
                       </div>
+                    ) : (
+                      <div className="h-40 sm:h-48 w-full flex items-center justify-center">
+                        <p className="text-[#6B7280] text-xs">No realized trades yet</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                      {/* Performance */}
-                      <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 backdrop-blur-xl sm:p-6">
-                        <div className="mb-3 flex items-center justify-between sm:mb-4">
-                          <div className="cursor-pointer text-xs font-medium text-[#f0f5f5] transition-colors hover:text-[#70E0B0] sm:text-sm">
-                            Performance
-                          </div>
-                          <InterstateTooltip label="Export">
-                            <button
-                              onClick={exportPerformanceData}
-                              className="cursor-pointer text-sm text-[#9CA3AF] transition-colors hover:text-[#f0f5f5]"
-                            >
-                              <FaUpload />
-                            </button>
-                          </InterstateTooltip>
+                {/* Performance */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
+                  <div className="mb-3 sm:mb-4 flex items-center justify-between">
+                    <div className="text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                      Performance
+                    </div>
+                    <InterstateTooltip label="Export">
+                      <button
+                        onClick={exportPerformanceData}
+                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-[#f0f5f5] transition-colors"
+                      >
+                        <FaUpload />
+                      </button>
+                    </InterstateTooltip>
+                  </div>
+                  <div className="space-y-2 sm:space-y-3">
+                    <div className="flex justify-between text-xs sm:text-sm">
+                      <span className="text-[#6B7280] font-light truncate pr-2">
+                        {selectedTimeframe} Unrealized PNL
+                      </span>
+                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
+                        {sortByUSD && contextSolPrice > 0 ? (
+                          <>
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(
+                              timeframeMetrics.unrealizedPnl / contextSolPrice,
+                            )}
+                          </>
+                        ) : (
+                          `$${formatSmallPrice(timeframeMetrics.unrealizedPnl)}`
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs sm:text-sm">
+                      <span className="text-[#6B7280] font-light truncate pr-2">
+                        {selectedTimeframe} Realized PNL
+                      </span>
+                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
+                        {sortByUSD && contextSolPrice > 0 ? (
+                          <>
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(
+                              timeframeMetrics.realizedPnl / contextSolPrice,
+                            )}
+                          </>
+                        ) : (
+                          `${
+                            timeframeMetrics.realizedPnl >= 0 ? "+" : "-"
+                          }$${formatSmallPrice(
+                            Math.abs(timeframeMetrics.realizedPnl),
+                          )}`
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs sm:text-sm">
+                      <span className="text-[#6B7280] font-light truncate pr-2">
+                        {selectedTimeframe} Total PNL
+                      </span>
+                      <span
+                        className="font-light whitespace-nowrap"
+                        style={{
+                          color: totalPnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                        }}
+                      >
+                        {sortByUSD && contextSolPrice > 0 ? (
+                          <>
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(Math.abs(totalPnl) / contextSolPrice)}
+                          </>
+                        ) : (
+                          `${totalPnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(totalPnl))}`
+                        )}
+                        {totalPnlPercentage !== 0 && (
+                          <span className="ml-1 sm:ml-2 text-xs">
+                            ({totalPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(totalPnlPercentage)}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs sm:text-sm">
+                      <span className="text-[#6B7280] font-light truncate pr-2">
+                        {selectedTimeframe} Total TXNS
+                      </span>
+                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
+                        {timeframeMetrics.winningTrades}/
+                        {timeframeMetrics.losingTrades}
+                      </span>
+                    </div>
+
+                    {/* Performance breakdown */}
+                    <div className="space-y-2 mt-4">
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
+                            &gt;500%
+                          </span>
                         </div>
-                        <div className="space-y-2 sm:space-y-3">
-                          <div className="flex justify-between text-xs sm:text-sm">
-                            <span className="truncate pr-2 font-light text-[#6B7280]">
-                              {selectedTimeframe} Unrealized PNL
-                            </span>
-                            <span className="font-light whitespace-nowrap text-[#f0f5f5]">
-                              {sortByUSD && contextSolPrice > 0 ? (
-                                <>
-                                  <ChainIcon
-                                    chain={currentChain}
-                                    size="medium"
-                                  />
-                                  {formatSmartNumber(
-                                    timeframeMetrics.unrealizedPnl /
-                                      contextSolPrice,
-                                  )}
-                                </>
-                              ) : (
-                                `$${formatSmallPrice(timeframeMetrics.unrealizedPnl)}`
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-xs sm:text-sm">
-                            <span className="truncate pr-2 font-light text-[#6B7280]">
-                              {selectedTimeframe} Realized PNL
-                            </span>
-                            <span className="font-light whitespace-nowrap text-[#f0f5f5]">
-                              {sortByUSD && contextSolPrice > 0 ? (
-                                <>
-                                  <ChainIcon
-                                    chain={currentChain}
-                                    size="medium"
-                                  />
-                                  {formatSmartNumber(
-                                    timeframeMetrics.realizedPnl /
-                                      contextSolPrice,
-                                  )}
-                                </>
-                              ) : (
-                                `${
-                                  timeframeMetrics.realizedPnl >= 0 ? "+" : "-"
-                                }$${formatSmallPrice(
-                                  Math.abs(timeframeMetrics.realizedPnl),
-                                )}`
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-xs sm:text-sm">
-                            <span className="truncate pr-2 font-light text-[#6B7280]">
-                              {selectedTimeframe} Total PNL
-                            </span>
-                            <span
-                              className="font-light whitespace-nowrap"
-                              style={{
-                                color: totalPnl >= 0 ? "#70E0B0" : "#FF4D7F",
-                              }}
-                            >
-                              {sortByUSD && contextSolPrice > 0 ? (
-                                <>
-                                  <ChainIcon
-                                    chain={currentChain}
-                                    size="medium"
-                                  />
-                                  {formatSmartNumber(
-                                    Math.abs(totalPnl) / contextSolPrice,
-                                  )}
-                                </>
-                              ) : (
-                                `${totalPnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(totalPnl))}`
-                              )}
-                              {totalPnlPercentage !== 0 && (
-                                <span className="ml-1 text-xs sm:ml-2">
-                                  ({totalPnlPercentage >= 0 ? "+" : ""}
-                                  {formatSmallPrice(totalPnlPercentage)}%)
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-xs sm:text-sm">
-                            <span className="truncate pr-2 font-light text-[#6B7280]">
-                              {selectedTimeframe} Total TXNS
-                            </span>
-                            <span className="font-light whitespace-nowrap text-[#f0f5f5]">
-                              {timeframeMetrics.winningTrades}/
-                              {timeframeMetrics.losingTrades}
-                            </span>
-                          </div>
-
-                          {/* Performance breakdown */}
-                          <div className="mt-4 space-y-2">
-                            <div className="flex items-center justify-between text-xs sm:text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 flex-shrink-0 rounded-full bg-[#70E0B0]"></div>
-                                <span className="truncate font-light text-[#6B7280]">
-                                  &gt;500%
-                                </span>
-                              </div>
-                              <span className="ml-2 font-light whitespace-nowrap text-[#f0f5f5]">
-                                {performanceBreakdown.above500}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs sm:text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 flex-shrink-0 rounded-full bg-[#70E0B0]"></div>
-                                <span className="truncate font-light text-[#6B7280]">
-                                  200% ~ 500%
-                                </span>
-                              </div>
-                              <span className="ml-2 font-light whitespace-nowrap text-[#f0f5f5]">
-                                {performanceBreakdown.between200And500}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs sm:text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 flex-shrink-0 rounded-full bg-[#70E0B0]"></div>
-                                <span className="truncate font-light text-[#6B7280]">
-                                  0% ~ 200%
-                                </span>
-                              </div>
-                              <span className="ml-2 font-light whitespace-nowrap text-[#f0f5f5]">
-                                {performanceBreakdown.between0And200}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs sm:text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 flex-shrink-0 rounded-full bg-[#FF4D7F]"></div>
-                                <span className="truncate font-light text-[#6B7280]">
-                                  0% ~ -50%
-                                </span>
-                              </div>
-                              <span className="ml-2 font-light whitespace-nowrap text-[#f0f5f5]">
-                                {performanceBreakdown.between0AndMinus50}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs sm:text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 flex-shrink-0 rounded-full bg-[#FF4D7F]"></div>
-                                <span className="truncate font-light text-[#6B7280]">
-                                  &lt; -50%
-                                </span>
-                              </div>
-                              <span className="ml-2 font-light whitespace-nowrap text-[#f0f5f5]">
-                                {performanceBreakdown.belowMinus50}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Pink line at bottom */}
-                          <div className="mt-4 h-px w-full bg-[#FF4D7F]"></div>
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                          {performanceBreakdown.above500}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
+                            200% ~ 500%
+                          </span>
                         </div>
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                          {performanceBreakdown.between200And500}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
+                            0% ~ 200%
+                          </span>
+                        </div>
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                          {performanceBreakdown.between0And200}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-[#FF4D7F] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
+                            0% ~ -50%
+                          </span>
+                        </div>
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                          {performanceBreakdown.between0AndMinus50}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs sm:text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-[#FF4D7F] flex-shrink-0"></div>
+                          <span className="text-[#6B7280] font-light truncate">
+                            &lt; -50%
+                          </span>
+                        </div>
+                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                          {performanceBreakdown.belowMinus50}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Positions Table Section  */}
-                    <div
-                      className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl"
-                      style={{
-                        boxShadow:
-                          "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                      }}
-                    >
-                      {/* Sub-navigation tabs with controls */}
-                      <div className="flex flex-col items-start justify-between gap-3 border-b border-white/[0.06] p-3 sm:flex-row sm:items-center sm:gap-0 sm:px-4 sm:py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          {spotTabs.map((tab, i) => (
-                            <button
-                              key={tab}
-                              className={`cursor-pointer px-3 py-2 text-xs transition-colors sm:px-4 ${
-                                activeSpotTab === i
-                                  ? "rounded-lg border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                                  : "rounded-lg border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
-                              }`}
-                              onClick={() => setActiveSpotTab(i)}
-                            >
-                              {tab}
-                            </button>
-                          ))}
-                        </div>
+                    {/* Pink line at bottom */}
+                    <div className="w-full h-px bg-[#FF4D7F] mt-4"></div>
+                  </div>
+                </div>
+              </div>
 
-                        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
-                          <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 transition-colors hover:border-white/[0.1] sm:min-w-0 sm:flex-initial">
-                            <FaSearch className="flex-shrink-0 text-xs text-[#9CA3AF]" />
-                            <input
-                              type="text"
-                              placeholder="Search by name or address"
-                              className="w-full bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none sm:w-40"
-                              value={searchQuery}
-                              onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                            {searchQuery.trim() && (
-                              <button
-                                onClick={() => setSearchQuery("")}
-                                className="flex-shrink-0 text-[#9CA3AF] transition-colors hover:text-[#f0f5f5]"
-                              >
-                                <FaTimes className="text-xs" />
-                              </button>
-                            )}
-                          </div>
-                          {searchQuery.trim() && (
-                            <div className="text-xs whitespace-nowrap text-[#9CA3AF]">
-                              {(() => {
-                                const activeTab = activeSpotTab;
-                                if (activeTab === 0)
-                                  return `${filteredPositions.length} of ${positions.length} positions`;
-                                // History tab (index 1) is commented out
-                                if (activeTab === 1)
-                                  return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
-                                if (activeTab === 2)
-                                  return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
-                                return "";
-                              })()}
-                            </div>
-                          )}
-                          <button
-                            onClick={() => setShowHidden(!showHidden)}
-                            className={`flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs whitespace-nowrap transition-all duration-200 ${
-                              !showHidden
-                                ? "bg-white/[0.07] text-[#70E0B0]"
-                                : "bg-transparent text-[#9CA3AF] hover:bg-white/[0.05] hover:text-[#f0f5f5]"
-                            }`}
-                          >
-                            <svg
-                              className="h-3 w-3"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              {!showHidden ? (
-                                <>
-                                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                                  <line x1="1" y1="1" x2="23" y2="23" />
-                                </>
-                              ) : (
-                                <>
-                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                  <circle cx="12" cy="12" r="3" />
-                                </>
-                              )}
-                            </svg>
-                            Show Hidden
-                          </button>
-                          <button
-                            onClick={() => setSortByUSD(!sortByUSD)}
-                            className="flex cursor-pointer items-center gap-1 rounded-lg bg-transparent px-2 py-1 text-xs text-[#9CA3AF] transition-all duration-200 hover:text-[#f0f5f5]"
-                          >
-                            <span className="text-xs">↑↓</span>
-                            {sortByUSD ? "USD" : "SOL"}
-                          </button>
-                        </div>
-                      </div>
+              {/* Positions Table Section  */}
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
+                {/* Sub-navigation tabs with controls */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/[0.06] gap-3 sm:gap-0 p-3 sm:px-4 sm:py-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {spotTabs.map((tab, i) => (
+                      <button
+                        key={tab}
+                        className={`px-3 sm:px-4 py-2 text-xs transition-colors cursor-pointer ${
+                          activeSpotTab === i
+                            ? "text-white font-semibold border border-white/[0.08] bg-white/[0.07] rounded-lg"
+                            : "text-neutral-400 font-medium border border-transparent hover:bg-white/[0.04] hover:text-neutral-200 rounded-lg"
+                        }`}
+                        onClick={() => setActiveSpotTab(i)}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
 
-                      {/* Table Content — display toggling keeps components mounted to avoid re-fetch on tab switch */}
-                      <div className="min-h-[200px]">
-                        <div
-                          style={{
-                            display: activeSpotTab === 0 ? "block" : "none",
-                          }}
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-colors flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
+                      <FaSearch className="text-[#9CA3AF] text-xs flex-shrink-0" />
+                      <input
+                        type="text"
+                        placeholder="Search by name or address"
+                        className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-full sm:w-40"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                      {searchQuery.trim() && (
+                        <button
+                          onClick={() => setSearchQuery("")}
+                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors flex-shrink-0"
                         >
-                          {!user?.id && !userLoading ? (
-                            <div className="py-8 text-center text-[#9CA3AF]">
-                              Please log in to view your positions.
-                            </div>
-                          ) : !user?.id ? null : (
-                            <Positions
-                              bearerToken={user.bearerToken}
-                              userId={user.id}
-                              onPositionsChange={setPositions}
-                              onTokenNamesChange={setTokenNames}
-                              preloadedPositions={
-                                searchQuery.trim() !== ""
-                                  ? filteredPositions
-                                  : undefined
-                              }
-                              skipFetch={searchQuery.trim() !== ""}
-                              showHidden={showHidden}
-                              showInSOL={sortByUSD}
-                              tokenMetadataCache={tokenMetadataCache}
-                              onUpdateCache={updateTokenMetadataCache}
-                              isCacheValid={isCacheValid}
-                              fallbackPositions={fallbackPositions}
-                            />
-                          )}
-                        </div>
-                        {/* History tab commented out */}
-                        {/* {activeSpotTab === 1 &&
+                          <FaTimes className="text-xs" />
+                        </button>
+                      )}
+                    </div>
+                    {searchQuery.trim() && (
+                      <div className="text-xs text-[#9CA3AF] whitespace-nowrap">
+                        {(() => {
+                          const activeTab = activeSpotTab;
+                          if (activeTab === 0)
+                            return `${filteredPositions.length} of ${positions.length} positions`;
+                          // History tab (index 1) is commented out
+                          if (activeTab === 1)
+                            return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
+                          if (activeTab === 2)
+                            return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
+                          return "";
+                        })()}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setShowHidden(!showHidden)}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs whitespace-nowrap ${
+                        !showHidden
+                          ? "bg-white/[0.07] text-[#70E0B0]"
+                          : "bg-transparent hover:bg-white/[0.05] text-[#9CA3AF] hover:text-[#f0f5f5]"
+                      }`}
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        {!showHidden ? (
+                          <>
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                          </>
+                        ) : (
+                          <>
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </>
+                        )}
+                      </svg>
+                      Show Hidden
+                    </button>
+                    <button
+                      onClick={() => setSortByUSD(!sortByUSD)}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer bg-transparent text-[#9CA3AF] hover:text-[#f0f5f5] text-xs"
+                    >
+                      <span className="text-xs">↑↓</span>
+                      {sortByUSD ? "USD" : "SOL"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table Content — display toggling keeps components mounted to avoid re-fetch on tab switch */}
+                <div className="min-h-[200px]">
+                  <div style={{ display: activeSpotTab === 0 ? 'block' : 'none' }}>
+                    {!user?.id && !userLoading ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your positions.
+                      </div>
+                    ) : !user?.id ? (
+                      null
+                    ) : (
+                      <Positions
+                        bearerToken={user.bearerToken}
+                        userId={user.id}
+                        onPositionsChange={setPositions}
+                        onTokenNamesChange={setTokenNames}
+                        preloadedPositions={searchQuery.trim() !== "" ? filteredPositions : undefined}
+                        skipFetch={searchQuery.trim() !== ""}
+                        showHidden={showHidden}
+                        showInSOL={sortByUSD}
+                        tokenMetadataCache={tokenMetadataCache}
+                        onUpdateCache={updateTokenMetadataCache}
+                        isCacheValid={isCacheValid}
+                        fallbackPositions={fallbackPositions}
+                      />
+                    )}
+                  </div>
+                  {/* History tab commented out */}
+                  {/* {activeSpotTab === 1 &&
                     (userLoading || loadingTradeHistory ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
@@ -4301,358 +3627,285 @@ export default function PortfolioPage() {
                         onTokenNamesChange={setTokenNames}
                       />
                     ))} */}
-                        <div
-                          style={{
-                            display: activeSpotTab === 1 ? "block" : "none",
-                          }}
-                        >
-                          {!user?.id && !userLoading ? (
-                            <div className="py-8 text-center text-[#9CA3AF]">
-                              Please log in to view your positions.
-                            </div>
-                          ) : !user?.id ? (
-                            <div />
-                          ) : (
-                            <Positions
-                              bearerToken={user.bearerToken}
-                              userId={user.id}
-                              onPositionsChange={setPositions}
-                              onTokenNamesChange={setTokenNames}
-                              preloadedPositions={
-                                searchQuery.trim()
-                                  ? filteredTop100Positions
-                                  : top100Positions.length > 0
-                                    ? top100Positions
-                                    : undefined
-                              }
-                              skipFetch={
-                                activeSpotTab !== 1 ||
-                                searchQuery.trim() !== "" ||
-                                top100Positions.length > 0
-                              }
-                              showHidden={showHidden}
-                              showInSOL={sortByUSD}
-                              tokenMetadataCache={tokenMetadataCache}
-                              onUpdateCache={updateTokenMetadataCache}
-                              isCacheValid={isCacheValid}
-                              fallbackPositions={fallbackPositions}
-                            />
-                          )}
-                        </div>
-                        <div
-                          style={{
-                            display: activeSpotTab === 2 ? "block" : "none",
-                          }}
-                        >
-                          {!user?.id && !userLoading ? (
-                            <div className="py-8 text-center text-[#9CA3AF]">
-                              Please log in to view your activity.
-                            </div>
-                          ) : !user?.id ? (
-                            <div />
-                          ) : (
-                            <div className="w-full">
-                              <Activity
-                                trades={filteredTradeActivity}
-                                loading={loadingTradeActivity}
-                                onTokenNamesChange={setTokenNames}
-                                tokenMetadataCache={tokenMetadataCache}
-                                onUpdateCache={updateTokenMetadataCache}
-                                isCacheValid={isCacheValid}
-                              />
-                            </div>
-                          )}
-                        </div>
-                        {/* Predictions sub-tab removed — now a top-level section */}
+                  <div style={{ display: activeSpotTab === 1 ? 'block' : 'none' }}>
+                    {!user?.id && !userLoading ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your positions.
                       </div>
-                    </div>
+                    ) : !user?.id ? (
+                      <div />
+                    ) : (
+                      <Positions
+                        bearerToken={user.bearerToken}
+                        userId={user.id}
+                        onPositionsChange={setPositions}
+                        onTokenNamesChange={setTokenNames}
+                        preloadedPositions={
+                          searchQuery.trim()
+                            ? filteredTop100Positions
+                            : top100Positions.length > 0
+                              ? top100Positions
+                              : undefined
+                        }
+                        skipFetch={activeSpotTab !== 1 || searchQuery.trim() !== "" || top100Positions.length > 0}
+                        showHidden={showHidden}
+                        showInSOL={sortByUSD}
+                        tokenMetadataCache={tokenMetadataCache}
+                        onUpdateCache={updateTokenMetadataCache}
+                        isCacheValid={isCacheValid}
+                        fallbackPositions={fallbackPositions}
+                      />
+                    )}
                   </div>
-                )}
+                  <div style={{ display: activeSpotTab === 2 ? 'block' : 'none' }}>
+                    {!user?.id && !userLoading ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your activity.
+                      </div>
+                    ) : !user?.id ? (
+                      <div />
+                    ) : (
+                      <div className="w-full">
+                        <Activity
+                          trades={filteredTradeActivity}
+                          loading={loadingTradeActivity}
+                          onTokenNamesChange={setTokenNames}
+                          tokenMetadataCache={tokenMetadataCache}
+                          onUpdateCache={updateTokenMetadataCache}
+                          isCacheValid={isCacheValid}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {/* Predictions sub-tab removed — now a top-level section */}
+                </div>
+              </div>
+            </div>
+          )}
 
-                {/* Predictions Section */}
-                {activeSection === "predictions" && (
-                  <div className="space-y-4 sm:space-y-6">
-                    {/* Polygon Wallet */}
-                    <PolygonWalletCard variant="compact" />
+          {/* Predictions Section */}
+          {activeSection === "predictions" && (
+            <div className="space-y-4 sm:space-y-6">
+              {/* Polygon Wallet */}
+              <PolygonWalletCard variant="compact" />
 
-                    {/* Positions */}
-                    <div
-                      className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl"
-                      style={{
-                        boxShadow:
-                          "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                      }}
+              {/* Positions */}
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
+                <div className="border-b border-white/[0.06] px-4 py-3">
+                  <span className="text-sm font-medium text-white">Positions & History</span>
+                </div>
+                <div className="p-4" style={{ minHeight: '200px' }}>
+                  {user?.bearerToken ? (
+                    <UnifiedPortfolio
+                      authToken={user.bearerToken}
+                      walletAddress={primaryWalletAddresses?.ethereum}
+                      variant="portfolio"
+                    />
+                  ) : (
+                    <PredictionPositions
+                      userPublicKey={user?.publicKey}
+                      showEmptyState={!!user?.id}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Wallet Section */}
+          {activeSection === "wallet" && (
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
+              {/* Header Row  */}
+              <div className="border-b border-white/[0.06]">
+                {/* Left Panel Header */}
+                <div className="px-3 sm:px-4 py-3">
+                  <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-2">
+                    <div className="flex items-center px-2 sm:px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] w-full sm:w-48">
+                      <FaSearch className="text-[#9CA3AF] text-xs mr-2 flex-shrink-0" />
+                      <input
+                        type="text"
+                        placeholder="Search by name or address"
+                        className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-full"
+                        value={walletSearchQuery}
+                        onChange={(e) => setWalletSearchQuery(e.target.value)}
+                      />
+                      {walletSearchQuery.trim() && (
+                        <button
+                          onClick={() => setWalletSearchQuery("")}
+                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors ml-2 flex-shrink-0"
+                        >
+                          <FaTimes className="text-xs" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setShowHidden(!showHidden)}
+                      className={`flex items-center gap-1 px-2 sm:px-1 sm:ml-0 py-1 rounded-full transition-colors duration-200 cursor-pointer text-xs whitespace-nowrap ${
+                        !showHidden
+                          ? "text-[#70E0B0]"
+                          : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                      }`}
                     >
-                      <div className="border-b border-white/[0.06] px-4 py-3">
-                        <span className="text-sm font-medium text-white">
-                          Positions & History
-                        </span>
-                      </div>
-                      <div className="p-4" style={{ minHeight: "200px" }}>
-                        {user?.bearerToken ? (
-                          <UnifiedPortfolio
-                            authToken={user.bearerToken}
-                            walletAddress={primaryWalletAddresses?.ethereum}
-                            variant="portfolio"
-                          />
+                      <svg
+                        className="w-3 h-3 flex-shrink-0"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        {!showHidden ? (
+                          // Eye with slash
+                          <>
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                          </>
                         ) : (
-                          <PredictionPositions
-                            userPublicKey={user?.publicKey}
-                            showEmptyState={!!user?.id}
-                          />
+                          // Regular eye
+                          <>
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </>
                         )}
+                      </svg>
+                      <span className="hidden sm:inline">Show Archived</span>
+                      <span className="sm:hidden">Archived</span>
+                    </button>
+                    {(currentChain === "sol" || currentChain === "monad") && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
+                          onClick={() => {
+                            if (currentChain === "sol") {
+                              if (isAllSolSelected) clearSelectedWallets("sol");
+                              else selectAllWalletsForChain("sol");
+                            } else {
+                              if (isAllMonSelected) clearSelectedWallets("monad");
+                              else selectAllWalletsForChain("monad");
+                            }
+                          }}
+                        >
+                          {(currentChain === "sol" ? isAllSolSelected : isAllMonSelected) ? "Unselect all" : "Select all"}
+                        </button>
+                        <button
+                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
+                          onClick={() => selectWalletsWithFunds(currentChain as "sol" | "monad")}
+                        >
+                          Select with funds
+                        </button>
+                        <button
+                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          disabled={redistributing}
+                          onClick={() => handleRedistributeFunds("consolidate")}
+                          title="Move all selected funds to the primary wallet"
+                        >
+                          <IoIosGitNetwork size={14} />
+                          <span className="hidden sm:inline">{redistributing ? "Working..." : "Consolidate"}</span>
+                          <span className="sm:hidden">{redistributing ? "..." : "Consolidate"}</span>
+                        </button>
+                        <button
+                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          disabled={redistributing}
+                          onClick={() => handleRedistributeFunds("split")}
+                          title="Split selected balance equally across wallets"
+                        >
+                          <PiNetwork size={14} />
+                          <span className="hidden sm:inline">{redistributing ? "Working..." : "Split"}</span>
+                          <span className="sm:hidden">{redistributing ? "..." : "Split"}</span>
+                        </button>
                       </div>
+                    )}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowImportDropdown(!showImportDropdown)}
+                        className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        Import ▾
+                      </button>
+                      {showImportDropdown && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setShowImportDropdown(false)}
+                          />
+                          <div className="absolute top-full mt-1 right-0 bg-black/90 backdrop-blur-xl border border-white/[0.06] rounded-lg shadow-lg z-20 min-w-[200px]">
+                            <button
+                              onClick={() => {
+                                setShowImportSolanaModal(true);
+                                setShowImportDropdown(false);
+                                posthog.capture("wallet_import_initiated", { chain: "sol" });
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-white/[0.05] transition-colors first:rounded-t-lg flex items-center gap-2"
+                            >
+                              <SolanaIcon size={16} />
+                              Import Solana Wallet
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowImportEvmModal(true);
+                                setShowImportDropdown(false);
+                                posthog.capture("wallet_import_initiated", { chain: "evm" });
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-white/[0.05] transition-colors last:rounded-b-lg flex items-center gap-2"
+                            >
+                              <img
+                                src="./monad_icon.png"
+                                alt="Monad"
+                                className="object-contain"
+                                style={{ width: 16, height: 16 }}
+                              />
+                              Import EVM Wallet (Monad/Polygon)
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <button
+                    onClick={handleCreateWallet}
+                    disabled={creatingWallet || !user}
+                    className={`px-2 sm:px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors cursor-pointer
+                      ${creatingWallet || !user
+                        ? "bg-white/[0.04] text-neutral-500 cursor-not-allowed" : "bg-[#70E0B0] text-[#1A1A1A] hover:brightness-90"
+}`}
+          >
+                  {creatingWallet ? "Creating..." : "Create Wallet"}
+                </button>
                     </div>
                   </div>
-                )}
+                </div>
 
-                {/* Wallet Section */}
-                {activeSection === "wallet" && (
-                  <div
-                    className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl"
-                    style={{
-                      boxShadow:
-                        "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                    }}
-                  >
-                    {/* Header Row  */}
-                    <div className="border-b border-white/[0.06]">
-                      {/* Left Panel Header */}
-                      <div className="px-3 py-3 sm:px-4">
-                        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:gap-2">
-                          <div className="flex w-full items-center rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1 sm:w-48 sm:px-3">
-                            <FaSearch className="mr-2 flex-shrink-0 text-xs text-[#9CA3AF]" />
-                            <input
-                              type="text"
-                              placeholder="Search by name or address"
-                              className="w-full bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none"
-                              value={walletSearchQuery}
-                              onChange={(e) =>
-                                setWalletSearchQuery(e.target.value)
-                              }
-                            />
-                            {walletSearchQuery.trim() && (
-                              <button
-                                onClick={() => setWalletSearchQuery("")}
-                                className="ml-2 flex-shrink-0 text-[#9CA3AF] transition-colors hover:text-[#f0f5f5]"
-                              >
-                                <FaTimes className="text-xs" />
-                              </button>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              onClick={() => setShowHidden(!showHidden)}
-                              className={`flex cursor-pointer items-center gap-1 rounded-full px-2 py-1 text-xs whitespace-nowrap transition-colors duration-200 sm:ml-0 sm:px-1 ${
-                                !showHidden
-                                  ? "text-[#70E0B0]"
-                                  : "text-[#9CA3AF] hover:text-[#f0f5f5]"
-                              }`}
-                            >
-                              <svg
-                                className="h-3 w-3 flex-shrink-0"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                {!showHidden ? (
-                                  // Eye with slash
-                                  <>
-                                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                                    <line x1="1" y1="1" x2="23" y2="23" />
-                                  </>
-                                ) : (
-                                  // Regular eye
-                                  <>
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                    <circle cx="12" cy="12" r="3" />
-                                  </>
-                                )}
-                              </svg>
-                              <span className="hidden sm:inline">
-                                Show Archived
-                              </span>
-                              <span className="sm:hidden">Archived</span>
-                            </button>
-                            {(currentChain === "sol" ||
-                              currentChain === "monad") && (
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  className="cursor-pointer rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-xs whitespace-nowrap text-neutral-200 transition-colors hover:border-white/[0.1] hover:bg-white/[0.07] sm:px-3"
-                                  onClick={() => {
-                                    if (currentChain === "sol") {
-                                      if (isAllSolSelected)
-                                        clearSelectedWallets("sol");
-                                      else selectAllWalletsForChain("sol");
-                                    } else {
-                                      if (isAllMonSelected)
-                                        clearSelectedWallets("monad");
-                                      else selectAllWalletsForChain("monad");
-                                    }
-                                  }}
-                                >
-                                  {(
-                                    currentChain === "sol"
-                                      ? isAllSolSelected
-                                      : isAllMonSelected
-                                  )
-                                    ? "Unselect all"
-                                    : "Select all"}
-                                </button>
-                                <button
-                                  className="cursor-pointer rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-xs whitespace-nowrap text-neutral-200 transition-colors hover:border-white/[0.1] hover:bg-white/[0.07] sm:px-3"
-                                  onClick={() =>
-                                    selectWalletsWithFunds(
-                                      currentChain as "sol" | "monad",
-                                    )
-                                  }
-                                >
-                                  Select with funds
-                                </button>
-                                <button
-                                  className="flex cursor-pointer items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-xs whitespace-nowrap text-neutral-200 transition-colors hover:border-white/[0.1] hover:bg-white/[0.07] disabled:opacity-60 sm:px-3"
-                                  disabled={redistributing}
-                                  onClick={() =>
-                                    handleRedistributeFunds("consolidate")
-                                  }
-                                  title="Move all selected funds to the primary wallet"
-                                >
-                                  <IoIosGitNetwork size={14} />
-                                  <span className="hidden sm:inline">
-                                    {redistributing
-                                      ? "Working..."
-                                      : "Consolidate"}
-                                  </span>
-                                  <span className="sm:hidden">
-                                    {redistributing ? "..." : "Consolidate"}
-                                  </span>
-                                </button>
-                                <button
-                                  className="flex cursor-pointer items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-xs whitespace-nowrap text-neutral-200 transition-colors hover:border-white/[0.1] hover:bg-white/[0.07] disabled:opacity-60 sm:px-3"
-                                  disabled={redistributing}
-                                  onClick={() =>
-                                    handleRedistributeFunds("split")
-                                  }
-                                  title="Split selected balance equally across wallets"
-                                >
-                                  <PiNetwork size={14} />
-                                  <span className="hidden sm:inline">
-                                    {redistributing ? "Working..." : "Split"}
-                                  </span>
-                                  <span className="sm:hidden">
-                                    {redistributing ? "..." : "Split"}
-                                  </span>
-                                </button>
-                              </div>
-                            )}
-                            <div className="relative">
-                              <button
-                                onClick={() =>
-                                  setShowImportDropdown(!showImportDropdown)
-                                }
-                                className="cursor-pointer rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-xs whitespace-nowrap text-neutral-200 transition-colors hover:border-white/[0.1] hover:bg-white/[0.07] sm:px-3"
-                              >
-                                Import ▾
-                              </button>
-                              {showImportDropdown && (
-                                <>
-                                  <div
-                                    className="fixed inset-0 z-10"
-                                    onClick={() => setShowImportDropdown(false)}
-                                  />
-                                  <div className="absolute top-full right-0 z-20 mt-1 min-w-[200px] rounded-lg border border-white/[0.06] bg-black/90 shadow-lg backdrop-blur-xl">
-                                    <button
-                                      onClick={() => {
-                                        setShowImportSolanaModal(true);
-                                        setShowImportDropdown(false);
-                                        posthog.capture(
-                                          "wallet_import_initiated",
-                                          { chain: "sol" },
-                                        );
-                                      }}
-                                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-[#f0f5f5] transition-colors first:rounded-t-lg hover:bg-white/[0.05]"
-                                    >
-                                      <SolanaIcon size={16} />
-                                      Import Solana Wallet
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setShowImportEvmModal(true);
-                                        setShowImportDropdown(false);
-                                        posthog.capture(
-                                          "wallet_import_initiated",
-                                          { chain: "evm" },
-                                        );
-                                      }}
-                                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-[#f0f5f5] transition-colors last:rounded-b-lg hover:bg-white/[0.05]"
-                                    >
-                                      <img
-                                        src="./monad_icon.png"
-                                        alt="Monad"
-                                        className="object-contain"
-                                        style={{ width: 16, height: 16 }}
-                                      />
-                                      Import EVM Wallet (Monad/Polygon)
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                            <button
-                              onClick={handleCreateWallet}
-                              disabled={creatingWallet || !user}
-                              className={`cursor-pointer rounded-full px-2 py-1 text-xs whitespace-nowrap transition-colors sm:px-3 ${
-                                creatingWallet || !user
-                                  ? "cursor-not-allowed bg-white/[0.04] text-neutral-500"
-                                  : "bg-[#70E0B0] text-[#1A1A1A] hover:brightness-90"
-                              }`}
-                            >
-                              {creatingWallet ? "Creating..." : "Create Wallet"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right Panel Header */}
-                      {/* <div className="px-2 py-4 border-l border-white/[0.06]">
+                {/* Right Panel Header */}
+                {/* <div className="px-2 py-4 border-l border-white/[0.06]">
                   <h3 className="text-[#f0f5f5] font-medium text-sm">Source wallets</h3>
                 </div> */}
-                    </div>
+              </div>
 
-                    {/* Table Headers Row - Spans Both Panels */}
-                    <div className="border-b border-white/[0.06]">
-                      <div className="-mx-3 px-3 py-2 sm:-mx-4 sm:px-4">
-                        <div className="hidden grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF] sm:grid">
-                          <div className="truncate font-medium">Wallet</div>
-                          <div className="flex items-center justify-center gap-2 truncate text-center font-medium">
-                            <span>
-                              Balance (
-                              {currentChain === "monad" ? "MON" : "SOL"})
-                            </span>
-                            <button
-                              className="flex items-center justify-center rounded-full border border-white/[0.06] p-1 text-[10px] transition hover:border-white/[0.1] disabled:opacity-50"
-                              title="Refresh balances"
-                              onClick={() => refreshBalancesForCurrentChain()}
-                              disabled={refreshingBalances}
-                            >
-                              <FaSync
-                                size={10}
-                                className={
-                                  refreshingBalances ? "animate-spin" : ""
-                                }
-                              />
-                            </button>
-                          </div>
-                          <div className="truncate text-center font-medium">
-                            Holdings
-                          </div>
-                          <div className="truncate text-center font-medium">
-                            Actions
-                          </div>
-                        </div>
-                      </div>
-                      {/* <div className="px-4 py-2 border-l border-white/[0.06]">
+              {/* Table Headers Row - Spans Both Panels */}
+              <div className="border-b border-white/[0.06]">
+                <div className="py-2 -mx-3 sm:-mx-4 px-3 sm:px-4">
+                  <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF]">
+                    <div className="font-medium truncate">Wallet</div>
+                    <div className="font-medium truncate text-center flex items-center justify-center gap-2">
+                      <span>
+                        Balance ({currentChain === "monad" ? "MON" : "SOL"})
+                      </span>
+                      <button
+                        className="flex items-center justify-center rounded-full border border-white/[0.06] p-1 text-[10px] hover:border-white/[0.1] transition disabled:opacity-50"
+                        title="Refresh balances"
+                        onClick={() => refreshBalancesForCurrentChain()}
+                        disabled={refreshingBalances}
+                      >
+                        <FaSync
+                          size={10}
+                          className={refreshingBalances ? "animate-spin" : ""}
+                        />
+                      </button>
+                    </div>
+                    <div className="font-medium truncate text-center">Holdings</div>
+                    <div className="font-medium truncate text-center">Actions</div>
+                  </div>
+                </div>
+                {/* <div className="px-4 py-2 border-l border-white/[0.06]">
                   <div className="grid grid-cols-4 gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
                     <div className="font-medium truncate">
@@ -4662,387 +3915,294 @@ export default function PortfolioPage() {
                     <div className="font-medium truncate">Actions</div>
                   </div>
                 </div> */}
-                    </div>
+              </div>
 
-                    {/* Content Area */}
-                    <div>
-                      {/* Left Panel Content */}
-                      <div className="px-3 py-3 sm:px-4">
-                        <div className="min-h-[300px]">
-                          {!user ? (
-                            <div className="flex h-24 flex-col items-center justify-center text-xs text-[#9CA3AF]">
-                              Please log in to view your wallets.
-                            </div>
-                          ) : isWalletsLoading ? (
-                            <div className="flex h-24 flex-col items-center justify-center text-xs text-[#9CA3AF]">
-                              Loading wallets...
-                            </div>
-                          ) : wallets.length === 0 ? (
-                            <div className="flex h-24 flex-col items-center justify-center text-xs text-[#9CA3AF]">
-                              No wallets yet. Click &quot;Create Wallet&quot; to
-                              get started.
-                            </div>
-                          ) : filteredWallets.length === 0 ? (
-                            <div className="flex h-24 flex-col items-center justify-center text-xs text-[#9CA3AF]">
-                              {walletSearchQuery.trim()
-                                ? `No wallets found matching "${walletSearchQuery}"`
-                                : showHidden
-                                  ? "No archived wallets"
-                                  : "No wallets found"}
-                            </div>
-                          ) : (
-                            <div className="-mr-2 max-h-[70vh] overflow-y-auto pr-2 pb-10">
-                              {filteredWallets.map((wallet) => {
-                                const displayAddress = getAddressForChain(
-                                  wallet,
-                                  currentChain,
-                                );
-                                const truncated =
-                                  displayAddress.length > 8
-                                    ? `${displayAddress.slice(0, 4)}...${displayAddress.slice(-4)}`
-                                    : displayAddress;
-                                const isSelectable =
-                                  currentChain === "sol" ||
-                                  currentChain === "monad";
-                                const isSelected = isSelectable
-                                  ? currentChain === "sol"
-                                    ? selectedSolSet.has(wallet.id)
-                                    : selectedMonSet.has(wallet.id)
-                                  : false;
-                                const rowBackground = undefined;
-                                return (
+              {/* Content Area */}
+              <div>
+                {/* Left Panel Content */}
+                <div className="px-3 sm:px-4 py-3">
+                  <div className="min-h-[300px]">
+                    {!user ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        Please log in to view your wallets.
+                      </div>
+                    ) : isWalletsLoading ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        Loading wallets...
+                      </div>
+                    ) : wallets.length === 0 ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        No wallets yet. Click &quot;Create Wallet&quot; to get started.
+                      </div>
+                    ) : filteredWallets.length === 0 ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        {walletSearchQuery.trim() 
+                          ? `No wallets found matching "${walletSearchQuery}"`
+                          : showHidden 
+                            ? "No archived wallets"
+                            : "No wallets found"}
+                      </div>
+                    ) : (
+                      <div className="max-h-[70vh] overflow-y-auto pr-2 -mr-2 pb-10">
+                        {filteredWallets.map((wallet) => {
+                          const displayAddress = getAddressForChain(wallet, currentChain);
+                          const truncated =
+                            displayAddress.length > 8
+                              ? `${displayAddress.slice(0, 4)}...${displayAddress.slice(-4)}`
+                              : displayAddress;
+                          const isSelectable = currentChain === "sol" || currentChain === "monad";
+                          const isSelected = isSelectable
+                            ? currentChain === "sol"
+                              ? selectedSolSet.has(wallet.id)
+                              : selectedMonSet.has(wallet.id)
+                            : false;
+                          const rowBackground = undefined;
+                          return (
+                            <div
+                              key={wallet.id}
+                              className="group border-b border-white/[0.06] hover:bg-white/[0.03] transition-colors -mx-3 sm:-mx-4 px-3 sm:px-4"
+                              style={{ backgroundColor: rowBackground }}
+                            >
+                              <div className="flex flex-col sm:grid sm:grid-cols-[2fr_1fr_1fr_1.2fr] gap-3 sm:gap-2 items-start sm:items-center py-3">
+                              {/* Wallet + address */}
+                                <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
                                   <div
-                                    key={wallet.id}
-                                    className="group -mx-3 border-b border-white/[0.06] px-3 transition-colors hover:bg-white/[0.03] sm:-mx-4 sm:px-4"
-                                    style={{ backgroundColor: rowBackground }}
+                                    className="relative flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer"
+                                    style={{
+                                      borderColor: wallet.isPrimary ? "#FF6B35" : isSelected ? "#2563EB" : "rgba(255,255,255,0.06)",
+                                      boxShadow: isSelected ? "0 0 0 1px #2563EB" : "none",
+                                      backgroundColor: wallet.isPrimary ? "#FF6B3522" : isSelected ? "#2563EB20" : "transparent",
+                                    }}
+                                    title={
+                                      wallet.isPrimary
+                                        ? "Primary wallet"
+                                        : isSelected
+                                          ? "Selected for trading"
+                                          : "Wallet"
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (currentChain === "sol" || currentChain === "monad") {
+                                        const next =
+                                          currentChain === "sol"
+                                            ? new Set(selectedSolSet)
+                                            : new Set(selectedMonSet);
+                                        if (isSelected) {
+                                          next.delete(wallet.id);
+                                        } else {
+                                          next.add(wallet.id);
+                                        }
+                                        setSelectedWalletsForChain(
+                                          Array.from(next),
+                                          currentChain as "sol" | "monad"
+                                        );
+                                      }
+                                    }}
                                   >
-                                    <div className="flex flex-col items-start gap-3 py-3 sm:grid sm:grid-cols-[2fr_1fr_1fr_1.2fr] sm:items-center sm:gap-2">
-                                      {/* Wallet + address */}
-                                      <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-                                        <div
-                                          className="relative flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center rounded border-2 transition-all"
-                                          style={{
-                                            borderColor: wallet.isPrimary
-                                              ? "#FF6B35"
-                                              : isSelected
-                                                ? "#2563EB"
-                                                : "rgba(255,255,255,0.06)",
-                                            boxShadow: isSelected
-                                              ? "0 0 0 1px #2563EB"
-                                              : "none",
-                                            backgroundColor: wallet.isPrimary
-                                              ? "#FF6B3522"
-                                              : isSelected
-                                                ? "#2563EB20"
-                                                : "transparent",
+                                    {wallet.isPrimary && (
+                                      <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: "#FF6B35" }} />
+                                    )}
+                                    {!wallet.isPrimary && isSelected && (
+                                      <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: "#2563EB" }} />
+                                    )}
+                                    {wallet.isPrimary && isSelected && (
+                                      <div className="absolute inset-0 rounded border border-[#2563EB] pointer-events-none" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-medium text-sm flex items-center gap-2 flex-wrap" style={{ color: wallet.isPrimary ? "#FF6B35" : "#f0f5f5" }}>
+                                    {editingWalletId === wallet.id ? (
+                                      <>
+                                        <input
+                                          className="bg-white/[0.03] border border-white/[0.06] rounded px-2 py-1 text-xs text-[#f0f5f5] focus:outline-none focus:ring-1 focus:ring-[#70E0B0]"
+                                          value={walletRenameValue}
+                                          onChange={(e) => setWalletRenameValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              handleRenameWallet();
+                                            } else if (e.key === "Escape") {
+                                              handleCancelRenameWallet();
+                                            }
                                           }}
-                                          title={
-                                            wallet.isPrimary
-                                              ? "Primary wallet"
-                                              : isSelected
-                                                ? "Selected for trading"
-                                                : "Wallet"
-                                          }
+                                          autoFocus
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <button
+                                          type="button"
+                                          className="text-[#70E0B0] hover:text-[#58B890]"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            if (
-                                              currentChain === "sol" ||
-                                              currentChain === "monad"
-                                            ) {
-                                              const next =
-                                                currentChain === "sol"
-                                                  ? new Set(selectedSolSet)
-                                                  : new Set(selectedMonSet);
-                                              if (isSelected) {
-                                                next.delete(wallet.id);
-                                              } else {
-                                                next.add(wallet.id);
-                                              }
-                                              setSelectedWalletsForChain(
-                                                Array.from(next),
-                                                currentChain as "sol" | "monad",
-                                              );
-                                            }
+                                            handleRenameWallet();
                                           }}
+                                          disabled={renamingWalletId === wallet.id}
                                         >
-                                          {wallet.isPrimary && (
-                                            <div
-                                              className="h-2.5 w-2.5 rounded-sm"
-                                              style={{
-                                                backgroundColor: "#FF6B35",
-                                              }}
-                                            />
-                                          )}
-                                          {!wallet.isPrimary && isSelected && (
-                                            <div
-                                              className="h-2.5 w-2.5 rounded-sm"
-                                              style={{
-                                                backgroundColor: "#2563EB",
-                                              }}
-                                            />
-                                          )}
-                                          {wallet.isPrimary && isSelected && (
-                                            <div className="pointer-events-none absolute inset-0 rounded border border-[#2563EB]" />
-                                          )}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                          <div
-                                            className="flex flex-wrap items-center gap-2 text-sm font-medium"
-                                            style={{
-                                              color: wallet.isPrimary
-                                                ? "#FF6B35"
-                                                : "#f0f5f5",
-                                            }}
-                                          >
-                                            {editingWalletId === wallet.id ? (
-                                              <>
-                                                <input
-                                                  className="rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-xs text-[#f0f5f5] focus:ring-1 focus:ring-[#70E0B0] focus:outline-none"
-                                                  value={walletRenameValue}
-                                                  onChange={(e) =>
-                                                    setWalletRenameValue(
-                                                      e.target.value,
-                                                    )
-                                                  }
-                                                  onKeyDown={(e) => {
-                                                    if (e.key === "Enter") {
-                                                      handleRenameWallet();
-                                                    } else if (
-                                                      e.key === "Escape"
-                                                    ) {
-                                                      handleCancelRenameWallet();
-                                                    }
-                                                  }}
-                                                  autoFocus
-                                                  onClick={(e) =>
-                                                    e.stopPropagation()
-                                                  }
-                                                />
-                                                <button
-                                                  type="button"
-                                                  className="text-[#70E0B0] hover:text-[#58B890]"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleRenameWallet();
-                                                  }}
-                                                  disabled={
-                                                    renamingWalletId ===
-                                                    wallet.id
-                                                  }
-                                                >
-                                                  <FiCheck size={14} />
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  className="text-[#9CA3AF] hover:text-[#f0f5f5]"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleCancelRenameWallet();
-                                                  }}
-                                                  disabled={
-                                                    renamingWalletId ===
-                                                    wallet.id
-                                                  }
-                                                >
-                                                  <FiX size={14} />
-                                                </button>
-                                              </>
-                                            ) : (
-                                              <>
-                                                <span>{wallet.label}</span>
-                                                <button
-                                                  type="button"
-                                                  className="text-[#9CA3AF] hover:text-[#f0f5f5]"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleBeginRenameWallet(
-                                                      wallet,
-                                                    );
-                                                  }}
-                                                  title="Rename wallet"
-                                                >
-                                                  <FiEdit2 size={14} />
-                                                </button>
-                                              </>
-                                            )}
-                                          </div>
-                                          <div className="flex items-center gap-1.5 truncate font-mono text-xs text-[#9CA3AF]">
-                                            <span>{truncated || "—"}</span>
-                                            <button
-                                              className="ml-1 flex-shrink-0 text-[#9CA3AF] hover:text-[#f0f5f5]"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (displayAddress) {
-                                                  navigator.clipboard
-                                                    .writeText(displayAddress)
-                                                    .then(
-                                                      () =>
-                                                        toast.success(
-                                                          "Address copied",
-                                                        ),
-                                                      () =>
-                                                        toast.error(
-                                                          "Failed to copy address",
-                                                        ),
-                                                    );
-                                                }
-                                              }}
-                                            >
-                                              <svg
-                                                width="12"
-                                                height="12"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                              >
-                                                <rect
-                                                  x="9"
-                                                  y="9"
-                                                  width="13"
-                                                  height="13"
-                                                  rx="2"
-                                                  ry="2"
-                                                  stroke="currentColor"
-                                                  strokeWidth="2"
-                                                />
-                                                <path
-                                                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                                                  stroke="currentColor"
-                                                  strokeWidth="2"
-                                                />
-                                              </svg>
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {/* Balance */}
-                                      <div className="flex w-full flex-col items-start gap-1 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
-                                        <span className="text-xs text-[#6B7280] sm:hidden">
-                                          Balance (
-                                          {currentChain === "monad"
-                                            ? "MON"
-                                            : "SOL"}
-                                          ):
-                                        </span>
-                                        <div className="flex items-center gap-1">
-                                          {currentChain === "monad" ? (
-                                            <img
-                                              src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                                              alt="Monad"
-                                              className="h-4 w-4 flex-shrink-0 rounded"
-                                              style={{ objectFit: "contain" }}
-                                            />
-                                          ) : (
-                                            <SiSolana
-                                              className="h-3 w-3 flex-shrink-0"
-                                              aria-hidden="true"
-                                              style={{
-                                                color: "unset",
-                                                fill: "url(#solana-gradient-wallets)",
-                                                filter: "none",
-                                              }}
-                                            />
-                                          )}
-                                          <span className="text-xs text-white">
-                                            {formatSmartNumber(
-                                              walletBalances[wallet.id] ??
-                                                wallet.balance,
-                                            )}
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      {/* Holdings */}
-                                      <div className="flex w-full flex-col items-start gap-1 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
-                                        <span className="text-xs text-[#6B7280] sm:hidden">
-                                          Holdings:
-                                        </span>
-                                        <div className="flex items-center">
-                                          <StackedTokenBoxes
-                                            count={
-                                              // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
-                                              wallet.holdingsCount > 0
-                                                ? wallet.holdingsCount
-                                                : wallet.isPrimary &&
-                                                    positions.length > 0
-                                                  ? positions.length
-                                                  : wallet.holdingsCount
-                                            }
+                                          <FiCheck size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="text-[#9CA3AF] hover:text-[#f0f5f5]"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleCancelRenameWallet();
+                                          }}
+                                          disabled={renamingWalletId === wallet.id}
+                                        >
+                                          <FiX size={14} />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>{wallet.label}</span>
+                                        <button
+                                          type="button"
+                                          className="text-[#9CA3AF] hover:text-[#f0f5f5]"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleBeginRenameWallet(wallet);
+                                          }}
+                                          title="Rename wallet"
+                                        >
+                                          <FiEdit2 size={14} />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                    <div className="text-xs text-[#9CA3AF] font-mono truncate flex items-center gap-1.5">
+                                      <span>{truncated || "—"}</span>
+                                      <button
+                                        className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0 ml-1"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (displayAddress) {
+                                            navigator.clipboard.writeText(displayAddress).then(
+                                              () => toast.success("Address copied"),
+                                              () => toast.error("Failed to copy address")
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                          <rect
+                                            x="9"
+                                            y="9"
+                                            width="13"
+                                            height="13"
+                                            rx="2"
+                                            ry="2"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
                                           />
-                                        </div>
-                                      </div>
-
-                                      {/* Actions */}
-                                      <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
-                                        <span className="text-xs text-[#6B7280] sm:hidden">
-                                          Actions:
-                                        </span>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <button
-                                            className={`p-1 transition-opacity ${wallet.isPrimary ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-                                            title={
-                                              wallet.isPrimary
-                                                ? "Primary wallet"
-                                                : "Set as primary"
-                                            }
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleSetPrimaryWallet(wallet.id);
-                                            }}
-                                          >
-                                            {wallet.isPrimary ? (
-                                              <FaStar
-                                                size={14}
-                                                color="#FF6B35"
-                                              />
-                                            ) : (
-                                              <FaRegStar
-                                                size={14}
-                                                color="#9CA3AF"
-                                              />
-                                            )}
-                                          </button>
-                                          <button
-                                            className="flex cursor-pointer items-center gap-1 rounded-full px-2 py-1 text-xs whitespace-nowrap text-red-400 transition-colors hover:text-red-300 disabled:opacity-60"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              beginDeleteWallet(wallet);
-                                            }}
-                                            title="Delete wallet"
-                                            disabled={
-                                              deletingWalletId === wallet.id
-                                            }
-                                          >
-                                            <FaTrash size={12} />
-                                          </button>
-                                          <button
-                                            className="cursor-pointer rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-xs whitespace-nowrap text-neutral-200 transition-colors hover:border-white/[0.1] hover:bg-white/[0.07] sm:px-3"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleExportWallet(wallet.id);
-                                            }}
-                                            title="Export wallet"
-                                          >
-                                            <span className="hidden sm:inline">
-                                              Export wallet
-                                            </span>
-                                            <span className="sm:hidden">
-                                              Export
-                                            </span>
-                                          </button>
-                                        </div>
-                                      </div>
+                                          <path
+                                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                          />
+                                        </svg>
+                                      </button>
                                     </div>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                                </div>
 
-                      {/* Right Panel Content - Source wallets and Destination sections commented out */}
-                      {/* <div className="py-3 border-l border-white/[0.06]">
+                              {/* Balance */}
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:justify-center w-full sm:w-auto">
+                                  <span className="text-xs text-[#6B7280] sm:hidden">Balance ({currentChain === "monad" ? "MON" : "SOL"}):</span>
+                                  <div className="flex items-center gap-1">
+                                    {currentChain === 'monad' ? (
+                                      <img
+                                        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                                        alt="Monad"
+                                        className="h-4 w-4 flex-shrink-0 rounded"
+                                        style={{ objectFit: 'contain' }}
+                                      />
+                                    ) : (
+                                      <SiSolana
+                                        className="h-3 w-3 flex-shrink-0"
+                                        aria-hidden="true"
+                                        style={{
+                                          color: "unset",
+                                          fill: "url(#solana-gradient-wallets)",
+                                          filter: "none",
+                                        }}
+                                      />
+                                    )}
+                                    <span className="text-xs text-white">
+                                      {formatSmartNumber(
+                                        walletBalances[wallet.id] ?? wallet.balance,
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Holdings */}
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:justify-center w-full sm:w-auto">
+                                  <span className="text-xs text-[#6B7280] sm:hidden">Holdings:</span>
+                                  <div className="flex items-center">
+                                    <StackedTokenBoxes
+                                      count={
+                                        // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
+                                        wallet.holdingsCount > 0
+                                          ? wallet.holdingsCount
+                                          : wallet.isPrimary && positions.length > 0
+                                            ? positions.length
+                                            : wallet.holdingsCount
+                                      }
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2 sm:justify-end w-full sm:w-auto">
+                                  <span className="text-xs text-[#6B7280] sm:hidden">Actions:</span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                  <button
+                                    className={`transition-opacity p-1 ${wallet.isPrimary ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                    title={wallet.isPrimary ? "Primary wallet" : "Set as primary"}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetPrimaryWallet(wallet.id);
+                                    }}
+                                  >
+                                    {wallet.isPrimary ? (
+                                      <FaStar size={14} color="#FF6B35" />
+                                    ) : (
+                                      <FaRegStar size={14} color="#9CA3AF" />
+                                    )}
+                                  </button>
+                                  <button
+                                    className="px-2 py-1 rounded-full text-xs text-red-400 hover:text-red-300 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      beginDeleteWallet(wallet);
+                                    }}
+                                    title="Delete wallet"
+                                    disabled={deletingWalletId === wallet.id}
+                                  >
+                                    <FaTrash size={12} />
+                                  </button>
+                                  <button
+                                    className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportWallet(wallet.id);
+                                    }}
+                                    title="Export wallet"
+                                  >
+                                    <span className="hidden sm:inline">Export wallet</span>
+                                    <span className="sm:hidden">Export</span>
+                                  </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Panel Content - Source wallets and Destination sections commented out */}
+                {/* <div className="py-3 border-l border-white/[0.06]">
                   <div className="min-h-[150px] flex flex-col items-center justify-center">
                     <div className="flex flex-col items-center gap-3 text-[#9CA3AF]">
                       <svg
@@ -5079,163 +4239,151 @@ export default function PortfolioPage() {
                     </div>
                   </div>
                 </div> */}
+              </div>
+            </div>
+          )}
+
+          {/* Perpetuals Section */}
+          {activeSection === "perpetuals" && (
+            <div className="space-y-6">
+              {/* Header with Time Range */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-light text-[#f0f5f5]">Your holdings</h2>
+                <div className="flex items-center gap-2">
+                  {["1d", "7d", "30d", "Max"].map((period, index) => (
+                    <button
+                      key={period}
+                      className={`px-3 py-1 text-sm transition-colors cursor-pointer ${
+                        period === "Max"
+                          ? "text-white font-semibold bg-white/[0.07] border border-white/[0.08] rounded-lg"
+                          : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                      }`}
+                    >
+                      {period}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Performance Metrics and PNL Chart */}
+              <div className="grid grid-cols-2 gap-6">
+                {/* Left Panel - Performance Metrics */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
+                  <h3 className="text-[#f0f5f5] font-medium text-lg mb-4">Performance</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-[#9CA3AF] mb-1">
+                        All Time Volume
+                      </div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-[#9CA3AF] mb-1">
+                        All Time PNL
+                      </div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                      <div className="text-xs text-[#9CA3AF] mt-1">
+                        Number of Trades: 0
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-sm text-[#9CA3AF] mb-1">
+                        Account Value
+                      </div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Panel - PNL Chart */}
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
+                  <h3 className="text-[#f0f5f5] font-medium text-lg mb-4">PNL</h3>
+                  <div className="h-48 flex items-center justify-center relative">
+                    {/* Simple chart representation */}
+                    <div className="w-full h-24 border-b border-white/[0.06] relative">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-full h-px bg-[#70E0B0]"></div>
+                      </div>
+                    </div>
+                    {/* Chart icon in bottom right */}
+                    <div className="absolute bottom-2 right-2 w-6 h-6 border border-white rounded flex items-center justify-center">
+                      <span className="text-xs text-[#f0f5f5]">T</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Positions Table */}
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl">
+                {/* Tabs */}
+                <div className="flex border-b border-white/[0.06]">
+                  <button
+                    className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+                      activePerpetualsTab === 0
+                        ? "text-white font-semibold border border-white/[0.08] bg-white/[0.07] rounded-lg"
+                        : "text-neutral-400 font-medium border border-transparent hover:bg-white/[0.04] hover:text-neutral-200 rounded-lg"
+                    }`}
+                    onClick={() => setActivePerpetualsTab(0)}
+                  >
+                    Open Positions
+                  </button>
+                  <button
+                    className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+                      activePerpetualsTab === 1
+                        ? "text-white font-semibold border border-white/[0.08] bg-white/[0.07] rounded-lg"
+                        : "text-neutral-400 font-medium border border-transparent hover:bg-white/[0.04] hover:text-neutral-200 rounded-lg"
+                    }`}
+                    onClick={() => setActivePerpetualsTab(1)}
+                  >
+                    Trade History
+                  </button>
+                </div>
+
+                {/* Table Headers */}
+                <div className="grid grid-cols-9 gap-4 px-6 py-1 text-xs text-[#9CA3AF] border-b border-white/[0.06]">
+                  <div className="font-medium flex items-center gap-1">
+                    Token ↑
+                  </div>
+                  <div className="font-medium">Position</div>
+                  <div className="font-medium">Position Value</div>
+                  <div className="font-medium">Entry Price</div>
+                  <div className="font-medium">Mark Price</div>
+                  <div className="font-medium">Liquidation Price</div>
+                  <div className="font-medium">Margin Used (PNL)</div>
+                  <div className="font-medium">TP/SL</div>
+                  <div className="font-medium">Close</div>
+                </div>
+
+                {/* Content based on active tab */}
+                {activePerpetualsTab === 0 && (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                      <div className="text-[#9CA3AF] text-sm">
+                        No open positions
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Perpetuals Section */}
-                {activeSection === "perpetuals" && (
-                  <div className="space-y-6">
-                    {/* Header with Time Range */}
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-2xl font-light text-[#f0f5f5]">
-                        Your holdings
-                      </h2>
-                      <div className="flex items-center gap-2">
-                        {["1d", "7d", "30d", "Max"].map((period, index) => (
-                          <button
-                            key={period}
-                            className={`cursor-pointer px-3 py-1 text-sm transition-colors ${
-                              period === "Max"
-                                ? "rounded-lg border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                                : "text-[#9CA3AF] hover:text-[#f0f5f5]"
-                            }`}
-                          >
-                            {period}
-                          </button>
-                        ))}
+                {activePerpetualsTab === 1 && (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                      <div className="text-[#9CA3AF] text-sm">
+                        No trade history
                       </div>
-                    </div>
-
-                    {/* Performance Metrics and PNL Chart */}
-                    <div className="grid grid-cols-2 gap-6">
-                      {/* Left Panel - Performance Metrics */}
-                      <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
-                        <h3 className="mb-4 text-lg font-medium text-[#f0f5f5]">
-                          Performance
-                        </h3>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <div className="mb-1 text-sm text-[#9CA3AF]">
-                              All Time Volume
-                            </div>
-                            <div className="text-2xl font-light text-[#f0f5f5]">
-                              $0
-                            </div>
-                          </div>
-                          <div>
-                            <div className="mb-1 text-sm text-[#9CA3AF]">
-                              All Time PNL
-                            </div>
-                            <div className="text-2xl font-light text-[#f0f5f5]">
-                              $0
-                            </div>
-                            <div className="mt-1 text-xs text-[#9CA3AF]">
-                              Number of Trades: 0
-                            </div>
-                          </div>
-                          <div className="col-span-2">
-                            <div className="mb-1 text-sm text-[#9CA3AF]">
-                              Account Value
-                            </div>
-                            <div className="text-2xl font-light text-[#f0f5f5]">
-                              $0
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right Panel - PNL Chart */}
-                      <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-6 backdrop-blur-xl">
-                        <h3 className="mb-4 text-lg font-medium text-[#f0f5f5]">
-                          PNL
-                        </h3>
-                        <div className="relative flex h-48 items-center justify-center">
-                          {/* Simple chart representation */}
-                          <div className="relative h-24 w-full border-b border-white/[0.06]">
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="h-px w-full bg-[#70E0B0]"></div>
-                            </div>
-                          </div>
-                          {/* Chart icon in bottom right */}
-                          <div className="absolute right-2 bottom-2 flex h-6 w-6 items-center justify-center rounded border border-white">
-                            <span className="text-xs text-[#f0f5f5]">T</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Positions Table */}
-                    <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl">
-                      {/* Tabs */}
-                      <div className="flex border-b border-white/[0.06]">
-                        <button
-                          className={`cursor-pointer px-3 py-2 text-xs font-medium transition-colors ${
-                            activePerpetualsTab === 0
-                              ? "rounded-lg border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                              : "rounded-lg border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
-                          }`}
-                          onClick={() => setActivePerpetualsTab(0)}
-                        >
-                          Open Positions
-                        </button>
-                        <button
-                          className={`cursor-pointer px-3 py-2 text-xs font-medium transition-colors ${
-                            activePerpetualsTab === 1
-                              ? "rounded-lg border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                              : "rounded-lg border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
-                          }`}
-                          onClick={() => setActivePerpetualsTab(1)}
-                        >
-                          Trade History
-                        </button>
-                      </div>
-
-                      {/* Table Headers */}
-                      <div className="grid grid-cols-9 gap-4 border-b border-white/[0.06] px-6 py-1 text-xs text-[#9CA3AF]">
-                        <div className="flex items-center gap-1 font-medium">
-                          Token ↑
-                        </div>
-                        <div className="font-medium">Position</div>
-                        <div className="font-medium">Position Value</div>
-                        <div className="font-medium">Entry Price</div>
-                        <div className="font-medium">Mark Price</div>
-                        <div className="font-medium">Liquidation Price</div>
-                        <div className="font-medium">Margin Used (PNL)</div>
-                        <div className="font-medium">TP/SL</div>
-                        <div className="font-medium">Close</div>
-                      </div>
-
-                      {/* Content based on active tab */}
-                      {activePerpetualsTab === 0 && (
-                        <div className="flex items-center justify-center py-12">
-                          <div className="text-center">
-                            <div className="text-sm text-[#9CA3AF]">
-                              No open positions
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {activePerpetualsTab === 1 && (
-                        <div className="flex items-center justify-center py-12">
-                          <div className="text-center">
-                            <div className="text-sm text-[#9CA3AF]">
-                              No trade history
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
               </div>
             </div>
+          )}
+            </div>
           </div>
+        </div>
         </DockedPanelMarginWrapper>
       </div>
       <Footer />
-
+      
       {/* Import Solana Wallet Modal */}
       <ImportSolanaWalletModal
         isOpen={showImportSolanaModal}
@@ -5249,7 +4397,7 @@ export default function PortfolioPage() {
         onClose={() => setShowImportEvmModal(false)}
         onImported={fetchWallets}
       />
-
+      
       {/* Export Wallet Modal */}
       <ExportWalletModal
         isOpen={showExportModal}
@@ -5272,18 +4420,15 @@ export default function PortfolioPage() {
       {/* Delete Wallet Confirmation */}
       {deleteModalOpen && deleteTarget && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-3 sm:px-4">
-          <div className="mx-3 w-full max-w-md rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 shadow-2xl backdrop-blur-xl sm:mx-0 sm:p-5">
+          <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl p-4 sm:p-5 shadow-2xl mx-3 sm:mx-0">
             <div className="mb-3 flex items-center gap-2 text-[#f0f5f5]">
               <span className="text-lg">⚠️ Deletion Reminder</span>
             </div>
-            <p className="mb-3 text-sm leading-relaxed text-[#c7c9d1]">
-              This archives the wallet and removes it from your list. Funds stay
-              on-chain, but this wallet will no longer be used for trading.
-              Export any keys you need first.
+            <p className="text-sm text-[#c7c9d1] mb-3 leading-relaxed">
+              This archives the wallet and removes it from your list. Funds stay on-chain, but this wallet will no longer be used for trading. Export any keys you need first.
             </p>
-            <p className="mb-3 text-sm leading-relaxed text-[#c7c9d1]">
-              Wallet:{" "}
-              <span className="text-[#70E0B0]">{deleteTarget.label}</span>
+            <p className="text-sm text-[#c7c9d1] mb-3 leading-relaxed">
+              Wallet: <span className="text-[#70E0B0]">{deleteTarget.label}</span>
             </p>
             <label className="flex items-center gap-2 text-sm text-[#c7c9d1]">
               <input
@@ -5306,15 +4451,11 @@ export default function PortfolioPage() {
               </button>
               <button
                 onClick={handleDeleteWallet}
-                disabled={
-                  !deleteRiskAck || deletingWalletId === deleteTarget.id
-                }
+                disabled={!deleteRiskAck || deletingWalletId === deleteTarget.id}
                 className="flex items-center gap-2 rounded-md bg-[#ef4444] px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60"
               >
                 <FaTrash size={12} />
-                {deletingWalletId === deleteTarget.id
-                  ? "Deleting..."
-                  : "Delete"}
+                {deletingWalletId === deleteTarget.id ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>

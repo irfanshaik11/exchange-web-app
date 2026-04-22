@@ -8,7 +8,6 @@
  * Lifetime), top-3 podium, your position, and the full standings list.
  */
 
-import posthog from "posthog-js";
 import React, { useState, useMemo, useEffect } from "react";
 import Head from "next/head";
 import Header from "~/components/Header";
@@ -29,6 +28,7 @@ import {
   isSeasonLocked,
   type SeasonKey,
 } from "~/utils/seasons";
+import posthog from "posthog-js";
 
 type LeaderboardType = "points" | "pnl" | "volume";
 // Leaderboard period is now always a season. Legacy DAILY/MONTHLY/LIFETIME
@@ -303,12 +303,7 @@ export default function LeaderboardPage() {
                         return (
                           <button
                             key={key}
-                            onClick={() => {
-                              setType(key);
-                              posthog.capture("leaderboard_category_changed", {
-                                category: key,
-                              });
-                            }}
+                            onClick={() => setType(key)}
                             className={`rounded-full px-4 py-2 text-sm transition-all ${
                               active
                                 ? "bg-gradient-to-r from-amber-500 to-yellow-500 font-semibold text-black"
@@ -341,15 +336,7 @@ export default function LeaderboardPage() {
                         return (
                           <button
                             key={season.key}
-                            onClick={() => {
-                              if (!locked) {
-                                setPeriod(season.key);
-                                posthog.capture(
-                                  "leaderboard_category_changed",
-                                  { period: season.key },
-                                );
-                              }
-                            }}
+                            onClick={() => { if (!locked) { setPeriod(season.key); posthog.capture("leaderboard_category_changed", { season: season.key }); } }}
                             disabled={locked}
                             aria-label={ariaLabel}
                             title={
@@ -366,7 +353,9 @@ export default function LeaderboardPage() {
                             }`}
                           >
                             {season.label}
-                            {locked && <span aria-hidden="true"> 🔒</span>}
+                            {locked && (
+                              <span aria-hidden="true"> 🔒</span>
+                            )}
                           </button>
                         );
                       })}

@@ -1,36 +1,24 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import posthog from "posthog-js";
-import {
-  login as apiLogin,
-  register as apiRegister,
-  checkUsernameAvailability,
-  updateUsername,
-} from "../utils/api";
-import Cookies from "js-cookie";
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { login as apiLogin, register as apiRegister, checkUsernameAvailability, updateUsername } from '../utils/api';
+import Cookies from 'js-cookie';
 import { useUser } from "./UserContext";
-import InterstatePopout from "./InterstatePopout";
-import InterstateButton from "./InterstateButton";
-import { toast } from "react-hot-toast";
-import { useTurnkey, ClientState, AuthState } from "@turnkey/react-wallet-kit";
-import {
-  GoogleOAuthProvider,
-  GoogleLogin,
-  type CredentialResponse,
-} from "@react-oauth/google";
-import { sha256 } from "@noble/hashes/sha256";
-import { bytesToHex } from "@noble/hashes/utils";
+import InterstatePopout from './InterstatePopout';
+import InterstateButton from './InterstateButton';
+import { toast } from 'react-hot-toast';
+import { useTurnkey, ClientState, AuthState } from '@turnkey/react-wallet-kit';
+import { GoogleOAuthProvider, GoogleLogin, type CredentialResponse } from '@react-oauth/google';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex } from '@noble/hashes/utils';
 import { useUserLimit } from "./UserLimitContext";
 import { ApiError } from "../utils/api";
 import { isBotUsername } from "../utils/botUsernames";
-import { FiCheck, FiAlertCircle, FiLoader } from "react-icons/fi";
-import {
-  useWalletDiscovery,
-  type DiscoveredWallet,
-} from "../hooks/useWalletDiscovery";
+import { FiCheck, FiAlertCircle, FiLoader } from 'react-icons/fi';
+import { useWalletDiscovery, type DiscoveredWallet } from '../hooks/useWalletDiscovery';
+import posthog from "posthog-js";
 
-const isDev = process.env.NODE_ENV !== "production";
+const isDev = process.env.NODE_ENV !== 'production';
 const ENABLE_EMAIL_AUTH = false;
-const AUTH_BUTTON_WIDTH_CLASS = "w-full max-w-[400px] mx-auto";
+const AUTH_BUTTON_WIDTH_CLASS = 'w-full max-w-[400px] mx-auto';
 const SESSION_METADATA_KEY = "@turnkey/session-metadata";
 
 interface LoginModalProps {
@@ -55,9 +43,7 @@ const recordAuthMethod = (method: "google" | "wallet") => {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem("turnkeyLastAuthMethod", method);
-    window.dispatchEvent(
-      new CustomEvent(TURNKEY_AUTH_METHOD_EVENT, { detail: method }),
-    );
+    window.dispatchEvent(new CustomEvent(TURNKEY_AUTH_METHOD_EVENT, { detail: method }));
   } catch (err) {
     console.warn("[LoginModal] Failed to persist auth method", err);
   }
@@ -73,17 +59,13 @@ const recordPasskeyReady = () => {
   }
 };
 
-export default function LoginModal({
-  open,
-  onClose,
-  forceLogin = false,
-}: LoginModalProps) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+export default function LoginModal({ open, onClose, forceLogin = false }: LoginModalProps) {
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
-
+  
   // Separate loading states for each login method
   const [loading, setLoading] = useState(false); // For email/password login
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -91,7 +73,7 @@ export default function LoginModal({
   const pubKeyRef = useRef<string | null>(null);
   const createdNonceRef = useRef(false);
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
+  
   const [error, setError] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -100,8 +82,8 @@ export default function LoginModal({
   const [wiggle, setWiggle] = useState(false);
 
   // Username setup step for new users
-  const [loginStep, setLoginStep] = useState<"auth" | "username">("auth");
-  const [newUsername, setNewUsername] = useState("");
+  const [loginStep, setLoginStep] = useState<'auth' | 'username'>('auth');
+  const [newUsername, setNewUsername] = useState('');
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [usernameSubmitting, setUsernameSubmitting] = useState(false);
   const [usernameValidation, setUsernameValidation] = useState<{
@@ -110,11 +92,11 @@ export default function LoginModal({
     error: string | null;
   }>({ isValid: false, isAvailable: null, error: null });
   const usernameCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
+  
   // Use Turnkey SDK for wallet authentication
-  const turnkey = useTurnkey();
-  const authState = turnkey?.authState;
-  const clientState = turnkey?.clientState;
+const turnkey = useTurnkey();
+const authState = turnkey?.authState;
+const clientState = turnkey?.clientState;
 
   // Dynamic wallet discovery
   const {
@@ -134,9 +116,7 @@ export default function LoginModal({
   };
 
   // Check if username looks auto-generated (wallet address or similar)
-  const isAutoGeneratedUsername = (
-    name: string | null | undefined,
-  ): boolean => {
+  const isAutoGeneratedUsername = (name: string | null | undefined): boolean => {
     if (!name) return true;
     // Check if it looks like a wallet address (hex or base58)
     if (/^(0x)?[a-fA-F0-9]{40,}$/.test(name)) return true;
@@ -147,44 +127,26 @@ export default function LoginModal({
   };
 
   // Username format validation
-  const validateUsernameFormat = (
-    value: string,
-  ): { valid: boolean; error: string | null } => {
+  const validateUsernameFormat = (value: string): { valid: boolean; error: string | null } => {
     if (!value || value.length === 0) {
       return { valid: false, error: null };
     }
     if (value.length < 3) {
-      return { valid: false, error: "Username must be at least 3 characters" };
+      return { valid: false, error: 'Username must be at least 3 characters' };
     }
     if (value.length > 20) {
-      return { valid: false, error: "Username must be 20 characters or less" };
+      return { valid: false, error: 'Username must be 20 characters or less' };
     }
     const usernameRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
     if (!usernameRegex.test(value)) {
       if (!/^[a-zA-Z_]/.test(value)) {
-        return {
-          valid: false,
-          error: "Username must start with a letter or underscore",
-        };
+        return { valid: false, error: 'Username must start with a letter or underscore' };
       }
-      return {
-        valid: false,
-        error: "Only letters, numbers, and underscores allowed",
-      };
+      return { valid: false, error: 'Only letters, numbers, and underscores allowed' };
     }
-    const reservedWords = [
-      "admin",
-      "administrator",
-      "root",
-      "system",
-      "interstate",
-      "support",
-      "help",
-      "null",
-      "undefined",
-    ];
+    const reservedWords = ['admin', 'administrator', 'root', 'system', 'interstate', 'support', 'help', 'null', 'undefined'];
     if (reservedWords.includes(value.toLowerCase()) || isBotUsername(value)) {
-      return { valid: false, error: "This username is reserved" };
+      return { valid: false, error: 'This username is reserved' };
     }
     return { valid: true, error: null };
   };
@@ -192,7 +154,7 @@ export default function LoginModal({
   // Handle username input change with debounced availability check
   const handleNewUsernameChange = (value: string) => {
     // Allow uppercase letters - only strip invalid characters
-    const cleanValue = value.replace(/[^a-zA-Z0-9_]/g, "");
+    const cleanValue = value.replace(/[^a-zA-Z0-9_]/g, '');
     setNewUsername(cleanValue);
 
     // Clear previous timeout
@@ -219,13 +181,13 @@ export default function LoginModal({
         setUsernameValidation({
           isValid: result.valid,
           isAvailable: result.available,
-          error: result.available ? null : "Username is already taken",
+          error: result.available ? null : 'Username is already taken',
         });
       } catch (err: any) {
         setUsernameValidation({
           isValid: false,
           isAvailable: false,
-          error: err?.message || "Failed to check availability",
+          error: err?.message || 'Failed to check availability',
         });
       } finally {
         setUsernameChecking(false);
@@ -235,11 +197,7 @@ export default function LoginModal({
 
   // Handle username submission
   const handleUsernameSubmit = async () => {
-    if (
-      !usernameValidation.isValid ||
-      !usernameValidation.isAvailable ||
-      !user?.bearerToken
-    ) {
+    if (!usernameValidation.isValid || !usernameValidation.isAvailable || !user?.bearerToken) {
       return;
     }
 
@@ -248,14 +206,14 @@ export default function LoginModal({
       const result = await updateUsername(user.bearerToken, newUsername);
       if (result.success) {
         await refreshUser();
-        toast.success("Username set successfully!");
+        toast.success('Username set successfully!');
         // Clear the new user flow ref and signal parent can close
         isInNewUserFlowRef.current = false;
-        window.dispatchEvent(new CustomEvent("login-modal-can-close"));
+        window.dispatchEvent(new CustomEvent('login-modal-can-close'));
         onClose();
       }
     } catch (err: any) {
-      toast.error(err?.message || "Failed to set username");
+      toast.error(err?.message || 'Failed to set username');
     } finally {
       setUsernameSubmitting(false);
     }
@@ -267,9 +225,9 @@ export default function LoginModal({
     // Give time for user context to update
     setTimeout(() => {
       // Check if user has an auto-generated username
-      const currentUser = Cookies.get("token") ? user : null;
+      const currentUser = Cookies.get('token') ? user : null;
       if (isNewUser || isAutoGeneratedUsername(currentUser?.name)) {
-        setLoginStep("username");
+        setLoginStep('username');
       } else {
         onClose();
       }
@@ -285,19 +243,12 @@ export default function LoginModal({
 
   // Debug: log session and wallets whenever they change
   useEffect(() => {
-    isDev &&
-      console.log(
-        "[LoginModal] useTurnkey session snapshot:",
-        turnkey?.session,
-      );
+    isDev && console.log("[LoginModal] useTurnkey session snapshot:", turnkey?.session);
     if (turnkey?.wallets) {
-      isDev &&
-        console.log(
-          "[LoginModal] useTurnkey wallets snapshot:",
-          turnkey.wallets,
-        );
+      isDev && console.log("[LoginModal] useTurnkey wallets snapshot:", turnkey.wallets);
     }
   }, [turnkey?.session, turnkey?.wallets]);
+
 
   // Track if we're in the middle of a login flow to prevent auto-close
   const isInNewUserFlowRef = useRef(false);
@@ -306,36 +257,34 @@ export default function LoginModal({
     if (open) {
       setShow(true);
       // Lock body scroll when modal is open to prevent interaction with background
-      document.body.style.overflow = "hidden";
+      document.body.style.overflow = 'hidden';
 
       // Check for token in cookies and refresh user if not already authenticated
       // BUT don't auto-close if we're in the username step (new user flow)
-      const token = Cookies.get("token");
+      const token = Cookies.get('token');
 
       // Don't do anything if we're in the username step or actively in new user flow
-      if (loginStep === "username" || isInNewUserFlowRef.current) {
+      if (loginStep === 'username' || isInNewUserFlowRef.current) {
         return;
       }
 
       if (token && !user && !userLoading) {
         setLoading(true);
-        refreshUser()
-          .then(() => {
-            setLoading(false);
-            // Double-check we're not in username step before closing
-            // Note: We don't auto-close here anymore - let login handlers manage closing
-          })
-          .catch(() => setLoading(false));
+        refreshUser().then(() => {
+          setLoading(false);
+          // Double-check we're not in username step before closing
+          // Note: We don't auto-close here anymore - let login handlers manage closing
+        }).catch(() => setLoading(false));
       }
     } else {
       // Unlock body scroll when modal closes
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
       // Clear all loading states when modal is closed
       clearAllLoadingStates();
       setSuccess(null);
       // Reset username step and flow ref
-      setLoginStep("auth");
-      setNewUsername("");
+      setLoginStep('auth');
+      setNewUsername('');
       setUsernameValidation({ isValid: false, isAvailable: null, error: null });
       isInNewUserFlowRef.current = false;
 
@@ -345,7 +294,7 @@ export default function LoginModal({
 
     // Cleanup: ensure scroll is restored if component unmounts with modal open
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     };
   }, [open, refreshUser, user, userLoading, onClose, loginStep]);
 
@@ -358,9 +307,7 @@ export default function LoginModal({
 
     (async () => {
       try {
-        const pubKey = await turnkey.createApiKeyPair?.({
-          storeOverride: false,
-        });
+        const pubKey = await turnkey.createApiKeyPair?.({ storeOverride: false });
         if (!pubKey) {
           throw new Error("Failed to create API keypair for Google login.");
         }
@@ -384,33 +331,21 @@ export default function LoginModal({
 
       connectAndSign(wallet, {
         onToken: async (token, isNewUser) => {
-          isDev &&
-            console.log("[LoginModal] Wallet login response:", {
-              isNewUser,
-              walletName: wallet.name,
-            });
+          isDev && console.log("[LoginModal] Wallet login response:", { isNewUser, walletName: wallet.name });
 
           if (isNewUser) {
             isInNewUserFlowRef.current = true;
           }
 
           await refreshUser();
+          posthog.capture(isNewUser ? "wallet_connected" : "user_logged_in", { method: "wallet", wallet: wallet.name });
           setSuccess(`${wallet.name} login successful`);
           recordAuthMethod("wallet");
 
-          posthog.capture(isNewUser ? "wallet_connected" : "user_logged_in", {
-            method: "wallet",
-            wallet_name: wallet.name,
-            is_new_user: isNewUser,
-          });
-
           if (isNewUser) {
-            isDev &&
-              console.log(
-                "[LoginModal] New user detected, showing username step",
-              );
-            setLoginStep("username");
-            window.dispatchEvent(new CustomEvent("login-modal-keep-open"));
+            isDev && console.log("[LoginModal] New user detected, showing username step");
+            setLoginStep('username');
+            window.dispatchEvent(new CustomEvent('login-modal-keep-open'));
           } else {
             isDev && console.log("[LoginModal] Existing user, closing modal");
             onClose();
@@ -440,20 +375,18 @@ export default function LoginModal({
     setSuccess(null);
     try {
       const { token } = await apiLogin(email, password);
-      Cookies.set("token", token, { expires: 7, path: "/" });
+      Cookies.set('token', token, { expires: 7, path: '/' });
       await refreshUser();
-      setSuccess("Login successful!");
-
-      posthog.identify(email, { email });
       posthog.capture("user_logged_in", { method: "email" });
+      posthog.identify(email, { email });
+      setSuccess('Login successful!');
 
       setTimeout(() => {
         setSuccess(null);
         onClose();
       }, 1200);
     } catch (err: any) {
-      posthog.captureException(err, { method: "email" });
-      setError(err.message || "Login failed");
+      setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -468,238 +401,241 @@ export default function LoginModal({
     try {
       const { user } = await apiRegister(email, username, password);
       if (user?.token) {
-        Cookies.set("token", user.token, { expires: 7, path: "/" });
+        Cookies.set('token', user.token, { expires: 7, path: '/' });
       }
-      Cookies.set("username", username, { expires: 7, path: "/" });
-      Cookies.set("email", email, { expires: 7, path: "/" });
+      Cookies.set('username', username, { expires: 7, path: '/' });
+      Cookies.set('email', email, { expires: 7, path: '/' });
       await refreshUser();
-      setSuccess("Registration successful!");
-
-      posthog.identify(email, { email, username });
       posthog.capture("user_signed_up", { method: "email" });
-
+      posthog.identify(email, { email, username });
+      setSuccess('Registration successful!');
       setTimeout(() => {
-        setMode("login");
+        setMode('login');
         setSuccess(null);
       }, 1200);
     } catch (err: any) {
-      posthog.captureException(err, { method: "email_register" });
       // Check if this is a user limit error
-      if (err instanceof ApiError && err.code === "USER_LIMIT_REACHED") {
+      if (err instanceof ApiError && err.code === 'USER_LIMIT_REACHED') {
         setUserLimitReached(err.message);
         setError(null); // Don't show error in modal, blocker will show
       } else {
-        setError(err.message || "Registration failed");
+        setError(err.message || 'Registration failed');
       }
     } finally {
       setLoading(false);
     }
   }
 
-  //   async function handleGoogleSuccess(resp: CredentialResponse) {
-  //   setGoogleLoading(true);
-  //   setError(null);
-  //   setSuccess(null);
 
-  //   try {
-  //     const publicKey = pubKeyRef.current;
-  //     if (!publicKey) {
-  //       throw new Error("Google login is not ready yet. Please try again.");
-  //     }
 
-  //     if (!resp?.credential) {
-  //       throw new Error("Google login did not return a credential.");
-  //     }
+//   async function handleGoogleSuccess(resp: CredentialResponse) {
+//   setGoogleLoading(true);
+//   setError(null);
+//   setSuccess(null);
 
-  //     if (!turnkey?.completeOauth) {
-  //       throw new Error("Turnkey OAuth is not available right now.");
-  //     }
+//   try {
+//     const publicKey = pubKeyRef.current;
+//     if (!publicKey) {
+//       throw new Error("Google login is not ready yet. Please try again.");
+//     }
 
-  //     // -------- Decode Google ID token to extract optional metadata ----------
-  //     isDev && console.log("Google credential:", resp.credential);
-  //     const createSubOrgParams = (() => {
-  //       try {
-  //         const [, payloadSegment] = resp.credential.split(".");
-  //         if (!payloadSegment) return undefined;
+//     if (!resp?.credential) {
+//       throw new Error("Google login did not return a credential.");
+//     }
 
-  //         const payloadJson = atob(
-  //           payloadSegment.replace(/-/g, "+").replace(/_/g, "/")
-  //         );
-  //         const payload = JSON.parse(payloadJson);
-  //         console.log("Decoded Google token payload:", payload);
-  //         const email =
-  //           typeof payload?.email === "string" ? payload.email : undefined;
-  //         const name =
-  //           typeof payload?.name === "string"
-  //             ? payload.name
-  //             : typeof payload?.given_name === "string"
-  //             ? payload.given_name
-  //             : undefined;
+//     if (!turnkey?.completeOauth) {
+//       throw new Error("Turnkey OAuth is not available right now.");
+//     }
 
-  //         if (!email && !name) return undefined;
+//     // -------- Decode Google ID token to extract optional metadata ----------
+//     isDev && console.log("Google credential:", resp.credential);
+//     const createSubOrgParams = (() => {
+//       try {
+//         const [, payloadSegment] = resp.credential.split(".");
+//         if (!payloadSegment) return undefined;
 
-  //         return {
-  //           ...(name && { userName: name }),
-  //           ...(email && { userEmail: email }),
-  //         };
-  //       } catch (err) {
-  //         console.warn("Could not decode Google token for signup metadata", err);
-  //         return undefined;
-  //       }
-  //     })();
+//         const payloadJson = atob(
+//           payloadSegment.replace(/-/g, "+").replace(/_/g, "/")
+//         );
+//         const payload = JSON.parse(payloadJson);
+//         console.log("Decoded Google token payload:", payload);
+//         const email =
+//           typeof payload?.email === "string" ? payload.email : undefined;
+//         const name =
+//           typeof payload?.name === "string"
+//             ? payload.name
+//             : typeof payload?.given_name === "string"
+//             ? payload.given_name
+//             : undefined;
 
-  //     isDev && console.log("createSubOrgParams:", createSubOrgParams);
+//         if (!email && !name) return undefined;
 
-  //     // -------- Build OAuth parameters for Turnkey --------
-  //     const oauthParams: any = {
-  //       oidcToken: resp.credential,
-  //       publicKey,
-  //       providerName: "Google"
-  //     };
-  //     console.log("OAuth params before sub-org:", oauthParams);
-  //     if (createSubOrgParams) {
-  //     oauthParams.createSubOrgParams = createSubOrgParams;
-  //     }
-  //     isDev && console.log("Final OAuth params:", oauthParams);
+//         return {
+//           ...(name && { userName: name }),
+//           ...(email && { userEmail: email }),
+//         };
+//       } catch (err) {
+//         console.warn("Could not decode Google token for signup metadata", err);
+//         return undefined;
+//       }
+//     })();
 
-  //     // -------- SUPER IMPORTANT: Use completeWithOauth --------
-  //     const sessionResult = await turnkey.completeOauth(oauthParams);
+//     isDev && console.log("createSubOrgParams:", createSubOrgParams);
 
-  //     isDev && console.log("Turnkey OAuth result:", sessionResult);
-  //     setSuccess("Google sign-in complete!");
+//     // -------- Build OAuth parameters for Turnkey --------
+//     const oauthParams: any = {
+//       oidcToken: resp.credential,
+//       publicKey,
+//       providerName: "Google"
+//     };
+//     console.log("OAuth params before sub-org:", oauthParams);
+//     if (createSubOrgParams) {
+//     oauthParams.createSubOrgParams = createSubOrgParams;
+//     }
+//     isDev && console.log("Final OAuth params:", oauthParams);
 
-  //   } catch (err: any) {
-  //     console.error("Turnkey Google OAuth failed:", err);
+//     // -------- SUPER IMPORTANT: Use completeWithOauth --------
+//     const sessionResult = await turnkey.completeOauth(oauthParams);
 
-  //     const message =
-  //       err?.message ||
-  //       err?.response?.data?.message ||
-  //       "Google OAuth login failed";
+//     isDev && console.log("Turnkey OAuth result:", sessionResult);
+//     setSuccess("Google sign-in complete!");
 
-  //     setError(message);
-  //     createdNonceRef.current = false;
-  //     setGoogleNonce(null);
+//   } catch (err: any) {
+//     console.error("Turnkey Google OAuth failed:", err);
 
-  //   } finally {
-  //     setGoogleLoading(false);
-  //   }
-  // }
+//     const message =
+//       err?.message ||
+//       err?.response?.data?.message ||
+//       "Google OAuth login failed";
 
-  async function handleGoogleSuccess(resp: CredentialResponse) {
-    setGoogleLoading(true);
-    setError(null);
-    setSuccess(null);
+//     setError(message);
+//     createdNonceRef.current = false;
+//     setGoogleNonce(null);
 
-    try {
-      const publicKey = pubKeyRef.current;
-      if (!publicKey) {
-        throw new Error("Google login is not ready yet. Please try again.");
-      }
+//   } finally {
+//     setGoogleLoading(false);
+//   }
+// }
 
-      if (!resp?.credential) {
-        throw new Error("Google login did not return a credential.");
-      }
+async function handleGoogleSuccess(resp: CredentialResponse) {
+  setGoogleLoading(true);
+  setError(null);
+  setSuccess(null);
 
-      if (!turnkey?.completeOauth) {
-        throw new Error("Turnkey OAuth is not available right now.");
-      }
-
-      // -------- Decode Google token ----------
-      isDev && console.log("Google credential:", resp.credential);
-      const decoded = (() => {
-        try {
-          const [, payloadSegment] = resp.credential.split(".");
-          if (!payloadSegment) return {};
-
-          const payloadJson = atob(
-            payloadSegment.replace(/-/g, "+").replace(/_/g, "/"),
-          );
-          return JSON.parse(payloadJson);
-        } catch {
-          return {};
-        }
-      })();
-
-      isDev && console.log("Decoded Google payload:", decoded);
-
-      const email =
-        typeof decoded?.email === "string" ? decoded.email : undefined;
-      const name =
-        typeof decoded?.name === "string"
-          ? decoded.name
-          : typeof decoded?.given_name === "string"
-            ? decoded.given_name
-            : undefined;
-
-      // -------- Build minimal sub-org params ----------
-      let createSubOrgParams: any = undefined;
-
-      if (email || name) {
-        const label = (email || name || "google-user")
-          .toLowerCase()
-          .replace(/\s+/g, "-");
-
-        createSubOrgParams = {
-          // REQUIRED:
-          subOrgName: `narrative-${label}`,
-          oauthProviders: [
-            {
-              providerName: "Google",
-            },
-          ],
-
-          // OPTIONAL but recommended metadata:
-          ...(name && { userName: name }),
-          ...(email && { userEmail: email }),
-        };
-      }
-
-      isDev && console.log("createSubOrgParams:", createSubOrgParams);
-
-      // -------- Build OAuth params ----------
-      const oauthParams: any = {
-        oidcToken: resp.credential,
-        publicKey,
-        providerName: "Google",
-        createSubOrgParams: {
-          userName: name,
-        },
-      };
-
-      isDev && console.log("Final OAuth params:", oauthParams);
-
-      // -------- Complete OAuth login via Turnkey ----------
-      const sessionResult = await turnkey.completeOauth(oauthParams);
-      isDev && console.log("Turnkey OAuth result:", sessionResult);
-
-      setSuccess("Google sign-in complete!");
-      recordAuthMethod("google");
-    } catch (err: any) {
-      console.error("Turnkey Google OAuth failed:", err);
-
-      const msg =
-        err?.message ||
-        err?.response?.data?.message ||
-        "Google OAuth login failed";
-
-      setError(msg);
-      createdNonceRef.current = false;
-      setGoogleNonce(null);
-    } finally {
-      setGoogleLoading(false);
+  try {
+    const publicKey = pubKeyRef.current;
+    if (!publicKey) {
+      throw new Error("Google login is not ready yet. Please try again.");
     }
+
+    if (!resp?.credential) {
+      throw new Error("Google login did not return a credential.");
+    }
+
+    if (!turnkey?.completeOauth) {
+      throw new Error("Turnkey OAuth is not available right now.");
+    }
+
+    // -------- Decode Google token ----------
+    isDev && console.log("Google credential:", resp.credential);
+    const decoded = (() => {
+      try {
+        const [, payloadSegment] = resp.credential.split(".");
+        if (!payloadSegment) return {};
+
+        const payloadJson = atob(
+          payloadSegment.replace(/-/g, "+").replace(/_/g, "/")
+        );
+        return JSON.parse(payloadJson);
+      } catch {
+        return {};
+      }
+    })();
+
+    isDev && console.log("Decoded Google payload:", decoded);
+
+    const email =
+      typeof decoded?.email === "string" ? decoded.email : undefined;
+    const name =
+      typeof decoded?.name === "string"
+        ? decoded.name
+        : typeof decoded?.given_name === "string"
+        ? decoded.given_name
+        : undefined;
+
+    // -------- Build minimal sub-org params ----------
+    let createSubOrgParams: any = undefined;
+
+    if (email || name) {
+      const label = (email || name || "google-user")
+        .toLowerCase()
+        .replace(/\s+/g, "-");
+
+      createSubOrgParams = {
+        // REQUIRED:
+        subOrgName: `narrative-${label}`,
+        oauthProviders: [
+          {
+            providerName: "Google",
+          },
+        ],
+
+        // OPTIONAL but recommended metadata:
+        ...(name && { userName: name }),
+        ...(email && { userEmail: email }),
+      };
+    }
+
+    isDev && console.log("createSubOrgParams:", createSubOrgParams);
+
+    // -------- Build OAuth params ----------
+    const oauthParams: any = {
+      oidcToken: resp.credential,
+      publicKey,
+      providerName: "Google",
+      createSubOrgParams : {
+        userName: name
+      }
+    };
+
+
+
+    isDev && console.log("Final OAuth params:", oauthParams);
+
+    // -------- Complete OAuth login via Turnkey ----------
+    const sessionResult = await turnkey.completeOauth(oauthParams);
+    isDev && console.log("Turnkey OAuth result:", sessionResult);
+
+    setSuccess("Google sign-in complete!");
+    recordAuthMethod("google");
+
+  } catch (err: any) {
+    console.error("Turnkey Google OAuth failed:", err);
+
+    const msg =
+      err?.message ||
+      err?.response?.data?.message ||
+      "Google OAuth login failed";
+
+    setError(msg);
+    createdNonceRef.current = false;
+    setGoogleNonce(null);
+  } finally {
+    setGoogleLoading(false);
   }
+}
 
   const handleGoogleError = () => {
     setGoogleLoading(false);
-    setError("Google login was cancelled. Please try again.");
+    setError('Google login was cancelled. Please try again.');
   };
+
 
   // Handle close attempt
   const handleClose = () => {
     if (forceLogin) {
       setWiggle(true);
-      toast.error("Please log-in to trade on Interstate.");
+      toast.error('Please log-in to trade on Interstate.');
       setTimeout(() => setWiggle(false), 600);
       return;
     }
@@ -711,7 +647,7 @@ export default function LoginModal({
       open={open}
       onClose={handleClose}
       align="center"
-      className={`relative max-h-[90vh] w-[460px] max-w-[94vw] overflow-y-auto rounded-[28px] border border-white/5 bg-[#0c0f18]/95 p-8 pt-12 text-neutral-100 shadow-[0_48px_160px_rgba(12,20,33,0.6)] backdrop-blur-xl ${wiggle ? "wiggle" : ""}`}
+      className={`relative w-[460px] max-w-[94vw] max-h-[90vh] overflow-y-auto rounded-[28px] border border-white/5 bg-[#0c0f18]/95 p-8 pt-12 shadow-[0_48px_160px_rgba(12,20,33,0.6)] backdrop-blur-xl text-neutral-100 ${wiggle ? ' wiggle' : ''}`}
       disableClickOutside={forceLogin}
       zIndex={99999}
       overlayClassName="bg-[radial-gradient(circle_at_22%_18%,rgba(16,185,129,0.02),transparent_62%),radial-gradient(circle_at_78%_20%,rgba(59,130,246,0.02),transparent_58%),radial-gradient(circle_at_center,rgba(12,18,32,0.05),rgba(6,8,12,0.08))]"
@@ -719,7 +655,7 @@ export default function LoginModal({
       <div className="pointer-events-none absolute -inset-14 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.25),transparent_55%),radial-gradient(circle_at_bottom_right,rgba(110,231,183,0.12),transparent_55%),radial-gradient(circle_at_top_right,rgba(129,140,248,0.2),transparent_55%)] opacity-80 blur-[90px]" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(148,163,184,0.12),transparent_70%)]" />
       <button
-        className="absolute top-4 right-4 rounded-full bg-white/5 px-2 text-lg text-neutral-400 transition hover:bg-white/10 hover:text-white"
+        className="absolute right-4 top-4 rounded-full bg-white/5 px-2 text-lg text-neutral-400 transition hover:bg-white/10 hover:text-white"
         onClick={handleClose}
         type="button"
       >
@@ -727,26 +663,24 @@ export default function LoginModal({
       </button>
 
       {/* Username Setup Step */}
-      {loginStep === "username" ? (
+      {loginStep === 'username' ? (
         <div className="py-2">
           <div className="mb-6 text-center">
-            <p className="text-[0.65rem] tracking-[0.45em] text-emerald-300/70 uppercase">
+            <p className="text-[0.65rem] uppercase tracking-[0.45em] text-emerald-300/70">
               Welcome to Interstate
             </p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">
-              Choose Your Username
-            </h2>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Choose Your Username</h2>
             <p className="mt-2 text-sm text-neutral-400">
               Pick a unique username for your profile and referral link
             </p>
           </div>
 
           <div className="mb-6">
-            <label className="mb-2 block text-xs font-medium text-neutral-400">
+            <label className="block text-xs font-medium text-neutral-400 mb-2">
               Username
             </label>
             <div className="relative">
-              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-neutral-500">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500">
                 @
               </span>
               <input
@@ -755,51 +689,43 @@ export default function LoginModal({
                 onChange={(e) => handleNewUsernameChange(e.target.value)}
                 placeholder="your_username"
                 maxLength={20}
-                className={`w-full rounded-xl border bg-neutral-800/50 py-3 pr-12 pl-8 text-white placeholder-neutral-500 transition-all focus:ring-2 focus:outline-none ${
+                className={`w-full pl-8 pr-12 py-3 bg-neutral-800/50 border rounded-xl text-white placeholder-neutral-500 focus:outline-none focus:ring-2 transition-all ${
                   usernameValidation.error
-                    ? "border-red-500/50 focus:ring-red-500/30"
+                    ? 'border-red-500/50 focus:ring-red-500/30'
                     : usernameValidation.isAvailable
-                      ? "border-emerald-500/50 focus:ring-emerald-500/30"
-                      : "border-neutral-700 focus:ring-emerald-500/30"
+                    ? 'border-emerald-500/50 focus:ring-emerald-500/30'
+                    : 'border-neutral-700 focus:ring-emerald-500/30'
                 }`}
               />
-              <div className="absolute top-1/2 right-4 -translate-y-1/2">
+              <div className="absolute right-4 top-1/2 -translate-y-1/2">
                 {usernameChecking ? (
-                  <FiLoader className="h-5 w-5 animate-spin text-neutral-400" />
+                  <FiLoader className="w-5 h-5 text-neutral-400 animate-spin" />
                 ) : usernameValidation.isAvailable ? (
-                  <FiCheck className="h-5 w-5 text-emerald-400" />
+                  <FiCheck className="w-5 h-5 text-emerald-400" />
                 ) : usernameValidation.error ? (
-                  <FiAlertCircle className="h-5 w-5 text-red-400" />
+                  <FiAlertCircle className="w-5 h-5 text-red-400" />
                 ) : null}
               </div>
             </div>
 
             {usernameValidation.error && (
-              <p className="mt-2 text-xs text-red-400">
-                {usernameValidation.error}
-              </p>
+              <p className="mt-2 text-xs text-red-400">{usernameValidation.error}</p>
             )}
             {usernameValidation.isAvailable && !usernameChecking && (
-              <p className="mt-2 text-xs text-emerald-400">
-                Username is available!
-              </p>
+              <p className="mt-2 text-xs text-emerald-400">Username is available!</p>
             )}
 
             <p className="mt-3 text-xs text-neutral-500">
-              3-20 characters. Letters, numbers, and underscores only. Must
-              start with a letter or underscore.
+              3-20 characters. Letters, numbers, and underscores only. Must start with a letter or underscore.
             </p>
           </div>
 
           {/* Referral link preview */}
           {newUsername && usernameValidation.isValid && (
-            <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-900/20 p-3">
-              <p className="mb-1 text-xs text-emerald-400">
-                Your referral link
-              </p>
-              <p className="font-mono text-sm break-all text-white">
-                interstate.trade?ref=
-                {newUsername.toLowerCase().substring(0, 10)}
+            <div className="mb-6 p-3 bg-emerald-900/20 rounded-xl border border-emerald-500/20">
+              <p className="text-xs text-emerald-400 mb-1">Your referral link</p>
+              <p className="text-white font-mono text-sm break-all">
+                interstate.trade?ref={newUsername.toLowerCase().substring(0, 10)}
               </p>
             </div>
           )}
@@ -809,38 +735,30 @@ export default function LoginModal({
               type="button"
               onClick={() => {
                 // Signal parent that modal can close, then close
-                window.dispatchEvent(new CustomEvent("login-modal-can-close"));
+                window.dispatchEvent(new CustomEvent('login-modal-can-close'));
                 onClose();
               }}
-              className="flex-1 rounded-xl bg-neutral-800 px-4 py-3 font-medium text-white transition-colors hover:bg-neutral-700"
+              className="flex-1 py-3 px-4 bg-neutral-800 hover:bg-neutral-700 text-white font-medium rounded-xl transition-colors"
             >
               Skip for now
             </button>
             <button
               type="button"
               onClick={handleUsernameSubmit}
-              disabled={
-                !usernameValidation.isValid ||
-                !usernameValidation.isAvailable ||
-                usernameChecking ||
-                usernameSubmitting
-              }
-              className={`flex-1 rounded-xl px-4 py-3 font-medium transition-all ${
-                usernameValidation.isValid &&
-                usernameValidation.isAvailable &&
-                !usernameChecking &&
-                !usernameSubmitting
-                  ? "bg-emerald-600 text-white hover:bg-emerald-500"
-                  : "cursor-not-allowed bg-neutral-800 text-neutral-500"
+              disabled={!usernameValidation.isValid || !usernameValidation.isAvailable || usernameChecking || usernameSubmitting}
+              className={`flex-1 py-3 px-4 font-medium rounded-xl transition-all ${
+                usernameValidation.isValid && usernameValidation.isAvailable && !usernameChecking && !usernameSubmitting
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
               }`}
             >
               {usernameSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
-                  <FiLoader className="h-4 w-4 animate-spin" />
+                  <FiLoader className="w-4 h-4 animate-spin" />
                   Saving...
                 </span>
               ) : (
-                "Continue"
+                'Continue'
               )}
             </button>
           </div>
@@ -849,12 +767,10 @@ export default function LoginModal({
         <>
           {/* Auth Step */}
           <div className="mb-4 text-center">
-            <p className="text-[0.65rem] tracking-[0.45em] text-emerald-300/70 uppercase">
+            <p className="text-[0.65rem] uppercase tracking-[0.45em] text-emerald-300/70">
               Secure Access
             </p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">
-              Sign in to Interstate
-            </h2>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Sign in to Interstate</h2>
           </div>
           {error && (
             <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
@@ -862,256 +778,172 @@ export default function LoginModal({
             </div>
           )}
 
-          {ENABLE_EMAIL_AUTH && (
-            <>
-              {mode === "login" ? (
-                <form onSubmit={handleLoginEmail}>
-                  <div className="mb-3">
-                    <label className="mb-1 block text-xs">Email</label>
-                    <input
-                      type="email"
-                      className="mb-2 w-full rounded-3xl border border-neutral-700 px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                      placeholder="Enter email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                    <label className="mb-1 block text-xs">Password</label>
-                    <input
-                      type="password"
-                      className="mb-2 w-full rounded-3xl border border-neutral-700 px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                      placeholder="Enter password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                    <div className="mb-2 flex justify-end">
-                      <InterstateButton
-                        variant="secondary"
-                        size="sm"
-                        type="button"
-                        className="h-auto border-none bg-transparent px-0 py-0 text-xs text-emerald-400 shadow-none hover:underline"
-                      >
-                        Forgot password?
-                      </InterstateButton>
-                    </div>
-                  </div>
-                  {error && (
-                    <div className="mb-2 text-center text-xs text-red-400">
-                      {error}
-                    </div>
-                  )}
-                  {success && (
-                    <div className="mb-2 text-center text-xs text-emerald-400">
-                      {success}
-                    </div>
-                  )}
-                  <InterstateButton
-                    type="submit"
-                    fullWidth
-                    loading={loading}
-                    className="mb-3"
-                  >
-                    Login
-                  </InterstateButton>
-                </form>
-              ) : (
-                <form onSubmit={handleRegister}>
-                  <div className="mb-4 text-center text-xl font-bold">
-                    Sign Up
-                  </div>
-                  <div className="mb-3">
-                    <label className="mb-1 block text-xs">Username</label>
-                    <input
-                      type="text"
-                      className="mb-2 w-full rounded-3xl border border-neutral-700 px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                      placeholder="Enter username"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      required
-                    />
-                    <label className="mb-1 block text-xs">Email</label>
-                    <input
-                      type="email"
-                      className="mb-2 w-full rounded-3xl border border-neutral-700 px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                      placeholder="Enter email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                    <label className="mb-1 block text-xs">Password</label>
-                    <input
-                      type="password"
-                      className="mb-2 w-full rounded-3xl border border-neutral-700 px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                      placeholder="Enter password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  {error && (
-                    <div className="mb-2 text-center text-xs text-red-400">
-                      {error}
-                    </div>
-                  )}
-                  {success && (
-                    <div className="mb-2 text-center text-xs text-emerald-400">
-                      {success}
-                    </div>
-                  )}
-                  <InterstateButton
-                    type="submit"
-                    fullWidth
-                    loading={loading}
-                    className="mb-3"
-                  >
-                    Sign Up
-                  </InterstateButton>
-                  <div className="mt-3 text-center text-xs text-neutral-400">
-                    Already have an account?{" "}
-                    <button
-                      className="h-auto border-none bg-transparent px-0 py-0 text-emerald-400 shadow-none hover:underline"
-                      onClick={() => setMode("login")}
-                    >
-                      Login
-                    </button>
-                  </div>
-                  <div className="mt-4 text-center text-xs text-neutral-500">
-                    By creating an account, you agree to Interstate's{" "}
-                    <a href="#" className="underline">
-                      Privacy Policy
-                    </a>{" "}
-                    and{" "}
-                    <a href="#" className="underline">
-                      Terms of Service
-                    </a>
-                    .
-                  </div>
-                </form>
-              )}
-            </>
-          )}
-          <hr className="mt-4 border-neutral-600" />
-          <div className="mt-4 flex flex-col items-center gap-2">
-            {googleClientId ? (
-              <GoogleOAuthProvider clientId={googleClientId}>
-                <div
-                  className={`mb-1 flex flex-col items-center ${AUTH_BUTTON_WIDTH_CLASS}`}
-                >
-                  {authState === AuthState.Authenticated ? (
-                    <div className="w-full rounded-3xl border border-neutral-700/60 bg-neutral-800/40 px-3 py-3 text-center text-sm text-neutral-200">
-                      Finishing sign-in…
-                    </div>
-                  ) : clientState !== ClientState.Ready ? (
-                    <InterstateButton
-                      type="button"
-                      fullWidth
-                      variant="secondary"
-                      disabled
-                    >
-                      <span className="flex items-center justify-center gap-2 text-sm font-normal">
-                        Preparing login…
-                      </span>
-                    </InterstateButton>
-                  ) : !googleNonce ? (
-                    <InterstateButton
-                      type="button"
-                      fullWidth
-                      variant="secondary"
-                      disabled
-                    >
-                      <span className="flex items-center justify-center gap-2 text-sm font-normal">
-                        {googleLoading
-                          ? "Finishing sign-in…"
-                          : "Generating nonce…"}
-                      </span>
-                    </InterstateButton>
-                  ) : googleLoading ? (
-                    <InterstateButton
-                      type="button"
-                      fullWidth
-                      variant="secondary"
-                      disabled
-                    >
-                      <span className="flex items-center justify-center gap-2 text-sm font-normal">
-                        Signing in with Google…
-                      </span>
-                    </InterstateButton>
-                  ) : (
-                    <div className="flex w-full justify-center">
-                      <GoogleLogin
-                        nonce={googleNonce}
-                        onSuccess={handleGoogleSuccess}
-                        onError={handleGoogleError}
-                        useOneTap={false}
-                        theme="outline"
-                        shape="pill"
-                        text="continue_with"
-                        size="large"
-                        width="400"
-                      />
-                    </div>
-                  )}
+      {ENABLE_EMAIL_AUTH && (
+        <>
+        {mode === 'login' ? (
+          <form onSubmit={handleLoginEmail}>
+            <div className="mb-3">
+              <label className="block text-xs mb-1">Email</label>
+              <input
+                type="email"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              <label className="block text-xs mb-1">Password</label>
+              <input
+                type="password"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+              <div className="flex justify-end mb-2">
+                <InterstateButton variant="secondary" size="sm" type="button" className="text-xs text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto">Forgot password?</InterstateButton>
+              </div>
+            </div>
+            {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
+            {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
+            <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Login</InterstateButton>
+          </form>
+        ) : (
+          <form onSubmit={handleRegister}>
+            <div className="text-xl font-bold mb-4 text-center">Sign Up</div>
+            <div className="mb-3">
+              <label className="block text-xs mb-1">Username</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter username"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                required
+              />
+              <label className="block text-xs mb-1">Email</label>
+              <input
+                type="email"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              <label className="block text-xs mb-1">Password</label>
+              <input
+                type="password"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
+            {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
+            <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Sign Up</InterstateButton>
+            <div className="text-center text-xs mt-3 text-neutral-400">
+              Already have an account?{' '}
+              <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
+            </div>
+            <div className="text-xs text-neutral-500 mt-4 text-center">
+              By creating an account, you agree to Interstate's{' '}
+              <a href="#" className="underline">Privacy Policy</a> and{' '}
+              <a href="#" className="underline">Terms of Service</a>.
+            </div>
+          </form>
+        )}
+        </>
+      )}
+      <hr  className="mt-4 border-neutral-600"/>
+      <div className="flex flex-col items-center gap-2 mt-4">
+        {googleClientId ? (
+          <GoogleOAuthProvider clientId={googleClientId}>
+            <div className={`mb-1 flex flex-col items-center ${AUTH_BUTTON_WIDTH_CLASS}`}>
+              {authState === AuthState.Authenticated ? (
+                <div className="w-full rounded-3xl border border-neutral-700/60 bg-neutral-800/40 px-3 py-3 text-center text-sm text-neutral-200">
+                  Finishing sign-in…
                 </div>
-              </GoogleOAuthProvider>
-            ) : (
-              <InterstateButton
+              ) : clientState !== ClientState.Ready ? (
+                <InterstateButton type="button" fullWidth variant="secondary" disabled>
+                  <span className="flex items-center justify-center gap-2 font-normal text-sm">
+                    Preparing login…
+                  </span>
+                </InterstateButton>
+              ) : !googleNonce ? (
+                <InterstateButton type="button" fullWidth variant="secondary" disabled>
+                  <span className="flex items-center justify-center gap-2 font-normal text-sm">
+                    {googleLoading ? 'Finishing sign-in…' : 'Generating nonce…'}
+                  </span>
+                </InterstateButton>
+              ) : googleLoading ? (
+                <InterstateButton type="button" fullWidth variant="secondary" disabled>
+                  <span className="flex items-center justify-center gap-2 font-normal text-sm">
+                    Signing in with Google…
+                  </span>
+                </InterstateButton>
+              ) : (
+                <div className="w-full flex justify-center">
+                  <GoogleLogin
+                    nonce={googleNonce}
+                    onSuccess={handleGoogleSuccess}
+                    onError={handleGoogleError}
+                    useOneTap={false}
+                    theme="outline"
+                    shape="pill"
+                    text="continue_with"
+                    size="large"
+                    width="400"
+                  />
+                </div>
+              )}
+            </div>
+          </GoogleOAuthProvider>
+        ) : (
+          <InterstateButton type="button" fullWidth variant="secondary" disabled className={AUTH_BUTTON_WIDTH_CLASS}>
+            <span className="flex items-center justify-center gap-2 font-normal text-sm">
+              Google login not configured
+            </span>
+          </InterstateButton>
+        )}
+
+      </div>
+
+      {(walletError || discoveryWalletError) && <div className="text-xs text-red-400 mt-4 text-center">{walletError || discoveryWalletError}</div>}
+
+      {/* Wallet list — shown directly, no toggle */}
+      {allWallets.length > 0 && (
+        <div className={`mt-4 ${AUTH_BUTTON_WIDTH_CLASS}`}>
+          <div className="text-xs text-neutral-500 mb-2 font-medium">Sign in with wallet</div>
+          <div className="space-y-1.5 max-h-[35vh] overflow-y-auto pr-1">
+            {allWallets.map((w) => (
+              <button
+                key={w.id}
                 type="button"
-                fullWidth
-                variant="secondary"
-                disabled
-                className={AUTH_BUTTON_WIDTH_CLASS}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 ${activeWalletId === w.id ? 'opacity-50 cursor-not-allowed' : ''} ${activeWalletId && activeWalletId !== w.id ? 'opacity-30 pointer-events-none' : ''}`}
+                onClick={() => {
+                  setGoogleLoading(false);
+                  handleWalletLogin(w);
+                }}
+                disabled={!!activeWalletId}
               >
-                <span className="flex items-center justify-center gap-2 text-sm font-normal">
-                  Google login not configured
-                </span>
-              </InterstateButton>
-            )}
+                <img
+                  src={w.icon}
+                  alt=""
+                  className="w-5 h-5 rounded-full shrink-0"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+                <span className="font-medium text-sm">{w.name}</span>
+                {activeWalletId === w.id && (
+                  <span className="ml-auto text-xs text-yellow-400">Connecting...</span>
+                )}
+              </button>
+            ))}
           </div>
-
-          {(walletError || discoveryWalletError) && (
-            <div className="mt-4 text-center text-xs text-red-400">
-              {walletError || discoveryWalletError}
-            </div>
-          )}
-
-          {/* Wallet list — shown directly, no toggle */}
-          {allWallets.length > 0 && (
-            <div className={`mt-4 ${AUTH_BUTTON_WIDTH_CLASS}`}>
-              <div className="mb-2 text-xs font-medium text-neutral-500">
-                Sign in with wallet
-              </div>
-              <div className="max-h-[35vh] space-y-1.5 overflow-y-auto pr-1">
-                {allWallets.map((w) => (
-                  <button
-                    key={w.id}
-                    type="button"
-                    className={`flex w-full items-center gap-3 rounded-lg border border-neutral-600/50 bg-neutral-700/50 p-3 transition-colors hover:border-neutral-500/50 hover:bg-neutral-600/50 ${activeWalletId === w.id ? "cursor-not-allowed opacity-50" : ""} ${activeWalletId && activeWalletId !== w.id ? "pointer-events-none opacity-30" : ""}`}
-                    onClick={() => {
-                      setGoogleLoading(false);
-                      handleWalletLogin(w);
-                    }}
-                    disabled={!!activeWalletId}
-                  >
-                    <img
-                      src={w.icon}
-                      alt=""
-                      className="h-5 w-5 shrink-0 rounded-full"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                    <span className="text-sm font-medium">{w.name}</span>
-                    {activeWalletId === w.id && (
-                      <span className="ml-auto text-xs text-yellow-400">
-                        Connecting...
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+        </div>
+      )}
         </>
       )}
     </InterstatePopout>

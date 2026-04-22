@@ -1,6 +1,5 @@
-const isDev = process.env.NODE_ENV !== "production";
+const isDev = process.env.NODE_ENV !== 'production';
 
-import posthog from "posthog-js";
 import React, {
   useEffect,
   useState,
@@ -48,6 +47,7 @@ import BlacklistModal from "../components/BlacklistModal";
 import { AiOutlineQuestionCircle } from "react-icons/ai";
 import { BsBookmarkX, BsLayoutThreeColumns } from "react-icons/bs";
 import { CiSettings } from "react-icons/ci";
+import posthog from "posthog-js";
 
 interface LaunchpadToken {
   mint: string;
@@ -121,11 +121,6 @@ export default function PulsePage() {
     "new" | "final-stretch" | "migrated"
   >("new");
 
-  const handleTabSwitch = (tab: "new" | "final-stretch" | "migrated") => {
-    setActiveTab(tab);
-    posthog.capture("pulse_tab_switched", { tab });
-  };
-
   // Updates modal state
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
 
@@ -174,13 +169,12 @@ export default function PulsePage() {
     if (router.query.chain) {
       const chainFromQuery = router.query.chain as string;
       if (chainFromQuery !== currentChain) {
-        isDev &&
-          console.log(
-            "[Pulse] Chain changed from router:",
-            currentChain,
-            "->",
-            chainFromQuery,
-          );
+        isDev && console.log(
+          "[Pulse] Chain changed from router:",
+          currentChain,
+          "->",
+          chainFromQuery,
+        );
         setCurrentChain(chainFromQuery);
       }
     }
@@ -193,13 +187,12 @@ export default function PulsePage() {
     const chainFromUrl = urlParams.get("chain");
     // Only update if there's an explicit chain in the URL
     if (chainFromUrl && chainFromUrl !== currentChain) {
-      isDev &&
-        console.log(
-          "[Pulse] Chain changed from URL:",
-          currentChain,
-          "->",
-          chainFromUrl,
-        );
+      isDev && console.log(
+        "[Pulse] Chain changed from URL:",
+        currentChain,
+        "->",
+        chainFromUrl,
+      );
       setCurrentChain(chainFromUrl);
     }
   }, [router.asPath, router.isReady, currentChain]);
@@ -212,13 +205,12 @@ export default function PulsePage() {
   const isSolanaRoute = chain === "sol"; // Only Solana if explicitly set
 
   // Debug logging for chain state (dev only)
-  isDev &&
-    console.log("[Pulse] Chain state:", {
-      currentChain,
-      chain,
-      isMonadRoute,
-      isSolanaRoute,
-    });
+  isDev && console.log("[Pulse] Chain state:", {
+    currentChain,
+    chain,
+    isMonadRoute,
+    isSolanaRoute,
+  });
   const chainButtonBase =
     "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.03] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
   const solanaButtonClasses = `${chainButtonBase} ${
@@ -298,15 +290,15 @@ export default function PulsePage() {
         switch (event.key) {
           case "1":
             event.preventDefault();
-            handleTabSwitch("new");
+            setActiveTab("new");
             break;
           case "2":
             event.preventDefault();
-            handleTabSwitch("final-stretch");
+            setActiveTab("final-stretch");
             break;
           case "3":
             event.preventDefault();
-            handleTabSwitch("migrated");
+            setActiveTab("migrated");
             break;
         }
       }
@@ -325,30 +317,25 @@ export default function PulsePage() {
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
+      if (document.visibilityState === 'hidden') {
         hiddenAtRef.current = Date.now();
-      } else if (document.visibilityState === "visible") {
-        const away =
-          hiddenAtRef.current > 0 ? Date.now() - hiddenAtRef.current : 0;
+      } else if (document.visibilityState === 'visible') {
+        const away = hiddenAtRef.current > 0 ? Date.now() - hiddenAtRef.current : 0;
         hiddenAtRef.current = 0;
 
         if (away > STALE_TAB_THRESHOLD_MS && !isMonadRoute) {
-          isDev &&
-            console.log(
-              `[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`,
-            );
+          isDev && console.log(`[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`);
 
           // Don't clear localStorage caches — let React Query's placeholderData
           // keep showing the last good data while refetch is in flight.
           // The queryFn naturally overwrites localStorage on success.
-          queryClient.invalidateQueries({ queryKey: ["tokens"] });
+          queryClient.invalidateQueries({ queryKey: ['tokens'] });
         }
       }
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isMonadRoute, queryClient]);
 
   // React Query hooks - instant cache
@@ -411,9 +398,9 @@ export default function PulsePage() {
   // Synchronous localStorage hydration — eliminates empty-frame flash on remount
   // (~21KB total parse cost is <1ms, negligible vs the visual glitch it prevents)
   const [monadNew, setMonadNew] = useState<any[]>(() => {
-    if (typeof window === "undefined") return [];
+    if (typeof window === 'undefined') return [];
     try {
-      const cached = localStorage.getItem("cached_monad_new_tokens");
+      const cached = localStorage.getItem('cached_monad_new_tokens');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Date.now() < parsed.expiresAt) return parsed.data || [];
@@ -423,9 +410,9 @@ export default function PulsePage() {
   });
   const [monadNewTick, setMonadNewTick] = useState(0);
   const [monadFinalStretch, setMonadFinalStretch] = useState<any[]>(() => {
-    if (typeof window === "undefined") return [];
+    if (typeof window === 'undefined') return [];
     try {
-      const cached = localStorage.getItem("cached_monad_final_stretch_tokens");
+      const cached = localStorage.getItem('cached_monad_final_stretch_tokens');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Date.now() < parsed.expiresAt) return parsed.data || [];
@@ -435,9 +422,9 @@ export default function PulsePage() {
   });
   const [monadFinalStretchTick, setMonadFinalStretchTick] = useState(0);
   const [monadMigrated, setMonadMigrated] = useState<any[]>(() => {
-    if (typeof window === "undefined") return [];
+    if (typeof window === 'undefined') return [];
     try {
-      const cached = localStorage.getItem("cached_monad_migrated_tokens");
+      const cached = localStorage.getItem('cached_monad_migrated_tokens');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Date.now() < parsed.expiresAt) return parsed.data || [];
@@ -610,13 +597,12 @@ export default function PulsePage() {
 
     const cacheValid = loadFromCache();
 
-    isDev &&
-      console.log(
-        "[Pulse] Fetching Monad data for chain=monad",
-        cacheValid
-          ? "(cache valid, refreshing in background)"
-          : "(no cache, fetching now)",
-      );
+    isDev && console.log(
+      "[Pulse] Fetching Monad data for chain=monad",
+      cacheValid
+        ? "(cache valid, refreshing in background)"
+        : "(no cache, fetching now)",
+    );
 
     const fetchMonadData = async () => {
       try {
@@ -626,8 +612,7 @@ export default function PulsePage() {
         const cacheTTL = 5 * 60 * 1000; // 5 minutes
 
         // Fetch new pairs - call backend directly (Redis cache enabled)
-        isDev &&
-          console.log("[Monad] Fetching new pairs directly from backend...");
+        isDev && console.log("[Monad] Fetching new pairs directly from backend...");
         const newRes = await fetch(`${monadServiceUrl}/v1/pulse/new?limit=35`, {
           cache: "no-store",
           headers: { Accept: "application/json" },
@@ -662,10 +647,9 @@ export default function PulsePage() {
             console.warn("[Monad] Failed to cache new tokens:", error);
           }
 
-          isDev &&
-            console.log(
-              `[Monad] Fetched ${filteredNew.length} new tokens from backend (Redis cache)`,
-            );
+          isDev && console.log(
+            `[Monad] Fetched ${filteredNew.length} new tokens from backend (Redis cache)`,
+          );
         } else {
           console.error(
             `[Monad] ❌ Failed to fetch new pairs: ${newRes.status}`,
@@ -673,10 +657,9 @@ export default function PulsePage() {
         }
 
         // Fetch final stretch tokens - call backend directly (Redis cache enabled)
-        isDev &&
-          console.log(
-            "[Monad] Fetching final stretch tokens directly from backend...",
-          );
+        isDev && console.log(
+          "[Monad] Fetching final stretch tokens directly from backend...",
+        );
         const finalStretchRes = await fetch(
           `${monadServiceUrl}/v1/pulse/final-stretch?limit=35`,
           {
@@ -718,17 +701,15 @@ export default function PulsePage() {
             );
           }
 
-          isDev &&
-            console.log(
-              `[Monad] Fetched ${filteredFinalStretch.length} final stretch tokens from backend (Redis cache)`,
-            );
+          isDev && console.log(
+            `[Monad] Fetched ${filteredFinalStretch.length} final stretch tokens from backend (Redis cache)`,
+          );
         }
 
         // Fetch migrated tokens - call backend directly (Redis cache enabled)
-        isDev &&
-          console.log(
-            "[Monad] Fetching migrated tokens directly from backend...",
-          );
+        isDev && console.log(
+          "[Monad] Fetching migrated tokens directly from backend...",
+        );
         const migratedRes = await fetch(
           `${monadServiceUrl}/v1/pulse/migrated?limit=35`,
           {
@@ -767,10 +748,9 @@ export default function PulsePage() {
             console.warn("[Monad] Failed to cache migrated tokens:", error);
           }
 
-          isDev &&
-            console.log(
-              `[Monad] Fetched ${filteredMigrated.length} migrated tokens from backend (Redis cache)`,
-            );
+          isDev && console.log(
+            `[Monad] Fetched ${filteredMigrated.length} migrated tokens from backend (Redis cache)`,
+          );
         } else {
           console.error(
             `[Monad] ❌ Failed to fetch migrated tokens: ${migratedRes.status}`,
@@ -926,12 +906,8 @@ export default function PulsePage() {
       return monadNew.length === 0 && monadNewTick === 0;
     }
     // For Solana: stop loading if ANY data source has delivered data
-    const hasHttpData =
-      tokens.length > 0 || (launchpadData?.new?.length ?? 0) > 0;
-    const hasWsData =
-      wsNewTokens.length > 0 ||
-      wsFinalStretchTokens.length > 0 ||
-      wsMigratedTokens.length > 0;
+    const hasHttpData = tokens.length > 0 || (launchpadData?.new?.length ?? 0) > 0;
+    const hasWsData = wsNewTokens.length > 0 || wsFinalStretchTokens.length > 0 || wsMigratedTokens.length > 0;
     const hasCachedData =
       _lastSolanaTokens.newPairs.length > 0 ||
       _lastSolanaTokens.finalStretch.length > 0 ||
@@ -1465,33 +1441,18 @@ export default function PulsePage() {
 
   // Write to module-level Solana cache when data is present
   if (!isMonadRoute) {
-    if (enrichedNewPairsToShow.length > 0)
-      _lastSolanaTokens.newPairs = enrichedNewPairsToShow;
-    if (enrichedFinalStretch.length > 0)
-      _lastSolanaTokens.finalStretch = enrichedFinalStretch;
-    if (enrichedMigrated.length > 0)
-      _lastSolanaTokens.migrated = enrichedMigrated;
+    if (enrichedNewPairsToShow.length > 0) _lastSolanaTokens.newPairs = enrichedNewPairsToShow;
+    if (enrichedFinalStretch.length > 0)   _lastSolanaTokens.finalStretch = enrichedFinalStretch;
+    if (enrichedMigrated.length > 0)       _lastSolanaTokens.migrated = enrichedMigrated;
   }
 
   // Fall back to cached data when hooks haven't resolved yet (Frame 0 on remount)
-  const displayNewPairs =
-    !isMonadRoute &&
-    enrichedNewPairsToShow.length === 0 &&
-    _lastSolanaTokens.newPairs.length > 0
-      ? _lastSolanaTokens.newPairs
-      : enrichedNewPairsToShow;
-  const displayFinalStretch =
-    !isMonadRoute &&
-    enrichedFinalStretch.length === 0 &&
-    _lastSolanaTokens.finalStretch.length > 0
-      ? _lastSolanaTokens.finalStretch
-      : enrichedFinalStretch;
-  const displayMigrated =
-    !isMonadRoute &&
-    enrichedMigrated.length === 0 &&
-    _lastSolanaTokens.migrated.length > 0
-      ? _lastSolanaTokens.migrated
-      : enrichedMigrated;
+  const displayNewPairs = (!isMonadRoute && enrichedNewPairsToShow.length === 0 && _lastSolanaTokens.newPairs.length > 0)
+    ? _lastSolanaTokens.newPairs : enrichedNewPairsToShow;
+  const displayFinalStretch = (!isMonadRoute && enrichedFinalStretch.length === 0 && _lastSolanaTokens.finalStretch.length > 0)
+    ? _lastSolanaTokens.finalStretch : enrichedFinalStretch;
+  const displayMigrated = (!isMonadRoute && enrichedMigrated.length === 0 && _lastSolanaTokens.migrated.length > 0)
+    ? _lastSolanaTokens.migrated : enrichedMigrated;
 
   // MonadTable debug useEffect removed — was causing unnecessary work on every data change
 
@@ -1513,47 +1474,40 @@ export default function PulsePage() {
         <meta name="description" content="Token tracking dashboard" />
       </Head>
       <div className="flex h-screen flex-col overflow-hidden bg-[#050608] text-neutral-100">
-        <div className="relative z-[10000]">
-          <Header />
-        </div>
-        <div className="min-h-0 flex-1 p-1 pb-7 sm:p-1.5 sm:pb-7">
+        <div className="relative z-[10000]"><Header /></div>
+        <div className="flex-1 min-h-0 p-1 pb-7 sm:p-1.5 sm:pb-7">
           <DockedPanelMarginWrapper>
-            <div
-              className="relative flex h-full flex-col overflow-hidden rounded-t-2xl rounded-b-lg border border-white/[0.06]"
-              style={{ backgroundColor: "#0a0b0d" }}
-            >
-              {/* Content */}
-              <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-3 sm:px-1.5">
-                <div className="mb-2">
-                  <div className="mb-1 flex flex-wrap items-center justify-between gap-3 px-2 pt-2">
-                    <div className="flex items-center gap-3">
-                      <h1 className="text-xl font-medium text-white">
-                        Trenches
-                      </h1>
-                      <div className="flex items-center gap-3">
-                        <Link
-                          href="/pulse?chain=sol"
-                          aria-label="View Solana tokens"
-                          className={solanaButtonClasses}
-                        >
-                          <img
-                            src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                            alt="Solana"
-                            className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
-                          />
-                        </Link>
-                        <Link
-                          href="/pulse?chain=monad"
-                          aria-label="View Monad tokens"
-                          className={monadButtonClasses}
-                        >
-                          <img
-                            src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                            alt="Monad"
-                            className="h-7 w-7 rounded-full object-cover"
-                          />
-                        </Link>
-                        {/* <Link
+          <div className="relative flex h-full flex-col overflow-hidden rounded-t-2xl rounded-b-lg border border-white/[0.06]" style={{ backgroundColor: '#0a0b0d' }}>
+            {/* Content */}
+            <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-3 sm:px-1.5">
+          <div className="mb-2">
+            <div className="mb-1 flex flex-wrap gap-3 px-2 pt-2 items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-medium text-white">Trenches</h1>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/pulse?chain=sol"
+                    aria-label="View Solana tokens"
+                    className={solanaButtonClasses}
+                  >
+                    <img
+                      src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                      alt="Solana"
+                      className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
+                    />
+                  </Link>
+                  <Link
+                    href="/pulse?chain=monad"
+                    aria-label="View Monad tokens"
+                    className={monadButtonClasses}
+                  >
+                    <img
+                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                      alt="Monad"
+                      className="h-7 w-7 rounded-full object-cover"
+                    />
+                  </Link>
+                  {/* <Link
                     href="/pulse?chain=bnb"
                     aria-label="View BNB tokens (beta)"
                     className={bnbButtonClasses}
@@ -1563,7 +1517,7 @@ export default function PulsePage() {
                       Beta
                     </span>
                   </Link> */}
-                        {/* <Link
+                  {/* <Link
                     href="/pulse?chain=base"
                     aria-label="View Base tokens (coming soon)"
                     className={baseButtonClasses}
@@ -1577,7 +1531,7 @@ export default function PulsePage() {
                       Soon
                     </span>
                   </Link> */}
-                        {/* <Link
+                  {/* <Link
                     href="/pulse?chain=eth"
                     aria-label="View Ethereum tokens (coming soon)"
                     className={ethButtonClasses}
@@ -1591,114 +1545,106 @@ export default function PulsePage() {
                       Soon
                     </span>
                   </Link> */}
-                      </div>
-                    </div>
-                    {/* Blacklist Button — global, one for all columns */}
-                    <button
-                      className="relative flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
-                      style={{
-                        backgroundColor: "transparent",
-                        color: showBlacklistModal ? "#526fff" : "#9CA3AF",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!showBlacklistModal)
-                          e.currentTarget.style.color = "#E6E7EA";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!showBlacklistModal)
-                          e.currentTarget.style.color = "#9CA3AF";
-                      }}
-                      onClick={() => setShowBlacklistModal(true)}
-                      title="Blacklist"
-                    >
-                      <FaRegEyeSlash size={14} />
-                      {blacklistTotalCount > 0 && (
-                        <span
-                          className="absolute -top-1 -right-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-0.5 text-[8px] font-bold"
-                          style={{ backgroundColor: "#ed3a7a", color: "#fff" }}
-                        >
-                          {blacklistTotalCount > 99
-                            ? "99+"
-                            : blacklistTotalCount}
-                        </span>
-                      )}
-                    </button>
-                    {/* <PulseControlBar className="mb-0.5" /> */}
-                  </div>
-
-                  {/* Tab Navigation - Mobile Only (also when content is narrow due to docked panels) */}
-                  <div className="content-mobile-only mt-3 mb-4 lg:hidden">
-                    <div className="flex w-full gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-1 backdrop-blur-xl">
-                      <button
-                        onClick={() => handleTabSwitch("new")}
-                        className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
-                          activeTab === "new"
-                            ? "bg-[#7FFFC9] text-black"
-                            : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
-                        }`}
-                      >
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span>New</span>
-                          <span
-                            className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
-                              activeTab === "new"
-                                ? "bg-black/15 text-black/90"
-                                : "bg-neutral-800 text-neutral-400"
-                            }`}
-                          >
-                            {displayNewPairs.length}
-                          </span>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => handleTabSwitch("final-stretch")}
-                        className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
-                          activeTab === "final-stretch"
-                            ? "bg-[#7FFFC9] text-black"
-                            : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
-                        }`}
-                      >
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span>Final</span>
-                          <span
-                            className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
-                              activeTab === "final-stretch"
-                                ? "bg-black/15 text-black/90"
-                                : "bg-neutral-800 text-neutral-400"
-                            }`}
-                          >
-                            {displayFinalStretch.length}
-                          </span>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => handleTabSwitch("migrated")}
-                        className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
-                          activeTab === "migrated"
-                            ? "bg-[#7FFFC9] text-black"
-                            : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
-                        }`}
-                      >
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span>Migrated</span>
-                          <span
-                            className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
-                              activeTab === "migrated"
-                                ? "bg-black/15 text-black/90"
-                                : "bg-neutral-800 text-neutral-400"
-                            }`}
-                          >
-                            {displayMigrated.length}
-                          </span>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
                 </div>
+              </div>
+              {/* Blacklist Button — global, one for all columns */}
+              <button
+                className="relative flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
+                style={{
+                  backgroundColor: "transparent",
+                  color: showBlacklistModal ? "#526fff" : "#9CA3AF",
+                }}
+                onMouseEnter={(e) => { if (!showBlacklistModal) e.currentTarget.style.color = "#E6E7EA"; }}
+                onMouseLeave={(e) => { if (!showBlacklistModal) e.currentTarget.style.color = "#9CA3AF"; }}
+                onClick={() => setShowBlacklistModal(true)}
+                title="Blacklist"
+              >
+                <FaRegEyeSlash size={14} />
+                {blacklistTotalCount > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-0.5 text-[8px] font-bold"
+                    style={{ backgroundColor: "#ed3a7a", color: "#fff" }}
+                  >
+                    {blacklistTotalCount > 99 ? "99+" : blacklistTotalCount}
+                  </span>
+                )}
+              </button>
+              {/* <PulseControlBar className="mb-0.5" /> */}
+            </div>
 
-                {false ? ( // isBnbRoute commented out
-                  <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-                    {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
+            {/* Tab Navigation - Mobile Only (also when content is narrow due to docked panels) */}
+            <div className="content-mobile-only mt-3 mb-4 lg:hidden">
+              <div className="w-full flex gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-1">
+                <button
+                  onClick={() => { setActiveTab("new"); posthog.capture("pulse_tab_switched", { tab: "new" }); }}
+                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
+                    activeTab === "new"
+                      ? "bg-[#7FFFC9] text-black"
+                      : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>New</span>
+                    <span
+                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
+                        activeTab === "new"
+                          ? "bg-black/15 text-black/90"
+                          : "bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {displayNewPairs.length}
+                    </span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setActiveTab("final-stretch"); posthog.capture("pulse_tab_switched", { tab: "final-stretch" }); }}
+                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
+                    activeTab === "final-stretch"
+                      ? "bg-[#7FFFC9] text-black"
+                      : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Final</span>
+                    <span
+                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
+                        activeTab === "final-stretch"
+                          ? "bg-black/15 text-black/90"
+                          : "bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {displayFinalStretch.length}
+                    </span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setActiveTab("migrated"); posthog.capture("pulse_tab_switched", { tab: "migrated" }); }}
+                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
+                    activeTab === "migrated"
+                      ? "bg-[#7FFFC9] text-black"
+                      : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Migrated</span>
+                    <span
+                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
+                        activeTab === "migrated"
+                          ? "bg-black/15 text-black/90"
+                          : "bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {displayMigrated.length}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {false ? ( // isBnbRoute commented out
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
               <div className="content-mobile-only lg:hidden">
                 <div className="transition-all duration-300 ease-in-out">
                   {activeTab === "new" && (
@@ -1729,8 +1675,8 @@ export default function PulsePage() {
                 </div>
               </div>
               */}
-                    {/* All tables horizontally - always visible */}
-                    {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+              {/* All tables horizontally - always visible */}
+              {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <BnbTable
                   title="New Pairs"
                   tokens={displayNewPairs as any}
@@ -1750,184 +1696,182 @@ export default function PulsePage() {
                   showBubbleMetrics={false}
                 />
               </div> */}
-                  </div>
-                ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
-                  <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-                    {/* Mobile: Single table based on active tab (also when content narrow) */}
-                    <div className="content-mobile-only flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
-                      <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
-                        {activeTab === "new" && (
-                          <MonadTable
-                            title="New Pairs"
-                            tokens={displayNewPairs}
-                            loading={isLoading}
-                            isFirstOrLast="only"
-                            showBubbleMetrics={false}
-                          />
-                        )}
-                        {activeTab === "final-stretch" && (
-                          <MonadTable
-                            title="Final Stretch"
-                            tokens={displayFinalStretch}
-                            loading={isLoading}
-                            isFirstOrLast="only"
-                            showBubbleMetrics={false}
-                          />
-                        )}
-                        {activeTab === "migrated" && (
-                          <MonadTable
-                            title="Migrated"
-                            tokens={displayMigrated}
-                            loading={isLoading}
-                            isFirstOrLast="only"
-                            showBubbleMetrics={false}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    {/* All tables horizontally - Desktop only (hidden when content narrow) */}
-                    <div className="content-desktop-only hidden min-h-0 w-full flex-1 flex-row gap-3 overflow-hidden lg:flex">
-                      <MonadTable
-                        title="New Pairs"
-                        tokens={displayNewPairs}
-                        loading={isLoading}
-                        isFirstOrLast="first"
-                        showBubbleMetrics={false}
-                        currentChain={currentChain}
-                      />
-                      <MonadTable
-                        title="Final Stretch"
-                        tokens={displayFinalStretch}
-                        loading={isLoading}
-                        showBubbleMetrics={false}
-                        currentChain={currentChain}
-                      />
-                      <MonadTable
-                        title="Migrated"
-                        tokens={displayMigrated}
-                        loading={isLoading}
-                        isFirstOrLast="last"
-                        showBubbleMetrics={false}
-                        currentChain={currentChain}
-                      />
-                    </div>
-                  </div>
-                ) : isLoading ? (
-                  // IMPORTANT: Pass actual tokens even during loading!
-                  // PulseTable has internal cache from WebSocket/IndexedDB that will show
-                  // Passing tokens={[]} would override the cache and show blank screen
-                  <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl">
+            </div>
+          ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              {/* Mobile: Single table based on active tab (also when content narrow) */}
+              <div className="content-mobile-only flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
+                <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
+                  {activeTab === "new" && (
+                    <MonadTable
+                      title="New Pairs"
+                      tokens={displayNewPairs}
+                      loading={isLoading}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                  {activeTab === "final-stretch" && (
+                    <MonadTable
+                      title="Final Stretch"
+                      tokens={displayFinalStretch}
+                      loading={isLoading}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                  {activeTab === "migrated" && (
+                    <MonadTable
+                      title="Migrated"
+                      tokens={displayMigrated}
+                      loading={isLoading}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
+                    />
+                  )}
+                </div>
+              </div>
+              {/* All tables horizontally - Desktop only (hidden when content narrow) */}
+              <div className="content-desktop-only hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
+                <MonadTable
+                  title="New Pairs"
+                  tokens={displayNewPairs}
+                  loading={isLoading}
+                  isFirstOrLast="first"
+                  showBubbleMetrics={false}
+                  currentChain={currentChain}
+                />
+                <MonadTable
+                  title="Final Stretch"
+                  tokens={displayFinalStretch}
+                  loading={isLoading}
+                  showBubbleMetrics={false}
+                  currentChain={currentChain}
+                />
+                <MonadTable
+                  title="Migrated"
+                  tokens={displayMigrated}
+                  loading={isLoading}
+                  isFirstOrLast="last"
+                  showBubbleMetrics={false}
+                  currentChain={currentChain}
+                />
+              </div>
+            </div>
+          ) : isLoading ? (
+            // IMPORTANT: Pass actual tokens even during loading!
+            // PulseTable has internal cache from WebSocket/IndexedDB that will show
+            // Passing tokens={[]} would override the cache and show blank screen
+            <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl">
+              <PulseTable
+                title="New Pairs"
+                tokens={displayNewPairs as any}
+                loading={true}
+                isFirstOrLast="first"
+                showBubbleMetrics={false}
+                currentChain={currentChain}
+              />
+              <PulseTable
+                title="Final Stretch"
+                tokens={displayFinalStretch as any}
+                loading={true}
+                showBubbleMetrics={false}
+                currentChain={currentChain}
+              />
+              <PulseTable
+                title="Migrated"
+                tokens={displayMigrated as any}
+                loading={true}
+                isFirstOrLast="last"
+                showBubbleMetrics={false}
+                currentChain={currentChain}
+              />
+            </div>
+          ) : hasError ? (
+            <div className="py-10 text-center text-red-400">
+              <div className="mb-2 text-xl font-semibold">
+                Error Loading Launchpad Data
+              </div>
+              <div>{launchpadError?.message || "Unknown error"}</div>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-4 rounded bg-emerald-600 px-4 py-2 text-white transition-colors hover:bg-emerald-700"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              {/* Mobile: Single table based on active tab (also when content narrow) */}
+              {/* Per-table loading guard: show skeletons until EACH table's data arrives */}
+              <div className="content-mobile-only flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
+                <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
+                  {activeTab === "new" && (
                     <PulseTable
                       title="New Pairs"
                       tokens={displayNewPairs as any}
-                      loading={true}
-                      isFirstOrLast="first"
+                      loading={displayNewPairs.length === 0}
+                      isFirstOrLast="only"
                       showBubbleMetrics={false}
                       currentChain={currentChain}
                     />
+                  )}
+                  {activeTab === "final-stretch" && (
                     <PulseTable
                       title="Final Stretch"
                       tokens={displayFinalStretch as any}
-                      loading={true}
+                      loading={displayFinalStretch.length === 0}
+                      isFirstOrLast="only"
                       showBubbleMetrics={false}
                       currentChain={currentChain}
                     />
+                  )}
+                  {activeTab === "migrated" && (
                     <PulseTable
                       title="Migrated"
                       tokens={displayMigrated as any}
-                      loading={true}
-                      isFirstOrLast="last"
+                      loading={displayMigrated.length === 0}
+                      isFirstOrLast="only"
                       showBubbleMetrics={false}
                       currentChain={currentChain}
                     />
-                  </div>
-                ) : hasError ? (
-                  <div className="py-10 text-center text-red-400">
-                    <div className="mb-2 text-xl font-semibold">
-                      Error Loading Launchpad Data
-                    </div>
-                    <div>{launchpadError?.message || "Unknown error"}</div>
-                    <button
-                      onClick={() => window.location.reload()}
-                      className="mt-4 rounded bg-emerald-600 px-4 py-2 text-white transition-colors hover:bg-emerald-700"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-                    {/* Mobile: Single table based on active tab (also when content narrow) */}
-                    {/* Per-table loading guard: show skeletons until EACH table's data arrives */}
-                    <div className="content-mobile-only flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
-                      <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
-                        {activeTab === "new" && (
-                          <PulseTable
-                            title="New Pairs"
-                            tokens={displayNewPairs as any}
-                            loading={displayNewPairs.length === 0}
-                            isFirstOrLast="only"
-                            showBubbleMetrics={false}
-                            currentChain={currentChain}
-                          />
-                        )}
-                        {activeTab === "final-stretch" && (
-                          <PulseTable
-                            title="Final Stretch"
-                            tokens={displayFinalStretch as any}
-                            loading={displayFinalStretch.length === 0}
-                            isFirstOrLast="only"
-                            showBubbleMetrics={false}
-                            currentChain={currentChain}
-                          />
-                        )}
-                        {activeTab === "migrated" && (
-                          <PulseTable
-                            title="Migrated"
-                            tokens={displayMigrated as any}
-                            loading={displayMigrated.length === 0}
-                            isFirstOrLast="only"
-                            showBubbleMetrics={false}
-                            currentChain={currentChain}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    {/* Desktop: All tables horizontally (hidden when content narrow) */}
-                    <div className="content-desktop-only hidden min-h-0 w-full flex-1 flex-row gap-3 overflow-hidden lg:flex">
-                      <PulseTable
-                        title="New Pairs"
-                        tokens={displayNewPairs as any}
-                        loading={displayNewPairs.length === 0}
-                        isFirstOrLast="first"
-                        showBubbleMetrics={false}
-                        currentChain={currentChain}
-                      />
-                      <PulseTable
-                        title="Final Stretch"
-                        tokens={displayFinalStretch as any}
-                        loading={displayFinalStretch.length === 0}
-                        showBubbleMetrics={false}
-                        currentChain={currentChain}
-                      />
-                      <PulseTable
-                        title="Migrated"
-                        tokens={displayMigrated as any}
-                        loading={displayMigrated.length === 0}
-                        isFirstOrLast="last"
-                        showBubbleMetrics={false}
-                        currentChain={currentChain}
-                      />
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
+              </div>
+              {/* Desktop: All tables horizontally (hidden when content narrow) */}
+              <div className="content-desktop-only hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
+                <PulseTable
+                  title="New Pairs"
+                  tokens={displayNewPairs as any}
+                  loading={displayNewPairs.length === 0}
+                  isFirstOrLast="first"
+                  showBubbleMetrics={false}
+                  currentChain={currentChain}
+                />
+                <PulseTable
+                  title="Final Stretch"
+                  tokens={displayFinalStretch as any}
+                  loading={displayFinalStretch.length === 0}
+                  showBubbleMetrics={false}
+                  currentChain={currentChain}
+                />
+                <PulseTable
+                  title="Migrated"
+                  tokens={displayMigrated as any}
+                  loading={displayMigrated.length === 0}
+                  isFirstOrLast="last"
+                  showBubbleMetrics={false}
+                  currentChain={currentChain}
+                />
               </div>
             </div>
+          )}
+            </div>
+          </div>
           </DockedPanelMarginWrapper>
-          <div className="relative z-10">
-            <Footer />
+            <div className="relative z-10"><Footer /></div>
           </div>
         </div>
-      </div>
 
       {/* Updates Modal */}
       {showUpdatesModal && user && (
