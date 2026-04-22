@@ -34,6 +34,7 @@ import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import type { PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
 import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 import useNavLayout from '~/hooks/useNavLayout';
+import { checkPolymarketGeoblock, type PolymarketGeoblock } from '../../utils/api';
 
 // Sort tab config
 const SORT_TABS: { id: SortOption; label: string }[] = [
@@ -55,6 +56,38 @@ export default function PredictionsPage() {
   const [dataSource] = useState<PredictionDataSource>('polymarket');
   const [visibleCardCount, setVisibleCardCount] = useState(24);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+  const [geoblockStatus, setGeoblockStatus] = useState<PolymarketGeoblock | null>(null);
+
+  // IP-based geoblock check (UI banner only; backend enforces on trade)
+  // NOTE: backend endpoint can return blocked=false in dev (proxy/localhost IP),
+  // so we do a pure client-side geo check via a free public API. Revert to the
+  // backend-based version below if we ever want a single source of truth.
+  // useEffect(() => {
+  //   checkPolymarketGeoblock()
+  //     .then((res) => { if (res.success) setGeoblockStatus(res.data); })
+  //     .catch((err) => console.warn('[Predictions] Geoblock check failed:', err?.message));
+  // }, []);
+  useEffect(() => {
+    // Try two free CORS-friendly providers in sequence so the label is resilient
+    // to one going down. Always set state on success (no blocklist gate) — the
+    // banner is always visible; this just personalizes the country name.
+    const codeToName = (code: string) => {
+      try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) || code; } catch { return code; }
+    };
+    const apply = (ip: string, code: string) => {
+      if (!code) return;
+      setGeoblockStatus({ allowed: false, blocked: true, ip, country: codeToName(code.toUpperCase()), region: '' });
+    };
+    fetch('https://api.country.is/')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`country.is ${r.status}`)))
+      .then((d: { ip?: string; country?: string }) => apply(d.ip || '', (d.country || '').toUpperCase()))
+      .catch(() =>
+        fetch('https://ipapi.co/json/')
+          .then((r) => r.ok ? r.json() : Promise.reject(new Error(`ipapi ${r.status}`)))
+          .then((d: { ip?: string; country_code?: string }) => apply(d.ip || '', (d.country_code || '').toUpperCase()))
+          .catch((err) => console.warn('[Predictions] Geo check failed:', err?.message)),
+      );
+  }, []);
 
   // Fetch markets
   const {
@@ -214,6 +247,26 @@ export default function PredictionsPage() {
         {/* Header */}
         <div className="relative z-[10000]">
           <Header />
+        </div>
+
+        {/* Restricted regions — flush banner directly under the header (IP-aware label) */}
+        <div
+          className="flex items-center justify-center gap-1.5 py-1.5 relative z-[9999]"
+          style={{
+            backgroundColor: 'rgba(248,113,113,0.08)',
+            borderBottom: '1px solid rgba(248,113,113,0.18)',
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span className="text-[11px] font-medium" style={{ color: '#F87171' }}>
+            {geoblockStatus?.blocked && geoblockStatus.country
+              ? `Trading unavailable in ${geoblockStatus.country}`
+              : 'Trading unavailable in restricted regions'}
+          </span>
         </div>
 
         {/* Navigation — sidebar or top bar based on user preference */}
