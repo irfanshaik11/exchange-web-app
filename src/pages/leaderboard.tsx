@@ -387,9 +387,7 @@ export default function LeaderboardPage() {
                       // in the Your Position bar below.
                       const podiumRank = podiumIdx + 1;
                       const isFirst = podiumRank === 1;
-                      const displayName = entry.isAnonymous
-                        ? "•••••••"
-                        : entry.userName || "---";
+                      const displayName = entry.userName || "User";
                       const initial = (displayName[0] || "?").toUpperCase();
                       const value = getEntryValue(entry);
                       const rankLabel =
@@ -540,11 +538,10 @@ export default function LeaderboardPage() {
                   <div className="flex flex-col gap-3 border-b border-white/[0.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h2 className="text-base font-bold text-white">
-                        Full Standings
+                        Top 10
                       </h2>
                       <p className="text-[11px] text-neutral-500">
-                        {totalEntries.toLocaleString()} traders · updates every
-                        5 min
+                        Updates every 5 min
                       </p>
                     </div>
                     <div className="relative w-full sm:w-64">
@@ -606,9 +603,7 @@ export default function LeaderboardPage() {
                     ) : leaderboardEntries.length > 0 ? (
                       leaderboardEntries.map((entry, idx) => {
                         const pos = (page - 1) * pageSize + idx + 1;
-                        const displayName = entry.isAnonymous
-                          ? "•••••••"
-                          : entry.userName || "---";
+                        const displayName = entry.userName || "User";
                         const initial = (displayName[0] || "?").toUpperCase();
                         const value = getEntryValue(entry);
                         const isPodium = pos <= 3;
@@ -640,8 +635,7 @@ export default function LeaderboardPage() {
                                 {initial}
                               </div>
                               <span className="truncate text-[13px] font-medium text-white">
-                                {entry.isAnonymous ? "" : "@"}
-                                {displayName}
+                                @{displayName}
                               </span>
                             </div>
 

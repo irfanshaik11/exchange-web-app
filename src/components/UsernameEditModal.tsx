@@ -13,6 +13,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { FiX, FiCheck, FiAlertCircle } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { checkUsernameAvailability, updateUsername } from '~/utils/api';
+import { isBotUsername } from '~/utils/botUsernames';
 import { useUser } from './UserContext';
 
 interface UsernameEditModalProps {
@@ -93,7 +94,7 @@ export default function UsernameEditModal({
     }
 
     const reservedWords = ['admin', 'administrator', 'root', 'system', 'interstate', 'support', 'help', 'null', 'undefined'];
-    if (reservedWords.includes(value.toLowerCase())) {
+    if (reservedWords.includes(value.toLowerCase()) || isBotUsername(value)) {
       return { valid: false, error: 'This username is reserved' };
     }
 

@@ -11,6 +11,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { useUserLimit } from "./UserLimitContext";
 import { ApiError } from "../utils/api";
+import { isBotUsername } from "../utils/botUsernames";
 import { FiCheck, FiAlertCircle, FiLoader } from 'react-icons/fi';
 import { useWalletDiscovery, type DiscoveredWallet } from '../hooks/useWalletDiscovery';
 
@@ -143,7 +144,7 @@ const clientState = turnkey?.clientState;
       return { valid: false, error: 'Only letters, numbers, and underscores allowed' };
     }
     const reservedWords = ['admin', 'administrator', 'root', 'system', 'interstate', 'support', 'help', 'null', 'undefined'];
-    if (reservedWords.includes(value.toLowerCase())) {
+    if (reservedWords.includes(value.toLowerCase()) || isBotUsername(value)) {
       return { valid: false, error: 'This username is reserved' };
     }
     return { valid: true, error: null };
