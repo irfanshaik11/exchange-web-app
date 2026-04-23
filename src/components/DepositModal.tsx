@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useCallback,
+} from "react";
 import {
   FaCopy,
   FaTimes,
@@ -80,6 +86,34 @@ const CHAIN_CONFIG: Record<
   },
 };
 
+// Onramper widget is rendered with the user's primary Solana wallet as the
+// destination. The key is a publishable `pk_` that is safe to ship to the
+// client, but keeping it in env lets us rotate without a code change.
+const ONRAMPER_THEME_PARAMS: Record<string, string> = {
+  defaultCrypto: "sol",
+  defaultAmount: "100",
+  themeName: "dark",
+  containerColor: "1a1b20",
+  primaryColor: "18c48c",
+  secondaryColor: "2A2D35",
+  cardColor: "0a0b0f",
+  primaryTextColor: "ffffff",
+  secondaryTextColor: "E6E7EA",
+};
+
+const buildOnramperUrl = (walletAddress: string): string | null => {
+  const apiKey = env.NEXT_PUBLIC_ONRAMPER_API_KEY;
+  if (!apiKey || !walletAddress) return null;
+
+  const url = new URL("https://buy.onramper.com/");
+  url.searchParams.set("apiKey", apiKey);
+  url.searchParams.set("wallets", `sol:${walletAddress}`);
+  for (const [key, value] of Object.entries(ONRAMPER_THEME_PARAMS)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+};
+
 // Helper function to detect chain from transaction signature
 // Monad/EVM transactions start with "0x", Solana uses base58
 const getTransactionChain = (txSignature?: string | null): "monad" | "sol" => {
@@ -126,8 +160,15 @@ const DepositModal: React.FC<DepositModalProps> = ({
   // Derive primary wallet from centralized wallet list
   const primaryWallet = walletList.find((w) => w.isPrimary) ?? walletList[0];
   const primaryWalletAddresses = {
-    solana: contextPrimaryWalletAddresses.solana ?? primaryWallet?.solanaAddress ?? primaryWallet?.address ?? null,
-    ethereum: contextPrimaryWalletAddresses.ethereum ?? primaryWallet?.ethereumAddress ?? null,
+    solana:
+      contextPrimaryWalletAddresses.solana ??
+      primaryWallet?.solanaAddress ??
+      primaryWallet?.address ??
+      null,
+    ethereum:
+      contextPrimaryWalletAddresses.ethereum ??
+      primaryWallet?.ethereumAddress ??
+      null,
   };
   const primaryWalletLabel = primaryWallet?.label ?? null;
   const primaryWalletLoading = walletListLoading;
@@ -190,6 +231,13 @@ const DepositModal: React.FC<DepositModalProps> = ({
         user?.publicKey ||
         "";
 
+  // Memoize so parent re-renders (tab switches, balance polls, copy state, etc.)
+  // don't produce a new URL string and remount the iframe mid-KYC.
+  const onramperUrl = useMemo(
+    () => buildOnramperUrl(depositAddress),
+    [depositAddress],
+  );
+
   useEffect(() => {
     if (!open) return;
     if (!depositAddress) return;
@@ -225,14 +273,17 @@ const DepositModal: React.FC<DepositModalProps> = ({
     onBalanceChange: (oldBalance, newBalance) => {
       const change = newBalance - oldBalance;
       if (change > 0) {
-        toast.success(`Deposit received: +${change.toFixed(4)} ${chainConfig.tokenSymbol}`, {
-          duration: 5000,
-          style: {
-            background: "#1E1F26",
-            color: "#E6E7EA",
-            border: "1px solid #18c48c",
+        toast.success(
+          `Deposit received: +${change.toFixed(4)} ${chainConfig.tokenSymbol}`,
+          {
+            duration: 5000,
+            style: {
+              background: "#1E1F26",
+              color: "#E6E7EA",
+              border: "1px solid #18c48c",
+            },
           },
-        });
+        );
       }
       setIsPollingBalance(false);
     },
@@ -350,7 +401,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
           ? feeData
           : ((feeData as any)?.fee ?? withdrawalFee);
       setWithdrawalFee(fee);
-      
+
       // Extract minimumReserve from API response
       if (typeof feeData === "object" && feeData !== null) {
         const apiMinimumReserve = (feeData as any)?.minimumReserve;
@@ -394,7 +445,10 @@ const DepositModal: React.FC<DepositModalProps> = ({
     // Calculate max with a small buffer to account for floating point precision
     // This ensures the validation will pass
     const precisionBuffer = 0.00001;
-    const maxAmount = Math.max(0, chainBalance - minimumReserve - precisionBuffer);
+    const maxAmount = Math.max(
+      0,
+      chainBalance - minimumReserve - precisionBuffer,
+    );
     // Round down to 4 decimal places to avoid issues
     const roundedMax = Math.floor(maxAmount * 10000) / 10000;
     setWithdrawAmount(roundedMax.toFixed(4));
@@ -575,11 +629,19 @@ const DepositModal: React.FC<DepositModalProps> = ({
       return;
     }
 
-    try {
-      // Construct Onramper widget URL
-      const onramperUrl =
-        "https://buy.onramper.com/?apiKey=pk_prod_01KB0GV0SYGKAC64C5QRJPD5DZ&wallets=sol:Hq6QEefod4MwtyZk13im7AVa4YrCkNLNzr6GpKBG9RUd&defaultCrypto=sol&defaultAmount=100&themeName=dark&containerColor=1a1b20&primaryColor=18c48c&secondaryColor=2A2D35&cardColor=0a0b0f&primaryTextColor=ffffff&secondaryTextColor=E6E7EA";
+    if (!onramperUrl) {
+      toast.error("Onramper is not configured. Please contact support.", {
+        duration: 2000,
+        style: {
+          background: "#1E1F26",
+          color: "#E6E7EA",
+          border: "1px solid #ff6b6b",
+        },
+      });
+      return;
+    }
 
+    try {
       // Open in new window
       const width = 500;
       const height = 700;
@@ -587,7 +649,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
       const top = (window.screen.height - height) / 2;
 
       window.open(
-        onramperUrl.toString(),
+        onramperUrl,
         "Onramper",
         `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`,
       );
@@ -705,16 +767,26 @@ const DepositModal: React.FC<DepositModalProps> = ({
               <div className="space-y-4">
                 {/* Onramper Swap Widget */}
                 <div className="overflow-hidden rounded-3xl border border-[#2A2B33]">
-                  <iframe
-                    src={`https://buy.onramper.com/?apiKey=pk_prod_01KB0GV0SYGKAC64C5QRJPD5DZ&wallets=sol:Hq6QEefod4MwtyZk13im7AVa4YrCkNLNzr6GpKBG9RUd&defaultCrypto=sol&defaultAmount=100&themeName=dark&containerColor=1a1b20&primaryColor=18c48c&secondaryColor=2A2D35&cardColor=0a0b0f&primaryTextColor=ffffff&secondaryTextColor=E6E7EA`}
-                    title="Onramper Swap"
-                    className="h-[600px] w-full border-none bg-[#0a0b0f]"
-                    allow="payment"
-                  />
+                  {onramperUrl ? (
+                    <iframe
+                      src={onramperUrl}
+                      title="Onramper Swap"
+                      className="h-[600px] w-full border-none bg-[#0a0b0f]"
+                      allow="payment"
+                    />
+                  ) : (
+                    <div className="flex h-[600px] w-full items-center justify-center bg-[#0a0b0f] px-6 text-center text-sm text-neutral-400">
+                      {primaryWalletLoading
+                        ? "Loading wallet data…"
+                        : !depositAddress
+                          ? `Add a primary ${tokenSymbol} wallet before swapping.`
+                          : "Onramper is not configured. Please contact support."}
+                    </div>
+                  )}
                 </div>
 
                 {/* Info Box */}
-                <div className="bg-[rgba(59,130,246,0.1)] flex gap-3 rounded-3xl border border-[#3b82f6] p-4">
+                <div className="flex gap-3 rounded-3xl border border-[#3b82f6] bg-[rgba(59,130,246,0.1)] p-4">
                   <div className="mt-0.5 flex-shrink-0">
                     <svg
                       width="20"
@@ -806,19 +878,19 @@ const DepositModal: React.FC<DepositModalProps> = ({
                             {chainBalance.toFixed(4)}
                             <button
                               onClick={handleManualRefresh}
-                              className="ml-1 p-1 rounded-full hover:bg-white/10 transition-colors"
+                              className="ml-1 rounded-full p-1 transition-colors hover:bg-white/10"
                               title="Refresh balance"
                             >
                               <FaSync
                                 size={12}
-                                className={`text-neutral-400 hover:text-white ${isPollingBalance ? 'animate-spin' : ''}`}
+                                className={`text-neutral-400 hover:text-white ${isPollingBalance ? "animate-spin" : ""}`}
                               />
                             </button>
                           </div>
                           <div className="mt-1 flex items-center gap-2 text-xs text-neutral-400">
                             {chainConfig.tokenSymbol} Balance
                             {isPollingBalance && (
-                              <span className="text-[#18c48c] text-[10px]">
+                              <span className="text-[10px] text-[#18c48c]">
                                 • Monitoring for deposits
                               </span>
                             )}
@@ -853,7 +925,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       </div>
 
                       {/* Caution Message */}
-                      <div className="bg-[rgba(217,119,6,0.1)] flex gap-3 rounded-3xl border border-[#d97706] p-4">
+                      <div className="flex gap-3 rounded-3xl border border-[#d97706] bg-[rgba(217,119,6,0.1)] p-4">
                         <div className="mt-0.5 flex-shrink-0">
                           <svg
                             width="20"
@@ -918,7 +990,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       <h3 className="text-lg font-semibold text-white">
                         Buy {tokenSymbol} with Card
                       </h3>
-                      <div className="bg-[rgba(24,196,140,0.15)] flex items-center gap-1.5 rounded-full px-2.5 py-1">
+                      <div className="flex items-center gap-1.5 rounded-full bg-[rgba(24,196,140,0.15)] px-2.5 py-1">
                         <img
                           src="/onramper.svg"
                           alt="Onramper"
@@ -955,7 +1027,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                         <span>Buy {tokenSymbol}</span>
                       </button>
 
-                      <div className="bg-[rgba(59,130,246,0.1)] flex gap-3 rounded-3xl border border-[#3b82f6] p-4">
+                      <div className="flex gap-3 rounded-3xl border border-[#3b82f6] bg-[rgba(59,130,246,0.1)] p-4">
                         <div className="mt-0.5 flex-shrink-0">
                           <svg
                             width="20"
@@ -1080,9 +1152,9 @@ const DepositModal: React.FC<DepositModalProps> = ({
                           </button>
                         </div>
                         <div className="mt-1 text-xs text-neutral-400">
-                          Gas Fee: {withdrawalFee.toFixed(4)} {tokenSymbol} • Min:{" "}
-                          {MIN_WITHDRAWAL} {tokenSymbol} • Max: {MAX_WITHDRAWAL}{" "}
-                          {tokenSymbol}
+                          Gas Fee: {withdrawalFee.toFixed(4)} {tokenSymbol} •
+                          Min: {MIN_WITHDRAWAL} {tokenSymbol} • Max:{" "}
+                          {MAX_WITHDRAWAL} {tokenSymbol}
                         </div>
                       </div>
 
@@ -1138,7 +1210,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       {/* Messages */}
                       {withdrawMessage && (
                         <div
-                          className={`rounded-3xl border p-4 ${withdrawMessage.type === "success" ? "bg-[rgba(24,196,140,0.1)] border-[#18c48c]" : "bg-[rgba(251,146,60,0.1)] border-[#fb923c]"}`}
+                          className={`rounded-3xl border p-4 ${withdrawMessage.type === "success" ? "border-[#18c48c] bg-[rgba(24,196,140,0.1)]" : "border-[#fb923c] bg-[rgba(251,146,60,0.1)]"}`}
                         >
                           <div className="flex gap-3">
                             <div className="flex-shrink-0">
@@ -1160,21 +1232,25 @@ const DepositModal: React.FC<DepositModalProps> = ({
                               {withdrawMessage.text}
                             </div>
                           </div>
-                          {txSignature && (() => {
-                            const txChain = getTransactionChain(txSignature);
-                            const explorer = getExplorerInfo(txChain, txSignature);
-                            return (
-                              <a
-                                href={explorer.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-2 flex items-center gap-1 text-xs text-[#18c48c] transition-opacity hover:opacity-80"
-                              >
-                                View on {explorer.name}{" "}
-                                <FaExternalLinkAlt size={10} />
-                              </a>
-                            );
-                          })()}
+                          {txSignature &&
+                            (() => {
+                              const txChain = getTransactionChain(txSignature);
+                              const explorer = getExplorerInfo(
+                                txChain,
+                                txSignature,
+                              );
+                              return (
+                                <a
+                                  href={explorer.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-2 flex items-center gap-1 text-xs text-[#18c48c] transition-opacity hover:opacity-80"
+                                >
+                                  View on {explorer.name}{" "}
+                                  <FaExternalLinkAlt size={10} />
+                                </a>
+                              );
+                            })()}
                         </div>
                       )}
 
@@ -1198,7 +1274,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       </button>
 
                       {/* Warning */}
-                      <div className="bg-[rgba(217,119,6,0.1)] flex gap-3 rounded-3xl border border-[#d97706] p-4">
+                      <div className="flex gap-3 rounded-3xl border border-[#d97706] bg-[rgba(217,119,6,0.1)] p-4">
                         <div className="mt-0.5 flex-shrink-0">
                           <svg
                             width="20"
@@ -1317,21 +1393,27 @@ const DepositModal: React.FC<DepositModalProps> = ({
                               <div className="text-xs text-neutral-500">
                                 {new Date(tx.createdAt).toLocaleString()}
                               </div>
-                              {tx.txSignature && (() => {
-                                const txChain = getTransactionChain(tx.txSignature);
-                                const explorer = getExplorerInfo(txChain, tx.txSignature);
-                                return (
-                                  <a
-                                    href={explorer.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-2 flex items-center gap-1 text-xs text-[#18c48c] transition-opacity hover:opacity-80"
-                                  >
-                                    View on {explorer.name}{" "}
-                                    <FaExternalLinkAlt size={10} />
-                                  </a>
-                                );
-                              })()}
+                              {tx.txSignature &&
+                                (() => {
+                                  const txChain = getTransactionChain(
+                                    tx.txSignature,
+                                  );
+                                  const explorer = getExplorerInfo(
+                                    txChain,
+                                    tx.txSignature,
+                                  );
+                                  return (
+                                    <a
+                                      href={explorer.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="mt-2 flex items-center gap-1 text-xs text-[#18c48c] transition-opacity hover:opacity-80"
+                                    >
+                                      View on {explorer.name}{" "}
+                                      <FaExternalLinkAlt size={10} />
+                                    </a>
+                                  );
+                                })()}
                             </div>
                           ))}
                         </div>

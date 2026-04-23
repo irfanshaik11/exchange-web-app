@@ -8,6 +8,7 @@ import InterstateButton from "~/components/InterstateButton";
 import Footer from "~/components/Footer";
 import { DockedPanelMarginWrapper } from "~/contexts/DockedPanelContext";
 import { useUser } from "~/components/UserContext";
+import posthog from "posthog-js";
 import {
   fetchReferralCodeForUser,
   fetchReferrals,
@@ -155,6 +156,7 @@ export default function RewardsPage() {
         return;
       }
       await navigator.clipboard.writeText(referralLink);
+      posthog.capture("referral_link_copied", { referral_code: referralCode });
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch (error) {

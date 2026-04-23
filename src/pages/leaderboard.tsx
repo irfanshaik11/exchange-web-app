@@ -19,15 +19,22 @@ import ArenaPageToggle from "~/components/ArenaPageToggle";
 import type { LeaderboardEntry } from "~/utils/arenaApi";
 
 import { GiTrophy } from "react-icons/gi";
+import { FiSearch, FiAlertCircle } from "react-icons/fi";
+
 import {
-  FiSearch,
-  FiChevronLeft,
-  FiChevronRight,
-  FiAlertCircle,
-} from "react-icons/fi";
+  SEASONS,
+  getCurrentSeason,
+  isSeasonEnded,
+  isSeasonLocked,
+  type SeasonKey,
+} from "~/utils/seasons";
+import posthog from "posthog-js";
 
 type LeaderboardType = "points" | "pnl" | "volume";
-type LeaderboardPeriod = "DAILY" | "MONTHLY" | "LIFETIME";
+// Leaderboard period is now always a season. Legacy DAILY/MONTHLY/LIFETIME
+// still serve traffic from the backend during the bake period but are no
+// longer exposed in the UI — tracking cleanup in exchange-backend#256.
+type LeaderboardPeriod = SeasonKey;
 
 // A small hook for debouncing a value by N milliseconds. Used to throttle
 // the search-as-you-type input so every keystroke doesn't fire a fresh
@@ -118,47 +125,44 @@ export default function LeaderboardPage() {
   const { user } = useUser();
   const [mounted, setMounted] = useState(false);
   const [type, setType] = useState<LeaderboardType>("points");
-  const [period, setPeriod] = useState<LeaderboardPeriod>("DAILY");
-  const [page, setPage] = useState(1);
+  // Default to whichever season is currently active. Hardcoding PRESEASON
+  // would become a time-bomb on Apr 30 when Preseason ends; computing at
+  // mount keeps the default accurate across the full season schedule.
+  // Falls back to PRESEASON only if the clock is somehow outside every
+  // season window (shouldn't happen in normal operation).
+  const [period, setPeriod] = useState<LeaderboardPeriod>(
+    () => getCurrentSeason()?.key ?? "PRESEASON",
+  );
   // Uncontrolled input text — debounced below before flowing into the query
   // so every keystroke doesn't fire a fresh backend request.
   const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebouncedValue(searchInput, 300);
-  const pageSize = 50;
+  // Leaderboard caps at top 10 per product direction (Irfan + Hujoe,
+  // Slack Apr 21). Pagination is retired — "your position" row for
+  // users outside top 10 will land with the seasons migration.
+  const pageSize = 10;
+  const TOP_N = 10;
 
   useEffect(() => setMounted(true), []);
 
-  // Reset to the first page whenever the debounced search term changes.
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch]);
-
   const { leaderboard, position, top3 } = useLeaderboardPageData(type, period, {
     limit: pageSize,
-    offset: (page - 1) * pageSize,
+    offset: 0,
     search: debouncedSearch || undefined,
   });
 
+  // Countdown targets the END of the current selected season. Frozen
+  // (past) seasons return null — no "ends in" label to show.
   const nextResetTime = useMemo(() => {
-    if (period === "LIFETIME") return null;
-    const now = new Date();
-    return period === "DAILY"
-      ? new Date(
-          Date.UTC(
-            now.getUTCFullYear(),
-            now.getUTCMonth(),
-            now.getUTCDate() + 1,
-          ),
-        )
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const season = SEASONS.find((s) => s.key === period);
+    if (!season) return null;
+    if (Date.now() >= season.end.getTime()) return null;
+    return season.end;
   }, [period]);
 
   const top3Data: LeaderboardEntry[] = top3.data ?? [];
   const leaderboardEntries: LeaderboardEntry[] =
     leaderboard.data?.entries ?? [];
-  const totalEntries = leaderboard.data?.total ?? 0;
-  const totalPages = Math.ceil(totalEntries / pageSize);
-
   const isInitialLoading =
     leaderboard.isLoading && leaderboardEntries.length === 0;
   const isLeaderboardError = leaderboard.isError;
@@ -299,10 +303,7 @@ export default function LeaderboardPage() {
                         return (
                           <button
                             key={key}
-                            onClick={() => {
-                              setType(key);
-                              setPage(1);
-                            }}
+                            onClick={() => setType(key)}
                             className={`rounded-full px-4 py-2 text-sm transition-all ${
                               active
                                 ? "bg-gradient-to-r from-amber-500 to-yellow-500 font-semibold text-black"
@@ -316,39 +317,63 @@ export default function LeaderboardPage() {
                     </div>
                   </div>
 
-                  {/* Period + countdown */}
+                  {/* Season selector + countdown. Future seasons lock with
+                   * a tooltip explaining when they start. */}
                   <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
                     <div className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1">
-                      {(["DAILY", "MONTHLY", "LIFETIME"] as const).map((p) => {
-                        const active = period === p;
+                      {SEASONS.map((season) => {
+                        const active = period === season.key;
+                        const locked = isSeasonLocked(season.key);
+                        const startLabel = season.start.toLocaleDateString(
+                          undefined,
+                          { month: "short", day: "numeric" },
+                        );
+                        // Explicit aria-label so screen readers get a clear
+                        // phrase instead of "Season 1 lock emoji".
+                        const ariaLabel = locked
+                          ? `${season.label}, locked — begins ${startLabel}`
+                          : season.label;
                         return (
                           <button
-                            key={p}
-                            onClick={() => {
-                              setPeriod(p);
-                              setPage(1);
-                            }}
+                            key={season.key}
+                            onClick={() => { if (!locked) { setPeriod(season.key); posthog.capture("leaderboard_category_changed", { season: season.key }); } }}
+                            disabled={locked}
+                            aria-label={ariaLabel}
+                            title={
+                              locked
+                                ? `${season.label} begins ${startLabel}`
+                                : undefined
+                            }
                             className={`rounded-full px-4 py-1.5 text-xs font-medium tracking-wider uppercase transition-colors ${
                               active
                                 ? "bg-white/[0.1] text-white"
-                                : "text-neutral-500 hover:text-white"
+                                : locked
+                                  ? "cursor-not-allowed text-neutral-700"
+                                  : "text-neutral-500 hover:text-white"
                             }`}
                           >
-                            {p.charAt(0) + p.slice(1).toLowerCase()}
+                            {season.label}
+                            {locked && (
+                              <span aria-hidden="true"> 🔒</span>
+                            )}
                           </button>
                         );
                       })}
                     </div>
-                    {nextResetTime && (
+                    {nextResetTime ? (
                       <div className="flex items-center gap-2 text-[11px] text-neutral-400">
                         <span className="tracking-wider uppercase">
-                          Resets in
+                          Ends in
                         </span>
                         <span className="font-mono text-white tabular-nums">
                           <CountdownInline targetTime={nextResetTime} />
                         </span>
                       </div>
-                    )}
+                    ) : isSeasonEnded(period) ? (
+                      <div className="text-[11px] tracking-wider text-neutral-500 uppercase">
+                        Season ended
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -387,9 +412,7 @@ export default function LeaderboardPage() {
                       // in the Your Position bar below.
                       const podiumRank = podiumIdx + 1;
                       const isFirst = podiumRank === 1;
-                      const displayName = entry.isAnonymous
-                        ? "•••••••"
-                        : entry.userName || "---";
+                      const displayName = entry.userName || "User";
                       const initial = (displayName[0] || "?").toUpperCase();
                       const value = getEntryValue(entry);
                       const rankLabel =
@@ -450,101 +473,14 @@ export default function LeaderboardPage() {
                   </div>
                 )}
 
-                {/* Your Position — tri-state:
-                    • loading  → skeleton pulse
-                    • ranked   → #rank + name + value
-                    • unranked → "Unranked" label + category-specific hint */}
-                {user && (() => {
-                  const isPositionLoading = position.isLoading && !position.data;
-                  const hasRank = !!position.data?.position;
-
-                  // Copy mirrors the Airdrop Genesis voice
-                  // ("Start trading to unlock…") used on airdrop-genesis.tsx.
-                  const unrankedHint = {
-                    points: "Start trading to earn your first Credits",
-                    pnl: "Close a position to appear on the PnL board",
-                    volume: "Start trading to appear on the Volume board",
-                  }[type];
-
-                  return (
-                    <div className="mb-6 flex items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.06] px-5 py-4 backdrop-blur-sm">
-                      <div className="flex min-w-0 items-center gap-4">
-                        {/* Rank badge — amber filled when ranked, neutral
-                            outline when unranked, shimmer when loading. */}
-                        {isPositionLoading ? (
-                          <div className="h-9 w-9 animate-pulse rounded-full border border-white/[0.08] bg-white/[0.04]" />
-                        ) : hasRank ? (
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-xs font-semibold text-amber-400 tabular-nums">
-                            #{position.data!.position}
-                          </div>
-                        ) : (
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.04] text-[13px] font-semibold text-neutral-500">
-                            —
-                          </div>
-                        )}
-
-                        <div className="min-w-0">
-                          <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
-                            {isPositionLoading
-                              ? "Your Position"
-                              : hasRank
-                                ? "Your Position"
-                                : "Unranked"}
-                          </div>
-                          {isPositionLoading ? (
-                            <div className="mt-1 h-4 w-28 animate-pulse rounded bg-white/[0.06]" />
-                          ) : hasRank ? (
-                            <div className="text-sm font-semibold text-white">
-                              @{user.name || "You"}
-                            </div>
-                          ) : (
-                            <>
-                              <div className="text-sm font-semibold text-white">
-                                @{user.name || "You"}
-                              </div>
-                              <div className="mt-0.5 truncate text-[11px] text-neutral-400">
-                                {unrankedHint}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
-                          {categoryLabel}
-                        </div>
-                        {isPositionLoading ? (
-                          <div className="ml-auto mt-1 h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
-                        ) : hasRank ? (
-                          <div
-                            className={`font-mono text-base font-semibold tabular-nums ${getValueColor(
-                              position.data!.value ?? 0,
-                            )}`}
-                          >
-                            {formatValue(position.data!.value ?? 0)}
-                          </div>
-                        ) : (
-                          <div className="font-mono text-base font-semibold tabular-nums text-neutral-500">
-                            —
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
                 {/* Full Standings */}
                 <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm">
                   {/* Toolbar */}
                   <div className="flex flex-col gap-3 border-b border-white/[0.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h2 className="text-base font-bold text-white">
-                        Full Standings
-                      </h2>
+                      <h2 className="text-base font-bold text-white">Top 10</h2>
                       <p className="text-[11px] text-neutral-500">
-                        {totalEntries.toLocaleString()} traders · updates every
-                        5 min
+                        Updates every 5 min
                       </p>
                     </div>
                     <div className="relative w-full sm:w-64">
@@ -604,11 +540,9 @@ export default function LeaderboardPage() {
                         </div>
                       ))
                     ) : leaderboardEntries.length > 0 ? (
-                      leaderboardEntries.map((entry, idx) => {
-                        const pos = (page - 1) * pageSize + idx + 1;
-                        const displayName = entry.isAnonymous
-                          ? "•••••••"
-                          : entry.userName || "---";
+                      leaderboardEntries.slice(0, TOP_N).map((entry, idx) => {
+                        const pos = idx + 1;
+                        const displayName = entry.userName || "User";
                         const initial = (displayName[0] || "?").toUpperCase();
                         const value = getEntryValue(entry);
                         const isPodium = pos <= 3;
@@ -640,8 +574,7 @@ export default function LeaderboardPage() {
                                 {initial}
                               </div>
                               <span className="truncate text-[13px] font-medium text-white">
-                                {entry.isAnonymous ? "" : "@"}
-                                {displayName}
+                                @{displayName}
                               </span>
                             </div>
 
@@ -663,43 +596,94 @@ export default function LeaderboardPage() {
                       </div>
                     )}
                   </div>
-
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between border-t border-white/[0.08] px-5 py-3 text-[11px]">
-                      <div className="text-neutral-500">
-                        Page{" "}
-                        <span className="font-mono font-semibold text-white tabular-nums">
-                          {page}
-                        </span>{" "}
-                        of{" "}
-                        <span className="font-mono text-neutral-400 tabular-nums">
-                          {totalPages}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setPage(Math.max(1, page - 1))}
-                          disabled={page === 1}
-                          className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-white hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          <FiChevronLeft className="h-3 w-3" />
-                          Prev
-                        </button>
-                        <button
-                          onClick={() =>
-                            setPage(Math.min(totalPages, page + 1))
-                          }
-                          disabled={page === totalPages}
-                          className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-white hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          Next
-                          <FiChevronRight className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
+
+                {/* Your Position — only shown when the user is OUTSIDE top 10
+                    (or unranked). Users who are already in the top 10 see
+                    their row inline above and don't need a duplicate below.
+                    Tri-state:
+                    • loading  → skeleton pulse
+                    • ranked (rank > 10) → #rank + name + value
+                    • unranked → "Unranked" label + category-specific hint */}
+                {user &&
+                  (() => {
+                    const isPositionLoading =
+                      position.isLoading && !position.data;
+                    const userRank = position.data?.position ?? null;
+                    const hasRank = userRank !== null;
+                    // Narrow without a non-null assertion — TS follows the
+                    // `userRank !== null` check and narrows to `number`.
+                    const isInTopN = userRank !== null && userRank <= TOP_N;
+
+                    if (isInTopN) return null;
+
+                    const unrankedHint = {
+                      points: "Start trading to earn your first Credits",
+                      pnl: "Close a position to appear on the PnL board",
+                      volume: "Start trading to appear on the Volume board",
+                    }[type];
+
+                    return (
+                      <div className="mt-4 mb-6 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-5 py-4 backdrop-blur-sm">
+                        <div className="flex min-w-0 items-center gap-4">
+                          {isPositionLoading ? (
+                            <div className="h-9 w-9 animate-pulse rounded-full border border-white/[0.08] bg-white/[0.04]" />
+                          ) : hasRank ? (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/15 text-xs font-semibold text-amber-400 tabular-nums">
+                              #{userRank}
+                            </div>
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.04] text-[13px] font-semibold text-neutral-500">
+                              —
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
+                              {hasRank ? "Your Position" : "Unranked"}
+                            </div>
+                            {isPositionLoading ? (
+                              <div className="mt-1 h-4 w-28 animate-pulse rounded bg-white/[0.06]" />
+                            ) : hasRank ? (
+                              <div className="text-sm font-semibold text-white">
+                                @{user.name || "You"}
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-sm font-semibold text-white">
+                                  @{user.name || "You"}
+                                </div>
+                                <div className="mt-0.5 truncate text-[11px] text-neutral-400">
+                                  {unrankedHint}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
+                            {categoryLabel}
+                          </div>
+                          {isPositionLoading ? (
+                            <div className="mt-1 ml-auto h-5 w-20 animate-pulse rounded bg-white/[0.06]" />
+                          ) : hasRank ? (
+                            <div
+                              className={`font-mono text-base font-semibold tabular-nums ${getValueColor(
+                                position.data?.value ?? 0,
+                              )}`}
+                            >
+                              {formatValue(position.data?.value ?? 0)}
+                            </div>
+                          ) : (
+                            <div className="font-mono text-base font-semibold text-neutral-500 tabular-nums">
+                              —
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 {/* FAQs */}
                 <div className="mt-16 mb-6">

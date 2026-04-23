@@ -67,11 +67,7 @@ function PodiumSpot({ entry, position, type }: PodiumSpotProps) {
     3: 'text-amber-600',
   };
 
-  const displayName = entry
-    ? entry.isAnonymous
-      ? '•••••••'
-      : entry.userName
-    : '—';
+  const displayName = entry ? entry.userName || 'User' : '—';
 
   return (
     <div className={`w-32 ${position === 1 ? 'order-2' : position === 2 ? 'order-1' : 'order-3'}`}>
@@ -139,7 +135,7 @@ export function CompactPodium({
       {entries.slice(0, 3).map((entry, index) => {
         const position = index + 1;
         const MedalIcon = MedalIcons[index];
-        const displayName = entry.isAnonymous ? '•••••••' : entry.userName;
+        const displayName = entry.userName || 'User';
 
         return (
           <div
