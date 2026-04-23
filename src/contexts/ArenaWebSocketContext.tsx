@@ -27,7 +27,24 @@ type ArenaEventType =
 
 type ArenaEvent =
   | { type: "arena.stats.updated"; userId: number; data: { points: number; credits: number; cashback: number; rank: string }; ts: number }
-  | { type: "arena.quest.progress"; userId: number; data: { deltas: Array<{ questId: number; percentComplete: number; isCompleted: boolean }> }; ts: number }
+  | {
+      type: "arena.quest.progress";
+      userId: number;
+      data: {
+        deltas: Array<{
+          questId: number;
+          // currentValue + targetValue added 2026-04-23: UI displays integer
+          // `N/M` text from these fields; omitting them left the UI stale
+          // until a full refetch even though the WS event arrived correctly.
+          // Optional in type for back-compat with older backend builds.
+          currentValue?: number;
+          targetValue?: number;
+          percentComplete: number;
+          isCompleted: boolean;
+        }>;
+      };
+      ts: number;
+    }
   | { type: "arena.quest.completed"; userId: number; data: { questId: number }; ts: number }
   | { type: "arena.quest.claimed"; userId: number; data: { questId: number; goldAwarded: number }; ts: number }
   | { type: "arena.key_tweet.claimed"; userId: number; data: { keyTweetId: number; creditsAwarded: number }; ts: number };
@@ -95,7 +112,11 @@ export function ArenaWebSocketProvider({ children }: { children: React.ReactNode
   // Coalesce rapid-fire quest.progress events (high-volume trader edge case).
   // 100 ms trailing debounce: merge all progress deltas received within the
   // window, then apply as a single setQueriesData pass. Matches plan §2d.
-  const progressBufferRef = useRef<Map<number, { percentComplete: number; isCompleted: boolean }>>(new Map());
+  // Buffered quest-progress deltas. Now carries currentValue so the
+  // `N/M` integer text in QuestCard updates live without a refetch.
+  const progressBufferRef = useRef<
+    Map<number, { percentComplete: number; isCompleted: boolean; currentValue?: number; targetValue?: number }>
+  >(new Map());
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flushProgressBuffer = useCallback(() => {
@@ -118,6 +139,11 @@ export function ArenaWebSocketProvider({ children }: { children: React.ReactNode
           if (!d) return q;
           return {
             ...q,
+            // currentValue + targetValue drive the "N/M" UI text. Prefer the
+            // delta's value when present; fall back to the existing cache
+            // value so older backend builds (pre-2026-04-23) still merge cleanly.
+            currentValue: d.currentValue ?? q.currentValue,
+            targetValue: d.targetValue ?? q.targetValue,
             percentComplete: d.percentComplete,
             isCompleted: d.isCompleted,
             completedAt: d.isCompleted && !q.completedAt ? new Date().toISOString() : q.completedAt,
@@ -166,7 +192,12 @@ export function ArenaWebSocketProvider({ children }: { children: React.ReactNode
           // Coalesce via 100 ms trailing debounce.
           const buf = progressBufferRef.current;
           for (const d of msg.data.deltas ?? []) {
-            buf.set(d.questId, { percentComplete: d.percentComplete, isCompleted: d.isCompleted });
+            buf.set(d.questId, {
+              percentComplete: d.percentComplete,
+              isCompleted: d.isCompleted,
+              currentValue: d.currentValue,
+              targetValue: d.targetValue,
+            });
           }
           if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
           progressTimerRef.current = setTimeout(flushProgressBuffer, 100);
