@@ -1,7 +1,8 @@
 const isDev = process.env.NODE_ENV !== 'production';
 
 import { env } from "../env";
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { useRobustWebSocket } from "./useRobustWebSocket";
 
 // Resolve backend URL (exchange-backend)
 function resolveBackendUrl(): string {
@@ -156,90 +157,54 @@ export interface ReferralWebSocketMessage {
 }
 
 /**
- * Hook to connect to referral WebSocket for real-time updates
+ * Hook to connect to referral WebSocket for real-time updates.
+ *
+ * Thin shim over useRobustWebSocket — all lifecycle handling (backoff,
+ * visibility, bfcache, ping/pong, callback stability) lives there. Public
+ * signature preserved so existing consumers (e.g. /rewards page) are
+ * unaffected.
  */
 export function useReferralWebSocket(
   userId: number | null,
   onNewReferral?: (message: ReferralWebSocketMessage) => void,
-  onStatsUpdate?: (stats: ReferralsResponse) => void
+  onStatsUpdate?: (stats: ReferralsResponse) => void,
+  onReconnect?: () => void,
 ) {
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-
-  const connect = useCallback(() => {
-    if (!userId || typeof window === 'undefined') return;
-
-    // Build WebSocket URL from backend URL
+  const url = useMemo(() => {
+    if (!userId || typeof window === "undefined") return null;
     const backendUrl = resolveBackendUrl();
-    const wsProtocol = backendUrl.startsWith('https') ? 'wss' : 'ws';
-    const wsHost = backendUrl.replace(/^https?:\/\//, '');
-    const wsUrl = `${wsProtocol}://${wsHost}/ws/referrals?userId=${userId}`;
+    const wsProtocol = backendUrl.startsWith("https") ? "wss" : "ws";
+    const wsHost = backendUrl.replace(/^https?:\/\//, "");
+    return `${wsProtocol}://${wsHost}/ws/referrals?userId=${userId}`;
+  }, [userId]);
 
-    isDev && console.log('[Referral WS] Connecting to:', wsUrl);
+  const handleMessage = useCallback(
+    (raw: unknown) => {
+      const message = raw as ReferralWebSocketMessage;
+      if (!message || typeof message !== "object" || !("type" in message)) return;
 
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        isDev && console.log('[Referral WS] Connected');
-        setIsConnected(true);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message: ReferralWebSocketMessage = JSON.parse(event.data);
-          isDev && console.log('[Referral WS] Message:', message.type);
-
-          if (message.type === 'new_referral' && onNewReferral) {
-            onNewReferral(message);
-          }
-
-          if (message.type === 'referral_stats' && onStatsUpdate && message.data) {
-            onStatsUpdate({
-              referrals: message.data.referrals || [],
-              totalVolume: message.data.totalVolume || 0,
-              totalReferrals: message.data.totalReferrals || 0,
-            });
-          }
-        } catch (error) {
-          console.error('[Referral WS] Parse error:', error);
-        }
-      };
-
-      ws.onclose = () => {
-        isDev && console.log('[Referral WS] Disconnected');
-        setIsConnected(false);
-        wsRef.current = null;
-
-        // Auto-reconnect after 5 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 5000);
-      };
-
-      ws.onerror = (error) => {
-        console.error('[Referral WS] Error:', error);
-      };
-    } catch (error) {
-      console.error('[Referral WS] Connection error:', error);
-    }
-  }, [userId, onNewReferral, onStatsUpdate]);
-
-  useEffect(() => {
-    connect();
-
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
+      if (message.type === "new_referral" && onNewReferral) {
+        onNewReferral(message);
       }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+
+      if (message.type === "referral_stats" && onStatsUpdate && message.data) {
+        onStatsUpdate({
+          referrals: message.data.referrals || [],
+          totalVolume: message.data.totalVolume || 0,
+          totalReferrals: message.data.totalReferrals || 0,
+        });
       }
-    };
-  }, [connect]);
+    },
+    [onNewReferral, onStatsUpdate],
+  );
+
+  const { isConnected } = useRobustWebSocket({
+    url,
+    enabled: !!userId,
+    onMessage: handleMessage,
+    onReconnect,
+    logTag: "Referral WS",
+  });
 
   return { isConnected };
 }
