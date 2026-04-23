@@ -1,4 +1,5 @@
 // Centralized API client for backend calls related to authentication and trading
+import posthog from "posthog-js";
 import { env } from "../env";
 // Critical Fix #10: Network timeout handling
 import { fetchWithTimeout, isTimeoutError as checkTimeoutError } from "./fetchWithTimeout";
@@ -1243,7 +1244,30 @@ export const executePolymarketOrder = (
       body: params,
       authToken,
     }
-  );
+  ).then((result) => {
+    // Polymarket returns HTTP 200 with { success: false } for rejected orders
+    // (insufficient USDC, order book rejection, etc.). Only emit the event
+    // when the order was actually placed — otherwise conversion funnels get
+    // polluted with failures that look identical to successes.
+    if (result?.success !== false) {
+      try {
+        posthog.capture("prediction_order_submitted", {
+          side: params.side,
+          outcome_side: params.outcomeSide,
+          amount_usdc: params.amountUSDC,
+          amount_tokens: params.amountTokens,
+          price: params.price,
+          order_type: params.orderType,
+          condition_id: params.conditionId,
+          market_id: params.marketId,
+          market_title: params.marketTitle,
+        });
+      } catch {
+        /* posthog not loaded or blocked — do not break trade flow */
+      }
+    }
+    return result;
+  });
 
 /**
  * Get user's actual outcome token balance from Polymarket (real on-chain balance)
