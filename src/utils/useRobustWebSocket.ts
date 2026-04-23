@@ -37,9 +37,17 @@ export type RobustWebSocketOptions = {
   onReconnect?: () => void;
   /** Enabled flag; if false the hook never opens a socket. */
   enabled?: boolean;
-  /** Override ping interval (ms). Default 30_000. */
+  /**
+   * Override ping interval (ms). Default 15_000.
+   *
+   * Kept well under any ~30s idle timeout found on intermediate proxies /
+   * load balancers on the WS path (notably GCP HTTPS LB in front of
+   * backend.interstate.so). A verified prod test on 2026-04-23 showed
+   * connections dying ~30s after last activity at the 30s ping interval;
+   * dropping to 15s keeps the socket live indefinitely.
+   */
   pingIntervalMs?: number;
-  /** Override pong timeout (ms). Default 10_000. */
+  /** Override pong timeout (ms). Default 8_000 (leaves headroom under ping interval). */
   pongTimeoutMs?: number;
   /** Optional tag used in console logs for debugging. */
   logTag?: string;
@@ -54,7 +62,7 @@ function withJitter(ms: number) {
 }
 
 export function useRobustWebSocket(opts: RobustWebSocketOptions): RobustWebSocketState {
-  const { url, enabled = true, pingIntervalMs = 30_000, pongTimeoutMs = 10_000, logTag = "WS" } = opts;
+  const { url, enabled = true, pingIntervalMs = 15_000, pongTimeoutMs = 8_000, logTag = "WS" } = opts;
 
   // Stash callbacks in refs so connection effect doesn't depend on their identity.
   const onMessageRef = useRef(opts.onMessage);
