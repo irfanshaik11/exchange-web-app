@@ -45,6 +45,7 @@ import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCo
 import PagePreloader from '../components/PagePreloader';
 import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
 import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
+import { ArenaWebSocketProvider } from '../contexts/ArenaWebSocketContext';
 import { listenForConfirmationUpdates } from '../utils/tradeToast';
 import { DockedPanelProvider } from '../contexts/DockedPanelContext';
 import { HyperliquidProvider } from '../contexts/HyperliquidContext';
@@ -881,17 +882,19 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                           <FilterProvider>
                             <WalletTrackerProvider>
                               <SolanaPositionWebSocketProvider>
-                                <ReferralAccessGate>
-                                  <DockedPanelProvider>
-                                    <HyperliquidProvider>
-                                      <PagePreloader />
-                                      <PulseBackgroundLoader />
-                                      <ErrorBoundary>
-                                        <Component {...pageProps} />
-                                      </ErrorBoundary>
-                                    </HyperliquidProvider>
-                                  </DockedPanelProvider>
-                                </ReferralAccessGate>
+                                <ArenaWebSocketProvider>
+                                  <ReferralAccessGate>
+                                    <DockedPanelProvider>
+                                      <HyperliquidProvider>
+                                        <PagePreloader />
+                                        <PulseBackgroundLoader />
+                                        <ErrorBoundary>
+                                          <Component {...pageProps} />
+                                        </ErrorBoundary>
+                                      </HyperliquidProvider>
+                                    </DockedPanelProvider>
+                                  </ReferralAccessGate>
+                                </ArenaWebSocketProvider>
                               </SolanaPositionWebSocketProvider>
                             </WalletTrackerProvider>
                           </FilterProvider>

@@ -5,44 +5,30 @@
  * Features: Space background, Honors system, 5-layer referrals, quests.
  */
 
-import React, { useState, useEffect, useRef } from "react";
-import Head from "next/head";
-import Header from "~/components/Header";
-import Footer from "~/components/Footer";
-import { DockedPanelMarginWrapper } from "~/contexts/DockedPanelContext";
-import { useUser } from "~/components/UserContext";
-import {
-  useReferralsPageData,
-  useAllReferrals,
-  useArenaStats,
-} from "~/hooks/useArena";
-import type { ReferralStats, HonorsInfo } from "~/utils/arenaApi";
-import { claimReferralRewards } from "~/utils/arenaApi";
-import UsernameEditModal from "~/components/UsernameEditModal";
-import { toast } from "react-hot-toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import Head from 'next/head';
+import Header from '~/components/Header';
+import Footer from '~/components/Footer';
+import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
+import { useUser } from '~/components/UserContext';
+import { useReferralsPageData, useAllReferrals, useArenaStats, useClaimReferralRewards } from '~/hooks/useArena';
+import type { ReferralStats, HonorsInfo } from '~/utils/arenaApi';
+import { useReferralWebSocket } from '~/utils/referrals';
+import UsernameEditModal from '~/components/UsernameEditModal';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-hot-toast'; // used for inline honors tooltips below — kept separate from the arena-branded toasts
+import posthog from 'posthog-js'; // analytics — added on prod, preserved across merge
 
 // React Icons
-import { GiMedal, GiTrophy, GiCrown, GiCoins } from "react-icons/gi";
-import ArenaPageToggle from "~/components/ArenaPageToggle";
-import RecruiterMilestoneStrip from "~/components/arena/referrals/RecruiterMilestoneStrip";
-import PassthroughCounter from "~/components/arena/referrals/PassthroughCounter";
-import {
-  FiUsers,
-  FiCopy,
-  FiCheck,
-  FiEdit2,
-  FiLock,
-  FiSearch,
-  FiChevronDown,
-  FiChevronLeft,
-  FiChevronRight,
-  FiInfo,
-} from "react-icons/fi";
-import { HiSparkles } from "react-icons/hi";
-import { IoRocketSharp } from "react-icons/io5";
-import { BiUser } from "react-icons/bi";
-import posthog from "posthog-js";
+import { GiMedal, GiTrophy, GiCrown, GiCoins } from 'react-icons/gi';
+import ArenaPageToggle from '~/components/ArenaPageToggle';
+// RecruiterMilestoneStrip + PassthroughCounter imports removed: both JSX sites
+// below are commented out as redundant with existing cards; keeping the imports
+// was dead weight. If these components come back, re-import them.
+import { FiUsers, FiCopy, FiCheck, FiEdit2, FiLock, FiSearch, FiChevronDown, FiChevronLeft, FiChevronRight, FiInfo } from 'react-icons/fi';
+import { HiSparkles } from 'react-icons/hi';
+import { IoRocketSharp } from 'react-icons/io5';
+import { BiUser } from 'react-icons/bi';
 
 // Space background - contained within rounded container (matching Arena)
 const SpaceBackgroundContained = () => (
@@ -192,7 +178,8 @@ export default function ReferralsPage() {
   // State hooks must be defined before any hooks that use them
   const [copied, setCopied] = useState(false);
   const [showAllHonors, setShowAllHonors] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
   const [isUsernameModalOpen, setIsUsernameModalOpen] = useState(false);
@@ -202,48 +189,24 @@ export default function ReferralsPage() {
 
   // Data fetching hooks
   const { stats, honors, quests, refetch } = useReferralsPageData();
-  const { data: allReferrals } = useAllReferrals({
-    limit: itemsPerPage,
-    offset: (currentPage - 1) * itemsPerPage,
-    search: searchQuery || undefined,
-  });
+  const allReferralsOptions = useMemo(
+    () => ({
+      limit: itemsPerPage,
+      offset: (currentPage - 1) * itemsPerPage,
+      search: debouncedSearchQuery || undefined,
+    }),
+    [itemsPerPage, currentPage, debouncedSearchQuery],
+  );
+  const { data: allReferrals } = useAllReferrals(allReferralsOptions);
   const { data: arenaStats } = useArenaStats();
   const queryClient = useQueryClient();
 
-  // Custom claim mutation with Solscan link toast
-  const claimRewardsMutation = useMutation({
-    mutationFn: () => claimReferralRewards(user!.bearerToken),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
-      queryClient.invalidateQueries({ queryKey: ["referrals"] });
-      if (data.success && data.amountClaimed > 0) {
-        toast.success(
-          (t) => (
-            <div className="flex flex-col gap-1">
-              <span className="font-medium">
-                ✅ Claimed {data.amountClaimed.toFixed(4)} SOL!
-              </span>
-              {data.txSignature && (
-                <a
-                  href={`https://solscan.io/tx/${data.txSignature}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-400 underline hover:text-blue-300"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  View on Solscan →
-                </a>
-              )}
-            </div>
-          ),
-          { duration: 8000 },
-        );
-      }
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to claim referral rewards");
-    },
-  });
+  // Use the shared optimistic mutation hook — zeroes out pendingSolRewards
+  // in cache instantly, rolls back on error, shows branded toast via arenaToast.
+  // Previously this page had its own inline mutation without optimistic UI,
+  // which made the button sit in "Claiming..." for the full on-chain SOL
+  // transfer duration (5-30s) even though the balance had already updated.
+  const claimRewardsMutation = useClaimReferralRewards();
 
   // Carousel scroll function
   const scrollHonorsCarousel = (direction: "left" | "right") => {
@@ -260,10 +223,46 @@ export default function ReferralsPage() {
     setMounted(true);
   }, []);
 
-  // Reset page when search query changes
+  // Debounce the raw search input (250 ms) so we don't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Reset page whenever the *debounced* query changes (what actually triggers refetch).
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [debouncedSearchQuery]);
+
+  // Subscribe to real-time referral events. Backend broadcasts new_referral
+  // (someone joined via our code) and referral_stats (cumulative snapshot).
+  // We invalidate rather than setQueryData because the WS payload shape doesn't
+  // match the cache entry shape (see plan §2a for rationale).
+  //
+  // user.id is a string in UserContext; the backend uses numeric ids. The WS
+  // handshake URL needs the numeric form (matching /rewards page), but the
+  // React Query cache keys use whatever we passed as `user?.id` elsewhere on
+  // this page — so we keep both forms.
+  const userIdStr = user?.id ?? null;
+  const userIdNum = user?.id ? Number(user.id) : null;
+  const onNewReferral = useCallback(() => {
+    if (userIdStr == null) return;
+    queryClient.invalidateQueries({ queryKey: ['referrals', 'stats', userIdStr] });
+    queryClient.invalidateQueries({ queryKey: ['referrals', 'all', userIdStr] });
+    queryClient.invalidateQueries({ queryKey: ['referrals', 'honors', userIdStr] });
+  }, [queryClient, userIdStr]);
+  const onStatsUpdate = useCallback(() => {
+    if (userIdStr == null) return;
+    queryClient.invalidateQueries({ queryKey: ['referrals', 'stats', userIdStr] });
+    queryClient.invalidateQueries({ queryKey: ['referrals', 'all', userIdStr] });
+  }, [queryClient, userIdStr]);
+  const onReferralReconnect = useCallback(() => {
+    if (userIdStr == null) return;
+    queryClient.refetchQueries({ queryKey: ['referrals', 'stats', userIdStr] });
+    queryClient.refetchQueries({ queryKey: ['referrals', 'all', userIdStr] });
+    queryClient.refetchQueries({ queryKey: ['referrals', 'honors', userIdStr] });
+  }, [queryClient, userIdStr]);
+  useReferralWebSocket(userIdNum, onNewReferral, onStatsUpdate, onReferralReconnect);
 
   // Pagination calculations
   const totalPages = Math.ceil((allReferrals?.total || 0) / itemsPerPage);
@@ -1338,8 +1337,11 @@ export default function ReferralsPage() {
                                 : "cursor-not-allowed border-emerald-700/30 bg-emerald-900/40 text-emerald-400/70 opacity-50"
                             }`}
                           >
+                            {/* Optimistic update already zeroed pendingSolRewards,
+                                so the in-flight state reflects on-chain
+                                confirmation (~5–30 s), not "still initiating". */}
                             {claimRewardsMutation.isPending
-                              ? "Claiming..."
+                              ? "Confirming…"
                               : "Claim"}
                           </button>
                         </div>
