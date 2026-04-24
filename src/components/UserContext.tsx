@@ -14,12 +14,16 @@ import { useRouter } from "next/router";
 import { getUserById, ApiError, updateUser } from "../utils/api";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 const USER_CACHE_KEY = "codex_user_info_cache";
-import { clearStoredReferralAccess, getStoredReferralCodeHint, clearStoredReferralCodeHint } from "../utils/referralStorage";
+import {
+  clearStoredReferralAccess,
+  getStoredReferralCodeHint,
+  clearStoredReferralCodeHint,
+} from "../utils/referralStorage";
 import { useTurnkey } from "@turnkey/react-wallet-kit";
 import next from "next";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 export interface UserInfo {
   id: string;
@@ -56,7 +60,10 @@ interface UserContextType {
     force?: boolean;
     updateChainBalance?: boolean; // Force update chainBalances[chain] regardless of isPrimaryWallet check
   }) => Promise<{ balance: number; usdBalance: number } | null>;
-  refreshAllBalances: (wallets: Array<{ address: string; chain: string }>, force?: boolean) => Promise<void>;
+  refreshAllBalances: (
+    wallets: Array<{ address: string; chain: string }>,
+    force?: boolean,
+  ) => Promise<void>;
   setUser: (user: UserInfo | null) => void;
   logout: () => void;
   primaryWalletAddresses: {
@@ -70,9 +77,15 @@ interface UserContextType {
   refreshWalletList: (force?: boolean) => Promise<void>;
   selectedWalletIds: { sol: string[]; monad: string[] };
   toggleWalletSelection: (walletId: string, chain?: "sol" | "monad") => void;
-  setSelectedWalletsForChain: (walletIds: string[], chain?: "sol" | "monad") => void;
+  setSelectedWalletsForChain: (
+    walletIds: string[],
+    chain?: "sol" | "monad",
+  ) => void;
   selectAllWalletsForChain: (chain?: "sol" | "monad") => void;
-  selectWalletsWithFunds: (chain?: "sol" | "monad", minimumBalance?: number) => void;
+  selectWalletsWithFunds: (
+    chain?: "sol" | "monad",
+    minimumBalance?: number,
+  ) => void;
   clearSelectedWallets: (chain?: "sol" | "monad") => void;
 }
 
@@ -120,11 +133,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [chainBalances, setChainBalances] = useState<Record<string, number>>({
     sol: 0,
   });
-  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
+    {},
+  );
   const [walletList, setWalletList] = useState<WalletInfo[]>([]);
   const [walletListLoading, setWalletListLoading] = useState(false);
   const MIN_SELECTABLE_BALANCE = 0.00021; // priority fee + safety buffer from pre-transaction check
-  const [selectedWalletIds, setSelectedWalletIds] = useState<{ sol: string[]; monad: string[] }>(() => {
+  const [selectedWalletIds, setSelectedWalletIds] = useState<{
+    sol: string[];
+    monad: string[];
+  }>(() => {
     if (typeof window === "undefined") {
       return { sol: [], monad: [] };
     }
@@ -152,7 +170,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const WALLET_LIST_COOLDOWN_MS = 2000; // 2 seconds cooldown for wallet list fetches
   const normalizeAddressForChain = (
     address?: string | null,
-    chain: "sol" | "monad" = "sol"
+    chain: "sol" | "monad" = "sol",
   ): string => {
     if (!address || typeof address !== "string") return "";
     if (chain === "monad") {
@@ -193,14 +211,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const persistSelectedWallets = useCallback((next: { sol: string[]; monad: string[] }) => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem("walletSelections_v1", JSON.stringify(next));
-    } catch {
-      // ignore storage errors
-    }
-  }, []);
+  const persistSelectedWallets = useCallback(
+    (next: { sol: string[]; monad: string[] }) => {
+      if (typeof window === "undefined") return;
+      try {
+        window.localStorage.setItem(
+          "walletSelections_v1",
+          JSON.stringify(next),
+        );
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [],
+  );
 
   // Keep selected wallet ids in sync with available wallets
   useEffect(() => {
@@ -210,18 +234,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const validSolIds = new Set(
         walletList
           .filter((w) => w.solanaAddress && !w.isArchived)
-          .map((w) => w.id)
+          .map((w) => w.id),
       );
       const validMonadIds = new Set(
         walletList
           .filter((w) => w.ethereumAddress && !w.isArchived)
-          .map((w) => w.id)
+          .map((w) => w.id),
       );
 
       const nextSol = prev.sol.filter((id) => validSolIds.has(id));
       const nextMonad = prev.monad.filter((id) => validMonadIds.has(id));
 
-      if (nextSol.length === prev.sol.length && nextMonad.length === prev.monad.length) {
+      if (
+        nextSol.length === prev.sol.length &&
+        nextMonad.length === prev.monad.length
+      ) {
         return prev;
       }
 
@@ -240,7 +267,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [persistSelectedWallets]
+    [persistSelectedWallets],
   );
 
   const toggleWalletSelection = useCallback(
@@ -257,7 +284,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [persistSelectedWallets]
+    [persistSelectedWallets],
   );
 
   const selectAllWalletsForChain = useCallback(
@@ -267,7 +294,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           ?.filter((w) =>
             chain === "monad"
               ? w.ethereumAddress && !w.isArchived
-              : w.solanaAddress && !w.isArchived
+              : w.solanaAddress && !w.isArchived,
           )
           .map((w) => w.id) || [];
       setSelectedWalletIds((prev) => {
@@ -276,11 +303,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [walletList, persistSelectedWallets]
+    [walletList, persistSelectedWallets],
   );
 
   const selectWalletsWithFunds = useCallback(
-    (chain: "sol" | "monad" = "sol", minimumBalance: number = MIN_SELECTABLE_BALANCE) => {
+    (
+      chain: "sol" | "monad" = "sol",
+      minimumBalance: number = MIN_SELECTABLE_BALANCE,
+    ) => {
       const ids =
         walletList
           ?.filter((w) => {
@@ -301,16 +331,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [walletList, walletBalances, persistSelectedWallets]
+    [walletList, walletBalances, persistSelectedWallets],
   );
 
-  const clearSelectedWallets = useCallback((chain: "sol" | "monad" = "sol") => {
-    setSelectedWalletIds((prev) => {
-      const next = { ...prev, [chain]: [] };
-      persistSelectedWallets(next);
-      return next;
-    });
-  }, [persistSelectedWallets]);
+  const clearSelectedWallets = useCallback(
+    (chain: "sol" | "monad" = "sol") => {
+      setSelectedWalletIds((prev) => {
+        const next = { ...prev, [chain]: [] };
+        persistSelectedWallets(next);
+        return next;
+      });
+    },
+    [persistSelectedWallets],
+  );
 
   useEffect(() => {
     chainBalancesRef.current = chainBalances;
@@ -333,28 +366,31 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const deriveWalletsFromTurnkey = () => {
       isDev && console.log("Deriving wallets from Turnkey:", turnkey?.wallets);
       const accounts = (turnkey?.wallets || []).flatMap((w: any) =>
-        Array.isArray(w?.accounts) ? w.accounts : []
+        Array.isArray(w?.accounts) ? w.accounts : [],
       );
       if (!accounts.length) return null;
 
       const solAccount = accounts.find((acct: any) =>
         typeof acct?.curve === "string"
           ? acct.curve.toUpperCase().includes("ED25519")
-          : !String(acct?.address || "").startsWith("0x")
+          : !String(acct?.address || "").startsWith("0x"),
       );
       const evmAccount = accounts.find((acct: any) =>
         typeof acct?.curve === "string"
           ? acct.curve.toUpperCase().includes("SECP")
-          : String(acct?.address || "").startsWith("0x")
+          : String(acct?.address || "").startsWith("0x"),
       );
 
       const solanaAddress =
-        (typeof solAccount?.address === "string" && solAccount.address.trim().length > 0
+        (typeof solAccount?.address === "string" &&
+        solAccount.address.trim().length > 0
           ? solAccount.address.trim()
-          : typeof solAccount?.publicKey === "string" && solAccount.publicKey.trim().length > 0
-          ? solAccount.publicKey.trim()
-          : null) ?? null;
-      const ethereumAddress = normalizeMonadAddress(evmAccount?.address) || null;
+          : typeof solAccount?.publicKey === "string" &&
+              solAccount.publicKey.trim().length > 0
+            ? solAccount.publicKey.trim()
+            : null) ?? null;
+      const ethereumAddress =
+        normalizeMonadAddress(evmAccount?.address) || null;
 
       return {
         solana: solanaAddress,
@@ -385,7 +421,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setUserState(value);
       persistUser(value);
     },
-    [persistUser]
+    [persistUser],
   );
 
   // Centralized wallet list fetch with debouncing to prevent thousands of calls
@@ -410,7 +446,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!force) {
         const timeSinceLastFetch = Date.now() - lastWalletListFetchRef.current;
         if (timeSinceLastFetch < WALLET_LIST_COOLDOWN_MS) {
-          isDev && console.log(`Wallet list fetch on cooldown, skipping (${timeSinceLastFetch}ms)`);
+          isDev &&
+            console.log(
+              `Wallet list fetch on cooldown, skipping (${timeSinceLastFetch}ms)`,
+            );
           return;
         }
       }
@@ -433,7 +472,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
               "Content-Type": "application/json",
               Authorization: `Bearer ${user.bearerToken}`,
             },
-          }
+          },
         );
 
         if (!res.ok) {
@@ -459,15 +498,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setWalletList(normalizedWallets);
 
           // Also update primary wallet addresses
-          const primary = normalizedWallets.find((w: any) => w.isPrimary) ?? normalizedWallets[0];
+          const primary =
+            normalizedWallets.find((w: any) => w.isPrimary) ??
+            normalizedWallets[0];
           if (primary) {
             const primarySolana =
-              typeof primary?.solanaAddress === "string" && primary.solanaAddress.trim().length > 0
+              typeof primary?.solanaAddress === "string" &&
+              primary.solanaAddress.trim().length > 0
                 ? primary.solanaAddress.trim()
-                : typeof primary?.address === "string" && primary.address.trim().length > 0
-                ? primary.address.trim()
-                : null;
-            const primaryEthereum = normalizeMonadAddress(primary?.ethereumAddress) || null;
+                : typeof primary?.address === "string" &&
+                    primary.address.trim().length > 0
+                  ? primary.address.trim()
+                  : null;
+            const primaryEthereum =
+              normalizeMonadAddress(primary?.ethereumAddress) || null;
 
             setPrimaryWalletAddresses({
               solana: primarySolana,
@@ -482,7 +526,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setWalletListLoading(false);
       }
     },
-    [user?.id, user?.bearerToken]
+    [user?.id, user?.bearerToken],
   );
 
   // Listen for wallets-updated event with debouncing
@@ -509,9 +553,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [refreshWalletList]);
 
   const refreshBalance = useCallback(
-    async (
-      options?: { chain?: string; address?: string; force?: boolean; updateChainBalance?: boolean }
-    ): Promise<{ balance: number; usdBalance: number } | null> => {
+    async (options?: {
+      chain?: string;
+      address?: string;
+      force?: boolean;
+      updateChainBalance?: boolean;
+    }): Promise<{ balance: number; usdBalance: number } | null> => {
       const chain = options?.chain === "monad" ? "monad" : "sol";
       const overrideAddress = options?.address;
       const fallbackAddress =
@@ -520,7 +567,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           : primaryWalletAddresses.ethereum;
       const targetAddress = normalizeAddressForChain(
         overrideAddress || fallbackAddress,
-        chain
+        chain,
       );
 
       if (!targetAddress) return null;
@@ -529,7 +576,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const isPrimaryWallet =
         !overrideAddress ||
         (chain === "sol" && targetAddress === primaryWalletAddresses.solana) ||
-        (chain === "monad" && targetAddress === primaryWalletAddresses.ethereum);
+        (chain === "monad" &&
+          targetAddress === primaryWalletAddresses.ethereum);
 
       if (!options?.force) {
         const lastFetch = lastBalanceFetchRef.current[checkKey];
@@ -548,7 +596,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       // Prevent multiple simultaneous balance checks for the same address
       // force: true bypasses the lock so init effects are never blocked by a competing non-forced fetch
       if (balanceCheckInProgressRef.current[checkKey] && !options?.force) {
-        isDev && console.log(`Balance check already in progress for ${checkKey}`);
+        isDev &&
+          console.log(`Balance check already in progress for ${checkKey}`);
         return null;
       }
 
@@ -558,15 +607,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       try {
         const response = await fetch(
           `/api/get-sol-bal?chain=${encodeURIComponent(
-            chain
-          )}&address=${encodeURIComponent(targetAddress)}`
+            chain,
+          )}&address=${encodeURIComponent(targetAddress)}`,
         );
 
         if (!response.ok) {
           console.warn(
             "Failed to fetch SOL balance:",
             response.status,
-            response.statusText
+            response.statusText,
           );
           return null;
         }
@@ -603,13 +652,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const lastNotified =
             lastNotifiedBalanceRef.current[targetAddress] ?? newBalance;
 
-          isDev && console.log(
-            `Balance check for ${targetAddress}: current=${solBalanceRef.current.toFixed(
-              4
-            )}, new=${newBalance.toFixed(
-              4
-            )}, lastNotified=${lastNotified.toFixed(4)}`
-          );
+          isDev &&
+            console.log(
+              `Balance check for ${targetAddress}: current=${solBalanceRef.current.toFixed(
+                4,
+              )}, new=${newBalance.toFixed(
+                4,
+              )}, lastNotified=${lastNotified.toFixed(4)}`,
+            );
 
           const depositAmount = newBalance - lastNotified;
           const isSignificantIncrease = depositAmount > 0.0001;
@@ -621,32 +671,35 @@ export function UserProvider({ children }: { children: ReactNode }) {
             hasPreviousBalance &&
             notificationsEnabled
           ) {
-            isDev && console.log(
-              `DEPOSIT DETECTED: ${depositAmount.toFixed(
-                4
-              )} SOL (from ${lastNotified.toFixed(
-                4
-              )} to ${newBalance.toFixed(4)})`
-            );
+            isDev &&
+              console.log(
+                `DEPOSIT DETECTED: ${depositAmount.toFixed(
+                  4,
+                )} SOL (from ${lastNotified.toFixed(
+                  4,
+                )} to ${newBalance.toFixed(4)})`,
+              );
             setLastNotifiedBalance((prev) => ({
               ...prev,
               [targetAddress]: newBalance,
             }));
-            isDev && console.log(
-              `Updated lastNotifiedBalance for ${targetAddress} to: ${newBalance.toFixed(
-                4
-              )}`
-            );
+            isDev &&
+              console.log(
+                `Updated lastNotifiedBalance for ${targetAddress} to: ${newBalance.toFixed(
+                  4,
+                )}`,
+              );
           } else if (
             isSignificantIncrease &&
             hasPreviousBalance &&
             !notificationsEnabled
           ) {
-            isDev && console.log(
-              `DEPOSIT DETECTED but notifications disabled: ${depositAmount.toFixed(
-                4
-              )} SOL`
-            );
+            isDev &&
+              console.log(
+                `DEPOSIT DETECTED but notifications disabled: ${depositAmount.toFixed(
+                  4,
+                )} SOL`,
+              );
             setLastNotifiedBalance((prev) => ({
               ...prev,
               [targetAddress]: newBalance,
@@ -657,19 +710,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 ...prev,
                 [targetAddress]: newBalance,
               }));
-              isDev && console.log(
-                `Initialized lastNotifiedBalance for ${targetAddress}: ${newBalance.toFixed(
-                  4
-                )}`
-              );
+              isDev &&
+                console.log(
+                  `Initialized lastNotifiedBalance for ${targetAddress}: ${newBalance.toFixed(
+                    4,
+                  )}`,
+                );
             } else {
               setLastNotifiedBalance((prev) => ({
                 ...prev,
                 [targetAddress]: newBalance,
               }));
-              isDev && console.log(
-                "No deposit detected. Balance unchanged or already notified."
-              );
+              isDev &&
+                console.log(
+                  "No deposit detected. Balance unchanged or already notified.",
+                );
             }
           }
 
@@ -690,31 +745,39 @@ export function UserProvider({ children }: { children: ReactNode }) {
       primaryWalletAddresses.ethereum,
       user?.publicKey,
       notificationsEnabled,
-    ]
+    ],
   );
 
   // Batch refresh all wallet balances using the optimized batch endpoint
   const refreshAllBalances = useCallback(
     async (
       wallets: Array<{ address: string; chain: string }>,
-      force = false
+      force = false,
     ): Promise<void> => {
       if (!wallets || wallets.length === 0) return;
 
       const normalizedWallets = wallets
         .map((wallet) => {
-          const chain: "sol" | "monad" = wallet.chain === "monad" ? "monad" : "sol";
-          const normalizedAddress = normalizeAddressForChain(wallet.address, chain);
+          const chain: "sol" | "monad" =
+            wallet.chain === "monad" ? "monad" : "sol";
+          const normalizedAddress = normalizeAddressForChain(
+            wallet.address,
+            chain,
+          );
           if (!normalizedAddress) return null;
           return { address: normalizedAddress, chain };
         })
-        .filter((wallet): wallet is { address: string; chain: "sol" | "monad" } => Boolean(wallet));
+        .filter(
+          (wallet): wallet is { address: string; chain: "sol" | "monad" } =>
+            Boolean(wallet),
+        );
 
       if (normalizedWallets.length === 0) return;
 
       // Deduplicate addresses per chain
       const seenAddresses = new Set<string>();
-      const uniqueWallets: Array<{ address: string; chain: "sol" | "monad" }> = [];
+      const uniqueWallets: Array<{ address: string; chain: "sol" | "monad" }> =
+        [];
       normalizedWallets.forEach((wallet) => {
         const key = `${wallet.chain}:${wallet.address}`;
         if (seenAddresses.has(key)) return;
@@ -726,7 +789,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!force) {
         const timeSinceLastFetch = Date.now() - lastBatchFetchRef.current;
         if (timeSinceLastFetch < BATCH_FETCH_COOLDOWN_MS) {
-          isDev && console.log(`Batch fetch on cooldown, skipping (${timeSinceLastFetch}ms since last fetch)`);
+          isDev &&
+            console.log(
+              `Batch fetch on cooldown, skipping (${timeSinceLastFetch}ms since last fetch)`,
+            );
           return;
         }
       }
@@ -745,7 +811,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        isDev && console.log(`Batch fetching ${uniqueWallets.length} unique wallet balances...`);
+        isDev &&
+          console.log(
+            `Batch fetching ${uniqueWallets.length} unique wallet balances...`,
+          );
 
         const addressChainMap = new Map<string, "sol" | "monad">();
         uniqueWallets.forEach(({ address, chain }) => {
@@ -787,7 +856,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
           if (!normalizedAddress) continue;
 
-          const { balance } = balanceData as { balance: number; usdBalance: number };
+          const { balance } = balanceData as {
+            balance: number;
+            usdBalance: number;
+          };
           newWalletBalances[normalizedAddress] = balance;
 
           const cacheKey = `${chain}:${normalizedAddress}`;
@@ -801,28 +873,40 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         // Update chainBalances for primary wallets
         const normalizedSolAddress =
-          primaryWalletAddresses.solana?.trim() || primaryWalletAddresses.solana || null;
+          primaryWalletAddresses.solana?.trim() ||
+          primaryWalletAddresses.solana ||
+          null;
         if (normalizedSolAddress && data.balances[normalizedSolAddress]) {
-          const solData = data.balances[normalizedSolAddress] as { balance: number; usdBalance: number };
-          setChainBalances(prev => ({ ...prev, sol: solData.balance }));
+          const solData = data.balances[normalizedSolAddress] as {
+            balance: number;
+            usdBalance: number;
+          };
+          setChainBalances((prev) => ({ ...prev, sol: solData.balance }));
           setSolBalance(solData.balance);
           setUsdcBalance(solData.usdBalance);
         }
 
-        const normalizedMonAddress = normalizeMonadAddress(primaryWalletAddresses.ethereum);
+        const normalizedMonAddress = normalizeMonadAddress(
+          primaryWalletAddresses.ethereum,
+        );
         if (normalizedMonAddress && data.balances[normalizedMonAddress]) {
-          const monadData = data.balances[normalizedMonAddress] as { balance: number };
-          setChainBalances(prev => ({ ...prev, monad: monadData.balance }));
+          const monadData = data.balances[normalizedMonAddress] as {
+            balance: number;
+          };
+          setChainBalances((prev) => ({ ...prev, monad: monadData.balance }));
         }
 
-        isDev && console.log(`Batch fetch complete: ${Object.keys(newWalletBalances).length} balances updated`);
+        isDev &&
+          console.log(
+            `Batch fetch complete: ${Object.keys(newWalletBalances).length} balances updated`,
+          );
       } catch (error) {
         console.error("Failed to batch fetch balances:", error);
       } finally {
         batchFetchInProgressRef.current = false;
       }
     },
-    [primaryWalletAddresses.solana, primaryWalletAddresses.ethereum]
+    [primaryWalletAddresses.solana, primaryWalletAddresses.ethereum],
   );
 
   // Removed redundant balance-fetch effect that raced with initializeAndStartPolling below.
@@ -861,9 +945,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       const userPromise = getUserById(token);
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('getUserById timed out after 15s')), 15000)
+        setTimeout(
+          () => reject(new Error("getUserById timed out after 15s")),
+          15000,
+        ),
       );
-      const { user: fetchedUser } = await Promise.race([userPromise, timeoutPromise]);
+      const { user: fetchedUser } = await Promise.race([
+        userPromise,
+        timeoutPromise,
+      ]);
 
       isDev && console.log("Fetched user from API:", fetchedUser);
       if (fetchedUser) {
@@ -883,42 +973,51 @@ export function UserProvider({ children }: { children: ReactNode }) {
           desiredName.trim().length > 0 &&
           desiredName !== fetchedUser.name;
         isDev && console.log("UPDATED USER --- >", nextUser);
-        if (!hasSyncedProfileRef.current && (needsEmailUpdate || needsNameUpdate) && token) {
+        if (
+          !hasSyncedProfileRef.current &&
+          (needsEmailUpdate || needsNameUpdate) &&
+          token
+        ) {
           try {
             const { user: updatedUser } = await updateUser(
               token,
               needsEmailUpdate ? desiredEmail! : fetchedUser.email,
               needsNameUpdate ? desiredName! : fetchedUser.name,
-              session?.userId || fetchedUser.userId || fetchedUser.id
+              session?.userId || fetchedUser.userId || fetchedUser.id,
             );
             if (updatedUser) {
               nextUser = updatedUser;
             }
             hasSyncedProfileRef.current = true;
           } catch (syncErr) {
-            console.warn("Failed to sync Turnkey user profile to backend", syncErr);
+            console.warn(
+              "Failed to sync Turnkey user profile to backend",
+              syncErr,
+            );
             // Avoid tight retry loops; only retry on next app session
             hasSyncedProfileRef.current = true;
           }
         }
 
-      const normalizedUser = normalizeUserPayload(nextUser) || nextUser;
-      setUser({ bearerToken: token, ...normalizedUser });
+        const normalizedUser = normalizeUserPayload(nextUser) || nextUser;
+        setUser({ bearerToken: token, ...normalizedUser });
 
-      // Clear stored referral code hint after successful login
-      // (referral tracking is now handled by exchange-backend during user creation)
-      const referralCode = getStoredReferralCodeHint();
-      if (referralCode) {
-        clearStoredReferralCodeHint();
-      }
-
+        // Clear stored referral code hint after successful login
+        // (referral tracking is now handled by exchange-backend during user creation)
+        const referralCode = getStoredReferralCodeHint();
+        if (referralCode) {
+          clearStoredReferralCodeHint();
+        }
       } else {
         Cookies.remove("token");
         setUser(null);
       }
     } catch (error) {
       console.error("Failed to refresh user", error);
-      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+      if (
+        error instanceof ApiError &&
+        (error.status === 401 || error.status === 403)
+      ) {
         Cookies.remove("token");
         setUser(null);
       } else {
@@ -936,7 +1035,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             } catch (cacheError) {
               console.warn(
                 "Failed to restore cached user after refresh failure",
-                cacheError
+                cacheError,
               );
             }
           }
@@ -945,7 +1044,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [setUser, turnkeyUser?.userEmail, turnkeyUser?.userName, session?.userId, normalizeUserPayload]);
+  }, [
+    setUser,
+    turnkeyUser?.userEmail,
+    turnkeyUser?.userName,
+    session?.userId,
+    normalizeUserPayload,
+  ]);
 
   const logout = useCallback(() => {
     const doLogout = async () => {
@@ -997,9 +1102,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         import("posthog-js").then(({ default: posthog }) => posthog.reset());
       }
 
-      router.push("/pulse?chain=sol").catch((err) =>
-        console.warn("[logout] Failed to navigate to login", err)
-      );
+      router
+        .push("/pulse?chain=sol")
+        .catch((err) =>
+          console.warn("[logout] Failed to navigate to login", err),
+        );
     };
 
     void doLogout();
@@ -1025,7 +1132,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const address = primaryWalletAddresses.solana || user.publicKey;
           if (!address) return;
 
-          const res = await refreshBalance({ chain: "sol", address, force: true, updateChainBalance: true });
+          const res = await refreshBalance({
+            chain: "sol",
+            address,
+            force: true,
+            updateChainBalance: true,
+          });
 
           if (!res) {
             console.warn("Failed to initialize Solana balance");
@@ -1042,11 +1154,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setSolBalance(currentBalance);
           setUsdcBalance(currentUsdBalance);
 
-          isDev && console.log(
-            `INITIALIZED balance tracking for ${address}: ${currentBalance.toFixed(
-              4
-            )} SOL (lastNotifiedBalance set to ${currentBalance.toFixed(4)})`
-          );
+          isDev &&
+            console.log(
+              `INITIALIZED balance tracking for ${address}: ${currentBalance.toFixed(
+                4,
+              )} SOL (lastNotifiedBalance set to ${currentBalance.toFixed(4)})`,
+            );
 
           setTimeout(() => {
             setNotificationsEnabled(true);
@@ -1058,7 +1171,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // Also initialize Monad/Ethereum balance if available
         const ethAddress = primaryWalletAddresses.ethereum;
         if (ethAddress) {
-          await refreshBalance({ chain: "monad", address: ethAddress, force: true, updateChainBalance: true });
+          await refreshBalance({
+            chain: "monad",
+            address: ethAddress,
+            force: true,
+            updateChainBalance: true,
+          });
         }
       };
 
@@ -1083,7 +1201,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
       };
     }
-  }, [user?.publicKey, primaryWalletAddresses.solana, primaryWalletAddresses.ethereum, refreshBalance]);
+  }, [
+    user?.publicKey,
+    primaryWalletAddresses.solana,
+    primaryWalletAddresses.ethereum,
+    refreshBalance,
+  ]);
 
   // Listen for balance-refresh events dispatched from trade surfaces
   useEffect(() => {
@@ -1091,50 +1214,75 @@ export function UserProvider({ children }: { children: ReactNode }) {
     let debounceTimer: NodeJS.Timeout | null = null;
     const handleBalanceRefresh = (event: Event) => {
       const detail = (event as CustomEvent).detail;
-      const chain = detail?.chain || 'sol';
+      const chain = detail?.chain || "sol";
       if (debounceTimer) clearTimeout(debounceTimer);
+      // Short debounce only coalesces multi-leg dispatches (e.g. multi-wallet trades that fire
+      // several balance-refresh events in quick succession). 500ms was needlessly conservative.
       debounceTimer = setTimeout(() => {
-        refreshBalance({ chain, force: true, updateChainBalance: true }).catch((err) => {
-          console.warn('[UserContext] Failed to refresh balance from event:', err);
-        });
-      }, 500);
+        refreshBalance({ chain, force: true, updateChainBalance: true }).catch(
+          (err) => {
+            console.warn(
+              "[UserContext] Failed to refresh balance from event:",
+              err,
+            );
+          },
+        );
+      }, 75);
     };
-    window.addEventListener('balance-refresh', handleBalanceRefresh);
+    window.addEventListener("balance-refresh", handleBalanceRefresh);
     return () => {
-      window.removeEventListener('balance-refresh', handleBalanceRefresh);
+      window.removeEventListener("balance-refresh", handleBalanceRefresh);
       if (debounceTimer) clearTimeout(debounceTimer);
     };
   }, [user?.publicKey, refreshBalance]);
 
-  // gRPC push: instant SOL balance updates via WebSocket (bypasses 20s cooldown)
+  // gRPC push: instant SOL balance updates via WebSocket (bypasses 20s cooldown).
+  // Must update chainBalances + walletBalances in addition to solBalance because
+  // Header.tsx reads chainBalances.sol as the source of truth — updating only
+  // solBalance leaves the header showing stale data when REST returns pre-finality.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     const handleGrpcBalance = (event: Event) => {
-      const { solBalance: newBal } = (event as CustomEvent).detail || {};
-      if (typeof newBal === 'number' && Number.isFinite(newBal) && newBal >= 0) {
+      const { solBalance: newBal, wallet } =
+        (event as CustomEvent).detail || {};
+      if (
+        typeof newBal === "number" &&
+        Number.isFinite(newBal) &&
+        newBal >= 0
+      ) {
         setSolBalance(newBal);
         solBalanceRef.current = newBal;
+        if (typeof wallet === "string" && wallet.length > 0) {
+          setWalletBalances((prev) => ({ ...prev, [wallet]: newBal }));
+          addressBalanceCacheRef.current[`sol:${wallet}`] = newBal;
+          if (wallet === primaryWalletAddresses.solana) {
+            setChainBalances((prev) => ({ ...prev, sol: newBal }));
+          }
+        } else {
+          // Fallback: no wallet in payload — assume primary
+          setChainBalances((prev) => ({ ...prev, sol: newBal }));
+        }
       }
     };
-    window.addEventListener('solanaBalanceUpdate', handleGrpcBalance);
+    window.addEventListener("solanaBalanceUpdate", handleGrpcBalance);
     return () => {
-      window.removeEventListener('solanaBalanceUpdate', handleGrpcBalance);
+      window.removeEventListener("solanaBalanceUpdate", handleGrpcBalance);
     };
-  }, []);
+  }, [primaryWalletAddresses.solana]);
 
   // Auto-logout when backend returns TOKEN_EXPIRED / INVALID_TOKEN / UNAUTHORIZED
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     let logoutTriggered = false;
     const handleSessionExpired = () => {
       if (logoutTriggered) return;
       logoutTriggered = true;
-      showEnhancedToast('error', 'Session expired. Please log in again.');
+      showEnhancedToast("error", "Session expired. Please log in again.");
       logout();
     };
-    window.addEventListener('auth-session-expired', handleSessionExpired);
+    window.addEventListener("auth-session-expired", handleSessionExpired);
     return () => {
-      window.removeEventListener('auth-session-expired', handleSessionExpired);
+      window.removeEventListener("auth-session-expired", handleSessionExpired);
     };
   }, [logout]);
 
@@ -1184,14 +1332,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       selectAllWalletsForChain,
       selectWalletsWithFunds,
       clearSelectedWallets,
-    ]
+    ],
   );
 
-  return (
-    <UserContext.Provider value={value}>
-      {children}
-    </UserContext.Provider>
-  );
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }
 
 export function useUser() {
