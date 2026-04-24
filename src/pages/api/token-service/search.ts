@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL!;
 
-  const fetchWithTimeout = async (url: string, timeoutMs = 5000) => {
+  const fetchWithTimeout = async (url: string, timeoutMs = 15000) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -52,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const goURL = `${goBase}/v1/search?${params.toString()}`;
     isDev && console.log('[Proxy:search] Using Go service search endpoint:', goURL);
-    const upstream = await fetchWithTimeout(goURL, 5000);
+    const upstream = await fetchWithTimeout(goURL, 15000);
     
     if (upstream.ok) {
       return await tryParseAndSend(upstream);

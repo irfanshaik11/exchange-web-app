@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
-  const fetchWithTimeout = async (url: string, timeoutMs = 5000) => {
+  const fetchWithTimeout = async (url: string, timeoutMs = 15000) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -61,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Use the Monad token service search endpoint
     const monadURL = `${monadTokenServiceUrl}/v1/search?q=${encodeURIComponent(query)}&limit=${limit}`;
     isDev && console.log('[Proxy:search-monad] Using Monad token service search endpoint:', monadURL);
-    const upstream = await fetchWithTimeout(monadURL, 5000);
+    const upstream = await fetchWithTimeout(monadURL, 15000);
     
     if (upstream.ok) {
       return await tryParseAndSend(upstream);
