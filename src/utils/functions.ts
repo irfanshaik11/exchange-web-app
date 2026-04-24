@@ -3,7 +3,7 @@ import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, NATIVE_MINT } from "@solana/spl-token";
 import { ethers } from "ethers";
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 export interface PositionRow {
   tokenAddress: string;
@@ -128,7 +128,11 @@ export async function fetchActivePositions(
 ): Promise<PositionsResult> {
   if (!userId) return { ok: true, data: [] };
   if (!env.NEXT_PUBLIC_BACKEND_URL) {
-    return { ok: false, data: null, error: "NEXT_PUBLIC_BACKEND_URL is not set" };
+    return {
+      ok: false,
+      data: null,
+      error: "NEXT_PUBLIC_BACKEND_URL is not set",
+    };
   }
 
   const controller =
@@ -201,7 +205,9 @@ export async function getTradeHistoryByUser(
       controller ? { signal: controller.signal } : {},
     );
     if (!res.ok) {
-      throw new Error(`Failed to fetch trade history by user: ${res.statusText}`);
+      throw new Error(
+        `Failed to fetch trade history by user: ${res.statusText}`,
+      );
     }
     return res.json();
   } catch (err) {
@@ -228,7 +234,11 @@ export async function fetchTradeActivity(
 ): Promise<TradeActivityResult> {
   if (!userId) return { ok: true, data: [] };
   if (!env.NEXT_PUBLIC_BACKEND_URL) {
-    return { ok: false, data: null, error: "NEXT_PUBLIC_BACKEND_URL is not set" };
+    return {
+      ok: false,
+      data: null,
+      error: "NEXT_PUBLIC_BACKEND_URL is not set",
+    };
   }
 
   const controller =
@@ -356,22 +366,39 @@ export function formatSmartNumber(num: number): string {
   const abs = Math.abs(num);
   if (abs > 0 && abs < 0.01) {
     const str = abs.toFixed(20);
-    const decIdx = str.indexOf('.');
+    const decIdx = str.indexOf(".");
     if (decIdx !== -1) {
       let zeroCount = 0;
-      let sigDigits = '';
+      let sigDigits = "";
       for (let i = decIdx + 1; i < str.length; i++) {
-        if (str[i] === '0') {
+        if (str[i] === "0") {
           zeroCount++;
         } else {
-          sigDigits = str.substring(i, Math.min(i + 4, str.length)).replace(/0+$/, '');
+          sigDigits = str
+            .substring(i, Math.min(i + 4, str.length))
+            .replace(/0+$/, "");
           break;
         }
       }
       if (zeroCount >= 2 && sigDigits) {
-        const subMap: Record<string, string> = { '0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉' };
-        const sub = zeroCount.toString().split('').map(c => subMap[c] || c).join('');
-        return `${num < 0 ? '-' : ''}0.0${sub}${sigDigits}`;
+        const subMap: Record<string, string> = {
+          "0": "₀",
+          "1": "₁",
+          "2": "₂",
+          "3": "₃",
+          "4": "₄",
+          "5": "₅",
+          "6": "₆",
+          "7": "₇",
+          "8": "₈",
+          "9": "₉",
+        };
+        const sub = zeroCount
+          .toString()
+          .split("")
+          .map((c) => subMap[c] || c)
+          .join("");
+        return `${num < 0 ? "-" : ""}0.0${sub}${sigDigits}`;
       }
     }
   }
@@ -443,18 +470,24 @@ export async function fetchTokenMetadata(
 export async function getSolBalance(address: string, isDevnet = false) {
   const clusterApiUrlString = isDevnet ? "devnet" : "mainnet-beta";
   try {
-    const connection = new Connection(
-      clusterApiUrl(clusterApiUrlString),
-      "confirmed",
-    );
+    // Use the configured private RPC for mainnet to avoid public-RPC throttling.
+    // Public clusterApiUrl is the fallback (and always used for devnet).
+    const rpcUrl =
+      !isDevnet && env.NEXT_PUBLIC_SOLANA_RPC
+        ? env.NEXT_PUBLIC_SOLANA_RPC
+        : clusterApiUrl(clusterApiUrlString);
+    const connection = new Connection(rpcUrl, "confirmed");
     const publicKey = new PublicKey(address);
 
     // Fetch native SOL and WSOL ATA balance in parallel
     const [lamports, wsolLamports] = await Promise.all([
       connection.getBalance(publicKey),
-      connection.getTokenAccountBalance(
-        getAssociatedTokenAddressSync(NATIVE_MINT, publicKey)
-      ).then(b => Number(b.value.amount)).catch(() => 0),
+      connection
+        .getTokenAccountBalance(
+          getAssociatedTokenAddressSync(NATIVE_MINT, publicKey),
+        )
+        .then((b) => Number(b.value.amount))
+        .catch(() => 0),
     ]);
 
     return (lamports + wsolLamports) / 1e9;

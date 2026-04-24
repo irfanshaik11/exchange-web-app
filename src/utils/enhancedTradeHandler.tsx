@@ -1,37 +1,45 @@
-import { tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from './api';
-import type { Token } from './db';
+import {
+  tradeBuy,
+  tradeSellPercentage,
+  SOL_MINT_ADDRESS,
+  ApiError,
+} from "./api";
+import type { Token } from "./db";
 import {
   showEnhancedToast,
   updateEnhancedToast,
   dismissToast,
   formatSol,
   getExplorerLink,
-  type ToastAction
-} from './enhancedToast';
-import { calculateDynamicPriorityFee } from './dynamicFees';
-import { TransactionProgressTracker, transactionStages } from './transactionProgress';
+  type ToastAction,
+} from "./enhancedToast";
+import { calculateDynamicPriorityFee } from "./dynamicFees";
+import {
+  TransactionProgressTracker,
+  transactionStages,
+} from "./transactionProgress";
 import {
   performPreTransactionCheck,
   checkBalanceSufficiency,
   type ValidationWarning,
-  type PreTransactionCheck
-} from './preTransactionValidation';
-import { enhanceError, type EnhancedError } from './enhancedErrors';
-import type { QuickBuySettings } from '~/components/QuickBuyContext';
-import { getPoolTypeFromToken } from './poolTypeDetection';
-import { checkAtaExists } from './ataCheck';
-import { Connection, PublicKey } from '@solana/web3.js';
-import toast from 'react-hot-toast';
-import { getResolvedTokenImage, resolveTokenImage } from './images';
-import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
-import { listenForTradeEvents } from '~/utils/createSolanaToastHandler';
-import { broadcastTradeCompleted } from './tradeEvents';
-import { dispatchBalanceRefresh } from './balanceEvents';
+  type PreTransactionCheck,
+} from "./preTransactionValidation";
+import { enhanceError, type EnhancedError } from "./enhancedErrors";
+import type { QuickBuySettings } from "~/components/QuickBuyContext";
+import { getPoolTypeFromToken } from "./poolTypeDetection";
+import { checkAtaExists } from "./ataCheck";
+import { Connection, PublicKey } from "@solana/web3.js";
+import toast from "react-hot-toast";
+import { getResolvedTokenImage, resolveTokenImage } from "./images";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
+import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
+import { broadcastTradeCompleted } from "./tradeEvents";
+import { dispatchBalanceRefresh } from "./balanceEvents";
 
 // Helper function to get first valid string from multiple candidates
 function getFirstString(...values: Array<unknown>): string | undefined {
   for (const value of values) {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       const trimmed = value.trim();
       if (trimmed.length > 0) {
         return trimmed;
@@ -71,7 +79,9 @@ function getEffectivePoolAddress(token: Token): string | undefined {
     (token as any).pool_address,
     (token as any).amm_id,
     (token as any).ammId,
-    typeof (token as any).pool === 'string' && (token as any).pool.length >= 32 ? (token as any).pool : undefined,
+    typeof (token as any).pool === "string" && (token as any).pool.length >= 32
+      ? (token as any).pool
+      : undefined,
   );
 
   // Effective pool address (prioritize migrated, then original, then fallback)
@@ -92,10 +102,14 @@ type WalletAllocation = {
 };
 
 const getAddressForChain = (
-  wallet: { solanaAddress?: string | null; ethereumAddress?: string | null; address?: string | null },
-  chain: 'sol' | 'monad'
+  wallet: {
+    solanaAddress?: string | null;
+    ethereumAddress?: string | null;
+    address?: string | null;
+  },
+  chain: "sol" | "monad",
 ) => {
-  if (chain === 'monad') {
+  if (chain === "monad") {
     return wallet.ethereumAddress || wallet.address || undefined;
   }
   return wallet.solanaAddress || wallet.address || undefined;
@@ -104,7 +118,7 @@ const getAddressForChain = (
 export interface EnhancedTradeParams {
   token: Token;
   amount: number;
-  side: 'buy' | 'sell';
+  side: "buy" | "sell";
   settings: QuickBuySettings;
   user: { bearerToken: string; id: string | number };
   solBalance: number;
@@ -121,12 +135,16 @@ export interface EnhancedTradeParams {
       isArchived?: boolean;
     }>;
     walletBalances: Record<string, number>;
-    chain?: 'sol' | 'monad';
+    chain?: "sol" | "monad";
   };
   onSuccess?: (txHash: string, stats: TradeStats) => void;
   onError?: (error: EnhancedError) => void;
   onWarning?: (warnings: ValidationWarning[]) => void;
-  refreshBalance?: (opts?: { chain?: string; address?: string; force?: boolean }) => Promise<{ balance: number; usdBalance: number } | null>;
+  refreshBalance?: (opts?: {
+    chain?: string;
+    address?: string;
+    force?: boolean;
+  }) => Promise<{ balance: number; usdBalance: number } | null>;
 }
 
 export interface TradeStats {
@@ -152,7 +170,9 @@ export interface TradeStats {
 }
 
 // Main enhanced trade handler
-export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise<{
+export async function executeEnhancedTrade(
+  params: EnhancedTradeParams,
+): Promise<{
   success: boolean;
   txHash?: string;
   stats?: TradeStats;
@@ -182,14 +202,16 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     tradeAmount: amount,
     tokenCreatedAt: token.created_at,
     userPriorityFee: settings.priority,
-    isUserOverride: settings.priority !== undefined && settings.priority > 0.0001,
+    isUserOverride:
+      settings.priority !== undefined && settings.priority > 0.0001,
   });
 
   // Check ATA existence for dynamic fee calculation (buy only, Solana only)
   let ataExists: boolean | null = null;
-  if (side === 'buy' && chain === 'sol' && token.mint) {
-    const primaryAddr = params.walletContext?.walletList?.find(w => w.isPrimary)?.solanaAddress
-      || params.walletContext?.walletList?.[0]?.solanaAddress;
+  if (side === "buy" && chain === "sol" && token.mint) {
+    const primaryAddr =
+      params.walletContext?.walletList?.find((w) => w.isPrimary)
+        ?.solanaAddress || params.walletContext?.walletList?.[0]?.solanaAddress;
     ataExists = await checkAtaExists(token.mint, primaryAddr).catch(() => null);
   }
 
@@ -199,21 +221,20 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
   if (side === "buy" && chain === "sol" && params.walletContext) {
     const availableWallets =
       params.walletContext.walletList?.filter(
-        (w) => !w.isArchived && (w.solanaAddress || w.address)
+        (w) => !w.isArchived && (w.solanaAddress || w.address),
       ) || [];
 
     const selectedIds = params.walletContext.selectedWalletIds || [];
     const selectionSet = new Set(selectedIds);
     const primaryId =
-      availableWallets.find((w) => w.isPrimary)?.id ||
-      availableWallets[0]?.id;
+      availableWallets.find((w) => w.isPrimary)?.id || availableWallets[0]?.id;
 
     const idsToUse =
       selectionSet.size > 0
         ? selectionSet
         : primaryId
-        ? new Set([primaryId])
-        : new Set<string>();
+          ? new Set([primaryId])
+          : new Set<string>();
 
     const chosenWallets = availableWallets.filter((w) => idsToUse.has(w.id));
     walletsConsidered = idsToUse.size || chosenWallets.length;
@@ -230,8 +251,10 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
             const address = getAddressForChain(wallet, "sol");
             const addressKey = address?.trim();
             const balance = addressKey
-              ? params.walletContext!.walletBalances[addressKey] ?? wallet.balance ?? 0
-              : wallet.balance ?? 0;
+              ? (params.walletContext!.walletBalances[addressKey] ??
+                wallet.balance ??
+                0)
+              : (wallet.balance ?? 0);
 
             const balanceWarning = checkBalanceSufficiency(
               balance,
@@ -240,7 +263,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
               settings.bribe || 0,
               false,
               0.0001,
-              ataExists
+              ataExists,
             );
 
             if (balanceWarning && !balanceWarning.canProceed) {
@@ -277,8 +300,10 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       const address = getAddressForChain(fallback, "sol");
       const addressKey = address?.trim();
       const balance = addressKey
-        ? params.walletContext.walletBalances[addressKey] ?? fallback.balance ?? 0
-        : fallback.balance ?? 0;
+        ? (params.walletContext.walletBalances[addressKey] ??
+          fallback.balance ??
+          0)
+        : (fallback.balance ?? 0);
       walletAllocations = [
         {
           walletId: fallback.id,
@@ -319,28 +344,34 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     // CRITICAL FIX: If poolAddress equals token mint, it's not a valid pool address
     // This happens when frontend sends token mint as pool address
     if (effectivePoolAddress && effectivePoolAddress === token.mint) {
-      console.warn('[EnhancedTrade] Pool address equals token mint - treating as missing. Backend will discover pool.', {
-        tokenMint: token.mint,
-        tokenSymbol: token.symbol,
-        invalidPoolAddress: effectivePoolAddress,
-      });
+      console.warn(
+        "[EnhancedTrade] Pool address equals token mint - treating as missing. Backend will discover pool.",
+        {
+          tokenMint: token.mint,
+          tokenSymbol: token.symbol,
+          invalidPoolAddress: effectivePoolAddress,
+        },
+      );
       effectivePoolAddress = undefined; // Trigger backend pool discovery
     }
 
     // If no pool address found, still allow the request to go through
     // The backend can discover pools using the token mint
     if (!effectivePoolAddress) {
-      console.warn('[EnhancedTrade] No pool address found in token data, backend will attempt pool discovery', {
-        tokenMint: token.mint,
-        tokenSymbol: token.symbol,
-        launchpad_protocol: (token as any).launchpad_protocol,
-        availableFields: {
-          migrated_pool_address: (token as any).migrated_pool_address,
-          pair_address: token.pair_address,
-          poolAddress: (token as any).poolAddress,
-          pool_address: (token as any).pool_address,
-        }
-      });
+      console.warn(
+        "[EnhancedTrade] No pool address found in token data, backend will attempt pool discovery",
+        {
+          tokenMint: token.mint,
+          tokenSymbol: token.symbol,
+          launchpad_protocol: (token as any).launchpad_protocol,
+          availableFields: {
+            migrated_pool_address: (token as any).migrated_pool_address,
+            pair_address: token.pair_address,
+            poolAddress: (token as any).poolAddress,
+            pool_address: (token as any).pool_address,
+          },
+        },
+      );
     }
 
     // Perform pre-transaction checks
@@ -353,20 +384,26 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       (settings.maxSlippage || 0.4) * 100,
       poolType,
       solPriceUsd,
-      side === 'sell', // Pass whether this is a sell order
-      ataExists
+      side === "sell", // Pass whether this is a sell order
+      ataExists,
     );
 
     // Handle validation warnings
     if (preCheck.warnings.length > 0) {
-      const criticalWarnings = preCheck.warnings.filter(w => w.level === 'critical');
-      const otherWarnings = preCheck.warnings.filter(w => w.level !== 'critical');
+      const criticalWarnings = preCheck.warnings.filter(
+        (w) => w.level === "critical",
+      );
+      const otherWarnings = preCheck.warnings.filter(
+        (w) => w.level !== "critical",
+      );
 
       if (criticalWarnings.length > 0) {
         // Show critical warnings and STOP (no toast shown yet since validation failed)
-        showEnhancedToast('error', criticalWarnings[0].message, {
+        showEnhancedToast("error", criticalWarnings[0].message, {
           title: criticalWarnings[0].title,
-          suggestions: criticalWarnings[0].suggestion ? [criticalWarnings[0].suggestion] : [],
+          suggestions: criticalWarnings[0].suggestion
+            ? [criticalWarnings[0].suggestion]
+            : [],
           duration: 6000,
         });
 
@@ -375,9 +412,11 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
           error: {
             title: criticalWarnings[0].title,
             description: criticalWarnings[0].message,
-            suggestions: criticalWarnings.map(w => w.suggestion || '').filter(Boolean),
+            suggestions: criticalWarnings
+              .map((w) => w.suggestion || "")
+              .filter(Boolean),
             canRetry: false,
-          }
+          },
         };
       }
 
@@ -387,7 +426,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
         // Show first warning as toast
         const firstWarning = otherWarnings[0];
-        showEnhancedToast('warning', firstWarning.message, {
+        showEnhancedToast("warning", firstWarning.message, {
           title: firstWarning.title,
           suggestions: firstWarning.suggestion ? [firstWarning.suggestion] : [],
           duration: 5000,
@@ -397,14 +436,14 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
     // Step 2: Show Monad-style toast after validation passes - trade is being submitted
     // Generate random timer cap (0.40-0.60s)
-    const timerCap = 0.30 + Math.random() * 0.20;
+    const timerCap = 0.3 + Math.random() * 0.2;
     const uniqueToastId = `solana-trade-${Date.now()}-${Math.random()}`;
     const startTime = Date.now();
     let timerFinished = false;
 
     // Get token image and wallet info for toast - use resolved version for cached metadata images
     const tokenImage = getResolvedTokenImage(token);
-    const tokenName = token?.symbol || token?.name || 'Token';
+    const tokenName = token?.symbol || token?.name || "Token";
     const walletsWithBalance = walletAllocations.length || 1;
     const totalWallets = walletsConsidered || 1;
     const isMultiWallet = walletsWithBalance > 1;
@@ -412,43 +451,47 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     // Show animated toast with timer (Monad-style)
     toast.custom(
       (t) => (
-        <div className="flex items-center gap-3 bg-[#1a1a1a] text-white border border-white/10 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-[#1a1a1a] px-4 py-3 text-white">
           {tokenImage && (
             <img
               src={tokenImage}
               alt={tokenName}
-              className="w-6 h-6 rounded-full flex-shrink-0"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              className="h-6 w-6 flex-shrink-0 rounded-full"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
           )}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-sm text-neutral-200 truncate">
-              {side === 'buy' ? 'Buying' : 'Selling'} {tokenName}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
+              {side === "buy" ? "Buying" : "Selling"} {tokenName}
             </span>
             <span
               id={`timer-${uniqueToastId}`}
-              className="text-xs text-neutral-400 flex-shrink-0"
+              className="flex-shrink-0 text-xs text-neutral-400"
             >
               (0.00s)
             </span>
             <span
               id={`check-${uniqueToastId}`}
-              className="text-green-400 flex-shrink-0"
-              style={{ display: timerFinished && !tradeErrored ? 'inline' : 'none' }}
+              className="flex-shrink-0 text-green-400"
+              style={{
+                display: timerFinished && !tradeErrored ? "inline" : "none",
+              }}
             >
               ✓
             </span>
             <span
               id={`link-${uniqueToastId}`}
               className="flex-shrink-0"
-              style={{ display: 'inline-flex' }}
+              style={{ display: "inline-flex" }}
             >
               {/* Default Solana avatar (becomes clickable once tx hash arrives) */}
               <img
                 src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
                 alt="Solana"
-                className="w-4 h-4 rounded-full opacity-70"
-                style={{ cursor: 'default' }}
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: "default" }}
               />
             </span>
           </div>
@@ -457,7 +500,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       {
         id: uniqueToastId,
         duration: Infinity,
-      }
+      },
     );
 
     toastId = uniqueToastId;
@@ -476,15 +519,16 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         if (!tradeErrored) {
           const checkEl = document.getElementById(`check-${uniqueToastId}`);
           if (checkEl) {
-            checkEl.style.display = 'block';
+            checkEl.style.display = "block";
           }
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
           if (linkEl) {
             if (isMultiWallet) {
               linkEl.textContent = `${walletsWithBalance}/${totalWallets}`;
-              linkEl.className = 'text-xs text-blue-400 font-medium flex-shrink-0';
+              linkEl.className =
+                "text-xs text-blue-400 font-medium flex-shrink-0";
             } else {
-              linkEl.className = 'flex-shrink-0';
+              linkEl.className = "flex-shrink-0";
             }
           }
         }
@@ -495,7 +539,14 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       timerInterval = requestAnimationFrame(tick) as any;
     };
     timerInterval = requestAnimationFrame(tick) as any;
-    cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+    cleanupTradeListener = listenForTradeEvents(
+      token.mint || "",
+      uniqueToastId,
+      (v) => {
+        tradeErrored = v;
+      },
+      "solana",
+    );
 
     // Create progress tracker (but don't use artificial delays - update based on actual progress)
     progressTracker = new TransactionProgressTracker((stage) => {
@@ -503,7 +554,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     });
 
     // Update to submitting stage immediately (no artificial delays)
-    progressTracker.setStage('submitting');
+    progressTracker.setStage("submitting");
 
     // Step 4: Execute trade - support multi-wallet (equal split) for Solana buys
     // Note: If effectivePoolAddress is missing, backend will use pool discovery
@@ -524,7 +575,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       rpc: settings.rpc,
       tokenName: token.name,
       tokenSymbol: token.symbol,
-      imageUrl: await resolveTokenImage(token) || undefined,
+      imageUrl: (await resolveTokenImage(token)) || undefined,
     };
 
     const allocationsToUse: WalletAllocation[] =
@@ -532,12 +583,13 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         ? walletAllocations
         : [{ walletId: undefined, amount, balance: validationBalance }];
 
-    const walletResults: Array<{ allocation: WalletAllocation; result: any }> = [];
+    const walletResults: Array<{ allocation: WalletAllocation; result: any }> =
+      [];
 
     const executeSingleTrade = async (
       allocation: WalletAllocation,
       index: number,
-      total: number
+      total: number,
     ) => {
       if (toastId) {
         updateEnhancedToast(
@@ -547,13 +599,17 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
           {
             title: `${side === "buy" ? "Buying" : "Selling"} ${token.symbol}`,
             description: `Using wallet ${index + 1} of ${total}`,
-          }
+          },
         );
       }
 
       const paramsForWallet =
         side === "buy"
-          ? { ...baseTradeParams, amount: allocation.amount, walletId: allocation.walletId }
+          ? {
+              ...baseTradeParams,
+              amount: allocation.amount,
+              walletId: allocation.walletId,
+            }
           : {
               ...baseTradeParams,
               tokenAddress: token.mint,
@@ -569,11 +625,9 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         setTimeout(
           () =>
             reject(
-              new Error(
-                "Request timeout - backend took too long to respond"
-              )
+              new Error("Request timeout - backend took too long to respond"),
             ),
-          30000
+          30000,
         );
       });
 
@@ -588,7 +642,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         const result = await executeSingleTrade(
           allocation,
           i,
-          allocationsToUse.length
+          allocationsToUse.length,
         );
         walletResults.push({ allocation, result });
       } catch (err) {
@@ -613,13 +667,17 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     const txHashes = walletResults
       .map((wr) => (wr.result as any)?.hash || (wr.result as any)?.txid)
       .filter(Boolean);
-    
+
     // Check for errors across wallet executions (transaction might be confirmed but failed on-chain)
     const failedResult = walletResults.find((wr) => {
       const resAny = wr.result as any;
       const err = resAny?.error;
       const tx = resAny?.hash || resAny?.txid;
-      return !resAny || (!tx && err) || (err && err !== "none" && err.trim().length > 0);
+      return (
+        !resAny ||
+        (!tx && err) ||
+        (err && err !== "none" && err.trim().length > 0)
+      );
     });
 
     if (failedResult) {
@@ -631,37 +689,45 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         "[EnhancedTrade] Transaction failed:",
         errorMessage,
         "wallet:",
-        failedResult.allocation.walletId
+        failedResult.allocation.walletId,
       );
-      
+
       // Check for specific on-chain errors
       let enhancedError: EnhancedError;
-      if (errorMessage.includes('6023') || errorMessage.includes('Not enough tokens to sell') || errorMessage.includes('not enough tokens')) {
+      if (
+        errorMessage.includes("6023") ||
+        errorMessage.includes("Not enough tokens to sell") ||
+        errorMessage.includes("not enough tokens")
+      ) {
         enhancedError = {
-          title: 'Insufficient Token Balance',
-          description: 'You don\'t have enough tokens to sell',
+          title: "Insufficient Token Balance",
+          description: "You don't have enough tokens to sell",
           suggestions: [
-            'Check your token balance',
-            'You may need to buy tokens before selling',
-            'Try selling a smaller percentage',
+            "Check your token balance",
+            "You may need to buy tokens before selling",
+            "Try selling a smaller percentage",
           ],
           canRetry: false,
           actions: [],
         };
-      } else if (errorMessage.includes('NotAuthorized') || errorMessage.includes('6000')) {
+      } else if (
+        errorMessage.includes("NotAuthorized") ||
+        errorMessage.includes("6000")
+      ) {
         enhancedError = {
-          title: 'Transaction Authorization Failed',
-          description: 'The transaction was not authorized. This may be a temporary issue.',
+          title: "Transaction Authorization Failed",
+          description:
+            "The transaction was not authorized. This may be a temporary issue.",
           suggestions: [
-            'Try again in a few seconds',
-            'Check if you have sufficient balance',
-            'Verify your wallet connection',
+            "Try again in a few seconds",
+            "Check if you have sufficient balance",
+            "Verify your wallet connection",
           ],
           canRetry: true,
         };
       } else {
         // Generic on-chain error
-        enhancedError = enhanceError(new ApiError(errorMessage, 'TX_FAILED'), {
+        enhancedError = enhanceError(new ApiError(errorMessage, "TX_FAILED"), {
           token,
           amount,
           slippage: (settings.maxSlippage || 0.4) * 100,
@@ -688,16 +754,20 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       }
 
       // Show error toast
-      const errorActions: ToastAction[] = enhancedError.canRetry ? [{
-        label: 'Retry',
-        onClick: () => {
-          // Re-execute trade with same parameters
-          executeEnhancedTrade(params);
-        },
-        variant: 'primary',
-      }] : [];
+      const errorActions: ToastAction[] = enhancedError.canRetry
+        ? [
+            {
+              label: "Retry",
+              onClick: () => {
+                // Re-execute trade with same parameters
+                executeEnhancedTrade(params);
+              },
+              variant: "primary",
+            },
+          ]
+        : [];
 
-      showEnhancedToast('error', enhancedError.description, {
+      showEnhancedToast("error", enhancedError.description, {
         title: enhancedError.title,
         suggestions: enhancedError.suggestions,
         actions: errorActions,
@@ -710,16 +780,20 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
       return { success: false, error: enhancedError };
     }
-    
+
     // For BUY: tokenAmount is returned (may be 0 if pending)
     // For SELL: we sold a percentage, display the percentage not token amount
     const tokenAmount = resultAny?.amount || resultAny?.tokenAmount;
-    const percentageSold = side === 'sell' ? amount : undefined;
+    const percentageSold = side === "sell" ? amount : undefined;
     const isPending = resultAny?.pending === true; // Backend returned immediately, metadata still processing
 
     const walletsUsedSummary = {
       used: walletResults.length,
-      total: walletsConsidered || allocationsToUse.length || walletResults.length || 1,
+      total:
+        walletsConsidered ||
+        allocationsToUse.length ||
+        walletResults.length ||
+        1,
       allocations: walletResults.map((wr) => ({
         walletId: wr.allocation.walletId,
         amount: wr.allocation.amount,
@@ -727,15 +801,19 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       })),
     };
 
-    if (walletResults.length > 0 && txHash && (!failedResult || failedResult === undefined)) {
+    if (
+      walletResults.length > 0 &&
+      txHash &&
+      (!failedResult || failedResult === undefined)
+    ) {
       const networkFee = 0.00001; // Reduced from 0.001
       const stats: TradeStats = {
         txHash,
         txHashes,
-        tokenAmount: side === 'buy' ? tokenAmount : percentageSold,
+        tokenAmount: side === "buy" ? tokenAmount : percentageSold,
         tokenSymbol: token.symbol,
-        spent: side === 'buy' ? amount : undefined,
-        received: side === 'sell' ? resultAny.solReceived : tokenAmount,
+        spent: side === "buy" ? amount : undefined,
+        received: side === "sell" ? resultAny.solReceived : tokenAmount,
         pricePerToken: token.usd_price,
         fees: {
           priorityFee: dynamicPriorityFee,
@@ -780,17 +858,17 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         }, 10000);
       }
 
-      // Refresh balance immediately after successful trade (with small delay for on-chain confirmation)
+      // Refresh balance immediately after successful trade. The previous 500ms setTimeout
+      // was dead weight given the gRPC push (solanaBalanceUpdate) is the source of truth
+      // and the BFF refresh is just a backup signal.
       if (refreshBalance) {
-        setTimeout(() => {
-          refreshBalance({ chain: "sol", force: true }).catch((err) => {
-            console.warn('[EnhancedTrade] Failed to refresh balance:', err);
-          });
-        }, 500);
+        refreshBalance({ chain: "sol", force: true }).catch((err) => {
+          console.warn("[EnhancedTrade] Failed to refresh balance:", err);
+        });
       }
-      
+
       // Dispatch balance-refresh event as fallback for callers that don't pass refreshBalance
-      dispatchBalanceRefresh(chain === 'monad' ? 'monad' : 'sol');
+      dispatchBalanceRefresh(chain === "monad" ? "monad" : "sol");
 
       if (onSuccess) onSuccess(txHash, stats);
 
@@ -798,13 +876,13 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       broadcastTradeCompleted({
         tokenAddress: token.mint,
         tradeType: side,
-        chain: 'sol',
+        chain: "sol",
         txHash: txHash || undefined,
         amount,
         tokenName: token.name,
         tokenSymbol: token.symbol,
         imageUrl: tokenImage || undefined,
-        solAmountSpent: side === 'buy' ? amount : undefined,
+        solAmountSpent: side === "buy" ? amount : undefined,
       });
 
       if (isPending && txHash) {
@@ -819,16 +897,15 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
           onError,
         });
       }
-      
+
       return { success: true, txHash, stats };
     } else {
-      throw new Error('No transaction hash returned');
+      throw new Error("No transaction hash returned");
     }
-
   } catch (error: any) {
     tradeErrored = true;
     cleanupTradeListener?.();
-    console.error('Enhanced trade error:', error);
+    console.error("Enhanced trade error:", error);
 
     // Stop timer
     if (timerInterval) {
@@ -851,21 +928,22 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     });
 
     // Friendly message for pool discovery failures (no tx sent)
-    const poolErrorText = (error?.message || '').toLowerCase();
+    const poolErrorText = (error?.message || "").toLowerCase();
     const poolErrorCode = (error as any)?.code || (error as any)?.status;
     if (
-      poolErrorText.includes('pool discovery failed') ||
-      poolErrorText.includes('pool address is required') ||
-      poolErrorText.includes('no pools found') ||
-      poolErrorCode === 'POOL_UNAVAILABLE'
+      poolErrorText.includes("pool discovery failed") ||
+      poolErrorText.includes("pool address is required") ||
+      poolErrorText.includes("no pools found") ||
+      poolErrorCode === "POOL_UNAVAILABLE"
     ) {
       enhancedError = {
-        title: 'Pool Not Found',
-        description: 'No active pool could be found for this token. The trade was not sent.',
+        title: "Pool Not Found",
+        description:
+          "No active pool could be found for this token. The trade was not sent.",
         suggestions: [
-          'Try again in a few seconds',
-          'Verify the token has an active pool',
-          'If newly launched, wait for the pool to appear on-chain',
+          "Try again in a few seconds",
+          "Verify the token has an active pool",
+          "If newly launched, wait for the pool to appear on-chain",
         ],
         canRetry: false,
         actions: [],
@@ -883,17 +961,17 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     // Add retry action if applicable
     if (enhancedError.canRetry) {
       actions.push({
-        label: 'Retry',
+        label: "Retry",
         onClick: () => {
           // Re-execute trade with same parameters
           executeEnhancedTrade(params);
         },
-        variant: 'primary',
+        variant: "primary",
       });
     }
 
     // Show error toast with actions
-    showEnhancedToast('error', enhancedError.description, {
+    showEnhancedToast("error", enhancedError.description, {
       title: enhancedError.title,
       suggestions: enhancedError.suggestions,
       actions,
@@ -927,7 +1005,7 @@ async function monitorPendingConfirmation({
   txHash: string;
   token: Token;
   amount: number;
-  side: 'buy' | 'sell';
+  side: "buy" | "sell";
   settings: QuickBuySettings;
   toastId: string | null;
   params: EnhancedTradeParams;
@@ -938,80 +1016,105 @@ async function monitorPendingConfirmation({
     tradeAmount: amount,
     tokenCreatedAt: token.created_at,
     userPriorityFee: settings.priority,
-    isUserOverride: settings.priority !== undefined && settings.priority > 0.0001,
+    isUserOverride:
+      settings.priority !== undefined && settings.priority > 0.0001,
   });
 
   try {
-    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
-    const connection = new Connection(rpcUrl, 'confirmed');
+    const rpcUrl =
+      process.env.NEXT_PUBLIC_SOLANA_RPC ||
+      "https://api.mainnet-beta.solana.com";
+    const connection = new Connection(rpcUrl, "confirmed");
 
     await Promise.race([
-      connection.confirmTransaction(txHash, 'confirmed'),
+      connection.confirmTransaction(txHash, "confirmed"),
       new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 30000);
+        setTimeout(
+          () => reject(new Error("Transaction confirmation timeout")),
+          30000,
+        );
       }),
     ]);
 
     const txStatus = await connection.getTransaction(txHash, {
-      commitment: 'confirmed',
+      commitment: "confirmed",
       maxSupportedTransactionVersion: 0,
     });
 
     if (txStatus?.meta?.err) {
       const txError = txStatus.meta.err;
-      const errorStr = typeof txError === 'object' ? JSON.stringify(txError) : String(txError);
+      const errorStr =
+        typeof txError === "object" ? JSON.stringify(txError) : String(txError);
 
-      console.error('[EnhancedTrade] Transaction confirmed but failed:', errorStr);
+      console.error(
+        "[EnhancedTrade] Transaction confirmed but failed:",
+        errorStr,
+      );
 
       let enhancedError: EnhancedError;
-      if (errorStr.includes('6023') || errorStr.includes('Not enough tokens to sell') || errorStr.includes('not enough tokens')) {
+      if (
+        errorStr.includes("6023") ||
+        errorStr.includes("Not enough tokens to sell") ||
+        errorStr.includes("not enough tokens")
+      ) {
         enhancedError = {
-          title: 'Insufficient Token Balance',
-          description: 'You don\'t have enough tokens to sell',
+          title: "Insufficient Token Balance",
+          description: "You don't have enough tokens to sell",
           suggestions: [
-            'Check your token balance',
-            'You may need to buy tokens before selling',
-            'Try selling a smaller percentage',
+            "Check your token balance",
+            "You may need to buy tokens before selling",
+            "Try selling a smaller percentage",
           ],
           canRetry: false,
           actions: [],
         };
-      } else if (errorStr.includes('NotAuthorized') || errorStr.includes('6000')) {
+      } else if (
+        errorStr.includes("NotAuthorized") ||
+        errorStr.includes("6000")
+      ) {
         enhancedError = {
-          title: 'Transaction Authorization Failed',
-          description: 'The transaction was not authorized. This may be a temporary issue.',
+          title: "Transaction Authorization Failed",
+          description:
+            "The transaction was not authorized. This may be a temporary issue.",
           suggestions: [
-            'Try again in a few seconds',
-            'Check if you have sufficient balance',
-            'Verify your wallet connection',
+            "Try again in a few seconds",
+            "Check if you have sufficient balance",
+            "Verify your wallet connection",
           ],
           canRetry: true,
         };
       } else {
-        enhancedError = enhanceError(new ApiError(`Transaction failed: ${errorStr}`, 'TX_FAILED'), {
-          token,
-          amount,
-          slippage: (settings.maxSlippage || 0.4) * 100,
-          priorityFee: dynamicPriorityFee,
-          poolType: getPoolTypeFromToken(token),
-          mevMode: settings.mevMode,
-          rpcUrl: settings.rpc,
-        });
+        enhancedError = enhanceError(
+          new ApiError(`Transaction failed: ${errorStr}`, "TX_FAILED"),
+          {
+            token,
+            amount,
+            slippage: (settings.maxSlippage || 0.4) * 100,
+            priorityFee: dynamicPriorityFee,
+            poolType: getPoolTypeFromToken(token),
+            mevMode: settings.mevMode,
+            rpcUrl: settings.rpc,
+          },
+        );
       }
 
       if (toastId) {
-        updateEnhancedToast(toastId, 'error', enhancedError.description, {
+        updateEnhancedToast(toastId, "error", enhancedError.description, {
           title: enhancedError.title,
           suggestions: enhancedError.suggestions,
-          actions: enhancedError.canRetry ? [{
-            label: 'Retry',
-            onClick: () => {
-              if (toastId) {
-                dismissToast(toastId);
-              }
-              executeEnhancedTrade(params);
-            }
-          }] : [],
+          actions: enhancedError.canRetry
+            ? [
+                {
+                  label: "Retry",
+                  onClick: () => {
+                    if (toastId) {
+                      dismissToast(toastId);
+                    }
+                    executeEnhancedTrade(params);
+                  },
+                },
+              ]
+            : [],
           showExplorerLink: true,
           txHash,
           duration: 6000,
@@ -1023,8 +1126,8 @@ async function monitorPendingConfirmation({
     }
 
     if (toastId) {
-      updateEnhancedToast(toastId, 'success', '', {
-        title: `${side === 'buy' ? 'Bought' : 'Sold'} ${token.symbol}!`,
+      updateEnhancedToast(toastId, "success", "", {
+        title: `${side === "buy" ? "Bought" : "Sold"} ${token.symbol}!`,
         description: `Confirmed: Tx ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}`,
         showExplorerLink: true,
         txHash,
@@ -1032,7 +1135,10 @@ async function monitorPendingConfirmation({
       });
     }
   } catch (confirmationError) {
-    console.warn('[EnhancedTrade] Could not confirm transaction status:', confirmationError);
+    console.warn(
+      "[EnhancedTrade] Could not confirm transaction status:",
+      confirmationError,
+    );
     // Leave existing toast message as-is; backend background job will update history when ready.
   }
 }
