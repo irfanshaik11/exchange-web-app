@@ -97,7 +97,7 @@ const Positions: React.FC<PositionsProps> = ({
   isCacheValid,
   fallbackPositions
 }) => {
-  const { selectedWalletIds, user } = useUser();
+  const { selectedWalletIds, user, primaryWalletAddresses } = useUser();
   const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
@@ -572,6 +572,17 @@ const Positions: React.FC<PositionsProps> = ({
               .catch(() => {});
           }
 
+          // Estimate SOL credit for the optimistic header update. Formula:
+          // remainingUsdValue × (pct/100) ÷ solPrice × (1 - slippage).
+          // If solPrice is unknown, omit the estimate (dispatcher no-ops).
+          const slip = quickSellSettings?.maxSlippage ?? 0.2;
+          const estSolOut =
+            solPrice > 0 && position.remainingUsdValue > 0
+              ? (position.remainingUsdValue * (percent / 100) * (1 - slip)) /
+                solPrice
+              : 0;
+          const primarySolAddr = primaryWalletAddresses.solana || "";
+
           const sellResult = await tradeSellPercentage(
             {
               tokenAddress: position.tokenAddress,
@@ -586,6 +597,9 @@ const Positions: React.FC<PositionsProps> = ({
               bribe: quickSellSettings?.bribe ?? 0.05,
             },
             bearerToken,
+            estSolOut > 0 && primarySolAddr
+              ? { solOut: estSolOut, walletAddress: primarySolAddr }
+              : undefined,
           );
 
           const explorerUrl = sellResult?.hash ? `https://solscan.io/tx/${sellResult.hash}` : undefined;

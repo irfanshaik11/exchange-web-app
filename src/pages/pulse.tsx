@@ -12,6 +12,9 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import PulseTable from "../components/PulseTable";
 // import BnbTable from "../components/BnbTable";
+// MONAD DISABLED — support paused, may re-enable later. Import retained because the
+// (unreachable) JSX branch below still references MonadTable; remove `false &&` in the
+// `isMonadRoute` ternary to restore the Monad view.
 import MonadTable from "../components/MonadTable";
 import PulseControlBar from "../components/PulseControlBar";
 import type { Token } from "~/utils/db";
@@ -223,11 +226,12 @@ export default function PulsePage() {
   //     ? 'bg-[#222733] text-white shadow-lg shadow-blue-500/20'
   //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
   // }`;
-  const monadButtonClasses = `${chainButtonBase} ${
-    isMonadRoute
-      ? "bg-white/[0.07] text-white border-white/[0.08]"
-      : "text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
-  }`;
+  // MONAD DISABLED — support paused, may re-enable later.
+  // const monadButtonClasses = `${chainButtonBase} ${
+  //   isMonadRoute
+  //     ? "bg-white/[0.07] text-white border-white/[0.08]"
+  //     : "text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
+  // }`;
   // const baseButtonClasses = `${chainButtonBase} ${
   //   isBaseRoute
   //     ? 'bg-[#222733] text-white shadow-lg shadow-blue-400/20'
@@ -1496,7 +1500,8 @@ export default function PulsePage() {
                       className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
                     />
                   </Link>
-                  <Link
+                  {/* MONAD DISABLED — support paused, may re-enable later. */}
+                  {/* <Link
                     href="/pulse?chain=monad"
                     aria-label="View Monad tokens"
                     className={monadButtonClasses}
@@ -1506,7 +1511,7 @@ export default function PulsePage() {
                       alt="Monad"
                       className="h-7 w-7 rounded-full object-cover"
                     />
-                  </Link>
+                  </Link> */}
                   {/* <Link
                     href="/pulse?chain=bnb"
                     aria-label="View BNB tokens (beta)"
@@ -1697,7 +1702,7 @@ export default function PulsePage() {
                 />
               </div> */}
             </div>
-          ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
+          ) : false && isMonadRoute ? ( // MONAD DISABLED — remove `false &&` to restore. // || isBaseRoute || isEthereumRoute
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
               {/* Mobile: Single table based on active tab (also when content narrow) */}
               <div className="content-mobile-only flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">

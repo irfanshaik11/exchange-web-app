@@ -843,10 +843,13 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
         if (!response.ok) {
           console.error("❌ Search API error:", response.status);
-          // Only set empty results if this is still the latest request
+          // Only set empty results if this is still the latest request.
+          // Reset hasSearched so the UI does NOT show "No tokens found" for a
+          // transient upstream failure — the user can simply retry.
           if (currentRequestId === searchRequestIdRef.current) {
             setSearchResults([]);
             setSearchLoading(false);
+            setHasSearched(false);
           }
           return;
         }
@@ -953,9 +956,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
           return;
         }
         console.error("Search error:", error);
-        // Only set empty results if this is still the latest request
+        // Only set empty results if this is still the latest request.
+        // Mirror the !response.ok branch: reset hasSearched so a network
+        // failure renders as "ready to search" rather than "no tokens found".
         if (currentRequestId === searchRequestIdRef.current) {
           setSearchResults([]);
+          setHasSearched(false);
         }
       } finally {
         // Only stop loading if this is still the latest request
@@ -1444,6 +1450,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
         if (searchTimeoutRef.current) {
           clearTimeout(searchTimeoutRef.current);
         }
+        // Abort any in-flight search so it doesn't keep an upstream socket
+        // busy or call setState on the now-unmounted component.
+        abortControllerRef.current?.abort();
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
