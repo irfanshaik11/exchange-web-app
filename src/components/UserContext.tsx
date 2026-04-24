@@ -19,6 +19,10 @@ import {
   getStoredReferralCodeHint,
   clearStoredReferralCodeHint,
 } from "../utils/referralStorage";
+import type {
+  OptimisticBalanceDetail,
+  OptimisticRollbackDetail,
+} from "../utils/optimisticBalance";
 import { useTurnkey } from "@turnkey/react-wallet-kit";
 import next from "next";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
@@ -187,6 +191,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const balanceCheckInProgressRef = useRef<Record<string, boolean>>({});
   const hasSyncedProfileRef = useRef(false);
   const BALANCE_REFRESH_COOLDOWN_MS = 20000; // prevent hammering the balance endpoint
+
+  // Optimistic balance deltas applied pre-trade; cleared when the real balance arrives
+  // via gRPC push or REST refresh. Keyed by tradeId so rollback can reverse a specific entry.
+  // `baselines` stores the pre-optimistic balance per wallet so the gRPC handler can
+  // distinguish stale pre-tx pushes (value === baseline → ignore) from real post-tx
+  // pushes (value differs → accept and clear pending).
+  type PendingOptimistic = {
+    chain: "sol";
+    side: "buy" | "sell";
+    perWalletDeltas: Array<{ address: string; deltaSol: number }>;
+    baselines: Record<string, number>;
+    expiresAt: number;
+    timerId: ReturnType<typeof setTimeout> | null;
+  };
+  const pendingOptimisticDeltasRef = useRef<Map<string, PendingOptimistic>>(
+    new Map(),
+  );
+  const OPTIMISTIC_TTL_MS = 15000;
+  const STALE_GRPC_TOLERANCE_SOL = 1e-6; // 0.000001 SOL
 
   const persistUser = useCallback((value: UserInfo | null) => {
     if (typeof window === "undefined") return;
@@ -631,6 +654,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const newBalance = data.data.balance;
         const newUsdBalance = data.data.usdBalance;
 
+        // REST queries may return pre-tx blockchain state for ~1s after a
+        // trade's backend ack (before the tx lands on-chain). If there's a
+        // pending optimistic delta for this wallet, skip the state setters
+        // so REST can't overwrite the optimistic value with a stale balance.
+        // gRPC (authoritative, post-confirmation) or the 15s TTL will
+        // reconcile. The caller still gets the fetched values from the
+        // return statement below.
+        const hasPendingOptimistic =
+          chain === "sol" &&
+          Array.from(pendingOptimisticDeltasRef.current.values()).some((e) =>
+            e.perWalletDeltas.some((d) => d.address === targetAddress),
+          );
+        if (hasPendingOptimistic) {
+          return { balance: newBalance, usdBalance: newUsdBalance };
+        }
+
         // Cache the balance for this specific address
         addressBalanceCacheRef.current[checkKey] = newBalance;
 
@@ -867,16 +906,33 @@ export function UserProvider({ children }: { children: ReactNode }) {
           lastBalanceFetchRef.current[cacheKey] = Date.now();
         }
 
-        if (Object.keys(newWalletBalances).length > 0) {
-          setWalletBalances((prev) => ({ ...prev, ...newWalletBalances }));
+        // Drop addresses with pending optimistic deltas from this batch update
+        // (REST may still reflect pre-tx state ~1s post-backend-ack; overwriting
+        // would flash the old value until gRPC arrives).
+        const pendingAddresses = new Set<string>();
+        for (const entry of pendingOptimisticDeltasRef.current.values()) {
+          for (const d of entry.perWalletDeltas) {
+            if (d.address) pendingAddresses.add(d.address);
+          }
+        }
+        const filteredWalletBalances: Record<string, number> = {};
+        for (const [addr, bal] of Object.entries(newWalletBalances)) {
+          if (!pendingAddresses.has(addr)) filteredWalletBalances[addr] = bal;
+        }
+        if (Object.keys(filteredWalletBalances).length > 0) {
+          setWalletBalances((prev) => ({ ...prev, ...filteredWalletBalances }));
         }
 
-        // Update chainBalances for primary wallets
+        // Update chainBalances for primary wallets (skip if pending optimistic)
         const normalizedSolAddress =
           primaryWalletAddresses.solana?.trim() ||
           primaryWalletAddresses.solana ||
           null;
-        if (normalizedSolAddress && data.balances[normalizedSolAddress]) {
+        if (
+          normalizedSolAddress &&
+          data.balances[normalizedSolAddress] &&
+          !pendingAddresses.has(normalizedSolAddress)
+        ) {
           const solData = data.balances[normalizedSolAddress] as {
             balance: number;
             usdBalance: number;
@@ -1246,28 +1302,182 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const { solBalance: newBal, wallet } =
         (event as CustomEvent).detail || {};
       if (
-        typeof newBal === "number" &&
-        Number.isFinite(newBal) &&
-        newBal >= 0
+        !(
+          typeof newBal === "number" &&
+          Number.isFinite(newBal) &&
+          newBal >= 0
+        )
       ) {
-        setSolBalance(newBal);
-        solBalanceRef.current = newBal;
-        if (typeof wallet === "string" && wallet.length > 0) {
-          setWalletBalances((prev) => ({ ...prev, [wallet]: newBal }));
-          addressBalanceCacheRef.current[`sol:${wallet}`] = newBal;
-          if (wallet === primaryWalletAddresses.solana) {
-            setChainBalances((prev) => ({ ...prev, sol: newBal }));
+        return;
+      }
+
+      const matchAddr =
+        typeof wallet === "string" && wallet.length > 0
+          ? wallet
+          : primaryWalletAddresses.solana;
+
+      // Find pending entries touching this wallet
+      const matchingPendings: Array<[string, PendingOptimistic]> = [];
+      if (matchAddr) {
+        for (const [id, entry] of pendingOptimisticDeltasRef.current) {
+          if (entry.perWalletDeltas.some((d) => d.address === matchAddr)) {
+            matchingPendings.push([id, entry]);
           }
-        } else {
-          // Fallback: no wallet in payload — assume primary
+        }
+      }
+
+      // Stale-push filter: if a pending optimistic exists and the incoming
+      // value equals the pre-optimistic baseline for this wallet, this push
+      // reflects pre-tx state (tx hasn't landed yet). Ignore it so the
+      // optimistic stays on screen. The real post-tx push will differ from
+      // the baseline and get accepted below.
+      if (matchAddr && matchingPendings.length > 0) {
+        const baseline = matchingPendings[0][1].baselines[matchAddr];
+        if (
+          typeof baseline === "number" &&
+          Math.abs(newBal - baseline) < STALE_GRPC_TOLERANCE_SOL
+        ) {
+          return;
+        }
+      }
+
+      // Real update — apply to state
+      setSolBalance(newBal);
+      solBalanceRef.current = newBal;
+      if (typeof wallet === "string" && wallet.length > 0) {
+        setWalletBalances((prev) => ({ ...prev, [wallet]: newBal }));
+        addressBalanceCacheRef.current[`sol:${wallet}`] = newBal;
+        if (wallet === primaryWalletAddresses.solana) {
           setChainBalances((prev) => ({ ...prev, sol: newBal }));
         }
+      } else {
+        // Fallback: no wallet in payload — assume primary
+        setChainBalances((prev) => ({ ...prev, sol: newBal }));
+      }
+
+      // Reconcile: this gRPC push is the post-tx truth. Clear matching
+      // pendings and their TTL timers.
+      for (const [id, entry] of matchingPendings) {
+        if (entry.timerId) clearTimeout(entry.timerId);
+        pendingOptimisticDeltasRef.current.delete(id);
       }
     };
     window.addEventListener("solanaBalanceUpdate", handleGrpcBalance);
     return () => {
       window.removeEventListener("solanaBalanceUpdate", handleGrpcBalance);
     };
+  }, [primaryWalletAddresses.solana]);
+
+  // Optimistic balance: pre-trade dispatch applies delta instantly so header
+  // reflects the click before the backend responds. Real value arrives via
+  // gRPC / REST and clears the pending entry (see reconcile blocks above).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOptimistic = (event: Event) => {
+      const detail = (event as CustomEvent<OptimisticBalanceDetail>).detail;
+      if (!detail || detail.chain !== "sol") return;
+      const { tradeId, side, perWalletDeltas, expiresAt } = detail;
+      if (!tradeId || !Array.isArray(perWalletDeltas)) return;
+
+      const primary = primaryWalletAddresses.solana;
+      const baselines: Record<string, number> = {};
+      let primaryDelta = 0;
+      setWalletBalances((prev) => {
+        const next = { ...prev };
+        for (const { address, deltaSol } of perWalletDeltas) {
+          if (!address || !Number.isFinite(deltaSol) || deltaSol === 0) continue;
+          const current = next[address] ?? 0;
+          baselines[address] = current;
+          next[address] = Math.max(0, current + deltaSol);
+          if (primary && address === primary) primaryDelta += deltaSol;
+        }
+        return next;
+      });
+      if (primaryDelta !== 0) {
+        // Snapshot the pre-optimistic primary baseline for the gRPC stale check
+        baselines[primary as string] = solBalanceRef.current;
+        setSolBalance((prev) => Math.max(0, prev + primaryDelta));
+        solBalanceRef.current = Math.max(
+          0,
+          solBalanceRef.current + primaryDelta,
+        );
+        setChainBalances((prev) => ({
+          ...prev,
+          sol: Math.max(0, (prev.sol ?? 0) + primaryDelta),
+        }));
+      }
+
+      // TTL: if gRPC/REST never arrives, force-refresh and drop the optimistic.
+      const ttl = Math.max(0, (expiresAt ?? 0) - Date.now()) || OPTIMISTIC_TTL_MS;
+      const timerId = setTimeout(() => {
+        const existing = pendingOptimisticDeltasRef.current.get(tradeId);
+        if (!existing) return;
+        pendingOptimisticDeltasRef.current.delete(tradeId);
+        if (primary) {
+          refreshBalance({ chain: "sol", address: primary, force: true }).catch(
+            () => {},
+          );
+        }
+      }, ttl);
+
+      pendingOptimisticDeltasRef.current.set(tradeId, {
+        chain: "sol",
+        side,
+        perWalletDeltas,
+        baselines,
+        expiresAt: expiresAt ?? Date.now() + OPTIMISTIC_TTL_MS,
+        timerId,
+      });
+    };
+
+    const handleRollback = (event: Event) => {
+      const detail = (event as CustomEvent<OptimisticRollbackDetail>).detail;
+      if (!detail?.tradeId) return;
+      const entry = pendingOptimisticDeltasRef.current.get(detail.tradeId);
+      if (!entry) return;
+      if (entry.timerId) clearTimeout(entry.timerId);
+      pendingOptimisticDeltasRef.current.delete(detail.tradeId);
+
+      const primary = primaryWalletAddresses.solana;
+      let primaryDelta = 0;
+      setWalletBalances((prev) => {
+        const next = { ...prev };
+        for (const { address, deltaSol } of entry.perWalletDeltas) {
+          if (!address || !Number.isFinite(deltaSol) || deltaSol === 0) continue;
+          const current = next[address] ?? 0;
+          next[address] = Math.max(0, current - deltaSol);
+          if (primary && address === primary) primaryDelta += deltaSol;
+        }
+        return next;
+      });
+      if (primaryDelta !== 0) {
+        setSolBalance((prev) => Math.max(0, prev - primaryDelta));
+        solBalanceRef.current = Math.max(
+          0,
+          solBalanceRef.current - primaryDelta,
+        );
+        setChainBalances((prev) => ({
+          ...prev,
+          sol: Math.max(0, (prev.sol ?? 0) - primaryDelta),
+        }));
+      }
+    };
+
+    window.addEventListener("balance-optimistic", handleOptimistic);
+    window.addEventListener("balance-optimistic-rollback", handleRollback);
+    return () => {
+      window.removeEventListener("balance-optimistic", handleOptimistic);
+      window.removeEventListener("balance-optimistic-rollback", handleRollback);
+    };
+  }, [primaryWalletAddresses.solana, refreshBalance]);
+
+  // Clear all pending optimistic entries when the primary wallet changes —
+  // a delta from wallet A shouldn't hang around displayed against wallet B.
+  useEffect(() => {
+    for (const entry of pendingOptimisticDeltasRef.current.values()) {
+      if (entry.timerId) clearTimeout(entry.timerId);
+    }
+    pendingOptimisticDeltasRef.current.clear();
   }, [primaryWalletAddresses.solana]);
 
   // Auto-logout when backend returns TOKEN_EXPIRED / INVALID_TOKEN / UNAUTHORIZED

@@ -46,7 +46,7 @@ const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 
 const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token, liveLiquidityUsd }) => {
   const router = useRouter();
-  const { user, solBalance, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { user, solBalance, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds, primaryWalletAddresses } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Check if we're on a Monad trade page
@@ -1447,6 +1447,18 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         try {
           const poolType = getPoolTypeFromToken(token);
 
+          // Estimate SOL credit for the optimistic header update.
+          const slipFraction = getEffectiveSlippage(sellSettings.maxSlippage, false);
+          const tokenSolPrice =
+            typeof token?.sol_price === 'number' && token.sol_price > 0
+              ? token.sol_price
+              : 0;
+          const estSolOut =
+            tokenSolPrice > 0 && tokenBalance > 0
+              ? tokenBalance * (percentage / 100) * tokenSolPrice * (1 - slipFraction)
+              : 0;
+          const primarySolAddr = primaryWalletAddresses.solana || '';
+
           const sellResult = await tradeSellPercentage(
             {
               tokenAddress,
@@ -1460,7 +1472,10 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               priorityFee: sellSettings.priority ?? 0.0001,
               bribe: sellSettings.bribe ?? 0,
             },
-            user.bearerToken
+            user.bearerToken,
+            estSolOut > 0 && primarySolAddr
+              ? { solOut: estSolOut, walletAddress: primarySolAddr }
+              : undefined
           );
 
           cleanupSellTradeListener();

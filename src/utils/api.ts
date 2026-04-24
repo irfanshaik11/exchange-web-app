@@ -4,6 +4,11 @@ import { env } from "../env";
 // Critical Fix #10: Network timeout handling
 import { fetchWithTimeout, isTimeoutError as checkTimeoutError } from "./fetchWithTimeout";
 import { getStoredReferralToken } from "./referralStorage";
+import {
+  dispatchOptimisticBalance,
+  dispatchOptimisticRollback,
+  newTradeId,
+} from "./optimisticBalance";
 
 // Constants
 export const SOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112";
@@ -718,15 +723,54 @@ export type SellPercentageParams = {
   bribe?: number; // in SOL, e.g., 0.001
 };
 
+export type TradeSellOptimistic = {
+  // Pre-computed SOL credit estimate (`position.currentValueSol × pct × (1-slip)`)
+  solOut: number;
+  // Wallet that will receive the SOL; header reads primary-wallet balance.
+  walletAddress: string;
+};
+
 export const tradeSellPercentage = (
   params: SellPercentageParams,
   authToken: string,
-) =>
-  apiFetch<{ message?: string; hash?: string }>("/api/trade/sell_percentage", {
-    method: "POST",
-    body: params,
-    authToken,
+  optimistic?: TradeSellOptimistic,
+) => {
+  let tradeId: string | null = null;
+  if (
+    optimistic &&
+    optimistic.walletAddress &&
+    Number.isFinite(optimistic.solOut) &&
+    optimistic.solOut > 0
+  ) {
+    tradeId = newTradeId();
+    queueMicrotask(() =>
+      dispatchOptimisticBalance({
+        tradeId: tradeId!,
+        chain: "sol",
+        side: "sell",
+        perWalletDeltas: [
+          { address: optimistic.walletAddress, deltaSol: +optimistic.solOut },
+        ],
+        expiresAt: Date.now() + 15_000,
+      }),
+    );
+  }
+
+  return apiFetch<{ message?: string; hash?: string }>(
+    "/api/trade/sell_percentage",
+    {
+      method: "POST",
+      body: params,
+      authToken,
+    },
+  ).catch((err) => {
+    if (tradeId) {
+      const id = tradeId;
+      queueMicrotask(() => dispatchOptimisticRollback(id));
+    }
+    throw err;
   });
+};
 
 type SellExactAmountParams = {
   tokenAddress: string;

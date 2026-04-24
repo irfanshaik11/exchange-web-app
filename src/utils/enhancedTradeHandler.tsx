@@ -35,6 +35,11 @@ import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 import { broadcastTradeCompleted } from "./tradeEvents";
 import { dispatchBalanceRefresh } from "./balanceEvents";
+import {
+  dispatchOptimisticBalance,
+  dispatchOptimisticRollback,
+  newTradeId,
+} from "./optimisticBalance";
 
 // Helper function to get first valid string from multiple candidates
 function getFirstString(...values: Array<unknown>): string | undefined {
@@ -145,6 +150,10 @@ export interface EnhancedTradeParams {
     address?: string;
     force?: boolean;
   }) => Promise<{ balance: number; usdBalance: number } | null>;
+  // Optional pre-computed SOL credit estimate for sells, used to drive the
+  // optimistic header balance update. Caller knows position value; handler
+  // does not. Omit for buys (handler derives debit from amount + fees).
+  optimisticSolOut?: number;
 }
 
 export interface TradeStats {
@@ -205,6 +214,55 @@ export async function executeEnhancedTrade(
     isUserOverride:
       settings.priority !== undefined && settings.priority > 0.0001,
   });
+
+  // Optimistic header balance: dispatch pre-submit so the number moves in
+  // the same animation frame as the click. `queueMicrotask` defers the
+  // dispatch off the sync trade path — the backend POST and toast render
+  // are unaffected. Reconciliation happens via gRPC / REST in UserContext.
+  const __optimisticTradeId = newTradeId();
+  let __optimisticDispatched = false;
+  const __rollbackOptimistic = () => {
+    if (!__optimisticDispatched) return;
+    queueMicrotask(() => dispatchOptimisticRollback(__optimisticTradeId));
+  };
+  if (chain === "sol") {
+    const primaryAddrForOptimistic =
+      params.walletContext?.walletList?.find((w) => w.isPrimary)
+        ?.solanaAddress ||
+      params.walletContext?.walletList?.[0]?.solanaAddress ||
+      null;
+    let deltaSol = 0;
+    if (side === "buy") {
+      // Lean estimate: swap amount + Jito bribe. Priority-fee actual
+      // deduction is typically a small fraction of the ceiling set by
+      // the user, and ATA rent (~0.002) only applies for first-time
+      // token purchases. We prefer to undershoot slightly and let the
+      // real gRPC balance settle *down* rather than overshoot and have
+      // the balance pop back up — which reads as a ghost-refund.
+      const bribe = settings.bribe || 0;
+      deltaSol = -(amount + bribe);
+    } else if (
+      typeof params.optimisticSolOut === "number" &&
+      Number.isFinite(params.optimisticSolOut) &&
+      params.optimisticSolOut > 0
+    ) {
+      deltaSol = +params.optimisticSolOut;
+    }
+    if (primaryAddrForOptimistic && deltaSol !== 0) {
+      __optimisticDispatched = true;
+      queueMicrotask(() =>
+        dispatchOptimisticBalance({
+          tradeId: __optimisticTradeId,
+          chain: "sol",
+          side,
+          perWalletDeltas: [
+            { address: primaryAddrForOptimistic, deltaSol },
+          ],
+          expiresAt: Date.now() + 15_000,
+        }),
+      );
+    }
+  }
 
   // Check ATA existence for dynamic fee calculation (buy only, Solana only)
   let ataExists: boolean | null = null;
@@ -407,6 +465,7 @@ export async function executeEnhancedTrade(
           duration: 6000,
         });
 
+        __rollbackOptimistic();
         return {
           success: false,
           error: {
@@ -778,6 +837,7 @@ export async function executeEnhancedTrade(
 
       if (onError) onError(enhancedError);
 
+      __rollbackOptimistic();
       return { success: false, error: enhancedError };
     }
 
@@ -981,6 +1041,7 @@ export async function executeEnhancedTrade(
 
     if (onError) onError(enhancedError);
 
+    __rollbackOptimistic();
     return { success: false, error: enhancedError };
   } finally {
     // Clean up timer if still running

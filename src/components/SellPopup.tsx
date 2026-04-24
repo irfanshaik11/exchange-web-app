@@ -11,6 +11,7 @@ import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { broadcastTradeCompleted } from "~/utils/tradeEvents";
 import type { PositionRow } from "~/utils/functions";
 import { useQuickBuy } from "~/components/QuickBuyContext";
+import { useSolPrice } from "~/components/SolPriceContext";
 import HighSlippageWarningDialog from "./HighSlippageWarningDialog";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
@@ -48,8 +49,9 @@ const AX = {
 const sellPresets = [10, 25, 50, 100];
 
 const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenMetadata, onSellSuccess }) => {
-  const { user } = useUser();
+  const { user, primaryWalletAddresses } = useUser();
   const { presets, activePreset } = useQuickBuy();
+  const { solPrice } = useSolPrice();
   const { prefetch, prefetchImmediate } = usePrefetchOrder();
   const [amount, setAmount] = useState("");
   const [sliderPct, setSliderPct] = useState(0);
@@ -302,7 +304,24 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
 
       isDev && console.log('[SellPopup] Sending sell request:', sellParams);
 
-      const result = await tradeSellPercentage(sellParams, user.bearerToken);
+      // Estimate SOL credit for the optimistic header update.
+      const slipFraction = settings.maxSlippage || 0.2;
+      const estSolOut =
+        solPrice > 0 && position.remainingUsdValue > 0
+          ? (position.remainingUsdValue *
+              (Number(amount) / 100) *
+              (1 - slipFraction)) /
+            solPrice
+          : 0;
+      const primarySolAddr = primaryWalletAddresses.solana || "";
+
+      const result = await tradeSellPercentage(
+        sellParams,
+        user.bearerToken,
+        estSolOut > 0 && primarySolAddr
+          ? { solOut: estSolOut, walletAddress: primarySolAddr }
+          : undefined,
+      );
 
       if (result?.hash || (result as any)?.txid) {
         const txHash = result.hash || (result as any).txid;

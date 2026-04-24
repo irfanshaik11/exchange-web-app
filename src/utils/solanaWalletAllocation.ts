@@ -2,6 +2,11 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 import { tradeBuy } from "./api";
 import { broadcastTradeCompleted } from "./tradeEvents";
+import {
+  dispatchOptimisticBalance,
+  dispatchOptimisticRollback,
+  newTradeId,
+} from "./optimisticBalance";
 
 type WalletListItem = {
   id: string;
@@ -411,6 +416,42 @@ export async function executeSolanaMultiBuy({
     bribe,
   });
 
+  // Optimistic header balance — dispatch per-wallet debits now so the UI
+  // reflects the click before the backend responds. queueMicrotask defers
+  // the dispatch off the sync trade path; the POST proceeds at native speed.
+  const __optimisticTradeId = newTradeId();
+  let __optimisticDispatched = false;
+  const __rollbackOptimistic = () => {
+    if (!__optimisticDispatched) return;
+    queueMicrotask(() => dispatchOptimisticRollback(__optimisticTradeId));
+  };
+  if (allocations.length > 0) {
+    // Lean estimate: per-wallet swap amount + bribe only. Priority fee
+    // actual deduction is typically a small fraction of the ceiling,
+    // and ATA rent (~0.002 SOL) only applies on first buy of a token.
+    // Undershooting avoids the "balance popped back up" flicker when
+    // the real balance arrives via gRPC.
+    const feesPerWallet = bribe || 0;
+    const perWalletDeltas = allocations
+      .map((a) => ({
+        address: a.address || "",
+        deltaSol: -(a.amount + feesPerWallet),
+      }))
+      .filter((d) => d.address.length > 0 && d.deltaSol !== 0);
+    if (perWalletDeltas.length > 0) {
+      __optimisticDispatched = true;
+      queueMicrotask(() =>
+        dispatchOptimisticBalance({
+          tradeId: __optimisticTradeId,
+          chain: "sol",
+          side: "buy",
+          perWalletDeltas,
+          expiresAt: Date.now() + 15_000,
+        }),
+      );
+    }
+  }
+
   // ========================================
   // NEW: Use backend multi-wallet API if multiple wallets selected
   // This is MUCH faster - 1 API call instead of N sequential calls
@@ -516,6 +557,7 @@ export async function executeSolanaMultiBuy({
 
   // Validate balance ONLY for sequential mode (single wallet or fallback)
   if (allocations.length === 0) {
+    __rollbackOptimistic();
     throw new Error('Insufficient balance — no selected wallets have enough SOL for this trade amount and fees');
   }
 
@@ -675,7 +717,8 @@ export async function executeSolanaMultiBuy({
   // Check if ALL wallets failed
   const successfulResults = results.filter(r => r.result && !r.error);
   if (successfulResults.length === 0) {
-    // All failed - throw the first error
+    // All failed - roll back the optimistic debit and surface the first error
+    __rollbackOptimistic();
     const firstError = results[0]?.error || new Error("All wallet trades failed");
     throw firstError;
   }

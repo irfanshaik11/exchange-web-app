@@ -1168,7 +1168,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, [mode, tab, timeRange, amount, targetMC, sliderPct, updateExternalParams]);
 
   const { presets: qbPresets, activePreset } = useQuickBuy();
-  const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds, primaryWalletAddresses } = useUser();
 
   // Prefetch ATA existence so buy validation is instant (cache warms on mount)
   useEffect(() => {
@@ -2566,6 +2566,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
         try {
+          // Estimate SOL credit for the optimistic header update.
+          const slipFraction = settings.maxSlippage || 0.2;
+          const remainingUsd = positionData?.remainingUsdValue ?? 0;
+          const estSolOut =
+            liveSolPrice > 0 && remainingUsd > 0
+              ? (remainingUsd * (sellPercentage / 100) * (1 - slipFraction)) /
+                liveSolPrice
+              : 0;
+          const primarySolAddr = primaryWalletAddresses.solana || "";
+
           const sellResult = await tradeSellPercentage(
             {
               tokenAddress: token.mint || '',
@@ -2579,7 +2589,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               priorityFee: settings.priority ?? 0.0001,
               bribe: settings.bribe ?? 0,
             },
-            user.bearerToken
+            user.bearerToken,
+            estSolOut > 0 && primarySolAddr
+              ? { solOut: estSolOut, walletAddress: primarySolAddr }
+              : undefined
           );
 
           // Stop timer
