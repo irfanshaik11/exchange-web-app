@@ -131,7 +131,7 @@ export interface LeaderboardEntry {
 
 export interface LeaderboardResponse {
   type: "POINTS" | "PNL" | "VOLUME";
-  period: "DAILY" | "MONTHLY" | "LIFETIME";
+  period: "DAILY" | "MONTHLY" | "LIFETIME" | "PRESEASON" | "SEASON1" | "SEASON2" | "SEASON3";
   entries: LeaderboardEntry[];
   total: number;
   limit: number;
@@ -380,7 +380,7 @@ export async function setAnonymousMode(
 
 export async function getLeaderboard(
   type: "points" | "pnl" | "volume",
-  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  period: "DAILY" | "MONTHLY" | "LIFETIME" | "PRESEASON" | "SEASON1" | "SEASON2" | "SEASON3",
   options: { limit?: number; offset?: number; search?: string } = {},
 ): Promise<LeaderboardResponse> {
   const params = new URLSearchParams({ period });
@@ -398,7 +398,7 @@ export async function getLeaderboard(
 export async function getUserPosition(
   bearerToken: string,
   type: "points" | "pnl" | "volume",
-  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  period: "DAILY" | "MONTHLY" | "LIFETIME" | "PRESEASON" | "SEASON1" | "SEASON2" | "SEASON3",
 ): Promise<UserPosition> {
   // Backend parses category case-insensitively — lowercase keeps the API
   // layer consistent with getLeaderboard / getTop3 URL conventions.
@@ -427,7 +427,7 @@ export async function getAllUserPositions(bearerToken: string): Promise<{
 
 export async function getTop3(
   type: "points" | "pnl" | "volume",
-  period: "DAILY" | "MONTHLY" | "LIFETIME",
+  period: "DAILY" | "MONTHLY" | "LIFETIME" | "PRESEASON" | "SEASON1" | "SEASON2" | "SEASON3",
 ): Promise<LeaderboardEntry[]> {
   // URL path segment is conventionally lowercase; backend parses
   // case-insensitively but we normalize here at the client boundary.

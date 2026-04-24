@@ -38,6 +38,7 @@ import { RiGhostLine } from "react-icons/ri";
 import { LuChefHat } from "react-icons/lu";
 import { BiCandles } from "react-icons/bi";
 import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
+import posthog from "posthog-js";
 // import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "6h" | "24h";
@@ -2401,6 +2402,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               submittedTokenAmount: Number(limitOrderResponse.order.tokenAmount ?? 0),
             });
           }
+          posthog.capture("limit_order_created", { symbol: token.symbol, mint: token.mint });
           setSuccessMessage(`Limit order for ${token.symbol} created successfully!`);
           setAmount("");
           setTargetMC("");
@@ -2606,6 +2608,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             setTimeout(() => toast.dismiss(uniqueToastId), 10000);
 
             // Broadcast trade completion immediately for portfolio auto-refresh
+            posthog.capture("token_sell_submitted", { symbol: token.symbol, mint: token.mint, sell_pct: sellPercentage });
             broadcastTradeCompleted({
               tokenAddress: token.mint,
               tradeType: 'sell',
@@ -2976,6 +2979,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         }, 2000);
 
         broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol', tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: amount });
+        posthog.capture("token_buy_submitted", { symbol: token.symbol, mint: token.mint, amount_sol: amount });
         setSuccessMessage(`✅ Bought ${tokenName} successfully!`);
         setIsLoading(false);
         return { success: true };

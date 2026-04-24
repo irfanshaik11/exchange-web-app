@@ -41,6 +41,7 @@ import { redistributeWalletFunds } from "~/utils/api";
 import { deleteUserWallet } from "~/utils/api";
 import { PredictionPositions, UnifiedPortfolio, PolygonWalletCard } from "~/components/predictions";
 import { useSolanaPositionWebSocketContext } from "~/contexts/SolanaPositionWebSocketContext";
+import posthog from "posthog-js";
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -608,6 +609,7 @@ export default function PortfolioPage() {
       setExportWalletAddress(getAddressForChain(primary, "sol"));
       setForceExportChain("sol");
       setShowExportModal(true);
+      posthog.capture("wallet_export_initiated", { chain: currentChain });
     }
   }, [currentChain, showExportModal, user?.id, wallets]);
 
@@ -3831,6 +3833,7 @@ export default function PortfolioPage() {
                               onClick={() => {
                                 setShowImportSolanaModal(true);
                                 setShowImportDropdown(false);
+                                posthog.capture("wallet_import_initiated", { chain: "sol" });
                               }}
                               className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-white/[0.05] transition-colors first:rounded-t-lg flex items-center gap-2"
                             >
@@ -3841,6 +3844,7 @@ export default function PortfolioPage() {
                               onClick={() => {
                                 setShowImportEvmModal(true);
                                 setShowImportDropdown(false);
+                                posthog.capture("wallet_import_initiated", { chain: "evm" });
                               }}
                               className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-white/[0.05] transition-colors last:rounded-b-lg flex items-center gap-2"
                             >

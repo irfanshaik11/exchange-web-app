@@ -16,15 +16,16 @@ import Header from '~/components/Header';
 import Footer from '~/components/Footer';
 import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
 import { useUser } from '~/components/UserContext';
-import { useArenaStats, useQuests, useCashbackSummary, useClaimCashback } from '~/hooks/useArena';
+import { useArenaStats, useQuests, useCashbackSummary, useClaimCashback, useClaimAllQuests } from '~/hooks/useArena';
 import SocialQuestsSection from '~/components/arena/quests/SocialQuestsSection';
 import KeyTweetsSection from '~/components/arena/quests/KeyTweetsSection';
 import SeasonRoadmap from '~/components/arena/season/SeasonRoadmap';
 import SeasonCountdownBanner from '~/components/arena/season/SeasonCountdownBanner';
 import ArenaInfoTooltip from '~/components/arena/common/ArenaInfoTooltip';
-import { claimAllQuests } from '~/utils/arenaApi';
+// claimAllQuests direct import removed — replaced by useClaimAllQuests hook.
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
+import { showArenaErrorToast } from '~/utils/arenaToast';
 
 // React Icons
 import { GiTrophy } from 'react-icons/gi';
@@ -596,6 +597,7 @@ export default function ArenaPage() {
   const { data: questsData, isError: questsError, isLoading: questsLoading } = useQuests();
   useCashbackSummary(); // Hook called for potential cache warming
   const claimCashbackMutation = useClaimCashback();
+  const claimAllQuestsMutation = useClaimAllQuests();
   const queryClient = useQueryClient();
   const [isClaimingCashback, setIsClaimingCashback] = useState(false);
   const [isClaimingGold, setIsClaimingGold] = useState(false);
@@ -648,41 +650,26 @@ export default function ArenaPage() {
     setMounted(true);
   }, []);
 
-  // Claim all unclaimed quests via single batch endpoint
+  // Claim all unclaimed quests via the mutation hook (optimistic UI + rollback
+  // + invalidation fan-out all live in useClaimAllQuests). Page-level toasts
+  // here are skipped — the hook's onSuccess shows them.
   const handleClaimAllGold = async () => {
     if (!user?.bearerToken) {
-      toast.error('Please log in to claim rewards');
+      showArenaErrorToast('Please log in to claim rewards');
       return;
     }
 
     const unclaimedQuests = allQuests.filter((q: any) => q.isCompleted && !q.isClaimed);
     if (unclaimedQuests.length === 0) {
-      toast('No credits to claim!', { icon: '💡' });
+      showArenaErrorToast('No credits to claim');
       return;
     }
 
     setIsClaimingGold(true);
-
     try {
-      const result = await claimAllQuests(user.bearerToken);
-
-      // Refresh all related data
-      queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
-      queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
-      queryClient.invalidateQueries({ queryKey: ['arena', 'cashback'] });
-      queryClient.invalidateQueries({ queryKey: ['arena', 'gold-history'] });
-
-      toast.success(`🪙 Claimed ${result.totalGoldAwarded.toLocaleString()} Credits!`, { duration: 4000 });
-
-      // Show rank-up toast if applicable
-      if (result.rankUp && result.newRank) {
-        toast.success(`🎖️ Ranked up to ${result.newRank}${result.newLevel ? ` ${['', 'I', 'II', 'III', 'IV'][result.newLevel]}` : ''}!`, { duration: 5000 });
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to claim credits');
-      // Still refresh in case the backend partially succeeded
-      queryClient.invalidateQueries({ queryKey: ['arena', 'stats'] });
-      queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
+      await claimAllQuestsMutation.mutateAsync();
+    } catch {
+      // Errors already toasted in the mutation's onError; nothing to do.
     } finally {
       setIsClaimingGold(false);
     }
@@ -1035,10 +1022,20 @@ export default function ArenaPage() {
                     />
                   )}
 
-                  {/* v2.0: Admin-curated Key Tweets (repeatable credits) */}
-                  <div className="mt-4">
-                    <KeyTweetsSection />
-                  </div>
+                  {/* v2.0: Admin-curated Key Tweets (repeatable credits) —
+                      HIDDEN until Snag-backed verification is wired.
+                      Decision: only social tasks should be Snag-maintained;
+                      key tweets currently have no server-side verification
+                      (honor system), so we're keeping the UI dark to avoid
+                      shipping a claimable-without-engagement surface.
+                      The backend tables (arena_key_tweets, arena_key_tweet_claims)
+                      and the claimKeyTweetReward service remain in place; only
+                      the UI is gated. Re-enable once verification is added. */}
+                  {false && (
+                    <div className="mt-4">
+                      <KeyTweetsSection />
+                    </div>
+                  )}
 
                   {/* Daily Quests */}
                   <div className="mb-6">

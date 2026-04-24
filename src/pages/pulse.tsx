@@ -47,6 +47,7 @@ import BlacklistModal from "../components/BlacklistModal";
 import { AiOutlineQuestionCircle } from "react-icons/ai";
 import { BsBookmarkX, BsLayoutThreeColumns } from "react-icons/bs";
 import { CiSettings } from "react-icons/ci";
+import posthog from "posthog-js";
 
 interface LaunchpadToken {
   mint: string;
@@ -1575,7 +1576,7 @@ export default function PulsePage() {
             <div className="content-mobile-only mt-3 mb-4 lg:hidden">
               <div className="w-full flex gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-1">
                 <button
-                  onClick={() => setActiveTab("new")}
+                  onClick={() => { setActiveTab("new"); posthog.capture("pulse_tab_switched", { tab: "new" }); }}
                   className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
                     activeTab === "new"
                       ? "bg-[#7FFFC9] text-black"
@@ -1596,7 +1597,7 @@ export default function PulsePage() {
                   </div>
                 </button>
                 <button
-                  onClick={() => setActiveTab("final-stretch")}
+                  onClick={() => { setActiveTab("final-stretch"); posthog.capture("pulse_tab_switched", { tab: "final-stretch" }); }}
                   className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
                     activeTab === "final-stretch"
                       ? "bg-[#7FFFC9] text-black"
@@ -1617,7 +1618,7 @@ export default function PulsePage() {
                   </div>
                 </button>
                 <button
-                  onClick={() => setActiveTab("migrated")}
+                  onClick={() => { setActiveTab("migrated"); posthog.capture("pulse_tab_switched", { tab: "migrated" }); }}
                   className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
                     activeTab === "migrated"
                       ? "bg-[#7FFFC9] text-black"

@@ -12,11 +12,22 @@ import {
 } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "react-hot-toast";
+import {
+  showQuestClaimedToast,
+  showBatchClaimToast,
+  showKeyTweetClaimedToast,
+  showRankUpToast,
+  showHonorsUpgradeToast,
+  showReferralClaimToast,
+  showCashbackClaimToast,
+  showArenaErrorToast,
+} from "~/utils/arenaToast";
 import { useUser } from "~/components/UserContext";
 import {
   getArenaStats,
   getQuests,
   claimQuest,
+  claimAllQuests,
   getCashbackSummary,
   claimCashback,
   getGoldHistory,
@@ -46,6 +57,7 @@ import {
   getRecruiterProgress,
   getSeasonLeaderboard,
   type ArenaStats,
+  type Quest,
   type QuestsResponse,
   type CashbackSummary,
   type GoldTransaction,
@@ -65,7 +77,7 @@ import {
   type KeyTweet,
   type RecruiterProgress,
   type SeasonLeaderboardResponse,
-} from '~/utils/arenaApi';
+} from "~/utils/arenaApi";
 
 // ============================================================
 // ARENA STATS HOOK
@@ -78,10 +90,13 @@ export function useArenaStats() {
     queryKey: ["arena", "stats", user?.id],
     queryFn: () => getArenaStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: Infinity,
+    refetchInterval: 5 * 60 * 1000,
+    // 'always' overrides the staleTime-gated behavior of refetchOnMount: true.
+    // Required because this app persists the React Query cache to localStorage
+    // (src/lib/queryClient.ts) — without 'always' the restored cache is
+    // considered fresh-forever and never re-syncs with the server on reload.
+    refetchOnMount: 'always',
   });
 }
 
@@ -98,10 +113,9 @@ export function useQuests(
     queryKey: ["arena", "quests", user?.id, type],
     queryFn: () => getQuests(user!.bearerToken, type),
     enabled: !!user?.bearerToken,
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: Infinity,
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnMount: 'always', // override persister-cache-restoration (see useArenaStats)
   });
 }
 
@@ -111,27 +125,173 @@ export function useClaimQuest() {
 
   return useMutation({
     mutationFn: (questId: number) => claimQuest(user!.bearerToken, questId),
+    onMutate: async (questId: number) => {
+      const userId = user?.id;
+      const questsKey = ["arena", "quests", userId] as const;
+      const statsKey = ["arena", "stats", userId] as const;
+
+      await queryClient.cancelQueries({ queryKey: questsKey });
+      await queryClient.cancelQueries({ queryKey: statsKey });
+
+      const prevQuestsEntries = queryClient.getQueriesData<QuestsResponse>({ queryKey: questsKey });
+      const prevStats = queryClient.getQueryData<ArenaStats>(statsKey);
+
+      let goldReward = 0;
+      for (const [, data] of prevQuestsEntries) {
+        const found = data?.quests?.find((q) => q.id === questId);
+        if (found) {
+          goldReward = found.goldReward ?? 0;
+          break;
+        }
+      }
+
+      queryClient.setQueriesData<QuestsResponse>({ queryKey: questsKey }, (old) => {
+        if (!old) return old;
+        const flip = (q: Quest): Quest =>
+          q.id === questId
+            ? { ...q, isClaimed: true, claimedAt: q.claimedAt ?? new Date().toISOString() }
+            : q;
+        return {
+          ...old,
+          quests: old.quests.map(flip),
+          grouped: {
+            daily: old.grouped.daily.map(flip),
+            seasonal: old.grouped.seasonal.map(flip),
+            referral: old.grouped.referral.map(flip),
+            special: old.grouped.special.map(flip),
+          },
+        };
+      });
+
+      if (prevStats && goldReward > 0) {
+        queryClient.setQueryData<ArenaStats>(statsKey, {
+          ...prevStats,
+          goldAvailable: prevStats.goldAvailable + goldReward,
+          goldEarned: prevStats.goldEarned + goldReward,
+          questsCompletedToday: prevStats.questsCompletedToday,
+        });
+      }
+
+      return { prevQuestsEntries, prevStats, questsKey, statsKey };
+    },
+    onError: (error: Error, _questId, ctx) => {
+      if (ctx) {
+        for (const [key, data] of ctx.prevQuestsEntries) {
+          queryClient.setQueryData(key, data);
+        }
+        if (ctx.prevStats !== undefined) {
+          queryClient.setQueryData(ctx.statsKey, ctx.prevStats);
+        }
+      }
+      showArenaErrorToast(error.message || "Failed to claim quest");
+    },
     onSuccess: (data) => {
-      // Invalidate related queries
+      if (data.goldAwarded) {
+        showQuestClaimedToast(data.goldAwarded);
+      }
+      if (data.honorsUpgrade) {
+        showHonorsUpgradeToast(data.honorsUpgrade);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
       queryClient.invalidateQueries({ queryKey: ["arena", "quests"] });
       queryClient.invalidateQueries({ queryKey: ["arena", "cashback"] });
       queryClient.invalidateQueries({ queryKey: ["arena", "gold-history"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "credits-summary"] });
+    },
+  });
+}
 
-      // Show success toast
-      if (data.goldAwarded) {
-        toast.success(`🏆 Claimed ${data.goldAwarded.toLocaleString()} Gold!`, {
-          duration: 4000,
+/**
+ * Claim all completed-but-unclaimed quests in a single server transaction.
+ *
+ * Backend is atomic: all claim rows commit together or none do. Optimistic UI
+ * flips every cached ready quest to claimed and bumps stats by the sum of
+ * goldReward. Full snapshot rollback on error.
+ */
+export function useClaimAllQuests() {
+  const { user } = useUser();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => claimAllQuests(user!.bearerToken),
+    onMutate: async () => {
+      const userId = user?.id;
+      const questsKey = ["arena", "quests", userId] as const;
+      const statsKey = ["arena", "stats", userId] as const;
+
+      await queryClient.cancelQueries({ queryKey: questsKey });
+      await queryClient.cancelQueries({ queryKey: statsKey });
+
+      const prevQuestsEntries = queryClient.getQueriesData<QuestsResponse>({ queryKey: questsKey });
+      const prevStats = queryClient.getQueryData<ArenaStats>(statsKey);
+
+      let totalGoldReward = 0;
+      const readyIds = new Set<number>();
+      for (const [, data] of prevQuestsEntries) {
+        if (!data?.quests) continue;
+        for (const q of data.quests) {
+          if (q.isCompleted && !q.isClaimed && !readyIds.has(q.id)) {
+            readyIds.add(q.id);
+            totalGoldReward += q.goldReward ?? 0;
+          }
+        }
+      }
+
+      queryClient.setQueriesData<QuestsResponse>({ queryKey: questsKey }, (old) => {
+        if (!old) return old;
+        const flipIfReady = (q: Quest): Quest =>
+          readyIds.has(q.id)
+            ? { ...q, isClaimed: true, claimedAt: q.claimedAt ?? new Date().toISOString() }
+            : q;
+        return {
+          ...old,
+          quests: old.quests.map(flipIfReady),
+          grouped: {
+            daily: old.grouped.daily.map(flipIfReady),
+            seasonal: old.grouped.seasonal.map(flipIfReady),
+            referral: old.grouped.referral.map(flipIfReady),
+            special: old.grouped.special.map(flipIfReady),
+          },
+        };
+      });
+
+      if (prevStats && totalGoldReward > 0) {
+        queryClient.setQueryData<ArenaStats>(statsKey, {
+          ...prevStats,
+          goldAvailable: prevStats.goldAvailable + totalGoldReward,
+          goldEarned: prevStats.goldEarned + totalGoldReward,
         });
       }
-      if (data.honorsUpgrade) {
-        toast.success(`🎖️ Upgraded to ${data.honorsUpgrade}!`, {
-          duration: 5000,
-        });
+
+      return { prevQuestsEntries, prevStats, questsKey, statsKey };
+    },
+    onError: (error: Error, _vars, ctx) => {
+      if (ctx) {
+        for (const [key, data] of ctx.prevQuestsEntries) {
+          queryClient.setQueryData(key, data);
+        }
+        if (ctx.prevStats !== undefined) {
+          queryClient.setQueryData(ctx.statsKey, ctx.prevStats);
+        }
+      }
+      showArenaErrorToast(error.message || "Failed to claim all quests");
+    },
+    onSuccess: (data) => {
+      if (data.success && data.totalGoldAwarded > 0) {
+        showBatchClaimToast(data.claimedCount, data.totalGoldAwarded);
+      }
+      if (data.rankUp && data.newRank) {
+        showRankUpToast(data.newRank, data.newLevel);
       }
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to claim quest");
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "quests"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "cashback"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "gold-history"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "credits-summary"] });
     },
   });
 }
@@ -164,14 +324,11 @@ export function useClaimCashback() {
       queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
       queryClient.invalidateQueries({ queryKey: ["arena", "cashback"] });
       if (data.success && data.amountClaimed > 0) {
-        toast.success(
-          `💰 Claimed ${data.amountClaimed.toFixed(6)} SOL!${data.txSignature ? " Check Solscan for details." : ""}`,
-          { duration: 6000 },
-        );
+        showCashbackClaimToast(data.amountClaimed, data.txSignature);
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to claim cashback");
+      showArenaErrorToast(error.message || "Failed to claim cashback");
     },
   });
 }
@@ -243,7 +400,18 @@ export function useSetAnonymousMode() {
 // asymmetric `.toUpperCase()` / `.toLowerCase()` casts that previously lived
 // inside useLeaderboardPageData.
 export type LeaderboardCategory = "points" | "pnl" | "volume";
-export type LeaderboardPeriod = "DAILY" | "MONTHLY" | "LIFETIME";
+// Legacy periods (DAILY/MONTHLY/LIFETIME) still serve traffic during the
+// seasons-migration bake period, but the UI now only exposes the 4 season
+// keys. They'll be dropped once the backend cleanup PR lands (~14 days
+// post-cutover — tracking narrative-prod/exchange-backend#256).
+export type LeaderboardPeriod =
+  | "DAILY"
+  | "MONTHLY"
+  | "LIFETIME"
+  | "PRESEASON"
+  | "SEASON1"
+  | "SEASON2"
+  | "SEASON3";
 
 export function useLeaderboard(
   type: LeaderboardCategory,
@@ -311,10 +479,9 @@ export function useReferralStats() {
     queryKey: ["referrals", "stats", user?.id],
     queryFn: () => getReferralStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: Infinity,
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnMount: 'always', // override persister-cache-restoration (see useArenaStats)
   });
 }
 
@@ -343,10 +510,9 @@ export function useAllReferrals(
     queryKey: ["referrals", "all", user?.id, options],
     queryFn: () => getAllReferrals(user!.bearerToken, options),
     enabled: !!user?.bearerToken,
-    staleTime: 10 * 1000,
-    refetchInterval: 30 * 1000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: Infinity,
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnMount: 'always', // override persister-cache-restoration (see useArenaStats)
   });
 }
 
@@ -356,20 +522,56 @@ export function useClaimReferralRewards() {
 
   return useMutation({
     mutationFn: () => claimReferralRewards(user!.bearerToken),
+    onMutate: async () => {
+      const userId = user?.id;
+      const refStatsKey = ["referrals", "stats", userId] as const;
+      const arenaStatsKey = ["arena", "stats", userId] as const;
+
+      await queryClient.cancelQueries({ queryKey: refStatsKey });
+      await queryClient.cancelQueries({ queryKey: arenaStatsKey });
+
+      const prevRefStats = queryClient.getQueryData<ReferralStats>(refStatsKey);
+      const prevArenaStats = queryClient.getQueryData<ArenaStats>(arenaStatsKey);
+
+      const pending = (prevRefStats as any)?.pendingSolRewards ?? 0;
+      if (prevRefStats && pending > 0) {
+        queryClient.setQueryData<ReferralStats>(refStatsKey, {
+          ...prevRefStats,
+          pendingSolRewards: 0,
+          lifetimeEarnings: ((prevRefStats as any).lifetimeEarnings ?? 0) + pending,
+        } as ReferralStats);
+      }
+      if (prevArenaStats && pending > 0) {
+        queryClient.setQueryData<ArenaStats>(arenaStatsKey, {
+          ...prevArenaStats,
+          solReferralAvailable: Math.max(0, prevArenaStats.solReferralAvailable - pending),
+          solReferralEarned: prevArenaStats.solReferralEarned + pending,
+        });
+      }
+
+      return { prevRefStats, prevArenaStats, refStatsKey, arenaStatsKey };
+    },
+    onError: (error: Error, _vars, ctx) => {
+      if (ctx) {
+        if (ctx.prevRefStats !== undefined) {
+          queryClient.setQueryData(ctx.refStatsKey, ctx.prevRefStats);
+        }
+        if (ctx.prevArenaStats !== undefined) {
+          queryClient.setQueryData(ctx.arenaStatsKey, ctx.prevArenaStats);
+        }
+      }
+      showArenaErrorToast(error.message || "Failed to claim referral rewards");
+    },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
-      queryClient.invalidateQueries({ queryKey: ["referrals"] });
       if (data.success && data.amountClaimed > 0) {
-        // Show success toast - the txSignature is returned for Solscan link
-        // The referrals page component will handle showing the link
-        toast.success(
-          `✅ Claimed ${data.amountClaimed.toFixed(4)} SOL!${data.txSignature ? " Check Solscan for details." : ""}`,
-          { duration: 6000 },
-        );
+        showReferralClaimToast(data.amountClaimed, data.txSignature);
       }
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to claim referral rewards");
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["arena", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "credits-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["arena", "cashback"] });
+      queryClient.invalidateQueries({ queryKey: ["referrals"] });
     },
   });
 }
@@ -381,10 +583,9 @@ export function useHonorsInfo() {
     queryKey: ["referrals", "honors", user?.id],
     queryFn: () => getHonorsInfo(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 10 * 1000,
-    refetchInterval: 30 * 1000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: Infinity,
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnMount: 'always', // override persister-cache-restoration (see useArenaStats)
   });
 }
 
@@ -525,7 +726,7 @@ export function useSocialStatus() {
   const { user } = useUser();
 
   return useQuery({
-    queryKey: ['arena', 'social-status', user?.id],
+    queryKey: ["arena", "social-status", user?.id],
     queryFn: () => getSocialStatus(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 30 * 1000,
@@ -539,18 +740,20 @@ export function useConnectSocial() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (platform: 'twitter' | 'telegram') =>
+    mutationFn: (platform: "twitter" | "telegram") =>
       connectSocial(user!.bearerToken, platform),
     onSuccess: (data) => {
       if (data.connected) {
-        queryClient.invalidateQueries({ queryKey: ['arena', 'social-status'] });
-        queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
-        toast.success(`${data.platform === 'twitter' ? 'X' : 'Telegram'} account connected!`);
+        queryClient.invalidateQueries({ queryKey: ["arena", "social-status"] });
+        queryClient.invalidateQueries({ queryKey: ["arena", "quests"] });
+        toast.success(
+          `${data.platform === "twitter" ? "X" : "Telegram"} account connected!`,
+        );
       }
       // If oauthUrl is returned, the component handles the redirect
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to connect account');
+      toast.error(error.message || "Failed to connect account");
     },
   });
 }
@@ -564,25 +767,30 @@ export function useVerifySocialQuest() {
       verifySocialQuest(user!.bearerToken, questId),
     onSuccess: (data) => {
       if (data.verified) {
-        queryClient.invalidateQueries({ queryKey: ['arena', 'quests'] });
-        queryClient.invalidateQueries({ queryKey: ['arena', 'social-status'] });
-        toast.success(data.message || 'Task verified! Claim your gold.');
+        queryClient.invalidateQueries({ queryKey: ["arena", "quests"] });
+        queryClient.invalidateQueries({ queryKey: ["arena", "social-status"] });
+        toast.success(data.message || "Task verified! Claim your gold.");
       }
     },
     onError: (error: Error) => {
-      const msg = (error.message || '').toLowerCase();
-      if (msg.includes('twitter not connected') || msg.includes('x not connected')) {
+      const msg = (error.message || "").toLowerCase();
+      if (
+        msg.includes("twitter not connected") ||
+        msg.includes("x not connected")
+      ) {
         toast.error(
-          'This X account may already be linked to another Interstate user. Please use a different account.',
-          { duration: 6000 }
+          "This X account may already be linked to another Interstate user. Please use a different account.",
+          { duration: 6000 },
         );
-      } else if (msg.includes('telegram not connected')) {
+      } else if (msg.includes("telegram not connected")) {
         toast.error(
-          'This Telegram account may already be linked to another Interstate user. Please use a different account.',
-          { duration: 6000 }
+          "This Telegram account may already be linked to another Interstate user. Please use a different account.",
+          { duration: 6000 },
         );
       } else {
-        toast.error(error.message || 'Verification failed — did you complete the task?');
+        toast.error(
+          error.message || "Verification failed — did you complete the task?",
+        );
       }
     },
   });
@@ -599,11 +807,12 @@ export function useVerifySocialQuest() {
 export function useCreditsSummary() {
   const { user } = useUser();
   return useQuery<CreditsSummary>({
-    queryKey: ['arena', 'credits-summary', user?.id],
+    queryKey: ["arena", "credits-summary", user?.id],
     queryFn: () => getCreditsSummary(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    refetchInterval: 30_000,
-    staleTime: 10_000,
+    staleTime: Infinity,
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnMount: 'always', // override persister-cache-restoration (see useArenaStats)
   });
 }
 
@@ -611,7 +820,7 @@ export function useCreditsSummary() {
 export function useSeasons() {
   const { user } = useUser();
   return useQuery<{ seasons: Season[]; activeSeasonId: number | null }>({
-    queryKey: ['arena', 'seasons'],
+    queryKey: ["arena", "seasons"],
     queryFn: () => getSeasons(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 5 * 60_000,
@@ -622,7 +831,7 @@ export function useSeasons() {
 export function useSeasonStats() {
   const { user } = useUser();
   return useQuery<SeasonStatsResponse>({
-    queryKey: ['arena', 'season-stats', user?.id],
+    queryKey: ["arena", "season-stats", user?.id],
     queryFn: () => getSeasonStats(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 60_000,
@@ -633,31 +842,88 @@ export function useSeasonStats() {
 export function useKeyTweets() {
   const { user } = useUser();
   return useQuery<{ tweets: KeyTweet[] }>({
-    queryKey: ['arena', 'key-tweets', user?.id],
+    queryKey: ["arena", "key-tweets", user?.id],
     queryFn: () => getKeyTweets(user!.bearerToken),
     enabled: !!user?.bearerToken,
-    staleTime: 60_000,
+    staleTime: Infinity,
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnMount: 'always', // override persister-cache-restoration (see useArenaStats)
   });
 }
 
-/** Claim a key tweet — invalidates credits-summary + key-tweets on success. */
+/**
+ * Claim a key tweet — optimistically marks the tweet as claimed and bumps
+ * credits by its reward. Full rollback on error via cached snapshot.
+ */
 export function useClaimKeyTweet() {
   const qc = useQueryClient();
   const { user } = useUser();
-  return useMutation<{ success: boolean; creditsAwarded?: number; error?: string }, Error, number>({
+  return useMutation<
+    { success: boolean; creditsAwarded?: number; error?: string },
+    Error,
+    number,
+    {
+      prevTweets: { tweets: KeyTweet[] } | undefined;
+      prevCredits: CreditsSummary | undefined;
+      tweetsKey: readonly unknown[];
+      creditsKey: readonly unknown[];
+      creditsAwarded: number;
+    }
+  >({
     mutationFn: (keyTweetId: number) => claimKeyTweet(user!.bearerToken, keyTweetId),
+    onMutate: async (keyTweetId) => {
+      const userId = user?.id;
+      const tweetsKey = ["arena", "key-tweets", userId] as const;
+      const creditsKey = ["arena", "credits-summary", userId] as const;
+
+      await qc.cancelQueries({ queryKey: tweetsKey });
+      await qc.cancelQueries({ queryKey: creditsKey });
+
+      const prevTweets = qc.getQueryData<{ tweets: KeyTweet[] }>(tweetsKey);
+      const prevCredits = qc.getQueryData<CreditsSummary>(creditsKey);
+
+      const found = prevTweets?.tweets?.find((t: any) => t.id === keyTweetId || t.keyTweetId === keyTweetId);
+      const creditsAwarded = (found as any)?.creditsReward ?? (found as any)?.credits ?? 0;
+
+      if (prevTweets) {
+        qc.setQueryData<{ tweets: KeyTweet[] }>(tweetsKey, {
+          ...prevTweets,
+          tweets: prevTweets.tweets.map((t: any) =>
+            t.id === keyTweetId || t.keyTweetId === keyTweetId
+              ? { ...t, isClaimed: true, claimedAt: t.claimedAt ?? new Date().toISOString() }
+              : t,
+          ),
+        });
+      }
+      if (prevCredits && creditsAwarded > 0) {
+        qc.setQueryData<CreditsSummary>(creditsKey, {
+          ...prevCredits,
+          creditsAvailable: ((prevCredits as any).creditsAvailable ?? 0) + creditsAwarded,
+          creditsEarned: ((prevCredits as any).creditsEarned ?? 0) + creditsAwarded,
+        } as CreditsSummary);
+      }
+
+      return { prevTweets, prevCredits, tweetsKey, creditsKey, creditsAwarded };
+    },
+    onError: (err: any, _keyTweetId, ctx) => {
+      if (ctx) {
+        if (ctx.prevTweets !== undefined) qc.setQueryData(ctx.tweetsKey, ctx.prevTweets);
+        if (ctx.prevCredits !== undefined) qc.setQueryData(ctx.creditsKey, ctx.prevCredits);
+      }
+      showArenaErrorToast(err?.message || "Claim failed");
+    },
     onSuccess: (res) => {
       if (res?.success && res.creditsAwarded) {
-        toast.success(`+${res.creditsAwarded.toLocaleString()} Credits claimed!`);
-        qc.invalidateQueries({ queryKey: ['arena', 'key-tweets'] });
-        qc.invalidateQueries({ queryKey: ['arena', 'credits-summary'] });
-        qc.invalidateQueries({ queryKey: ['arena', 'stats'] });
+        showKeyTweetClaimedToast(res.creditsAwarded);
       } else if (res?.error) {
-        toast.error(res.error);
+        showArenaErrorToast(res.error);
       }
     },
-    onError: (err: any) => {
-      toast.error(err?.message || 'Claim failed');
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["arena", "key-tweets"] });
+      qc.invalidateQueries({ queryKey: ["arena", "credits-summary"] });
+      qc.invalidateQueries({ queryKey: ["arena", "stats"] });
+      qc.invalidateQueries({ queryKey: ["arena", "cashback"] });
     },
   });
 }
@@ -666,7 +932,7 @@ export function useClaimKeyTweet() {
 export function useRecruiterProgress() {
   const { user } = useUser();
   return useQuery<RecruiterProgress>({
-    queryKey: ['arena', 'recruiter-progress', user?.id],
+    queryKey: ["arena", "recruiter-progress", user?.id],
     queryFn: () => getRecruiterProgress(user!.bearerToken),
     enabled: !!user?.bearerToken,
     staleTime: 60_000,
@@ -674,10 +940,18 @@ export function useRecruiterProgress() {
 }
 
 /** Season-scoped leaderboard (top 100 of active season by default). */
-export function useSeasonLeaderboard(opts: { seasonId?: number; limit?: number } = {}) {
+export function useSeasonLeaderboard(
+  opts: { seasonId?: number; limit?: number } = {},
+) {
   const { user } = useUser();
   return useQuery<SeasonLeaderboardResponse>({
-    queryKey: ['arena', 'leaderboard', 'season', opts.seasonId ?? 'active', opts.limit ?? 100],
+    queryKey: [
+      "arena",
+      "leaderboard",
+      "season",
+      opts.seasonId ?? "active",
+      opts.limit ?? 100,
+    ],
     queryFn: () => getSeasonLeaderboard(user!.bearerToken, opts),
     enabled: !!user?.bearerToken,
     staleTime: 30_000,

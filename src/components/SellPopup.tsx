@@ -15,6 +15,7 @@ import HighSlippageWarningDialog from "./HighSlippageWarningDialog";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
+import posthog from "posthog-js";
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -309,6 +310,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
           type: "success",
           text: `✅ Sold ${amount}% successfully! Tx: ${String(txHash).slice(0, 8)}...`,
         });
+        posthog.capture("quick_sell_submitted", { amount_pct: amount, symbol: tokenMetadata?.symbol });
         toast.success(`Sold ${amount}% of ${tokenMetadata?.symbol || 'tokens'} successfully!`);
         
         // Broadcast trade completion for portfolio auto-refresh
