@@ -6,6 +6,11 @@ import { formatSmartNumber } from "~/utils/db";
 import { tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
+import {
+  confirmOptimisticMarker,
+  insertOptimisticMarker,
+  rollbackOptimisticMarker,
+} from "~/utils/pendingTradeMarkers";
 import InterstateTooltip from "./InterstateTooltip";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { broadcastTradeCompleted } from "~/utils/tradeEvents";
@@ -218,6 +223,8 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
     setIsLoading(true);
     setMessage(null);
 
+    let __sellMarkId = "";
+
     try {
       // CRITICAL: Verify the pair address from the token service before selling
       let verifiedPoolAddress = effectivePoolAddress;
@@ -315,6 +322,13 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
           : 0;
       const primarySolAddr = primaryWalletAddresses.solana || "";
 
+      __sellMarkId = insertOptimisticMarker({
+        mint: position.tokenAddress,
+        walletAddress: primarySolAddr,
+        side: "sell",
+        amountToken: Number(amount),
+      }).id;
+
       const result = await tradeSellPercentage(
         sellParams,
         user.bearerToken,
@@ -325,6 +339,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
 
       if (result?.hash || (result as any)?.txid) {
         const txHash = result.hash || (result as any).txid;
+        confirmOptimisticMarker(__sellMarkId, txHash);
         setMessage({
           type: "success",
           text: `✅ Sold ${amount}% successfully! Tx: ${String(txHash).slice(0, 8)}...`,
@@ -352,10 +367,12 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
           onClose();
         }, 2000);
       } else {
+        rollbackOptimisticMarker(__sellMarkId);
         setMessage({ type: "error", text: "❌ Trade failed. Please try again." });
         toast.error("Trade failed. Please try again.");
       }
     } catch (error: any) {
+      rollbackOptimisticMarker(__sellMarkId);
       // Use console.warn for expected validation errors, console.error for unexpected errors
       const logFn = (error as any)?.expected ? console.warn : console.error;
       logFn("Sell error:", error);

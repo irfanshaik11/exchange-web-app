@@ -23,6 +23,11 @@ import { formatMonadError } from "~/utils/monadError";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { useUser } from "~/components/UserContext";
+import {
+  confirmOptimisticMarker,
+  insertOptimisticMarker,
+  rollbackOptimisticMarker,
+} from "~/utils/pendingTradeMarkers";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import PumpLiveGrid, { type PumpLiveSortField, type PumpLiveSortDirection } from '../components/PumpLiveGrid';
 import { type PumpLiveToken } from '../hooks/usePumpLive';
@@ -2341,9 +2346,19 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
 
     const cleanupSolanaTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
+    let __markId = "";
+
     try {
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
+
+      __markId = insertOptimisticMarker({
+        mint: baseMint,
+        walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+        side: "buy",
+        amountSol: buyAmount,
+        priceUsd: (token as any).usd_price,
+      }).id;
 
       notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
@@ -2390,6 +2405,8 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
         )?.result?.txid;
 
+      confirmOptimisticMarker(__markId, firstTxHash);
+
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
@@ -2424,6 +2441,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
 
       return { success: true };
     } catch (error: any) {
+      rollbackOptimisticMarker(__markId);
       tradeErrored = true;
       cleanupSolanaTradeListener();
       // Stop timer on error
@@ -2595,11 +2613,21 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
 
     const cleanupPumpLiveTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
+    let __markId = "";
+
     try {
       // For PumpLive tokens, use the bonding_curve as the pool address
       const poolAddress = token.bonding_curve || "";
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
+
+      __markId = insertOptimisticMarker({
+        mint: baseMint,
+        walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+        side: "buy",
+        amountSol: buyAmount,
+        priceUsd: (token as any).usd_price,
+      }).id;
 
       notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
@@ -2646,6 +2674,8 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
         )?.result?.txid;
 
+      confirmOptimisticMarker(__markId, firstTxHash);
+
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
@@ -2680,6 +2710,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
 
       return { success: true };
     } catch (error: any) {
+      rollbackOptimisticMarker(__markId);
       tradeErrored = true;
       cleanupPumpLiveTradeListener();
       // Stop timer on error
