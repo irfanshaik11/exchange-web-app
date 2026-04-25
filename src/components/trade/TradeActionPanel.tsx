@@ -2994,11 +2994,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
         // Stamp signature on the optimistic marker so the chart's
         // reconciliation can dedupe it against the real WS trade.
-        if (buyMarkerInserted && firstTxHash) {
-          updatePendingTrade(buyMarkerId, {
-            signature: firstTxHash,
-            status: "confirmed",
-          });
+        // If no txHash returned, the trade was rejected by a soft pre-flight
+        // check (insufficient SOL, low liquidity, etc.) — remove the marker.
+        if (buyMarkerInserted) {
+          if (firstTxHash) {
+            updatePendingTrade(buyMarkerId, {
+              signature: firstTxHash,
+              status: "confirmed",
+            });
+          } else {
+            removePendingTrade(buyMarkerId);
+          }
         }
 
         if (firstTxHash && !isMultiWallet) {

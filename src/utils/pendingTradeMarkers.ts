@@ -298,14 +298,24 @@ export function insertOptimisticMarker(
 /**
  * Stamp the on-chain signature on an optimistic marker once the trade succeeds.
  * The merge memo in [id].tsx uses the signature as the dedupe key against real
- * WS trades. No-op if `id` is empty (insertion was skipped) or `signature` is
- * falsy (no transaction hash returned).
+ * WS trades.
+ *
+ * **If `signature` is falsy, the marker is REMOVED** — a missing signature
+ * after the trade function returned means the trade didn't actually go through
+ * (typically a soft pre-flight validation failure like "insufficient SOL" or
+ * "low liquidity" where the function returns an error result rather than
+ * throwing). In those cases we don't want a phantom marker hanging around
+ * until the 5-min TTL — the user got an error toast and shouldn't see a marker.
  */
 export function confirmOptimisticMarker(
   id: string,
   signature: string | null | undefined,
 ): void {
-  if (!id || !signature) return;
+  if (!id) return;
+  if (!signature) {
+    removePendingTrade(id);
+    return;
+  }
   updatePendingTrade(id, { signature, status: "confirmed" });
 }
 
