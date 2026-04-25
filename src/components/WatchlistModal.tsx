@@ -13,6 +13,11 @@ import { useRouter } from 'next/router';
 import { copyToClipboard } from '~/utils/clipboard';
 import { SolanaIcon } from './Footer';
 import { useUser } from './UserContext';
+import {
+  confirmOptimisticMarker,
+  insertOptimisticMarker,
+  rollbackOptimisticMarker,
+} from "~/utils/pendingTradeMarkers";
 import { useQuickBuy } from './QuickBuyContext';
 import toast from 'react-hot-toast';
 import { tradeMonadBuy, SOL_MINT_ADDRESS } from '~/utils/api';
@@ -758,9 +763,19 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
 
       const cleanupSolanaTradeListener = listenForTradeEvents((token as any).mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
+      let __markId = "";
+
       try {
         const baseMint = tokenMint;
         const quoteMint = SOL_MINT_ADDRESS;
+
+        __markId = insertOptimisticMarker({
+          mint: baseMint,
+          walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+          side: "buy",
+          amountSol: quickBuyAmount,
+          priceUsd: token.usd_price,
+        }).id;
 
         notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
         const multiResult = await executeSolanaMultiBuy({
@@ -806,6 +821,8 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
             (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
           )?.result?.txid;
 
+        confirmOptimisticMarker(__markId, firstTxHash);
+
         if (firstTxHash && !isMultiWallet) {
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
           if (linkEl) {
@@ -832,6 +849,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
         dispatchBalanceRefresh('sol');
         broadcastTradeCompleted({ tokenAddress: tokenMint, tradeType: 'buy', chain: 'sol', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: quickBuyAmount });
       } catch (error: any) {
+        rollbackOptimisticMarker(__markId);
         tradeErrored = true;
         cleanupSolanaTradeListener();
         // Stop timer on error

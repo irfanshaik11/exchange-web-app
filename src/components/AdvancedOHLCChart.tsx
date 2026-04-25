@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
+import { subscribe as subscribePendingTradeMarkers } from "../utils/pendingTradeMarkers";
 import { KOL_ADDRESS_MAP } from "../utils/kolLookup";
 import * as ohlcPrefetchManager from "../utils/ohlcPrefetchManager";
 
@@ -493,7 +494,16 @@ function clampLaunchCandles(candles: BackendOHLCData[]): void {
   }
 }
 
-const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
+export interface AdvancedOHLCChartHandle {
+  /**
+   * Force an immediate `refreshMarks()` on the underlying TradingView widget,
+   * bypassing the 800ms debounce. Used by the trade page to make optimistic
+   * buy/sell markers appear sub-150ms after a click.
+   */
+  refreshMarksNow: () => void;
+}
+
+const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartProps>(({
   mint,
   pairAddress,
   interval = "1s",
@@ -517,7 +527,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   onChartMetrics,
   tokenAgeSec,
   circulatingSupply,
-}) => {
+}, ref) => {
   const MARKET_CAP_MULTIPLIER = circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY;
 
   // DEBUG: Confirm component is rendering with latest code
@@ -1807,6 +1817,87 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     }
     return () => { if (refreshMarksTimeoutRef.current) clearTimeout(refreshMarksTimeoutRef.current); };
   }, [tradeData]);
+
+  // Single cancellable retry chain shared by both refresh paths (the chart's
+  // direct store subscription below, and the imperative `refreshMarksNow` API
+  // below that). Without this, every store mutation (add → confirm → remove)
+  // spawns a fresh 30-attempt setTimeout chain and they accumulate concurrently
+  // until each completes. With cancellation, at most one retry chain is alive
+  // at any time and rapid mutations naturally collapse.
+  const refreshRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRefreshMarks = useCallback(() => {
+    if (refreshRetryTimerRef.current) {
+      clearTimeout(refreshRetryTimerRef.current);
+      refreshRetryTimerRef.current = null;
+    }
+    const tryRefresh = (attemptsLeft: number) => {
+      refreshRetryTimerRef.current = null;
+      const widget = widgetRef.current;
+      if (!widget) {
+        if (attemptsLeft > 0) {
+          refreshRetryTimerRef.current = setTimeout(
+            () => tryRefresh(attemptsLeft - 1),
+            100,
+          );
+        }
+        return;
+      }
+      try {
+        widget.onChartReady?.(() => {
+          try {
+            widget.chart?.()?.refreshMarks?.();
+          } catch {}
+        });
+      } catch {}
+    };
+    // Up to 30 attempts × 100ms = 3s of retry headroom — covers the slowest
+    // observed widget init time on cold caches.
+    tryRefresh(30);
+  }, []);
+
+  // Cancel any pending retry chain on unmount so a stale timer can't fire
+  // against a torn-down widget.
+  useEffect(() => {
+    return () => {
+      if (refreshRetryTimerRef.current) {
+        clearTimeout(refreshRetryTimerRef.current);
+        refreshRetryTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Direct subscription to the pendingTradeMarkers store as a safety net for
+  // the parent's listener path. On component re-mount (e.g. after navigating
+  // away and returning), the parent's `subscribePendingTrades` listener may
+  // race the chart's widget initialization. Subscribing here too means even
+  // if the parent's path silently no-ops (because chartRef wasn't ready), the
+  // chart itself triggers a refresh as soon as its widget comes online.
+  // Two rAFs of defer to ensure the parent's React render has committed and
+  // `latestTradeDataRef` is populated before refreshMarks reads it.
+  useEffect(() => {
+    return subscribePendingTradeMarkers(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scheduleRefreshMarks();
+        });
+      });
+    });
+  }, [scheduleRefreshMarks]);
+
+  // Imperative API: lets the trade page bypass the 800ms debounce above for
+  // optimistic-marker inserts. Sub-150ms click→render path lives through here.
+  // Robust against the re-mount race where the parent's listener fires before
+  // the chart's TradingView widget has finished initializing — we poll widgetRef
+  // briefly until it's ready, then run the refresh through onChartReady.
+  useImperativeHandle(
+    ref,
+    () => ({
+      refreshMarksNow: () => {
+        scheduleRefreshMarks();
+      },
+    }),
+    [scheduleRefreshMarks],
+  );
 
   // Build URL for OHLC data (same as BackendOHLCChart)
   // Allow override of interval for when TradingView requests a different resolution
@@ -5192,6 +5283,23 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         const shouldLogMarks = marksLogCountRef.current % 10 === 1;
 
         try {
+          // TEMP diagnostic — remove once optimistic markers verified.
+          const optimisticInTradeData = currentTradeData.filter((t: any) => t.__optimistic);
+          if (optimisticInTradeData.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log("[getMarks] optimistic rows in tradeData:", optimisticInTradeData.length, {
+              from,
+              to,
+              userWallet: currentUserWallet,
+              firstOptimistic: {
+                maker: optimisticInTradeData[0].maker,
+                wallet_address: optimisticInTradeData[0].wallet_address,
+                timestamp: optimisticInTradeData[0].timestamp,
+                side: optimisticInTradeData[0].side,
+              },
+            });
+          }
+
           if (!currentTradeData || currentTradeData.length === 0) {
             onDataCallback([]);
             return;
@@ -6552,6 +6660,8 @@ Maker: ${walletAddress}`;
       )}
     </div>
   );
-};
+});
+
+AdvancedOHLCChart.displayName = "AdvancedOHLCChart";
 
 export default AdvancedOHLCChart;

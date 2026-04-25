@@ -36,6 +36,11 @@ import { listenForTradeEvents } from "~/utils/createSolanaToastHandler";
 import { broadcastTradeCompleted } from "./tradeEvents";
 import { dispatchBalanceRefresh } from "./balanceEvents";
 import {
+  addPendingTrade,
+  removePendingTrade,
+  updatePendingTrade,
+} from "./pendingTradeMarkers";
+import {
   dispatchOptimisticBalance,
   dispatchOptimisticRollback,
   newTradeId,
@@ -225,6 +230,15 @@ export async function executeEnhancedTrade(
     if (!__optimisticDispatched) return;
     queueMicrotask(() => dispatchOptimisticRollback(__optimisticTradeId));
   };
+
+  // Optimistic chart marker id — function-scoped so success/error paths can update/remove it.
+  // Inserted only for Solana primary-wallet trades (see logic in the `chain === "sol"` block).
+  const pendingMarkerId =
+    `pend_${
+      (typeof crypto !== "undefined" && crypto.randomUUID?.()) ||
+      Math.random().toString(36).slice(2)
+    }`;
+  let pendingMarkerInserted = false;
   if (chain === "sol") {
     const primaryAddrForOptimistic =
       params.walletContext?.walletList?.find((w) => w.isPrimary)
@@ -261,6 +275,31 @@ export async function executeEnhancedTrade(
           expiresAt: Date.now() + 15_000,
         }),
       );
+    }
+
+    // Optimistic chart marker. We insert whenever we have a primary wallet
+    // address — the chart's getMarks() isUser filter will hide markers whose
+    // wallet doesn't match the active primary, so an over-eager insert just
+    // sits invisible in the store and gets pruned by the TTL. Better than
+    // a too-strict gate that silently drops markers the user expected.
+    if (primaryAddrForOptimistic && token?.mint) {
+      // Subtract 1.5s from the timestamp so the marker reliably falls inside
+      // the chart's cached visible-range `to` value. Real WS trades arrive
+      // with indexer timestamps slightly in the past for the same reason.
+      const markerTs = Date.now() - 1500;
+      addPendingTrade({
+        id: pendingMarkerId,
+        mint: token.mint,
+        walletAddress: primaryAddrForOptimistic.toLowerCase(),
+        side,
+        amountSol: side === "buy" ? amount : undefined,
+        amountToken: side === "sell" ? amount : undefined,
+        priceUsd: token.usd_price,
+        timestamp: markerTs,
+        status: "pending",
+        createdAt: Date.now(),
+      });
+      pendingMarkerInserted = true;
     }
   }
 
@@ -835,6 +874,10 @@ export async function executeEnhancedTrade(
         duration: 6000,
       });
 
+      if (pendingMarkerInserted) {
+        removePendingTrade(pendingMarkerId);
+      }
+
       if (onError) onError(enhancedError);
 
       __rollbackOptimistic();
@@ -929,6 +972,15 @@ export async function executeEnhancedTrade(
 
       // Dispatch balance-refresh event as fallback for callers that don't pass refreshBalance
       dispatchBalanceRefresh(chain === "monad" ? "monad" : "sol");
+
+      // Stamp signature on the optimistic marker so the chart's reconciliation
+      // path can dedupe it against the real WS trade once it echoes.
+      if (pendingMarkerInserted && txHash) {
+        updatePendingTrade(pendingMarkerId, {
+          signature: txHash,
+          status: "confirmed",
+        });
+      }
 
       if (onSuccess) onSuccess(txHash, stats);
 
@@ -1038,6 +1090,10 @@ export async function executeEnhancedTrade(
       showExplorerLink: false, // Explicitly don't show Solscan link for errors
       duration: 6000, // 6s for errors with actions/suggestions (needs time to read)
     });
+
+    if (pendingMarkerInserted) {
+      removePendingTrade(pendingMarkerId);
+    }
 
     if (onError) onError(enhancedError);
 

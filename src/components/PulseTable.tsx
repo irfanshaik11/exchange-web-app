@@ -86,6 +86,11 @@ import FastImage from "./FastImage";
 import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
 import { useUser } from "~/components/UserContext";
+import {
+  confirmOptimisticMarker,
+  insertOptimisticMarker,
+  rollbackOptimisticMarker,
+} from "~/utils/pendingTradeMarkers";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import {
   extractTokenImage,
@@ -3501,9 +3506,20 @@ function PulseTable({
 
     const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
+    // Optimistic chart marker — declared outside try so catch can roll back.
+    let __markId = "";
+
     try {
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
+
+      __markId = insertOptimisticMarker({
+        mint: baseMint,
+        walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+        side: "buy",
+        amountSol: buyAmount,
+        priceUsd: token.usd_price,
+      }).id;
 
       notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
@@ -3553,6 +3569,8 @@ function PulseTable({
           (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
         )?.result?.txid;
 
+      confirmOptimisticMarker(__markId, firstTxHash);
+
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
@@ -3579,6 +3597,7 @@ function PulseTable({
 
       return { success: true };
     } catch (error: any) {
+      rollbackOptimisticMarker(__markId);
       tradeErrored = true;
       cleanupTradeListener();
       // Stop timer on error

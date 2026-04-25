@@ -28,7 +28,9 @@ import { creatorAddressCache } from "../../utils/preloadTradeChart";
 import { useKeepOrderFresh } from "../../hooks/usePrefetchOrder";
 import useTokenSupply from "../../hooks/useTokenSupply";
 // Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
-import AdvancedOHLCChart from "../../components/AdvancedOHLCChart";
+import AdvancedOHLCChart, { type AdvancedOHLCChartHandle } from "../../components/AdvancedOHLCChart";
+import { usePendingTradeMarkers } from "../../hooks/usePendingTradeMarkers";
+import { subscribe as subscribePendingTrades } from "../../utils/pendingTradeMarkers";
 
 // Lazy load other heavy components to reduce initial bundle size
 //const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
@@ -688,30 +690,223 @@ export default function TradePage() {
     enableDeduplication: true,
   });
 
-  // Trade data for chart dev markers — sourced from unified WebSocket only
-  // (trade-events WS is disabled; unified WS provides the same data via wsHistoricalTrades)
-  const tradeDataForChart = React.useMemo(() => {
-    if (!wsHistoricalTrades || wsHistoricalTrades.length === 0) return [];
+  // Optimistic chart markers — added the moment the user clicks Buy/Sell in
+  // executeEnhancedTrade. Persisted to localStorage so they survive reload.
+  const userWalletForMarkers = primaryWalletAddresses?.solana || user?.publicKey || null;
+  const pendingTrades = usePendingTradeMarkers(resolvedTokenMint, userWalletForMarkers);
 
+  // Imperative ref to the chart so we can fire refreshMarks() immediately on
+  // pending-store mutations, bypassing the chart's internal 800ms debounce.
+  const chartRef = useRef<AdvancedOHLCChartHandle | null>(null);
+
+  // Subscribe directly to the pending-trades store (not via the React tree)
+  // so we can refresh marks the same tick a row is added — sub-150ms feel.
+  // We defer with rAF so the chart's `latestTradeDataRef` (updated in a
+  // useEffect) has flushed before TradingView re-fetches marks. Without the
+  // defer, refreshMarksNow runs synchronously inside notify() and getMarks()
+  // sees the old tradeData ref → no marker.
+  React.useEffect(() => {
+    return subscribePendingTrades(() => {
+      requestAnimationFrame(() => {
+        chartRef.current?.refreshMarksNow();
+      });
+    });
+  }, []);
+
+  // Trade data for chart dev markers — sourced from unified WebSocket plus the
+  // optimistic-markers store. The early-return guard from the previous version
+  // was removed: with pending rows we may need to render markers even when the
+  // WS feed is empty (post-reload state).
+  const tradeDataForChart = React.useMemo(() => {
     const combined: any[] = [];
     const seen = new Set<string>();
 
-    for (const trade of wsHistoricalTrades) {
-      const key = trade.signature || trade.transaction_hash || `${trade.timestamp}-${trade.wallet_address}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        // Map historical trade fields to match chart expectations
-        combined.push({
-          ...trade,
-          maker: trade.wallet_address, // Chart looks for maker field
-          side: trade.type?.toLowerCase(), // BUY/SELL -> buy/sell
-          eventDisplayType: trade.type, // Keep original for fallback
-        });
+    // 1) Pending rows first. Key by signature when stamped (so a WS trade with
+    // matching sig dedupes onto this slot via case 2a), or by `__pending_<id>`
+    // while still pending.
+    for (const p of pendingTrades) {
+      const key = p.signature || `__pending_${p.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      combined.push({
+        maker: p.walletAddress,
+        wallet_address: p.walletAddress,
+        side: p.side,
+        type: p.side.toUpperCase(),
+        eventDisplayType: p.side.toUpperCase(),
+        timestamp: p.timestamp,
+        // Dedupe-key fields — used by case 2a's seen.has() check below.
+        signature: p.signature,
+        transaction_hash: p.signature,
+        // H2 — stable chart-mark id. `transactionHash` (camelCase) and `tx_hash`
+        // are deliberately NOT set so AdvancedOHLCChart's id builder (line 5374:
+        // `${time}_${transactionHash || tx_hash || id || maker}`) falls through
+        // to `id`, which stays constant as `p.id` for the row's entire lifetime.
+        // This prevents TradingView from creating a ghost mark when the row
+        // transitions pending → confirmed (signature stamped).
+        id: p.id,
+        price_usd: p.priceUsd,
+        amount: p.amountSol ?? p.amountToken,
+        __optimistic: true,
+        __optimisticId: p.id,
+        // createdAt — used by fuzzy-match guard to reject WS trades older
+        // than the click (those can't be the echo of a click that just
+        // happened, so they shouldn't dedupe against this optimistic row).
+        __optimisticCreatedAt: p.createdAt,
+      });
+    }
+
+    // Normalize side from any of side/type/eventDisplayType. Mirrors the chart's
+    // own detector (AdvancedOHLCChart.tsx:5276–5302) which does substring matches
+    // because real DEX trade types are often prefixed (e.g. "PUMPFUN_BUY",
+    // "RAYDIUM_SELL"). Strict equality === "buy" misses all of those.
+    const normalizeSide = (raw: unknown): "buy" | "sell" | null => {
+      if (raw === undefined || raw === null) return null;
+      const s = String(raw).toLowerCase();
+      if (!s) return null;
+      if (s.includes("buy") || s === "bid" || s === "buy_order") return "buy";
+      if (s.includes("sell") || s === "ask" || s === "sell_order") return "sell";
+      return null;
+    };
+
+    // 2) Real WS trades.
+    for (const trade of (wsHistoricalTrades ?? [])) {
+      const sigKey = trade.signature || trade.transaction_hash || `${trade.timestamp}-${trade.wallet_address}`;
+      const tradeTsMs =
+        typeof trade.timestamp === 'string'
+          ? new Date(trade.timestamp).getTime()
+          : trade.timestamp > 1e12
+            ? trade.timestamp
+            : trade.timestamp * 1000;
+      const tradeWallet = trade.wallet_address?.toLowerCase();
+      const tradeAny = trade as any;
+      const tradeSide = normalizeSide(tradeAny.type ?? tradeAny.side ?? tradeAny.eventDisplayType);
+
+      // a) Direct signature match — pending row already has the matching sig.
+      if (seen.has(sigKey)) {
+        const idx = combined.findIndex((c: any) =>
+          c.__optimistic && (c.signature === sigKey || c.transaction_hash === sigKey),
+        );
+        if (idx >= 0) {
+          // Preserve EVERYTHING from the optimistic row that influences
+          // rendering identity or correctness: `id` and `timestamp` (so the
+          // chart-mark id at line 5374 stays stable across replacement);
+          // `side`/`type`/`is_buy` (so the chart's side detector at lines
+          // 5262-5306 can't disagree with our normalized side because of a
+          // backend-misencoded WS field). Only enrichment fields like
+          // signature, price, amount, etc. flow in from the WS payload.
+          combined[idx] = {
+            ...trade,
+            id: combined[idx].id,
+            timestamp: combined[idx].timestamp,
+            side: combined[idx].side,
+            type: combined[idx].type,
+            eventDisplayType: combined[idx].eventDisplayType,
+            is_buy: combined[idx].side === "buy",
+            transactionHash: undefined,
+            tx_hash: undefined,
+            maker: combined[idx].wallet_address ?? trade.wallet_address,
+            wallet_address: combined[idx].wallet_address ?? trade.wallet_address,
+            __optimistic: true,
+            __optimisticId: combined[idx].__optimisticId,
+            __optimisticCreatedAt: combined[idx].__optimisticCreatedAt,
+          };
+        }
+        continue;
       }
+
+      // b) Fuzzy match — covers two cases:
+      //    1. No-signature window: optimistic row inserted, WS echoed before
+      //       success path stamped the sig.
+      //    2. Signature mismatch: stamped sig differs from WS sig (e.g. the
+      //       trade API returned an internal hash, not the on-chain sig).
+      // Match by side + wallet + WS timestamp must be ≥ optimistic createdAt
+      // (with 5s slack for clock skew). A WS trade with a timestamp OLDER than
+      // the click can't be that click's echo — without this constraint, prior
+      // unrelated trades from the same session falsely dedupe a fresh click,
+      // which manifests as "no marker shows on return visits" because the
+      // reconciliation effect removes the optimistic row instantly.
+      const fuzzyIdx = combined.findIndex((c: any) =>
+        c.__optimistic &&
+        normalizeSide(c.side) === tradeSide &&
+        c.wallet_address?.toLowerCase() === tradeWallet &&
+        tradeTsMs >= ((c.__optimisticCreatedAt ?? c.timestamp ?? 0) - 5_000) &&
+        tradeTsMs - ((c.__optimisticCreatedAt ?? c.timestamp ?? 0)) < 120_000,
+      );
+      if (fuzzyIdx >= 0) {
+        // TEMP diagnostic.
+        // eslint-disable-next-line no-console
+        console.log("[tradeDataForChart] fuzzy dedupe matched", {
+          optimisticSig: combined[fuzzyIdx].signature,
+          wsSig: sigKey,
+          deltaMs: Math.abs((combined[fuzzyIdx].timestamp ?? 0) - tradeTsMs),
+        });
+        // Same field-preservation pattern as case 2a above — keep all
+        // rendering-identity fields from the optimistic row, merge only
+        // enrichment from WS.
+        combined[fuzzyIdx] = {
+          ...trade,
+          id: combined[fuzzyIdx].id,
+          timestamp: combined[fuzzyIdx].timestamp,
+          side: combined[fuzzyIdx].side,
+          type: combined[fuzzyIdx].type,
+          eventDisplayType: combined[fuzzyIdx].eventDisplayType,
+          is_buy: combined[fuzzyIdx].side === "buy",
+          transactionHash: undefined,
+          tx_hash: undefined,
+          maker: combined[fuzzyIdx].wallet_address ?? trade.wallet_address,
+          wallet_address: combined[fuzzyIdx].wallet_address ?? trade.wallet_address,
+          __optimistic: true,
+          __optimisticId: combined[fuzzyIdx].__optimisticId,
+          __optimisticCreatedAt: combined[fuzzyIdx].__optimisticCreatedAt,
+        };
+        seen.add(sigKey);
+        continue;
+      }
+
+      // c) New unrelated trade.
+      seen.add(sigKey);
+      combined.push({
+        ...trade,
+        maker: trade.wallet_address,
+        side: tradeSide,
+        eventDisplayType: trade.type,
+      });
+    }
+
+    // TEMP diagnostic — log if we shipped any optimistic rows (would-be duplicates).
+    const remainingOptimistic = combined.filter((c: any) => c.__optimistic);
+    if (remainingOptimistic.length > 0 && (wsHistoricalTrades?.length ?? 0) > 0) {
+      // eslint-disable-next-line no-console
+      console.log("[tradeDataForChart] optimistic rows survived merge:", {
+        count: remainingOptimistic.length,
+        first: {
+          signature: remainingOptimistic[0].signature,
+          wallet: remainingOptimistic[0].wallet_address,
+          side: remainingOptimistic[0].side,
+          timestamp: remainingOptimistic[0].timestamp,
+        },
+        wsCount: wsHistoricalTrades?.length,
+      });
     }
 
     return combined;
-  }, [wsHistoricalTrades]);
+  }, [wsHistoricalTrades, pendingTrades]);
+
+  // No auto-removal of confirmed optimistic rows from the store. Even when
+  // the WS feed currently has the trade, that buffer is finite (~200 trades)
+  // and rotates older entries out. If we evicted on WS match and the WS
+  // later forgot the trade, the marker would disappear on the next reload.
+  // Instead the optimistic row stays as a permanent local backup. Cleanup
+  // mechanisms that DO run:
+  //   • Slot eviction in `addPendingTrade` removes any prior row for the same
+  //     (mint, wallet, side) when the user clicks again — bounds accumulation
+  //     to one row per slot.
+  //   • `pruneStale` in `pendingTradeMarkers.ts` removes 5-min-stale pending
+  //     and 60s-stale confirmed-without-signature rows on every mutation.
+  //   • Render-time dedupe in the merge memo's case 2a/2b prevents two markers
+  //     for the same trade — the WS row is replaced in `combined` while the
+  //     localStorage row stays untouched.
 
   // -------- Position Lines for Chart (avg entry/exit prices) --------
   const [positionLinesApi, setPositionLinesApi] = useState<{ avgBuyPriceUsd: number | null; avgSellPriceUsd: number | null } | null>(null);
@@ -1065,6 +1260,7 @@ export default function TradePage() {
               >
                 {(canStartOHLC || (idString.length >= 32)) && isRouterReady ? (
                   <AdvancedOHLCChart
+                    ref={chartRef}
                     key={`chart-${displayToken?.mint || idString}`}
                     mint={displayToken?.mint || resolvedTokenMint || undefined}
                     pairAddress={resolvedPairAddress || idString || undefined}

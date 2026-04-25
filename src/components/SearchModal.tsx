@@ -29,6 +29,11 @@ import { BsLightningChargeFill, BsTwitterX } from "react-icons/bs";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { getHistory, addToHistory, clearHistory, removeFromHistory, type SearchHistoryItem } from "~/utils/searchHistory";
 import { useUser } from "./UserContext";
+import {
+  confirmOptimisticMarker,
+  insertOptimisticMarker,
+  rollbackOptimisticMarker,
+} from "~/utils/pendingTradeMarkers";
 import { useSolPrice } from "./SolPriceContext";
 import { HiLightningBolt } from "react-icons/hi";
 import toast from "react-hot-toast";
@@ -1144,9 +1149,19 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
     const cleanupTradeListener = listenForTradeEvents(tokenMint, uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
+    let __markId = "";
+
     try {
       const baseMint = tokenMint;
       const quoteMint = SOL_MINT_ADDRESS;
+
+      __markId = insertOptimisticMarker({
+        mint: baseMint,
+        walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+        side: "buy",
+        amountSol: buyAmount,
+        priceUsd: (token as any).usd_price,
+      }).id;
 
       notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
@@ -1193,6 +1208,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
           (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
         )?.result?.txid;
 
+      confirmOptimisticMarker(__markId, firstTxHash);
+
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
         if (linkEl) {
@@ -1218,6 +1235,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
       }
       dispatchBalanceRefresh('sol');
     } catch (error: any) {
+      rollbackOptimisticMarker(__markId);
       tradeErrored = true;
       cleanupTradeListener();
       if (timerHandle) {
