@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { LuPencil, LuCheck } from "react-icons/lu";
+import React, { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from "react";
+import { LuPencil, LuCheck, LuArrowLeftRight } from "react-icons/lu";
 import { formatSmartNumber, formatMarketCap, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt, FaTrophy, FaDice, FaUsers, FaChartBar, FaCrown, FaCrosshairs, FaFire } from "react-icons/fa";
@@ -1101,17 +1101,51 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [pendingTradeOptions, setPendingTradeOptions] = useState<{ skipLiquidity?: boolean; skipSlippage?: boolean } | null>(null);
   const tradeButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Position data for this token
-  const [positionData, setPositionData] = useState<{
+  // Raw trade-history aggregates. The derived position (incl. PnL) is computed
+  // in a useMemo below, keyed on [tradeHistory, deferredPriceUsd], so the PnL
+  // tile re-renders every WebSocket price tick without us needing to refetch
+  // trade history on every tick.
+  interface TradeHistoryAggregate {
     bought: number;
     boughtUsdValue: number;
     sold: number;
     soldUsdValue: number;
-    remaining: number;
-    remainingUsdValue: number;
-    pnl: number;
-    pnlPercentage: number;
-  } | null>(null);
+  }
+  const [tradeHistory, setTradeHistory] = useState<TradeHistoryAggregate | null>(null);
+
+  // PnL display mode — 'unrealized' = live mark-to-market on the holding (default,
+  // GMGN-style); 'realized' = profit locked in from closed sells only. Toggled by
+  // clicking the PnL tile. Persisted to localStorage so the choice sticks across
+  // tokens and reloads. Both server and client start at 'unrealized' to avoid an
+  // SSR hydration mismatch; the persisted value is loaded in a useEffect after mount.
+  type PnlMode = 'unrealized' | 'realized';
+  const PNL_MODE_STORAGE_KEY = 'ist:trade-panel:pnl-mode';
+  const [pnlMode, setPnlMode] = useState<PnlMode>('unrealized');
+  const [pnlModeHydrated, setPnlModeHydrated] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setPnlModeHydrated(true);
+      return;
+    }
+    try {
+      const stored = window.localStorage.getItem(PNL_MODE_STORAGE_KEY);
+      if (stored === 'realized') setPnlMode('realized');
+    } catch {
+      // Safari private mode / embedded webviews can throw on storage access.
+    }
+    setPnlModeHydrated(true);
+  }, []);
+  // Persist pnlMode changes (skip writes before hydration completes so we don't
+  // clobber the stored value with the default).
+  useEffect(() => {
+    if (!pnlModeHydrated) return;
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(PNL_MODE_STORAGE_KEY, pnlMode);
+    } catch {
+      // Ignore storage write failures (private mode, quota, etc.).
+    }
+  }, [pnlMode, pnlModeHydrated]);
 
   // COMMENTED OUT: Migration UI disabled — always returns false
   const isMigratingToken = useMemo(() => {
@@ -1217,106 +1251,131 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Use the shared single WebSocket connection from context (no duplicate connection)
   useTxHashCallback('trade-action-panel', handleSolanaWsTxHash);
 
-  // Calculate position data from trade activity (like Activity tab does)
+  // Fetch trade-history aggregates from the Activity API. The *derived* position
+  // fields (remaining, remainingUsdValue, realized/unrealized PnL) live in a
+  // useMemo below — keeping this effect responsible only for raw state means we
+  // don't refetch trades every time the WebSocket price ticks.
   useEffect(() => {
+    const emptyAggregate: TradeHistoryAggregate = {
+      bought: 0,
+      boughtUsdValue: 0,
+      sold: 0,
+      soldUsdValue: 0,
+    };
+
     const calculatePositionFromTrades = async () => {
       if (!user?.id || !token?.mint) {
-        const emptyData = {
-          bought: 0,
-          boughtUsdValue: 0,
-          sold: 0,
-          soldUsdValue: 0,
-          remaining: 0,
-          remainingUsdValue: 0,
-          pnl: 0,
-          pnlPercentage: 0,
-        };
-        setPositionData(emptyData);
+        setTradeHistory(emptyAggregate);
         return;
       }
-      
+
       try {
-        // Get all trade activity for this user (like Activity tab)
         const trades = await getTradeActivityByUser(user.id.toString());
-        
-        // Filter trades for this specific token (case-insensitive comparison)
         const tokenMint = (token.mint || '').toLowerCase();
         const tokenTrades = trades.filter((trade: any) =>
           (trade.tokenAddress || '').toLowerCase() === tokenMint
         );
-        
-        if (tokenTrades.length > 0) {
-          // Calculate position from individual trades
-          let bought = 0;
-          let boughtUsdValue = 0;
-          let sold = 0;
-          let soldUsdValue = 0;
-          
-          tokenTrades.forEach((trade: any) => {
-            if (trade.type === 'Buy') {
-              bought += Number(trade.tokenAmount) || 0;
-              boughtUsdValue += Number(trade.usdValue) || 0;
-            } else if (trade.type === 'Sell') {
-              sold += Number(trade.tokenAmount) || 0;
-              soldUsdValue += Number(trade.usdValue) || 0;
-            }
-          });
-          
-          const remaining = bought - sold;
-          
-          // Calculate PnL: (sold value + remaining value) - bought value
-          // For remaining value, we'll use the average price of remaining tokens
-          const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
-          const remainingUsdValue = remaining * avgBoughtPrice;
-          const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
-          const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
-          
-          const newData = {
-            bought,
-            boughtUsdValue,
-            sold,
-            soldUsdValue,
-            remaining,
-            remainingUsdValue,
-            pnl,
-            pnlPercentage,
-          };
-          
-          setPositionData(newData);
-        } else {
-          // No trades found for this token
-          setPositionData({
-            bought: 0,
-            boughtUsdValue: 0,
-            sold: 0,
-            soldUsdValue: 0,
-            remaining: 0,
-            remainingUsdValue: 0,
-            pnl: 0,
-            pnlPercentage: 0,
-          });
-        }
+
+        // Sum buys and sells. Coerce every numeric field through `Number(x) || 0`
+        // so one bad API row can't poison the aggregate with NaN and cascade into
+        // every derived value downstream.
+        let bought = 0;
+        let boughtUsdValue = 0;
+        let sold = 0;
+        let soldUsdValue = 0;
+
+        tokenTrades.forEach((trade: any) => {
+          if (trade.type === 'Buy') {
+            bought += Number(trade.tokenAmount) || 0;
+            boughtUsdValue += Number(trade.usdValue) || 0;
+          } else if (trade.type === 'Sell') {
+            sold += Number(trade.tokenAmount) || 0;
+            soldUsdValue += Number(trade.usdValue) || 0;
+          }
+        });
+
+        setTradeHistory({ bought, boughtUsdValue, sold, soldUsdValue });
       } catch (error) {
         console.error('Error calculating position from trades:', error);
-        setPositionData({
-          bought: 0,
-          boughtUsdValue: 0,
-          sold: 0,
-          soldUsdValue: 0,
-          remaining: 0,
-          remainingUsdValue: 0,
-          pnl: 0,
-          pnlPercentage: 0,
-        });
+        setTradeHistory(emptyAggregate);
       }
     };
-    
+
     calculatePositionFromTrades();
-    
+
     // Refresh position data every 10 seconds
     const interval = setInterval(calculatePositionFromTrades, 10000);
     return () => clearInterval(interval);
   }, [user?.id, token?.mint]);
+
+  // Live price source for the unrealized PnL calc. Prefer the `livePriceUsd`
+  // prop — that's the same chart OHLC stream the candlesticks render from, so
+  // the PnL tile updates at the same cadence as the chart. Falls back to
+  // `token.price_usd` (slower, gated by `token_update` WS messages) and finally
+  // to 0 (which trips the cost-basis fallback inside the memo below).
+  // `useDeferredValue` coalesces bursts of ticks during volatile pumps; cost is
+  // zero when ticks are slow.
+  const rawPriceUsd =
+    typeof livePriceUsd === 'number' && Number.isFinite(livePriceUsd) && livePriceUsd > 0
+      ? livePriceUsd
+      : Number((token as any)?.price_usd) || 0;
+  const deferredPriceUsd = useDeferredValue(rawPriceUsd);
+
+  // Derived position data — recomputes on every trade-history change AND every
+  // price tick, giving the PnL tile live mark-to-market behavior.
+  //
+  // The `unrealizedPnl` formula is `soldUsdValue + remainingMarketValue - boughtUsdValue`.
+  // This mirrors the Active Positions implementation — see
+  // `exchange-web-app/src/components/trade/Positions.tsx` (~lines 1468-1496) —
+  // so both surfaces define "unrealized PnL" the same way (realized + live paper gain).
+  const positionData = useMemo(() => {
+    if (!tradeHistory) return null;
+    const { bought, boughtUsdValue, sold, soldUsdValue } = tradeHistory;
+
+    // Raw remaining may go negative if the user sold tokens they received from
+    // somewhere other than Interstate (airdrop, inbound transfer). We preserve
+    // the signed value for the Holding tile (matches prior behavior) but clamp
+    // to zero for the PnL math so a negative holding doesn't silently subtract
+    // from reported PnL at current market price.
+    const remaining = bought - sold;
+    const safeRemaining = Math.max(0, remaining);
+
+    const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
+    // `deferredPriceUsd` is already coerced to a finite number ≥ 0 above.
+    const currentPrice = deferredPriceUsd > 0 ? deferredPriceUsd : 0;
+
+    // Realized PnL — profit locked in from closed sells. Algebraically equivalent
+    // to the previously-shipped formula `(soldUsdValue + remaining*avgBoughtPrice) - boughtUsdValue`
+    // (cancels to `soldUsdValue - sold*avgBoughtPrice` when bought > 0).
+    const realizedPnl = soldUsdValue - (sold * avgBoughtPrice);
+    const realizedPnlPercentage = boughtUsdValue > 0 ? (realizedPnl / boughtUsdValue) * 100 : 0;
+
+    // Unrealized PnL — mark-to-market. Falls back to cost basis when the WS
+    // hasn't delivered a price yet, so the tile degrades gracefully to the
+    // old behavior during the first few hundred ms of the page load.
+    const remainingMarketValue = currentPrice > 0
+      ? safeRemaining * currentPrice
+      : safeRemaining * avgBoughtPrice;
+    const unrealizedPnl = (soldUsdValue + remainingMarketValue) - boughtUsdValue;
+    const unrealizedPnlPercentage = boughtUsdValue > 0 ? (unrealizedPnl / boughtUsdValue) * 100 : 0;
+
+    // Holding tile value — preserves prior behavior (cost-basis USD valuation
+    // for the remaining holding). Out of scope to mark this to market here.
+    const remainingUsdValue = remaining * avgBoughtPrice;
+
+    return {
+      bought,
+      boughtUsdValue,
+      sold,
+      soldUsdValue,
+      remaining,
+      remainingUsdValue,
+      realizedPnl,
+      realizedPnlPercentage,
+      unrealizedPnl,
+      unrealizedPnlPercentage,
+    };
+  }, [tradeHistory, deferredPriceUsd]);
   
   // Use external QuickBuy settings if available, otherwise use internal context
   const settings = externalQuickBuySettings || (
@@ -2662,22 +2721,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     }
                   });
 
-                  const remaining = bought - sold;
-                  const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
-                  const remainingUsdValue = remaining * avgBoughtPrice;
-                  const pnl = soldUsdValue + remainingUsdValue - boughtUsdValue;
-                  const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
-
-                  setPositionData({
-                    bought,
-                    boughtUsdValue,
-                    sold,
-                    soldUsdValue,
-                    remaining,
-                    remainingUsdValue,
-                    pnl,
-                    pnlPercentage,
-                  });
+                  setTradeHistory({ bought, boughtUsdValue, sold, soldUsdValue });
                 }
 
                 // Refresh balance
@@ -2715,15 +2759,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           const errorCode = error?.code || error?.response?.data?.code;
           const rawMessage = error?.message || '';
           if (errorCode === 'NO_HOLDINGS' || rawMessage.includes('Insufficient token')) {
-            setPositionData({
-              bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
-              remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
-            });
+            setTradeHistory({ bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0 });
           } else if (errorCode === 'NO_LIQUIDITY' || rawMessage.includes('no liquidity across all')) {
-            setPositionData({
-              bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0,
-              remaining: 0, remainingUsdValue: 0, pnl: 0, pnlPercentage: 0,
-            });
+            setTradeHistory({ bought: 0, boughtUsdValue: 0, sold: 0, soldUsdValue: 0 });
           }
 
           transformToastToError(uniqueToastId, errorMessage, tokenImage, tokenName);
@@ -2962,24 +3000,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 }
               });
 
-              const remaining = bought - sold;
-              const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
-              const remainingUsdValue = remaining * avgBoughtPrice;
-              const pnl = soldUsdValue + remainingUsdValue - boughtUsdValue;
-              const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
-
-              const newData = {
-                bought,
-                boughtUsdValue,
-                sold,
-                soldUsdValue,
-                remaining,
-                remainingUsdValue,
-                pnl,
-                pnlPercentage,
-              };
-
-              setPositionData(newData);
+              setTradeHistory({ bought, boughtUsdValue, sold, soldUsdValue });
             }
 
             // Dispatch event to refresh chart price lines
@@ -3924,8 +3945,31 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">PnL</span>
+        {/*
+          Interactive PnL tile — toggles between unrealized (default, live
+          mark-to-market) and realized (locked-in profit from closed sells).
+          GMGN does the same pattern on their per-token panel; we match the
+          convention so users switching from GMGN/Axiom find the mental model
+          familiar. role="switch" + aria-checked gives screen readers the
+          correct announcement; whole tile is the tap target for ≥44px mobile
+          hit area.
+        */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={pnlMode === 'unrealized'}
+          aria-label={
+            pnlMode === 'unrealized'
+              ? 'PnL: unrealized (live mark-to-market). Click to switch to realized.'
+              : 'PnL: realized (from closed sells). Click to switch to unrealized.'
+          }
+          onClick={() => setPnlMode((m) => (m === 'unrealized' ? 'realized' : 'unrealized'))}
+          className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33] hover:bg-[#1E1F26] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#70E0B0] transition-colors cursor-pointer"
+        >
+          <span className="flex items-center gap-1 text-[9px] text-[#9CA3AF] uppercase tracking-wide">
+            {pnlMode === 'unrealized' ? 'UPnL' : 'PnL'}
+            <LuArrowLeftRight size={9} aria-hidden="true" />
+          </span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
@@ -3948,25 +3992,40 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <div className={`text-[9px] font-semibold ${positionData && positionData.pnl >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
-              {positionData ? (
-                <div className="flex flex-col items-center leading-tight">
-                  <div className="mb-0.5">
-                    {positionData.pnl >= 0 ? '+' : ''}${formatCompactNumber(Math.abs(positionData.pnl))}
+            {(() => {
+              if (!positionData) {
+                return (
+                  <div className="text-[9px] font-semibold text-[#70E0B0]">
+                    <div className="flex flex-col items-center leading-tight">
+                      <div className="mb-0.5">$0</div>
+                      <div>(+0%)</div>
+                    </div>
                   </div>
-                  <div>
-                    ({positionData.pnl >= 0 ? '+' : ''}{Number(positionData.pnlPercentage).toFixed(1)}%)
+                );
+              }
+              const value = pnlMode === 'unrealized'
+                ? positionData.unrealizedPnl
+                : positionData.realizedPnl;
+              const pct = pnlMode === 'unrealized'
+                ? positionData.unrealizedPnlPercentage
+                : positionData.realizedPnlPercentage;
+              const isPositive = value >= 0;
+              const sign = isPositive ? '+' : '';
+              return (
+                <div className={`text-[9px] font-semibold ${isPositive ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
+                  <div className="flex flex-col items-center leading-tight">
+                    <div className="mb-0.5">
+                      {sign}${formatCompactNumber(Math.abs(value))}
+                    </div>
+                    <div>
+                      ({sign}{Number(pct).toFixed(1)}%)
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center leading-tight">
-                  <div className="mb-0.5">$0</div>
-                  <div>(+0%)</div>
-                </div>
-              )}
-            </div>
+              );
+            })()}
           </div>
-        </div>
+        </button>
       </div>
 
       <div className="w-full overflow-hidden" style={{ borderTop: `1px solid ${AX.border}` }}>
