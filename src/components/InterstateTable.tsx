@@ -505,6 +505,13 @@ const MonadIcon = ({ size = 16 }: { size?: number }) => (
 
 // Module-level cache: mint → resolved proxy image URL (survives unmount/remount)
 const resolvedImageCache: Record<string, string> = {};
+// Per-mint cache of the URL whose image has been successfully loaded by the
+// browser. Once an image has loaded for a mint, we render that exact URL for
+// the rest of the page session with no re-preload and no re-fade, even if
+// imgSrc later recomputes to a different value (metadata change, imgError
+// flicker, etc.). Loaded images stay visually constant. Module-level so the
+// cache survives unmount/remount of any specific TableRow.
+const loadedAvatarCache = new Map<string, string>();
 
 // Token Avatar Component
 const TokenAvatar: React.FC<{
@@ -521,7 +528,21 @@ const TokenAvatar: React.FC<{
   // blank-flash flicker (browser blanks the element on src change). Preloading
   // via `new Image()` first means the swap is from one fully-loaded image to
   // another, with the placeholder visible underneath the whole time.
-  const [visibleSrc, setVisibleSrc] = useState<string>('');
+  // mintKey for the persistent loaded-image cache lookup.
+  const cachedAvatarMint = (token.mint || (token as any).mint_address || '') as string;
+  // If this mint's image already loaded earlier, hydrate visibleSrc synchronously
+  // so the FIRST render shows the cached URL with no preload and no fade.
+  const [visibleSrc, setVisibleSrc] = useState<string>(
+    () => cachedAvatarMint ? (loadedAvatarCache.get(cachedAvatarMint) || '') : ''
+  );
+  // Capture at mount time: was this mint's image already in the cache BEFORE we
+  // mounted? If yes, render without the fade for the entire lifetime of this
+  // mount (instant). If no, render with fade until unmount  the fade plays
+  // exactly once when the <img> first appears, and never re-plays on subsequent
+  // re-renders of the same mount because className stays stable.
+  const skipFadeRef = useRef<boolean>(
+    cachedAvatarMint ? loadedAvatarCache.has(cachedAvatarMint) : false
+  );
   
   // Get protocol color - matches PulseTable/SearchModal for consistency
   const getProtocolColor = (token: Token): string => {
@@ -615,14 +636,24 @@ const TokenAvatar: React.FC<{
       setVisibleSrc('');
       return;
     }
+    // Cache hit: render the previously-loaded URL with no preload, no fade.
+    if (cachedAvatarMint && loadedAvatarCache.has(cachedAvatarMint)) {
+      const cached = loadedAvatarCache.get(cachedAvatarMint)!;
+      if (cached !== visibleSrc) setVisibleSrc(cached);
+      return;
+    }
     let cancelled = false;
     // Use window.Image to bypass the next/image default import shadowing the global.
     const preloader = new window.Image();
-    preloader.onload = () => { if (!cancelled) setVisibleSrc(imgSrc); };
+    preloader.onload = () => {
+      if (cancelled) return;
+      setVisibleSrc(imgSrc);
+      if (cachedAvatarMint) loadedAvatarCache.set(cachedAvatarMint, imgSrc);
+    };
     preloader.onerror = () => { if (!cancelled) setImgError(true); };
     preloader.src = imgSrc;
     return () => { cancelled = true; };
-  }, [imgSrc]);
+  }, [imgSrc, cachedAvatarMint]);
 
   // Compute protocol badge values
   const protocolColor = getProtocolColor(token);
@@ -661,7 +692,14 @@ const TokenAvatar: React.FC<{
             // Browser-driven fade-in via keyframe (see globals.css token-avatar-fade-in).
             // Runs once on mount because the <img> is only mounted after visibleSrc
             // flips from '' to a fully-preloaded URL.
-            className="absolute inset-0 h-full w-full object-cover rounded-full token-avatar-fade-in"
+            // Apply fade-in only on the FIRST load of this mint's image (cache
+            // miss at mount). Captured in a ref so className stays stable for the
+            // whole mount  the keyframe plays exactly once when the <img> first
+            // appears, and subsequent re-renders don't re-trigger it. Cache hits
+            // render with no class at all, instant, image stays constant.
+            className={`absolute inset-0 h-full w-full object-cover rounded-full ${
+              skipFadeRef.current ? '' : 'token-avatar-fade-in'
+            }`}
             onError={() => setImgError(true)}
           />
         )}
