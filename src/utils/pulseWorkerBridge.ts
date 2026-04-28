@@ -13,6 +13,8 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 import { loadPulseCache, savePulseCache, type PulseToken } from './pulseCache';
 import { extractImageUrls, preloadImage } from './imagePreloader';
+import { resolveMetadataImage, isMetadataUrl, getCachedResolvedImage, extractTokenImage } from './images';
+import { computeHashImageUrl } from './imageHash';
 
 type ConnectionStatus = {
   new: boolean;
@@ -909,6 +911,55 @@ function normalizeToken(rawToken: any): PulseToken | null {
   } as PulseToken;
 }
 
+/**
+ * Proactively resolve metadata + preload the resolved image the moment a new
+ * token arrives from the WS, BEFORE React renders. With the 500ms notify
+ * throttle, this gives the metadata fetch a 200-500ms head start. By the time
+ * TokenImage mounts and reads getCachedResolvedImage(), the resolved URL is
+ * synchronously available; by the time FastImage's isImageTracked() runs, the
+ * actual image bytes are in the browser cache.
+ *
+ * Closest analog to GMGN's UX without a backend change: their backend pushes
+ * pre-resolved image_url; we still fetch metadata client-side, but we hide
+ * the latency under React render time instead of stacking it on top.
+ */
+const prewarmedMints = new Set<string>();
+function prewarmTokenImage(token: PulseToken) {
+  if (typeof window === 'undefined') return;
+  if (!token?.mint || prewarmedMints.has(token.mint)) return;
+  prewarmedMints.add(token.mint);
+  // Cap the set to prevent unbounded growth across long sessions
+  if (prewarmedMints.size > 5000) {
+    const oldest = prewarmedMints.values().next().value;
+    if (oldest) prewarmedMints.delete(oldest);
+  }
+
+  const raw = extractTokenImage(token);
+  if (!raw) return;
+
+  // Direct image URL — preload through proxy immediately
+  if (!isMetadataUrl(raw)) {
+    const proxyUrl = computeHashImageUrl(raw) || raw;
+    preloadImage(proxyUrl);
+    return;
+  }
+
+  // Metadata URI — already resolved? Skip the fetch, just preload the image.
+  const cached = getCachedResolvedImage(raw, true);
+  if (cached) {
+    const proxyUrl = computeHashImageUrl(cached) || cached;
+    preloadImage(proxyUrl);
+    return;
+  }
+
+  // Otherwise: kick off resolution now, preload the resolved URL when it lands.
+  resolveMetadataImage(raw, true).then((resolved) => {
+    if (!resolved) return;
+    const proxyUrl = computeHashImageUrl(resolved) || resolved;
+    preloadImage(proxyUrl);
+  }).catch(() => { /* silent */ });
+}
+
 function addToken(key: 'newTokens' | 'finalStretchTokens' | 'migratedTokens', token: PulseToken) {
   const arr = currentData[key];
   const existing = arr.find(t => t.mint === token.mint);
@@ -931,6 +982,9 @@ function addToken(key: 'newTokens' | 'finalStretchTokens' | 'migratedTokens', to
     ...currentData,
     [key]: [finalToken, ...filtered].slice(0, maxSize),
   };
+
+  // Pre-warm image: resolve metadata + preload bytes before React renders
+  if (!existing) prewarmTokenImage(finalToken);
 }
 
 /**

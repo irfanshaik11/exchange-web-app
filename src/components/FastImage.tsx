@@ -283,8 +283,13 @@ function FastImageInner({
       setImageLoaded(prev => prev ? prev : true); // Only update if not already true
       setImageError(false);
     } else {
-      // New URL - don't reset imageLoaded (prevents flicker)
-      // The img onLoad will set it to true when loaded
+      // New, untracked URL — reset imageLoaded so the letter-fallback shows
+      // during the load instead of leaving stale-true state from the previous
+      // image. Without this, when a row gets repointed at a different mint
+      // (e.g. virtualized list shifts after a new token prepends) the
+      // previously-loaded image disappears and the user sees a dark/empty box
+      // until the new bytes arrive — the "old tokens lose their image" bug.
+      setImageLoaded(false);
       setImageError(false);
     }
   }, [imageUrl]);
