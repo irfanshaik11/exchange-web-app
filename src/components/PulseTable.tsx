@@ -98,6 +98,7 @@ import {
   getCachedResolvedImage,
   resolveMetadataImage,
   resolveTokenImage,
+  isMetadataUrl,
 } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { preloadTokenImages, preloadMetadataImages } from "~/utils/imagePreloader";
@@ -1579,9 +1580,20 @@ function TokenImage({
   // Extract image URL from token data, checking multiple possible field names
   // Priority: image_url, image, logo, uri (updated for API compatibility)
   const rawImageUrl = extractTokenImage(token as any) || null;
-  // uri is a metadata URI by definition — only use when no direct image available
   const tokenUri = (token as any)?.uri || null;
-  const metadataCandidate = !rawImageUrl ? tokenUri : null;
+
+  // If extractTokenImage returned a metadata JSON URL (e.g., irys.xyz/arweave URI
+  // from the "uri" field), treat it as metadataCandidate so we resolve it before
+  // passing to FastImage. Without this, PulseTable would hand the JSON URL to
+  // FastImage which routes it through the /api/img proxy causing a server-side
+  // double-hop (fetch JSON + fetch image) taking 5-6s for new tokens.
+  const rawIsMetadata = rawImageUrl ? isMetadataUrl(rawImageUrl) : false;
+  const directImageUrl = rawIsMetadata ? null : rawImageUrl;
+  const metadataCandidate = rawIsMetadata
+    ? rawImageUrl
+    : !rawImageUrl && tokenUri
+    ? tokenUri
+    : null;
 
   // Sync-initialize from metadata cache to eliminate skeleton flash on re-mount
   const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(() => {
@@ -1591,7 +1603,7 @@ function TokenImage({
       if (cached) return cached;
       return null; // will resolve async in effect
     }
-    return rawImageUrl; // non-metadata URL, use immediately
+    return directImageUrl; // non-metadata URL, use immediately
   });
 
   // If the image URL is a JSON metadata URL, resolve it asynchronously
@@ -1606,13 +1618,13 @@ function TokenImage({
         }
       });
     } else {
-      setResolvedImageUrl(rawImageUrl);
+      setResolvedImageUrl(directImageUrl);
     }
 
     return () => {
       cancelled = true;
     };
-  }, [rawImageUrl, metadataCandidate]);
+  }, [directImageUrl, metadataCandidate]);
 
   // Use resolved URL or fall back to raw URL
   const imageUrl = resolvedImageUrl;
