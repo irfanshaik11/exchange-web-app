@@ -2316,7 +2316,13 @@ export default function InterstateTable({
 
               return (
                 <TableRow
-                  key={token.pair_address || token.mint}
+                  // CRITICAL: key MUST be `mint` first. Many distinct pump.fun mints
+                  // share the same `pair_address` (bonding-curve / program address from
+                  // the backend). Using pair_address as the key collapses N rows onto
+                  // one key, React fails to reconcile, old <tr> nodes accumulate in the
+                  // tbody unboundedly, and the page freezes after ~5 min. Mint is
+                  // guaranteed unique (normalizeToken returns null without one).
+                  key={token.mint || token.pair_address}
                   token={token}
                   i={i}
                   selectedTimeframe={selectedTimeframe}
