@@ -99,6 +99,7 @@ import {
   resolveMetadataImage,
   resolveTokenImage,
   isMetadataUrl,
+  clearMetadataFailureCache,
 } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { preloadTokenImages, preloadMetadataImages } from "~/utils/imagePreloader";
@@ -1606,23 +1607,40 @@ function TokenImage({
     return directImageUrl; // non-metadata URL, use immediately
   });
 
-  // If the image URL is a JSON metadata URL, resolve it asynchronously
+  // If the image URL is a JSON metadata URL, resolve it asynchronously.
+  // Mirrors FastImage's retry pattern: 2s then 5s backoff so slow gateways
+  // (Arweave congestion, brand-new IPFS content) don't leave the placeholder
+  // permanently visible for the lifetime of the row mount.
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 2;
 
-    if (metadataCandidate) {
-      // force=true: resolve any URI regardless of host whitelist
+    const attemptResolve = (isRetry: boolean) => {
+      if (isRetry && metadataCandidate) clearMetadataFailureCache(metadataCandidate);
+      if (!metadataCandidate) return;
       resolveMetadataImage(metadataCandidate, true).then((resolved) => {
-        if (!cancelled) {
-          setResolvedImageUrl(resolved || null);
+        if (cancelled) return;
+        if (resolved) {
+          setResolvedImageUrl(resolved);
+        } else if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          const delay = retryCount === 1 ? 2000 : 5000;
+          retryTimer = setTimeout(() => attemptResolve(true), delay);
         }
       });
+    };
+
+    if (metadataCandidate) {
+      attemptResolve(false);
     } else {
       setResolvedImageUrl(directImageUrl);
     }
 
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [directImageUrl, metadataCandidate]);
 
