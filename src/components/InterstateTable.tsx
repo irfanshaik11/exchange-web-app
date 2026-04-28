@@ -677,9 +677,9 @@ const TokenAvatar: React.FC<{
             the image fades in on top, and remains visible if the image fails. */}
         <div
           className="absolute inset-0 flex items-center justify-center rounded-full"
-          style={{ backgroundColor: `${protocolColor}26` /* ~15% opacity tint */ }}
+          style={{ backgroundColor: AX.surface2 /* neutral grey, blends with page bg */ }}
         >
-          <span className="text-sm font-bold" style={{ color: protocolColor }}>{initial}</span>
+          <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
         </div>
         {/* Real image, only mounted once fully preloaded. Fades in over the
             placeholder via the .token-avatar-fade-in CSS keyframe (globals.css). */}
@@ -933,10 +933,10 @@ const TokenInfo: React.FC<{
       
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
-          <span className="truncate text-sm font-bold" style={{ color: AX.text }}>
+          <span className="truncate text-base font-bold" style={{ color: AX.text }}>
             {token.symbol}
           </span>
-          <span className="truncate text-xs font-medium" style={{ color: AX.muted }}>
+          <span className="truncate text-sm font-medium" style={{ color: AX.muted }}>
             {token.name}
           </span>
           {/* Copy contract button */}
@@ -962,7 +962,7 @@ const TokenInfo: React.FC<{
         
         <div className="flex items-center gap-2">
           {tokenAge && (
-            <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
+            <span className={`text-sm ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
               {tokenAge}
             </span>
           )}
@@ -1397,7 +1397,7 @@ const MarketCapCell: React.FC<{
 
   return (
     <div className="text-right">
-      <div className={`text-sm font-semibold ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+      <div className={`text-base font-semibold ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
         color: isDiscoverPage ? marketCapColor : AX.text,
         ...(isDiscoverPage ? {} : {
           fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -1446,14 +1446,14 @@ const TxnsCell: React.FC<{
   return (
     <div className="flex flex-col h-full justify-center">
       <div className="flex items-center justify-end">
-        <span className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+        <span className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
         }}>
           {formatTxnValue(total)}
         </span>
       </div>
-      <div className="flex items-center justify-end text-xs font-medium">
+      <div className="flex items-center justify-end text-sm font-medium">
         <span className={isDiscoverPage ? 'number-font' : ''} style={{
           color: isDiscoverPage ? '#85d99f' : '#34d399',
           ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
@@ -1997,7 +1997,7 @@ const TableRow: React.FC<{
       }}
       onMouseEnter={(e) => {
         if (isDiscoverPage) {
-          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
         } else {
           e.currentTarget.style.backgroundColor = AX.surface2;
         }
@@ -2012,7 +2012,7 @@ const TableRow: React.FC<{
         <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
 
-      <td className="w-32 px-4 py-4 align-middle">
+      <td className="w-32 px-4 py-4 align-middle text-right">
         <MarketCapCell
           token={token}
           selectedTimeframe={selectedTimeframe}
@@ -2031,15 +2031,19 @@ const TableRow: React.FC<{
           return null;
         })()} */}
         {(() => {
-          // Calculate liquidity color for discover page
+          // Color-graduated liquidity. Three bands so traders eye-scan risk:
+          //   < $5K   = red    (high risk, dust pool)
+          //   < $50K  = amber  (caution; matches market-cap warm amber #f2c367)
+          //   >= $50K = default (normal)
           const liquidity = token.total_liquidity_usd || 0;
           let liquidityColor = AX.text;
-          if (isDiscoverPage && liquidity < 1000) {
-            liquidityColor = '#f26681';
+          if (isDiscoverPage) {
+            if (liquidity < 5000) liquidityColor = '#f26681';
+            else if (liquidity < 50000) liquidityColor = '#f2c367';
           }
 
           return (
-            <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+            <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
               color: isDiscoverPage ? liquidityColor : AX.text,
               ...(isDiscoverPage ? {} : {
                 fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -2055,7 +2059,7 @@ const TableRow: React.FC<{
       {/* Volume column - hidden for newPairs */}
       {tableType !== 'newPairs' && (
       <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+        <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
             fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -2069,7 +2073,7 @@ const TableRow: React.FC<{
       )}
 
       {tableType === 'newPairs' && (
-        <td className="w-24 px-4 py-4 align-middle">
+        <td className="w-24 px-4 py-4 align-middle text-right">
           <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
         </td>
       )}
@@ -2083,7 +2087,7 @@ const TableRow: React.FC<{
 
       {/* Gas Fees column - commented out per user request
       <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+        <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
             fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -2106,7 +2110,7 @@ const TableRow: React.FC<{
         {isDiscoverPage ? (
           <button
             onClick={handleQuickBuy}
-            className="flex items-center justify-center gap-1.5 text-xs font-medium transition-all duration-200 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 text-sm font-medium transition-all duration-200 cursor-pointer mx-auto"
             style={{
               backgroundColor: '#272a2e',
               color: '#85d99f',
@@ -2130,7 +2134,7 @@ const TableRow: React.FC<{
           <InterstateButton
             variant="primary"
             size="sm"
-            className="!px-3 !py-2 text-xs font-medium w-full"
+            className="!px-3 !py-2 text-sm font-medium w-full"
             onClick={handleQuickBuy}
           >
             Buy {quickBuyAmount} {chain === 'monad' ? 'MON' : 'SOL'}
