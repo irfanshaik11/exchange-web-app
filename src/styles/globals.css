@@ -384,8 +384,10 @@ input[type="number"] {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+/* 50ms — borderline imperceptible, the fade is almost instant with just a
+   tiny softening of the edge. Maximum sensation of speed. */
 .token-avatar-fade-in {
-  animation: tokenAvatarFadeIn 200ms ease-out;
+  animation: tokenAvatarFadeIn 50ms ease-out;
 }
 
 /* Bottom card info badges - horizontal scroll without visible scrollbar */

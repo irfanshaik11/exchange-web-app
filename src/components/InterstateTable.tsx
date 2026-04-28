@@ -505,6 +505,13 @@ const MonadIcon = ({ size = 16 }: { size?: number }) => (
 
 // Module-level cache: mint → resolved proxy image URL (survives unmount/remount)
 const resolvedImageCache: Record<string, string> = {};
+// Per-mint cache of the URL whose image has been successfully loaded by the
+// browser. Once an image has loaded for a mint, we render that exact URL for
+// the rest of the page session with no re-preload and no re-fade, even if
+// imgSrc later recomputes to a different value (metadata change, imgError
+// flicker, etc.). Loaded images stay visually constant. Module-level so the
+// cache survives unmount/remount of any specific TableRow.
+const loadedAvatarCache = new Map<string, string>();
 
 // Token Avatar Component
 const TokenAvatar: React.FC<{
@@ -521,7 +528,21 @@ const TokenAvatar: React.FC<{
   // blank-flash flicker (browser blanks the element on src change). Preloading
   // via `new Image()` first means the swap is from one fully-loaded image to
   // another, with the placeholder visible underneath the whole time.
-  const [visibleSrc, setVisibleSrc] = useState<string>('');
+  // mintKey for the persistent loaded-image cache lookup.
+  const cachedAvatarMint = (token.mint || (token as any).mint_address || '') as string;
+  // If this mint's image already loaded earlier, hydrate visibleSrc synchronously
+  // so the FIRST render shows the cached URL with no preload and no fade.
+  const [visibleSrc, setVisibleSrc] = useState<string>(
+    () => cachedAvatarMint ? (loadedAvatarCache.get(cachedAvatarMint) || '') : ''
+  );
+  // Capture at mount time: was this mint's image already in the cache BEFORE we
+  // mounted? If yes, render without the fade for the entire lifetime of this
+  // mount (instant). If no, render with fade until unmount  the fade plays
+  // exactly once when the <img> first appears, and never re-plays on subsequent
+  // re-renders of the same mount because className stays stable.
+  const skipFadeRef = useRef<boolean>(
+    cachedAvatarMint ? loadedAvatarCache.has(cachedAvatarMint) : false
+  );
   
   // Get protocol color - matches PulseTable/SearchModal for consistency
   const getProtocolColor = (token: Token): string => {
@@ -615,14 +636,24 @@ const TokenAvatar: React.FC<{
       setVisibleSrc('');
       return;
     }
+    // Cache hit: render the previously-loaded URL with no preload, no fade.
+    if (cachedAvatarMint && loadedAvatarCache.has(cachedAvatarMint)) {
+      const cached = loadedAvatarCache.get(cachedAvatarMint)!;
+      if (cached !== visibleSrc) setVisibleSrc(cached);
+      return;
+    }
     let cancelled = false;
     // Use window.Image to bypass the next/image default import shadowing the global.
     const preloader = new window.Image();
-    preloader.onload = () => { if (!cancelled) setVisibleSrc(imgSrc); };
+    preloader.onload = () => {
+      if (cancelled) return;
+      setVisibleSrc(imgSrc);
+      if (cachedAvatarMint) loadedAvatarCache.set(cachedAvatarMint, imgSrc);
+    };
     preloader.onerror = () => { if (!cancelled) setImgError(true); };
     preloader.src = imgSrc;
     return () => { cancelled = true; };
-  }, [imgSrc]);
+  }, [imgSrc, cachedAvatarMint]);
 
   // Compute protocol badge values
   const protocolColor = getProtocolColor(token);
@@ -646,9 +677,9 @@ const TokenAvatar: React.FC<{
             the image fades in on top, and remains visible if the image fails. */}
         <div
           className="absolute inset-0 flex items-center justify-center rounded-full"
-          style={{ backgroundColor: `${protocolColor}26` /* ~15% opacity tint */ }}
+          style={{ backgroundColor: AX.surface2 /* neutral grey, blends with page bg */ }}
         >
-          <span className="text-sm font-bold" style={{ color: protocolColor }}>{initial}</span>
+          <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
         </div>
         {/* Real image, only mounted once fully preloaded. Fades in over the
             placeholder via the .token-avatar-fade-in CSS keyframe (globals.css). */}
@@ -661,7 +692,14 @@ const TokenAvatar: React.FC<{
             // Browser-driven fade-in via keyframe (see globals.css token-avatar-fade-in).
             // Runs once on mount because the <img> is only mounted after visibleSrc
             // flips from '' to a fully-preloaded URL.
-            className="absolute inset-0 h-full w-full object-cover rounded-full token-avatar-fade-in"
+            // Apply fade-in only on the FIRST load of this mint's image (cache
+            // miss at mount). Captured in a ref so className stays stable for the
+            // whole mount  the keyframe plays exactly once when the <img> first
+            // appears, and subsequent re-renders don't re-trigger it. Cache hits
+            // render with no class at all, instant, image stays constant.
+            className={`absolute inset-0 h-full w-full object-cover rounded-full ${
+              skipFadeRef.current ? '' : 'token-avatar-fade-in'
+            }`}
             onError={() => setImgError(true)}
           />
         )}
@@ -895,10 +933,10 @@ const TokenInfo: React.FC<{
       
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
-          <span className="truncate text-sm font-bold" style={{ color: AX.text }}>
+          <span className="truncate text-base font-bold" style={{ color: AX.text }}>
             {token.symbol}
           </span>
-          <span className="truncate text-xs font-medium" style={{ color: AX.muted }}>
+          <span className="truncate text-sm font-medium" style={{ color: AX.muted }}>
             {token.name}
           </span>
           {/* Copy contract button */}
@@ -924,7 +962,7 @@ const TokenInfo: React.FC<{
         
         <div className="flex items-center gap-2">
           {tokenAge && (
-            <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
+            <span className={`text-sm ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
               {tokenAge}
             </span>
           )}
@@ -1359,7 +1397,7 @@ const MarketCapCell: React.FC<{
 
   return (
     <div className="text-right">
-      <div className={`text-sm font-semibold ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+      <div className={`text-base font-semibold ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
         color: isDiscoverPage ? marketCapColor : AX.text,
         ...(isDiscoverPage ? {} : {
           fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -1408,14 +1446,14 @@ const TxnsCell: React.FC<{
   return (
     <div className="flex flex-col h-full justify-center">
       <div className="flex items-center justify-end">
-        <span className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+        <span className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
         }}>
           {formatTxnValue(total)}
         </span>
       </div>
-      <div className="flex items-center justify-end text-xs font-medium">
+      <div className="flex items-center justify-end text-sm font-medium">
         <span className={isDiscoverPage ? 'number-font' : ''} style={{
           color: isDiscoverPage ? '#85d99f' : '#34d399',
           ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
@@ -1959,7 +1997,7 @@ const TableRow: React.FC<{
       }}
       onMouseEnter={(e) => {
         if (isDiscoverPage) {
-          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
         } else {
           e.currentTarget.style.backgroundColor = AX.surface2;
         }
@@ -1974,7 +2012,7 @@ const TableRow: React.FC<{
         <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
 
-      <td className="w-32 px-4 py-4 align-middle">
+      <td className="w-32 px-4 py-4 align-middle text-right">
         <MarketCapCell
           token={token}
           selectedTimeframe={selectedTimeframe}
@@ -1993,15 +2031,19 @@ const TableRow: React.FC<{
           return null;
         })()} */}
         {(() => {
-          // Calculate liquidity color for discover page
+          // Color-graduated liquidity. Three bands so traders eye-scan risk:
+          //   < $5K   = red    (high risk, dust pool)
+          //   < $50K  = amber  (caution; matches market-cap warm amber #f2c367)
+          //   >= $50K = default (normal)
           const liquidity = token.total_liquidity_usd || 0;
           let liquidityColor = AX.text;
-          if (isDiscoverPage && liquidity < 1000) {
-            liquidityColor = '#f26681';
+          if (isDiscoverPage) {
+            if (liquidity < 5000) liquidityColor = '#f26681';
+            else if (liquidity < 50000) liquidityColor = '#f2c367';
           }
 
           return (
-            <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+            <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
               color: isDiscoverPage ? liquidityColor : AX.text,
               ...(isDiscoverPage ? {} : {
                 fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -2017,7 +2059,7 @@ const TableRow: React.FC<{
       {/* Volume column - hidden for newPairs */}
       {tableType !== 'newPairs' && (
       <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+        <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
             fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -2031,7 +2073,7 @@ const TableRow: React.FC<{
       )}
 
       {tableType === 'newPairs' && (
-        <td className="w-24 px-4 py-4 align-middle">
+        <td className="w-24 px-4 py-4 align-middle text-right">
           <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
         </td>
       )}
@@ -2045,7 +2087,7 @@ const TableRow: React.FC<{
 
       {/* Gas Fees column - commented out per user request
       <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+        <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
             fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
@@ -2068,7 +2110,7 @@ const TableRow: React.FC<{
         {isDiscoverPage ? (
           <button
             onClick={handleQuickBuy}
-            className="flex items-center justify-center gap-1.5 text-xs font-medium transition-all duration-200 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 text-sm font-medium transition-all duration-200 cursor-pointer mx-auto"
             style={{
               backgroundColor: '#272a2e',
               color: '#85d99f',
@@ -2092,7 +2134,7 @@ const TableRow: React.FC<{
           <InterstateButton
             variant="primary"
             size="sm"
-            className="!px-3 !py-2 text-xs font-medium w-full"
+            className="!px-3 !py-2 text-sm font-medium w-full"
             onClick={handleQuickBuy}
           >
             Buy {quickBuyAmount} {chain === 'monad' ? 'MON' : 'SOL'}
