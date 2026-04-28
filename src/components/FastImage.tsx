@@ -101,6 +101,8 @@ interface FastImageProps {
   name?: string;
   showBubble?: boolean;
   bubbleSrc?: string;
+  /** Fired when all auto-retries are exhausted. Parent can swap to a fallback src. */
+  onLoadFailed?: () => void;
 }
 
 /**
@@ -124,6 +126,7 @@ function FastImageInner({
   name,
   showBubble = true,
   bubbleSrc,
+  onLoadFailed,
 }: FastImageProps) {
   const inputSrc = src || fallbackSrc;
 
@@ -150,14 +153,23 @@ function FastImageInner({
     const initialUrl = computeImageUrl(initialSrc);
     if (!initialUrl) return false;
 
+    // Check the module-level retained Image cache FIRST, regardless of
+    // isImageTracked. This covers the prewarm path: when the WS bridge ran
+    // preloadImage() before this component mounted, the bitmap is in
+    // imageObjectCache but globalLoadedImages was never updated (only
+    // FastImage's own handleLoad does that). Without this check, prewarmed
+    // images go through the imageLoaded=false → letter → onLoad → true cycle
+    // even though the bitmap is sitting in memory ready to display.
+    const retained = getRetainedImage(initialUrl);
+    if (retained && retained.complete && retained.naturalHeight > 0) {
+      wasCachedAtMount.current = true;
+      return true; // Already decoded — instant display
+    }
+
     if (isImageTracked(initialUrl)) {
-      // Check prefetched image first (started at module init, may already be decoded)
-      const retained = getRetainedImage(initialUrl);
-      if (retained && retained.complete && retained.naturalHeight > 0) {
-        wasCachedAtMount.current = true;
-        return true; // Already decoded — instant display
-      }
-      // Fallback: new probe (current behavior)
+      // Fallback: probe via fresh Image() — covers the case where FastImage
+      // previously loaded this URL (added to globalLoadedImages via handleLoad)
+      // but the retained image was evicted from imageObjectCache.
       const probe = new Image();
       probe.src = initialUrl;
       if (probe.complete && probe.naturalHeight > 0) {
@@ -278,6 +290,15 @@ function FastImageInner({
 
     currentUrlRef.current = imageUrl;
 
+    // Check retained image cache first (covers prewarm path — see useState
+    // initializer above for full explanation)
+    const retained = getRetainedImage(imageUrl);
+    if (retained && retained.complete && retained.naturalHeight > 0) {
+      setImageLoaded(true);
+      setImageError(false);
+      return;
+    }
+
     // If already in global tracker, set loaded immediately
     if (isImageTracked(imageUrl)) {
       setImageLoaded(prev => prev ? prev : true); // Only update if not already true
@@ -363,6 +384,7 @@ function FastImageInner({
     } else {
       setImageError(true);
       setImageLoaded(false);
+      onLoadFailed?.();
     }
   };
 
@@ -452,6 +474,7 @@ export default memo(FastImageInner, (prevProps, nextProps) => {
     prevProps.name === nextProps.name &&
     prevProps.showBubble === nextProps.showBubble &&
     prevProps.bubbleSrc === nextProps.bubbleSrc &&
-    prevProps.priority === nextProps.priority
+    prevProps.priority === nextProps.priority &&
+    prevProps.onLoadFailed === nextProps.onLoadFailed
   );
 });

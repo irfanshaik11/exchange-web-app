@@ -1596,15 +1596,36 @@ function TokenImage({
     ? tokenUri
     : null;
 
+  // Track whether the direct image URL (e.g. cdn.interstate.so/{mint}.webp)
+  // exhausted its retries. When it does, we swap to the uri-based fallback —
+  // see the rationale in the prewarm function in pulseWorkerBridge.ts.
+  const [directImageFailed, setDirectImageFailed] = useState(false);
+
+  // Reset the failure flag whenever the underlying token changes
+  useEffect(() => {
+    setDirectImageFailed(false);
+  }, [token.mint]);
+
+  // Stable callback so FastImage's memo comparator doesn't bust on every render
+  const handleDirectImageFailed = React.useCallback(() => {
+    setDirectImageFailed(true);
+  }, []);
+
+  // If direct image failed AND we have a uri fallback, prefer the URI path
+  const uriFallbackActive =
+    directImageFailed && !rawIsMetadata && tokenUri && isMetadataUrl(tokenUri);
+  const effectiveDirectImageUrl = uriFallbackActive ? null : directImageUrl;
+  const effectiveMetadataCandidate = uriFallbackActive ? tokenUri : metadataCandidate;
+
   // Sync-initialize from metadata cache to eliminate skeleton flash on re-mount
   const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(() => {
-    if (metadataCandidate) {
+    if (effectiveMetadataCandidate) {
       // force=true: uri IS metadata by definition, skip isMetadataUrl check
-      const cached = getCachedResolvedImage(metadataCandidate, true);
+      const cached = getCachedResolvedImage(effectiveMetadataCandidate, true);
       if (cached) return cached;
       return null; // will resolve async in effect
     }
-    return directImageUrl; // non-metadata URL, use immediately
+    return effectiveDirectImageUrl; // non-metadata URL, use immediately
   });
 
   // If the image URL is a JSON metadata URL, resolve it asynchronously.
@@ -1618,9 +1639,9 @@ function TokenImage({
     const MAX_RETRIES = 2;
 
     const attemptResolve = (isRetry: boolean) => {
-      if (isRetry && metadataCandidate) clearMetadataFailureCache(metadataCandidate);
-      if (!metadataCandidate) return;
-      resolveMetadataImage(metadataCandidate, true).then((resolved) => {
+      if (isRetry && effectiveMetadataCandidate) clearMetadataFailureCache(effectiveMetadataCandidate);
+      if (!effectiveMetadataCandidate) return;
+      resolveMetadataImage(effectiveMetadataCandidate, true).then((resolved) => {
         if (cancelled) return;
         if (resolved) {
           setResolvedImageUrl(resolved);
@@ -1632,17 +1653,17 @@ function TokenImage({
       });
     };
 
-    if (metadataCandidate) {
+    if (effectiveMetadataCandidate) {
       attemptResolve(false);
     } else {
-      setResolvedImageUrl(directImageUrl);
+      setResolvedImageUrl(effectiveDirectImageUrl);
     }
 
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [directImageUrl, metadataCandidate]);
+  }, [effectiveDirectImageUrl, effectiveMetadataCandidate]);
 
   // Use resolved URL or fall back to raw URL
   const imageUrl = resolvedImageUrl;
@@ -2078,6 +2099,7 @@ function TokenImage({
                 className="h-full w-full object-cover"
                 priority={priority}
                 showBubble={false}
+                onLoadFailed={handleDirectImageFailed}
               />
               {/* Dark dim overlay on hover */}
               <div

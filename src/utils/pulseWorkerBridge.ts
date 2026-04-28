@@ -935,29 +935,47 @@ function prewarmTokenImage(token: PulseToken) {
   }
 
   const raw = extractTokenImage(token);
-  if (!raw) return;
+  const uriFallback = (token as any)?.uri || null;
+
+  // Helper: resolve a metadata URI and preload the resolved image
+  const resolveAndPreload = (metaUrl: string) => {
+    const cached = getCachedResolvedImage(metaUrl, true);
+    if (cached) {
+      const proxyUrl = computeHashImageUrl(cached) || cached;
+      preloadImage(proxyUrl);
+      return;
+    }
+    resolveMetadataImage(metaUrl, true).then((resolved) => {
+      if (!resolved) return;
+      const proxyUrl = computeHashImageUrl(resolved) || resolved;
+      preloadImage(proxyUrl);
+    }).catch(() => { /* silent */ });
+  };
 
   // Direct image URL — preload through proxy immediately
-  if (!isMetadataUrl(raw)) {
+  if (raw && !isMetadataUrl(raw)) {
     const proxyUrl = computeHashImageUrl(raw) || raw;
     preloadImage(proxyUrl);
+    // ALSO resolve the URI fallback in parallel: the direct URL is often
+    // cdn.interstate.so/{mint}.webp which 404s for brand-new pump tokens
+    // until the CDN is warmed. Pre-resolving the uri means a fast swap is
+    // possible if the direct URL fails.
+    if (uriFallback && uriFallback !== raw && isMetadataUrl(uriFallback)) {
+      resolveAndPreload(uriFallback);
+    }
     return;
   }
 
-  // Metadata URI — already resolved? Skip the fetch, just preload the image.
-  const cached = getCachedResolvedImage(raw, true);
-  if (cached) {
-    const proxyUrl = computeHashImageUrl(cached) || cached;
-    preloadImage(proxyUrl);
+  // Metadata URI as the primary — resolve and preload
+  if (raw && isMetadataUrl(raw)) {
+    resolveAndPreload(raw);
     return;
   }
 
-  // Otherwise: kick off resolution now, preload the resolved URL when it lands.
-  resolveMetadataImage(raw, true).then((resolved) => {
-    if (!resolved) return;
-    const proxyUrl = computeHashImageUrl(resolved) || resolved;
-    preloadImage(proxyUrl);
-  }).catch(() => { /* silent */ });
+  // No raw at all but a uri exists — fall through to uri
+  if (uriFallback && isMetadataUrl(uriFallback)) {
+    resolveAndPreload(uriFallback);
+  }
 }
 
 function addToken(key: 'newTokens' | 'finalStretchTokens' | 'migratedTokens', token: PulseToken) {
