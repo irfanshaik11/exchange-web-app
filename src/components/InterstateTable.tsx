@@ -516,6 +516,12 @@ const TokenAvatar: React.FC<{
 }> = ({ token, meta, loading, showInitial, chain = 'sol' }) => {
   const initial = token.name?.charAt(0)?.toUpperCase() || '?';
   const [imgError, setImgError] = useState(false);
+  // visibleSrc holds the URL we know is fully loaded and safe to render.
+  // We never put a fetching URL into the live <img> — that's what causes the
+  // blank-flash flicker (browser blanks the element on src change). Preloading
+  // via `new Image()` first means the swap is from one fully-loaded image to
+  // another, with the placeholder visible underneath the whole time.
+  const [visibleSrc, setVisibleSrc] = useState<string>('');
   
   // Get protocol color - matches PulseTable/SearchModal for consistency
   const getProtocolColor = (token: Token): string => {
@@ -599,12 +605,24 @@ const TokenAvatar: React.FC<{
     return proxyUrl;
   }, [meta, imageUrl, token.logo, mintKey, rawUri]);
 
-  // Reset imgError when image source changes
+  // Preload the new image off-screen with `new Image()`. Only when its bytes
+  // are fully decoded by the browser do we promote `imgSrc` into `visibleSrc`,
+  // which is what the rendered <img> actually points at. Old image stays
+  // visible until new one is ready, so swaps are clean — no blank gap.
   useEffect(() => {
     setImgError(false);
+    if (!imgSrc) {
+      setVisibleSrc('');
+      return;
+    }
+    let cancelled = false;
+    // Use window.Image to bypass the next/image default import shadowing the global.
+    const preloader = new window.Image();
+    preloader.onload = () => { if (!cancelled) setVisibleSrc(imgSrc); };
+    preloader.onerror = () => { if (!cancelled) setImgError(true); };
+    preloader.src = imgSrc;
+    return () => { cancelled = true; };
   }, [imgSrc]);
-
-  const showFallbackLetter = imgError || (!loading && !imgSrc);
 
   // Compute protocol badge values
   const protocolColor = getProtocolColor(token);
@@ -622,21 +640,28 @@ const TokenAvatar: React.FC<{
     <div className="relative h-12 w-12 flex items-center justify-center">
       {/* Image container - circular */}
       <div className="relative rounded-full overflow-hidden" style={{ width: '48px', height: '48px' }}>
-        {loading && !showInitial ? (
-          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2 }}>
-            <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
-          </div>
-        ) : showFallbackLetter ? (
-          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
-            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
-          </div>
-        ) : (
+        {/* Stable placeholder: protocol-color tint + initial letter. Always rendered
+            beneath the image so the row appears instantly with no spinner-then-letter
+            cascade. Stays visible while the real image preloads, gets covered when
+            the image fades in on top, and remains visible if the image fails. */}
+        <div
+          className="absolute inset-0 flex items-center justify-center rounded-full"
+          style={{ backgroundColor: `${protocolColor}26` /* ~15% opacity tint */ }}
+        >
+          <span className="text-sm font-bold" style={{ color: protocolColor }}>{initial}</span>
+        </div>
+        {/* Real image, only mounted once fully preloaded. Fades in over the
+            placeholder via the .token-avatar-fade-in CSS keyframe (globals.css). */}
+        {visibleSrc && !imgError && (
           <img
-            src={imgSrc}
+            src={visibleSrc}
             alt={token.name || token.symbol || ''}
             width={48}
             height={48}
-            className="h-full w-full object-cover rounded-full transition-all duration-300"
+            // Browser-driven fade-in via keyframe (see globals.css token-avatar-fade-in).
+            // Runs once on mount because the <img> is only mounted after visibleSrc
+            // flips from '' to a fully-preloaded URL.
+            className="absolute inset-0 h-full w-full object-cover rounded-full token-avatar-fade-in"
             onError={() => setImgError(true)}
           />
         )}
