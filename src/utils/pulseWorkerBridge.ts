@@ -13,6 +13,8 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 import { loadPulseCache, savePulseCache, type PulseToken } from './pulseCache';
 import { extractImageUrls, preloadImage } from './imagePreloader';
+import { resolveMetadataImage, isMetadataUrl, getCachedResolvedImage, extractTokenImage } from './images';
+import { computeHashImageUrl } from './imageHash';
 
 type ConnectionStatus = {
   new: boolean;
@@ -909,6 +911,86 @@ function normalizeToken(rawToken: any): PulseToken | null {
   } as PulseToken;
 }
 
+/**
+ * Proactively resolve metadata + preload the resolved image the moment a new
+ * token arrives from the WS, BEFORE React renders. With the 500ms notify
+ * throttle, this gives the metadata fetch a 200-500ms head start. By the time
+ * TokenImage mounts and reads getCachedResolvedImage(), the resolved URL is
+ * synchronously available; by the time FastImage's isImageTracked() runs, the
+ * actual image bytes are in the browser cache.
+ *
+ * Closest analog to GMGN's UX without a backend change: their backend pushes
+ * pre-resolved image_url; we still fetch metadata client-side, but we hide
+ * the latency under React render time instead of stacking it on top.
+ */
+const prewarmedMints = new Set<string>();
+function prewarmTokenImage(token: PulseToken) {
+  if (typeof window === 'undefined') return;
+  if (!token?.mint || prewarmedMints.has(token.mint)) return;
+  prewarmedMints.add(token.mint);
+  // Cap the set to prevent unbounded growth across long sessions
+  if (prewarmedMints.size > 5000) {
+    const oldest = prewarmedMints.values().next().value;
+    if (oldest) prewarmedMints.delete(oldest);
+  }
+
+  const raw = extractTokenImage(token);
+  const uriFallback = (token as any)?.uri || null;
+
+  // Helper: resolve a metadata URI and preload the resolved image
+  const resolveAndPreload = (metaUrl: string) => {
+    const cached = getCachedResolvedImage(metaUrl, true);
+    if (cached) {
+      const proxyUrl = computeHashImageUrl(cached) || cached;
+      preloadImage(proxyUrl);
+      return;
+    }
+    resolveMetadataImage(metaUrl, true).then((resolved) => {
+      if (!resolved) return;
+      const proxyUrl = computeHashImageUrl(resolved) || resolved;
+      preloadImage(proxyUrl);
+    }).catch(() => { /* silent */ });
+  };
+
+  // Direct image URL — preload through proxy.
+  // SPECIAL CASE: cdn.interstate.so/{mint}.webp 404s for fresh pump tokens
+  // until the CDN is warmed (typically minutes). When we have a uri fallback,
+  // skip the CDN preload entirely — it would just generate a flood of 404s.
+  // The uri-resolved image is preloaded instead, and FastImage's onLoadFailed
+  // → directImageFailed swap (in PulseTable.TokenImage) handles the runtime
+  // case if the CDN attempt also fails.
+  if (raw && !isMetadataUrl(raw)) {
+    const isInterstateCdn = raw.includes("cdn.interstate.so/");
+    const hasUriFallback =
+      uriFallback && uriFallback !== raw && isMetadataUrl(uriFallback);
+
+    if (isInterstateCdn && hasUriFallback) {
+      // Skip CDN preload — go straight to uri so we don't pollute the network
+      // log with 404s for tokens whose CDN entry isn't warmed yet.
+      resolveAndPreload(uriFallback);
+      return;
+    }
+
+    const proxyUrl = computeHashImageUrl(raw) || raw;
+    preloadImage(proxyUrl);
+    if (hasUriFallback) {
+      resolveAndPreload(uriFallback);
+    }
+    return;
+  }
+
+  // Metadata URI as the primary — resolve and preload
+  if (raw && isMetadataUrl(raw)) {
+    resolveAndPreload(raw);
+    return;
+  }
+
+  // No raw at all but a uri exists — fall through to uri
+  if (uriFallback && isMetadataUrl(uriFallback)) {
+    resolveAndPreload(uriFallback);
+  }
+}
+
 function addToken(key: 'newTokens' | 'finalStretchTokens' | 'migratedTokens', token: PulseToken) {
   const arr = currentData[key];
   const existing = arr.find(t => t.mint === token.mint);
@@ -931,6 +1013,9 @@ function addToken(key: 'newTokens' | 'finalStretchTokens' | 'migratedTokens', to
     ...currentData,
     [key]: [finalToken, ...filtered].slice(0, maxSize),
   };
+
+  // Pre-warm image: resolve metadata + preload bytes before React renders
+  if (!existing) prewarmTokenImage(finalToken);
 }
 
 /**

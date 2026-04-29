@@ -98,6 +98,8 @@ import {
   getCachedResolvedImage,
   resolveMetadataImage,
   resolveTokenImage,
+  isMetadataUrl,
+  clearMetadataFailureCache,
 } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { preloadTokenImages, preloadMetadataImages } from "~/utils/imagePreloader";
@@ -1579,43 +1581,108 @@ function TokenImage({
   // Extract image URL from token data, checking multiple possible field names
   // Priority: image_url, image, logo, uri (updated for API compatibility)
   const rawImageUrl = extractTokenImage(token as any) || null;
-  // uri is a metadata URI by definition — only use when no direct image available
   const tokenUri = (token as any)?.uri || null;
-  const metadataCandidate = !rawImageUrl ? tokenUri : null;
 
-  // Sync-initialize from metadata cache to eliminate skeleton flash on re-mount
-  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(() => {
-    if (metadataCandidate) {
-      // force=true: uri IS metadata by definition, skip isMetadataUrl check
-      const cached = getCachedResolvedImage(metadataCandidate, true);
-      if (cached) return cached;
-      return null; // will resolve async in effect
-    }
-    return rawImageUrl; // non-metadata URL, use immediately
+  // If extractTokenImage returned a metadata JSON URL (e.g., irys.xyz/arweave URI
+  // from the "uri" field), treat it as metadataCandidate so we resolve it before
+  // passing to FastImage. Without this, PulseTable would hand the JSON URL to
+  // FastImage which routes it through the /api/img proxy causing a server-side
+  // double-hop (fetch JSON + fetch image) taking 5-6s for new tokens.
+  const rawIsMetadata = rawImageUrl ? isMetadataUrl(rawImageUrl) : false;
+  const directImageUrl = rawIsMetadata ? null : rawImageUrl;
+  const metadataCandidate = rawIsMetadata
+    ? rawImageUrl
+    : !rawImageUrl && tokenUri
+    ? tokenUri
+    : null;
+
+  // Track whether the direct image URL (e.g. cdn.interstate.so/{mint}.webp)
+  // exhausted its retries. When it does, we swap to the uri-based fallback —
+  // see the rationale in the prewarm function in pulseWorkerBridge.ts.
+  const [directImageFailed, setDirectImageFailed] = useState(false);
+
+  // Reset the failure flag whenever the underlying token changes
+  useEffect(() => {
+    setDirectImageFailed(false);
+  }, [token.mint]);
+
+  // Stable callback so FastImage's memo comparator doesn't bust on every render
+  const handleDirectImageFailed = React.useCallback(() => {
+    setDirectImageFailed(true);
+  }, []);
+
+  // If direct image failed AND we have a uri fallback, prefer the URI path
+  const uriFallbackActive =
+    directImageFailed && !rawIsMetadata && tokenUri && isMetadataUrl(tokenUri);
+  const effectiveDirectImageUrl = uriFallbackActive ? null : directImageUrl;
+  const effectiveMetadataCandidate = uriFallbackActive ? tokenUri : metadataCandidate;
+
+  // State holds ONLY the async-resolved metadata URL. Direct URLs are derived
+  // from props in render so a virtualized-list shift (where the same component
+  // instance gets repointed at a different token) immediately reflects the new
+  // direct URL — no stale-state render where FastImage briefly receives the
+  // previous token's src and visibly swaps. This was the root cause of "all
+  // already-loaded tokens flicker when a new token arrives."
+  const [resolvedMetadataUrl, setResolvedMetadataUrl] = useState<string | null>(() => {
+    if (!effectiveMetadataCandidate) return null;
+    const cached = getCachedResolvedImage(effectiveMetadataCandidate, true);
+    return cached || null;
   });
 
-  // If the image URL is a JSON metadata URL, resolve it asynchronously
+  // Sync the metadata-cache hit when the candidate changes (token shift). Reads
+  // the cache synchronously in render so when the new token's metadata is
+  // already resolved, the URL is correct on the FIRST render — no flicker.
+  const cachedMetadataUrl = effectiveMetadataCandidate
+    ? getCachedResolvedImage(effectiveMetadataCandidate, true)
+    : null;
+
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 2;
 
-    if (metadataCandidate) {
-      // force=true: resolve any URI regardless of host whitelist
-      resolveMetadataImage(metadataCandidate, true).then((resolved) => {
-        if (!cancelled) {
-          setResolvedImageUrl(resolved || null);
+    if (!effectiveMetadataCandidate) {
+      // Token has a direct URL — clear any stale resolved-metadata state
+      setResolvedMetadataUrl(null);
+      return;
+    }
+
+    // Sync cache hit — initialize state without waiting for promise
+    const cached = getCachedResolvedImage(effectiveMetadataCandidate, true);
+    if (cached) {
+      setResolvedMetadataUrl(cached);
+      return;
+    }
+
+    setResolvedMetadataUrl(null);
+
+    const attemptResolve = (isRetry: boolean) => {
+      if (isRetry && effectiveMetadataCandidate) clearMetadataFailureCache(effectiveMetadataCandidate);
+      resolveMetadataImage(effectiveMetadataCandidate, true).then((resolved) => {
+        if (cancelled) return;
+        if (resolved) {
+          setResolvedMetadataUrl(resolved);
+        } else if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          const delay = retryCount === 1 ? 2000 : 5000;
+          retryTimer = setTimeout(() => attemptResolve(true), delay);
         }
       });
-    } else {
-      setResolvedImageUrl(rawImageUrl);
-    }
+    };
+    attemptResolve(false);
 
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [rawImageUrl, metadataCandidate]);
+  }, [effectiveMetadataCandidate]);
 
-  // Use resolved URL or fall back to raw URL
-  const imageUrl = resolvedImageUrl;
+  // imageUrl is computed every render: prefer the direct URL straight from
+  // props, fall back to the synchronously-checked metadata cache, then to the
+  // async-resolved state. No stale render — token-shift gives the new URL
+  // immediately, FastImage's memo bail-out keeps cached images stable.
+  const imageUrl = effectiveDirectImageUrl || cachedMetadataUrl || resolvedMetadataUrl;
 
   // Blacklist: extract twitter handle and dev wallet for action buttons
   const { meta: blMeta } = useTokenMetadata(token.uri);
@@ -2048,6 +2115,7 @@ function TokenImage({
                 className="h-full w-full object-cover"
                 priority={priority}
                 showBubble={false}
+                onLoadFailed={handleDirectImageFailed}
               />
               {/* Dark dim overlay on hover */}
               <div

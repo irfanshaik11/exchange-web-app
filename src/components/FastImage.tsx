@@ -1,8 +1,18 @@
-import React, { useState, useEffect, useRef, memo } from 'react';
-import ImageBubble from './ImageBubble';
-import { isMetadataUrl, resolveMetadataImage, clearMetadataFailureCache, getCachedMetadataImage } from '~/utils/images';
-import { retainImageObject, isImageRetained, getRetainedImage, prefetchFromSessionStorage } from '~/utils/imagePreloader';
-import { computeHashImageUrl } from '~/utils/imageHash';
+import React, { useState, useEffect, useRef, memo } from "react";
+import ImageBubble from "./ImageBubble";
+import {
+  isMetadataUrl,
+  resolveMetadataImage,
+  clearMetadataFailureCache,
+  getCachedMetadataImage,
+} from "~/utils/images";
+import {
+  retainImageObject,
+  isImageRetained,
+  getRetainedImage,
+  prefetchFromSessionStorage,
+} from "~/utils/imagePreloader";
+import { computeHashImageUrl } from "~/utils/imageHash";
 
 /**
  * Global tracker for loaded image URLs with LRU eviction
@@ -11,17 +21,17 @@ import { computeHashImageUrl } from '~/utils/imageHash';
 const globalLoadedImages = new Map<string, number>(); // url -> last access timestamp
 const MAX_TRACKED_IMAGES = 500;
 const MAX_PERSISTED_IMAGES = 200;
-const PERSIST_KEY = '__img_urls'; // No 'session'/'Session' substring — safe from TurnkeyRootProvider
+const PERSIST_KEY = "__img_urls"; // No 'session'/'Session' substring — safe from TurnkeyRootProvider
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Hydrate from sessionStorage at module init (survives F5, clears on tab close)
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   try {
     const raw = sessionStorage.getItem(PERSIST_KEY);
     if (raw) {
       const entries: [string, number][] = JSON.parse(raw);
       for (const [url, ts] of entries) {
-        if (typeof url === 'string' && typeof ts === 'number') {
+        if (typeof url === "string" && typeof ts === "number") {
           globalLoadedImages.set(url, ts);
         }
       }
@@ -34,13 +44,13 @@ if (typeof window !== 'undefined') {
     prefetchFromSessionStorage(
       Array.from(globalLoadedImages.entries())
         .sort((a, b) => b[1] - a[1]) // most-recently-used first
-        .map(([url]) => url)
+        .map(([url]) => url),
     );
   }
 }
 
 function schedulePersist() {
-  if (typeof window === 'undefined' || persistTimer) return;
+  if (typeof window === "undefined" || persistTimer) return;
   persistTimer = setTimeout(() => {
     persistTimer = null;
     try {
@@ -58,7 +68,7 @@ function trackLoadedImage(url: string) {
 
   // Evict oldest if over limit
   if (globalLoadedImages.size > MAX_TRACKED_IMAGES) {
-    let oldestUrl = '';
+    let oldestUrl = "";
     let oldestTime = Infinity;
     for (const [u, time] of globalLoadedImages) {
       if (time < oldestTime) {
@@ -101,6 +111,8 @@ interface FastImageProps {
   name?: string;
   showBubble?: boolean;
   bubbleSrc?: string;
+  /** Fired when all auto-retries are exhausted. Parent can swap to a fallback src. */
+  onLoadFailed?: () => void;
 }
 
 /**
@@ -115,29 +127,53 @@ interface FastImageProps {
 function FastImageInner({
   src,
   fallbackSrc,
-  alt = '',
+  alt = "",
   width = 48,
   height = 48,
-  className = '',
+  className = "",
   priority = false,
   symbol,
   name,
   showBubble = true,
   bubbleSrc,
+  onLoadFailed,
 }: FastImageProps) {
   const inputSrc = src || fallbackSrc;
 
-  // CRITICAL: Initialize resolvedSrc SYNCHRONOUSLY from props
-  // Only use null for metadata URLs (which need async resolution)
-  // This prevents the flicker caused by: null → effect sets value → re-render
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
+  // State holds ONLY the async-resolved metadata image URL, scoped to the
+  // input it was resolved from. Direct URLs are derived from inputSrc on every
+  // render so a parent prop change (e.g. virtualized-list shift repointing
+  // this row at a different token) reflects instantly — no stale render where
+  // we'd briefly show the previous token's URL until an effect catches up.
+  // Scoping by source prevents a stale resolved URL from a previous metadata
+  // candidate leaking through when the candidate changes.
+  const [asyncResolved, setAsyncResolved] = useState<{ src: string; url: string } | null>(null);
+
+  const resolvedSrc: string | null = (() => {
     if (!inputSrc) return null;
-    if (!isMetadataUrl(inputSrc)) return inputSrc; // Regular URL - use immediately!
-    // Use cached resolved image if available; otherwise use inputSrc directly.
-    // computeImageUrl routes through /api/img/{hash} which handles both
-    // direct images and JSON metadata (via resolveJsonMetadataImage).
-    return getCachedMetadataImage(inputSrc) || inputSrc;
-  });
+    if (!isMetadataUrl(inputSrc)) return inputSrc;
+    const cached = getCachedMetadataImage(inputSrc);
+    if (cached) return cached;
+    if (asyncResolved && asyncResolved.src === inputSrc) return asyncResolved.url;
+    return inputSrc;
+  })();
+
+  // Shim so the inputSrc-change effect's existing setResolvedSrc(...) calls
+  // still type-check and work — they only matter for the metadata path now.
+  const setResolvedSrc = (
+    next: string | null | ((prev: string | null) => string | null),
+  ) => {
+    if (typeof next === "function") {
+      const prev = asyncResolved?.url ?? null;
+      const nextVal = next(prev);
+      if (nextVal && inputSrc) setAsyncResolved({ src: inputSrc, url: nextVal });
+      else setAsyncResolved(null);
+    } else if (next && inputSrc) {
+      setAsyncResolved({ src: inputSrc, url: next });
+    } else {
+      setAsyncResolved(null);
+    }
+  };
 
   // Track whether the image was already cached at mount time (set synchronously, never re-renders)
   const wasCachedAtMount = useRef(false);
@@ -150,14 +186,23 @@ function FastImageInner({
     const initialUrl = computeImageUrl(initialSrc);
     if (!initialUrl) return false;
 
+    // Check the module-level retained Image cache FIRST, regardless of
+    // isImageTracked. This covers the prewarm path: when the WS bridge ran
+    // preloadImage() before this component mounted, the bitmap is in
+    // imageObjectCache but globalLoadedImages was never updated (only
+    // FastImage's own handleLoad does that). Without this check, prewarmed
+    // images go through the imageLoaded=false → letter → onLoad → true cycle
+    // even though the bitmap is sitting in memory ready to display.
+    const retained = getRetainedImage(initialUrl);
+    if (retained && retained.complete && retained.naturalHeight > 0) {
+      wasCachedAtMount.current = true;
+      return true; // Already decoded — instant display
+    }
+
     if (isImageTracked(initialUrl)) {
-      // Check prefetched image first (started at module init, may already be decoded)
-      const retained = getRetainedImage(initialUrl);
-      if (retained && retained.complete && retained.naturalHeight > 0) {
-        wasCachedAtMount.current = true;
-        return true; // Already decoded — instant display
-      }
-      // Fallback: new probe (current behavior)
+      // Fallback: probe via fresh Image() — covers the case where FastImage
+      // previously loaded this URL (added to globalLoadedImages via handleLoad)
+      // but the retained image was evicted from imageObjectCache.
       const probe = new Image();
       probe.src = initialUrl;
       if (probe.complete && probe.naturalHeight > 0) {
@@ -165,7 +210,7 @@ function FastImageInner({
         retainImageObject(initialUrl, probe);
         return true; // Confirmed in browser memory
       }
-      probe.src = ''; // Cancel any queued fetch
+      probe.src = ""; // Cancel any queued fetch
     }
     return false;
   });
@@ -181,10 +226,16 @@ function FastImageInner({
   const retryCountRef = useRef(0);
   const MAX_VISIBILITY_RETRIES = 3;
 
-  // Auto-retry on load error with exponential backoff
+  // Auto-retry on load error with shortened backoff (200/500/1000ms instead
+  // of 2s/4s/8s — for 404s retries don't help, and the parent's onLoadFailed
+  // fallback chain wants to fire ASAP).
   const autoRetryCountRef = useRef(0);
   const autoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MAX_AUTO_RETRIES = 3;
+  const RETRY_DELAYS_MS = [200, 500, 1000];
+  // Track whether onLoadFailed has fired for the current URL (only fire once
+  // per URL so the parent doesn't get spammed across retries).
+  const onLoadFailedFiredRef = useRef(false);
 
   // Metadata resolution retry (for when resolveMetadataImage returns null due to timeout/congestion)
   const metadataRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -208,7 +259,7 @@ function FastImageInner({
     if (symbol && symbol.length > 0) return symbol.charAt(0).toUpperCase();
     if (name && name.length > 0) return name.charAt(0).toUpperCase();
     if (alt && alt.length > 0) return alt.charAt(0).toUpperCase();
-    return '?';
+    return "?";
   })();
 
   // Resolve metadata URLs with retry on failure
@@ -223,22 +274,25 @@ function FastImageInner({
     if (inputSrc && isMetadataUrl(inputSrc)) {
       const attemptResolve = (isRetry: boolean) => {
         if (isRetry) clearMetadataFailureCache(inputSrc);
-        resolveMetadataImage(inputSrc).then(resolved => {
+        resolveMetadataImage(inputSrc).then((resolved) => {
           if (resolved) {
-            setResolvedSrc(prev => prev === resolved ? prev : resolved);
+            setResolvedSrc((prev) => (prev === resolved ? prev : resolved));
           } else if (metadataRetryCountRef.current < MAX_METADATA_RETRIES) {
             metadataRetryCountRef.current++;
             const delay = metadataRetryCountRef.current === 1 ? 2000 : 5000;
-            metadataRetryRef.current = setTimeout(() => attemptResolve(true), delay);
+            metadataRetryRef.current = setTimeout(
+              () => attemptResolve(true),
+              delay,
+            );
           }
         });
       };
       attemptResolve(false);
     } else if (inputSrc) {
       // For regular URLs, only update if changed (prevents unnecessary re-renders)
-      setResolvedSrc(prev => prev === inputSrc ? prev : inputSrc);
+      setResolvedSrc((prev) => (prev === inputSrc ? prev : inputSrc));
     } else {
-      setResolvedSrc(prev => prev === null ? prev : null);
+      setResolvedSrc((prev) => (prev === null ? prev : null));
     }
 
     return () => {
@@ -253,9 +307,10 @@ function FastImageInner({
   const imageUrl = computeImageUrl(resolvedSrc);
 
   // Cache-bust URL for retries (keeps canonical imageUrl for tracking)
-  const finalImageUrl = imageUrl && retryVersion > 0
-    ? `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}_r=${retryVersion}`
-    : imageUrl;
+  const finalImageUrl =
+    imageUrl && retryVersion > 0
+      ? `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}_r=${retryVersion}`
+      : imageUrl;
 
   // Whether this URL was previously loaded (from in-memory tracker or sessionStorage hydration)
   // Used for CSS background fallback and eager loading even when bitmap isn't in decoded cache
@@ -264,6 +319,7 @@ function FastImageInner({
   // Update ref and check tracker when URL changes
   useEffect(() => {
     autoRetryCountRef.current = 0;
+    onLoadFailedFiredRef.current = false; // reset per-URL fire-once flag
     setRetryVersion(0);
     if (autoRetryTimerRef.current) {
       clearTimeout(autoRetryTimerRef.current);
@@ -278,13 +334,27 @@ function FastImageInner({
 
     currentUrlRef.current = imageUrl;
 
+    // Check retained image cache first (covers prewarm path — see useState
+    // initializer above for full explanation)
+    const retained = getRetainedImage(imageUrl);
+    if (retained && retained.complete && retained.naturalHeight > 0) {
+      setImageLoaded(true);
+      setImageError(false);
+      return;
+    }
+
     // If already in global tracker, set loaded immediately
     if (isImageTracked(imageUrl)) {
-      setImageLoaded(prev => prev ? prev : true); // Only update if not already true
+      setImageLoaded((prev) => (prev ? prev : true)); // Only update if not already true
       setImageError(false);
     } else {
-      // New URL - don't reset imageLoaded (prevents flicker)
-      // The img onLoad will set it to true when loaded
+      // New, untracked URL — reset imageLoaded so the letter-fallback shows
+      // during the load instead of leaving stale-true state from the previous
+      // image. Without this, when a row gets repointed at a different mint
+      // (e.g. virtualized list shifts after a new token prepends) the
+      // previously-loaded image disappears and the user sees a dark/empty box
+      // until the new bytes arrive — the "old tokens lose their image" bug.
+      setImageLoaded(false);
       setImageError(false);
     }
   }, [imageUrl]);
@@ -292,7 +362,7 @@ function FastImageInner({
   // Retry failed / evicted images when the tab becomes visible again
   useEffect(() => {
     const handler = () => {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== "visible") return;
       if (!currentUrlRef.current) return;
       if (retryCountRef.current >= MAX_VISIBILITY_RETRIES) return;
 
@@ -315,13 +385,15 @@ function FastImageInner({
         globalLoadedImages.delete(currentUrlRef.current);
         setImageLoaded(false);
         const src = img.src;
-        img.src = '';
-        requestAnimationFrame(() => { img.src = src; });
+        img.src = "";
+        requestAnimationFrame(() => {
+          img.src = src;
+        });
       }
     };
 
-    document.addEventListener('visibilitychange', handler);
-    return () => document.removeEventListener('visibilitychange', handler);
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
   }, []); // Empty deps: registered once, uses refs for state
 
   const handleLoad = () => {
@@ -344,15 +416,26 @@ function FastImageInner({
     if (currentUrlRef.current) {
       globalLoadedImages.delete(currentUrlRef.current);
     }
+
+    // Fire onLoadFailed on the FIRST error (not after all retries).
+    // For 404s, retries won't help — the parent (e.g. PulseTable.TokenImage)
+    // wants to swap to a fallback src (URI-resolved image) immediately.
+    // Background retries still continue in case the CDN comes back, but the
+    // parent's fallback gets a head start instead of waiting 14s.
+    if (!onLoadFailedFiredRef.current) {
+      onLoadFailedFiredRef.current = true;
+      onLoadFailed?.();
+    }
+
     if (autoRetryCountRef.current < MAX_AUTO_RETRIES) {
-      const delay = Math.pow(2, autoRetryCountRef.current + 1) * 1000; // 2s, 4s, 8s
+      const delay = RETRY_DELAYS_MS[autoRetryCountRef.current] ?? 1000;
       autoRetryCountRef.current++;
       setImageError(true);
       setImageLoaded(false);
       autoRetryTimerRef.current = setTimeout(() => {
         autoRetryTimerRef.current = null;
-        setRetryVersion(v => v + 1);  // Cache-bust: forces new URL on retry
-        setImageError(false);  // Clears error → React re-renders <img> → fresh load
+        setRetryVersion((v) => v + 1); // Cache-bust: forces new URL on retry
+        setImageError(false); // Clears error → React re-renders <img> → fresh load
         setImageLoaded(false);
       }, delay);
     } else {
@@ -365,8 +448,8 @@ function FastImageInner({
   if (!imageUrl || imageError) {
     return (
       <div
-        className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg`}
-        style={{ width, height, borderRadius: 'inherit' }}
+        className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black font-bold text-white shadow-lg`}
+        style={{ width, height, borderRadius: "inherit" }}
       >
         <span className="text-lg select-none">{firstLetter}</span>
         {showBubble && <ImageBubble src={bubbleSrc} />}
@@ -383,22 +466,23 @@ function FastImageInner({
       style={{
         width,
         height,
-        borderRadius: 'inherit',
+        borderRadius: "inherit",
         // For cached/known images: CSS background-image resolves from SW/HTTP/memory cache,
         // painting the image behind the letter (no gradient flash on F5 or SPA nav).
         // isKnownUrl covers post-refresh when bitmap isn't decoded yet but URL is in cache.
-        background: ((imageLoaded || isKnownUrl) && finalImageUrl)
-          ? `url("${finalImageUrl}") center/cover no-repeat, linear-gradient(to bottom right, #1f2937, #000000)`
-          : 'linear-gradient(to bottom right, #1f2937, #000000)',
+        background:
+          (imageLoaded || isKnownUrl) && finalImageUrl
+            ? `url("${finalImageUrl}") center/cover no-repeat, linear-gradient(to bottom right, #1f2937, #000000)`
+            : "linear-gradient(to bottom right, #1f2937, #000000)",
       }}
     >
       {/* Fallback letter - always rendered, hidden by image when loaded */}
       <div
-        className="absolute inset-0 flex items-center justify-center text-white font-bold"
+        className="absolute inset-0 flex items-center justify-center font-bold text-white"
         style={{
           // Hide when image is loaded (image will cover this anyway, but this ensures clean state)
           opacity: imageLoaded ? 0 : 1,
-          pointerEvents: 'none',
+          pointerEvents: "none",
         }}
       >
         <span className="text-lg select-none">{firstLetter}</span>
@@ -413,14 +497,16 @@ function FastImageInner({
         height={height}
         onLoad={handleLoad}
         onError={handleError}
-        loading={(priority || wasCachedAtMount.current || isKnownUrl) ? 'eager' : 'lazy'}
-        decoding={(wasCachedAtMount.current || isKnownUrl) ? 'sync' : 'async'}
-        fetchPriority={priority ? 'high' : 'auto'}
+        loading={
+          priority || wasCachedAtMount.current || isKnownUrl ? "eager" : "lazy"
+        }
+        decoding={wasCachedAtMount.current || isKnownUrl ? "sync" : "async"}
+        fetchPriority={priority ? "high" : "auto"}
         style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          display: 'block',
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block",
           // Hide img until loaded — prevents browser broken-icon flash.
           // Gradient+letter fallback shows through cleanly when opacity is 0.
           opacity: imageLoaded ? 1 : 0,
@@ -447,6 +533,7 @@ export default memo(FastImageInner, (prevProps, nextProps) => {
     prevProps.name === nextProps.name &&
     prevProps.showBubble === nextProps.showBubble &&
     prevProps.bubbleSrc === nextProps.bubbleSrc &&
-    prevProps.priority === nextProps.priority
+    prevProps.priority === nextProps.priority &&
+    prevProps.onLoadFailed === nextProps.onLoadFailed
   );
 });
