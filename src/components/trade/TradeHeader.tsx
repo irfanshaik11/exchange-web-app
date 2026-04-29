@@ -1,10 +1,12 @@
 // components/trade/TradeHeader.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber, formatLamportsToSol, normalizeTimestampMs } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
 import FastImage from "../FastImage";
+import { TokenCountdown24h } from "../TokenCountdown24h";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 import { useRouter } from "next/router";
 import { getProtocolBranding } from "~/utils/protocolBranding";
@@ -590,6 +592,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const isOverSearchMenu = useRef(false);
 	const isOverSearchButton = useRef(false);
 	const searchMenuRef = useRef<HTMLDivElement>(null);
+	// Custom hover tooltip for the protocol/Mayhem bubble — mirrors the
+	// PulseTable row's bottom-right bubble tooltip (createPortal + opacity
+	// transition) instead of relying on the native browser title attribute,
+	// which has a noticeable delay and no styling.
+	const ammBubbleTipRef = useRef<HTMLDivElement>(null);
 
 	// State for fetched age from Monad search endpoint (Solana uses wsTokenInfo.created_at directly)
 	const [fetchedCreatedAt, setFetchedCreatedAt] = useState<
@@ -1065,7 +1072,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 							<div
 								className="relative rounded-sm"
 								style={{
-									border: `1px solid ${protocolColor}`,
+									// Mayhem Mode replaces the launchpad-color image frame with
+									// brand red so the trade header reads as Mayhem at a glance.
+									border: `1px solid ${(token as any)?.is_mayhem_mode ? "#c83c51" : protocolColor}`,
 									padding: 1,
 									backgroundColor: "#06070b",
 								}}
@@ -1090,15 +1099,44 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 						</div>
 
 						<div
-							className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full bg-white"
+							className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
 							style={{
 								width: "clamp(10px, 2.5vw, 12px)",
 								height: "clamp(10px, 2.5vw, 12px)",
-								border: `1px solid ${protocolColor}`,
-								boxShadow: `0 0 2px ${protocolColor}60`,
+								// Mayhem Mode → black bubble background so the Mayhem.webp icon
+								// (which has transparent regions) reads against a dark backdrop,
+								// matching the PulseTable row treatment. Non-Mayhem retains the
+								// original white background so launchpad logos pop as before.
+								backgroundColor: (token as any)?.is_mayhem_mode ? "#000000" : "#ffffff",
+								// Mayhem Mode → red bubble border + red glow, mirroring the
+								// PulseTable row's bottom-right protocol bubble treatment.
+								border: `1px solid ${(token as any)?.is_mayhem_mode ? "#c83c51" : protocolColor}`,
+								boxShadow: `0 0 2px ${(token as any)?.is_mayhem_mode ? "#c83c5160" : `${protocolColor}60`}`,
 							}}
-							title="Protocol"
+							onMouseEnter={(e) => {
+								const tip = ammBubbleTipRef.current;
+								if (tip) {
+									const r = e.currentTarget.getBoundingClientRect();
+									tip.style.left = `${r.left + r.width / 2}px`;
+									tip.style.top = `${r.top - 6}px`;
+									tip.style.transform = "translate(-50%, -100%)";
+									tip.style.opacity = "1";
+								}
+							}}
+							onMouseLeave={() => {
+								const tip = ammBubbleTipRef.current;
+								if (tip) tip.style.opacity = "0";
+							}}
 						>
+							{(token as any)?.is_mayhem_mode ? (
+								// Mayhem Mode → swap the launchpad logo for the dedicated
+								// /public/Mayhem.webp asset, sized to fit the small bubble.
+								<img
+									src="/Mayhem.webp"
+									alt="Mayhem Mode"
+									className="h-3/4 w-3/4 rounded-full object-contain"
+								/>
+							) : (
 							<img
 								src={tokenIcon}
 								alt={`${(token as any)?.launchpad_protocol || (token as any)?.protocol || (token as any)?.launchpadName || "Protocol"} logo`}
@@ -1113,7 +1151,29 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									(e.target as HTMLImageElement).style.display = "none";
 								}}
 							/>
+							)}
 						</div>
+						{typeof document !== "undefined" &&
+							createPortal(
+								<div
+									ref={ammBubbleTipRef}
+									className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+									style={{
+										backgroundColor: "rgba(31, 41, 55, 0.95)",
+										color: "#e5e7eb",
+										border: "1px solid rgba(107, 114, 128, 0.3)",
+										opacity: 0,
+										transition: "opacity 150ms",
+									}}
+								>
+									{(token as any)?.is_mayhem_mode
+										? "Mayhem"
+										: (token as any)?.launchpad_protocol ||
+										  (token as any)?.protocol ||
+										  "Protocol"}
+								</div>,
+								document.body,
+							)}
 
 						<div
 							className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300"
@@ -1251,6 +1311,17 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
 						<div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] sm:gap-1 sm:text-xs lg:gap-2">
 							<span className="whitespace-nowrap">{tokenAgeLabel}</span>
+							{/* Mayhem Mode 24h fire countdown — sits between the age and the
+							    search button, mirroring the PulseTable row metadata strip. */}
+							{(token as any)?.is_mayhem_mode && (
+								<TokenCountdown24h
+									startedAt={
+										(token as any)?.launch_time ||
+										(token as any)?.created_at ||
+										(wsTokenInfo as any)?.created_at
+									}
+								/>
+							)}
 							{/* Socials */}
 							<div className="relative flex items-center gap-0.5 text-neutral-400 sm:gap-1 lg:gap-1">
 								{/* Pump.fun Link - only show for pump tokens */}

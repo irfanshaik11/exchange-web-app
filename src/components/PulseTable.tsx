@@ -3161,7 +3161,9 @@ function PulseTable({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const hasSpecificProtocols =
-      filters.protocols.length > 0 && !filters.protocols.includes("All");
+      (filters.onlyMayhemMode && filters.protocols.length === 0
+        ? false
+        : !filters.protocols.includes("All"));
     if (hasSpecificProtocols) return;
 
     // Select the right direct tokens based on channel
@@ -3204,7 +3206,9 @@ function PulseTable({
   useEffect(() => {
     // Treat ['All'] the same as no filter - don't fetch filtered data
     const hasSpecificProtocols =
-      filters.protocols.length > 0 && !filters.protocols.includes("All");
+      (filters.onlyMayhemMode && filters.protocols.length === 0
+        ? false
+        : !filters.protocols.includes("All"));
 
     if (hasSpecificProtocols) {
       fetchFilteredTokens(filters.protocols);
@@ -3643,13 +3647,11 @@ function PulseTable({
     }
   };
 
-  // Protocol and quote token data with official icons from web3icons
+  // Protocol and quote token data with official icons from web3icons.
+  // NOTE: "All" is intentionally NOT in this array anymore — it's rendered as a
+  // standalone globe button before the protocol chips, and "All" mode is shown
+  // by lighting up every individual protocol chip (see the chip render below).
   const protocols = [
-    {
-      name: "All",
-      icon: <span className="text-sm">🌐</span>,
-      color: "#9333ea",
-    },
     {
       name: "Pump",
       icon: (
@@ -3876,7 +3878,7 @@ function PulseTable({
     // This ensures WebSocket tokens render instantly without any processing delay
     // ═══════════════════════════════════════════════════════════════════════════
     const hasNoCustomFilters =
-      (filters.protocols.length === 0 || filters.protocols.includes("All")) &&
+      filters.protocols.includes("All") &&
       filters.quoteTokens.length === 0 &&
       !filters.searchKeywords.trim() &&
       !filters.excludeKeywords.trim() &&
@@ -4047,7 +4049,9 @@ function PulseTable({
     // 3. Original tokens prop (fallback)
     let filtered: Token[];
     const hasSpecificProtocols =
-      filters.protocols.length > 0 && !filters.protocols.includes("All");
+      (filters.onlyMayhemMode && filters.protocols.length === 0
+        ? false
+        : !filters.protocols.includes("All"));
 
     // Merge WebSocket tokens with HTTP API tokens (deduplicate by mint)
     const mergedMap = new Map<string, Token>();
@@ -4092,9 +4096,54 @@ function PulseTable({
     };
 
     // Use filteredTokens if available (either from specific filters or fresh "All" fetch)
-    // Otherwise fall back to baseTokens (local state with price updates)
+    // Otherwise fall back to baseTokens (local state with price updates).
+    //
+    // Mayhem exception: when Mayhem is on and a specific protocol is selected,
+    // the protocol-filtered REST endpoint returns the latest 50 tokens of that
+    // protocol — which often contains zero Mayhem-flagged tokens (Mayhem is
+    // sparse). Combining `filteredTokens` with `baseTokens` widens the source
+    // pool so a Mayhem-Meteora intersection isn't accidentally empty just
+    // because the protocol-only fetch happened to skip Mayhem tokens. The
+    // mergedMap dedupes by mint, so this never double-counts.
     const tokensSource =
-      filteredTokens.length > 0 ? filteredTokens : baseTokens;
+      filters.onlyMayhemMode && hasSpecificProtocols
+        ? [...filteredTokens, ...baseTokens]
+        : filteredTokens.length > 0
+          ? filteredTokens
+          : baseTokens;
+
+    // TEMP DIAGNOSTIC — at the source level, count Mayhem-flagged tokens by
+    // category in EVERY data source (REST filtered, REST base, WS direct).
+    // This tells us at the data layer whether any Meteora-Mayhem tokens exist
+    // at all, separately from the merge/filter logic.
+    if (filters.onlyMayhemMode) {
+      const wsForLog = (
+        channel === 'new' ? directNewTokens :
+        channel === 'final_stretch' ? directFinalStretchTokens :
+        channel === 'migrated' ? directMigratedTokens :
+        []
+      ) as unknown as Token[];
+      const summarize = (arr: Token[], label: string) => {
+        const total = arr.length;
+        const mayhem = arr.filter((t) => !!(t as any).is_mayhem_mode);
+        const protoCounts = mayhem.reduce<Record<string, number>>((acc, t) => {
+          const p = (t as any).launchpad_protocol || "(none)";
+          acc[p] = (acc[p] || 0) + 1;
+          return acc;
+        }, {});
+        return { label, total, mayhemCount: mayhem.length, mayhemByProtocol: protoCounts };
+      };
+      // eslint-disable-next-line no-console
+      console.log("[Mayhem source check]", {
+        column: title,
+        protocolsFilter: filters.protocols,
+        sources: [
+          summarize(filteredTokens as Token[], "filteredTokens (REST protocol-filtered)"),
+          summarize(baseTokens, "baseTokens (REST all-protocol)"),
+          summarize(wsForLog, "wsDirect (WebSocket)"),
+        ],
+      });
+    }
 
     // First add HTTP API tokens (either filtered or from local state)
     // Apply client-side filter validation to ensure consistency with icon display
@@ -4694,11 +4743,52 @@ function PulseTable({
       });
     }
 
-    // Mayhem Mode — keep only tokens currently inside the 24h hot window.
-    // Backend sets `is_mayhem_mode: true` for the duration of the window.
+    // Mayhem Mode is handled in two distinct ways here:
+    //
+    // (a) When `onlyMayhemMode` is true → narrow to Mayhem-flagged tokens only.
+    // (b) When the user has a specific protocol selected (NOT "All") and
+    //     `onlyMayhemMode` is false → EXCLUDE Mayhem tokens from the result.
+    //
+    // Why exclude in case (b): a Mayhem token's `launchpad_protocol` is still
+    // its underlying launchpad (e.g., "pumpfun"). Without this exclusion, a
+    // user filtering by Pump would see Mayhem-flagged Pump tokens "sneak in"
+    // alongside regular Pump tokens — confusing because the Mayhem badge/red
+    // border makes those rows stand out as a different category. Composing
+    // Pump+Mayhem requires the user to explicitly click both chips.
     if (filters.onlyMayhemMode) {
+      // TEMP DIAGNOSTIC — remove once Mayhem-vs-protocol intersection bug fixed.
+      // Logs the input size, how many carry the flag, the protocol distribution
+      // of the Mayhem-flagged tokens specifically, and a sample. Lets us see
+      // if Meteora-Mayhem tokens exist in the data at all.
+      // eslint-disable-next-line no-console
+      console.log("[Mayhem+Protocol filter]", {
+        column: title,
+        protocols: filters.protocols,
+        beforeFilter: filtered.length,
+        withMayhemFlag: filtered.filter((t) => !!(t as any).is_mayhem_mode).length,
+        mayhemTokenProtocols: filtered
+          .filter((t) => !!(t as any).is_mayhem_mode)
+          .map((t) => (t as any).launchpad_protocol)
+          .reduce<Record<string, number>>((acc, p) => {
+            const k = p || "(none)";
+            acc[k] = (acc[k] || 0) + 1;
+            return acc;
+          }, {}),
+        sample: filtered.slice(0, 5).map((t) => ({
+          mint: (t as any).mint?.slice(0, 8),
+          launchpad_protocol: (t as any).launchpad_protocol,
+          is_mayhem_mode: (t as any).is_mayhem_mode,
+        })),
+      });
       filtered = filtered.filter(
         (token) => !!(token as any).is_mayhem_mode,
+      );
+    } else if (
+      !filters.protocols.includes("All") &&
+      filters.protocols.length > 0
+    ) {
+      filtered = filtered.filter(
+        (token) => !(token as any).is_mayhem_mode,
       );
     }
 
@@ -5601,11 +5691,25 @@ function PulseTable({
                             e.currentTarget.style.transform = "scale(1)";
                           }}
                           onClick={() => {
-                            // Simply revert to ['All'] - same as default state, no API call needed
+                            // "Select All" semantically means "show everything,
+                            // no restrictions." Mayhem is a filter that *narrows*
+                            // the result set, so even though it's a visible chip,
+                            // Select All should switch it OFF (any active filter
+                            // would contradict "show everything").
+                            //
+                            // Toggle on  → protocols=["All"] (all protocol chips
+                            //              lit) + onlyMayhemMode=false (Mayhem
+                            //              chip dim) → unrestricted view.
+                            // Toggle off → protocols=[] (every chip dim) +
+                            //              onlyMayhemMode=false → column empty.
                             handlePendingFilterChange((prev) => {
+                              const isAllOn =
+                                prev.protocols.includes("All") &&
+                                !prev.onlyMayhemMode;
                               return {
                                 ...prev,
-                                protocols: ["All"],
+                                protocols: isAllOn ? [] : ["All"],
+                                onlyMayhemMode: false,
                               };
                             });
                           }}
@@ -5614,48 +5718,42 @@ function PulseTable({
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {protocols.map((protocol) => (
+                        {protocols.map((protocol) => {
+                          // "All" mode lights up every chip in its own brand color.
+                          // Specific selection mode (`protocols: ["Pump"]`) only lights
+                          // up the chips listed. The hover style only kicks in when the
+                          // chip is NOT in active state, regardless of whether "active"
+                          // came from a specific listing or from "All".
+                          const isAllMode = pendingFilters.protocols.includes("All");
+                          const isExplicit = pendingFilters.protocols.includes(protocol.name);
+                          const isActive = isAllMode || isExplicit;
+                          return (
                           <button
                             key={protocol.name}
                             className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out"
                             style={{
-                              backgroundColor:
-                                pendingFilters.protocols.includes(protocol.name)
-                                  ? protocol.color
-                                  : "transparent",
-                              borderColor: pendingFilters.protocols.includes(
-                                protocol.name,
-                              )
+                              backgroundColor: isActive
                                 ? protocol.color
                                 : "transparent",
-                              border: pendingFilters.protocols.includes(
-                                protocol.name,
-                              )
+                              borderColor: isActive
+                                ? protocol.color
+                                : "transparent",
+                              border: isActive
                                 ? "2px solid"
                                 : "none",
-                              color: pendingFilters.protocols.includes(
-                                protocol.name,
-                              )
+                              color: isActive
                                 ? "#000000"
                                 : AX.text,
                               borderRadius: "20px",
-                              boxShadow: pendingFilters.protocols.includes(
-                                protocol.name,
-                              )
+                              boxShadow: isActive
                                 ? `0 0 12px ${protocol.color}40, 0 0 24px ${protocol.color}20`
                                 : "none",
-                              transform: pendingFilters.protocols.includes(
-                                protocol.name,
-                              )
+                              transform: isActive
                                 ? "scale(1.02)"
                                 : "scale(1)",
                             }}
                             onMouseEnter={(e) => {
-                              if (
-                                !pendingFilters.protocols.includes(
-                                  protocol.name,
-                                )
-                              ) {
+                              if (!isActive) {
                                 e.currentTarget.style.backgroundColor =
                                   protocol.color + "10";
                                 e.currentTarget.style.borderColor =
@@ -5667,11 +5765,7 @@ function PulseTable({
                               }
                             }}
                             onMouseLeave={(e) => {
-                              if (
-                                !pendingFilters.protocols.includes(
-                                  protocol.name,
-                                )
-                              ) {
+                              if (!isActive) {
                                 e.currentTarget.style.backgroundColor =
                                   "transparent";
                                 e.currentTarget.style.borderColor =
@@ -5687,29 +5781,34 @@ function PulseTable({
                                 const currentProtocols = prev.protocols;
                                 const clickedProtocol = protocol.name;
 
-                                // If clicking "All", clear all other protocols
+                                // Clicking "All" snaps to all-protocols + clears
+                                // Mayhem — "All" means "show everything, no
+                                // narrowing filters." (This branch is currently
+                                // unreachable since the "All" chip was removed
+                                // from the row, but kept as a defensive default.)
                                 if (clickedProtocol === "All") {
-                                  return { ...prev, protocols: ["All"] };
+                                  return {
+                                    ...prev,
+                                    protocols: ["All"],
+                                    onlyMayhemMode: false,
+                                  };
                                 }
 
-                                // If clicking a specific protocol
+                                // Toggle a specific protocol. Mayhem state is
+                                // preserved across protocol clicks so users can
+                                // compose Pump + Mayhem (or Mayhem + a series of
+                                // protocols) without the Mayhem chip auto-clearing.
                                 if (
                                   currentProtocols.includes(clickedProtocol)
                                 ) {
-                                  // Deselecting a protocol
                                   const remaining = currentProtocols.filter(
                                     (p) => p !== clickedProtocol && p !== "All",
                                   );
-                                  // If no protocols left, revert to 'All'
                                   return {
                                     ...prev,
-                                    protocols:
-                                      remaining.length === 0
-                                        ? ["All"]
-                                        : remaining,
+                                    protocols: remaining,
                                   };
                                 } else {
-                                  // Selecting a new protocol - remove 'All' and add the new one
                                   const withoutAll = currentProtocols.filter(
                                     (p) => p !== "All",
                                   );
@@ -5734,36 +5833,49 @@ function PulseTable({
                               {protocol.name}
                             </span>
                           </button>
-                        ))}
+                          );
+                        })}
                         {/* Mayhem Mode chip — visually mirrors the protocol chips
                             (same shape, hover treatment, scale-up on select), but
                             toggles the `onlyMayhemMode` boolean filter rather than
                             joining the protocols list. Brand red #c83c51 + fire
                             icon match the row treatment so users see the same
                             visual identity here as on a flagged token row. */}
+                        {(() => {
+                          // Visual lit when EITHER the user is filtering to Mayhem
+                          // (onlyMayhemMode) OR they're in "Select All" / All-mode
+                          // — so Select All lights up Mayhem alongside the protocol
+                          // chips. The actual data filter at line ~4700 still keys
+                          // strictly off onlyMayhemMode, so the chip can be lit
+                          // cosmetically without restricting the result set.
+                          const isAllModeAndMayhemOff =
+                            pendingFilters.protocols.includes("All") &&
+                            !pendingFilters.onlyMayhemMode;
+                          const isMayhemActive = pendingFilters.onlyMayhemMode || isAllModeAndMayhemOff;
+                          return (
                         <button
                           key="__mayhem_mode_chip"
                           className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out"
                           style={{
-                            backgroundColor: pendingFilters.onlyMayhemMode
+                            backgroundColor: isMayhemActive
                               ? "#c83c51"
                               : "transparent",
-                            border: pendingFilters.onlyMayhemMode
+                            border: isMayhemActive
                               ? "2px solid #c83c51"
                               : "none",
-                            color: pendingFilters.onlyMayhemMode
+                            color: isMayhemActive
                               ? "#000000"
                               : AX.text,
                             borderRadius: "20px",
-                            boxShadow: pendingFilters.onlyMayhemMode
+                            boxShadow: isMayhemActive
                               ? "0 0 12px #c83c5140, 0 0 24px #c83c5120"
                               : "none",
-                            transform: pendingFilters.onlyMayhemMode
+                            transform: isMayhemActive
                               ? "scale(1.02)"
                               : "scale(1)",
                           }}
                           onMouseEnter={(e) => {
-                            if (!pendingFilters.onlyMayhemMode) {
+                            if (!isMayhemActive) {
                               e.currentTarget.style.backgroundColor = "#c83c5110";
                               e.currentTarget.style.border = "1px solid #c83c51";
                               e.currentTarget.style.color = "#c83c51";
@@ -5772,7 +5884,7 @@ function PulseTable({
                             }
                           }}
                           onMouseLeave={(e) => {
-                            if (!pendingFilters.onlyMayhemMode) {
+                            if (!isMayhemActive) {
                               e.currentTarget.style.backgroundColor = "transparent";
                               e.currentTarget.style.border = "none";
                               e.currentTarget.style.color = AX.text;
@@ -5781,10 +5893,24 @@ function PulseTable({
                             }
                           }}
                           onClick={() => {
-                            handlePendingFilterChange((prev) => ({
-                              ...prev,
-                              onlyMayhemMode: !prev.onlyMayhemMode,
-                            }));
+                            handlePendingFilterChange((prev) => {
+                              // If the chip looks lit only because we're in "All"
+                              // mode (purely cosmetic), clicking it should narrow
+                              // to Mayhem-only — exit All-mode and turn Mayhem on.
+                              const cosmeticLitFromAll =
+                                prev.protocols.includes("All") && !prev.onlyMayhemMode;
+                              if (cosmeticLitFromAll) {
+                                return {
+                                  ...prev,
+                                  protocols: [],
+                                  onlyMayhemMode: true,
+                                };
+                              }
+                              return {
+                                ...prev,
+                                onlyMayhemMode: !prev.onlyMayhemMode,
+                              };
+                            });
                           }}
                         >
                           {/* Branded Mayhem artwork from public/Mayhem.webp.
@@ -5803,6 +5929,8 @@ function PulseTable({
                             Mayhem
                           </span>
                         </button>
+                          );
+                        })()}
                       </div>
                     </div>
 

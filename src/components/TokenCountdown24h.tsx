@@ -122,7 +122,7 @@ export const TokenCountdown24h = memo(function TokenCountdown24h({
   return (
     <>
       <div
-        className="flex items-center gap-1"
+        className="flex shrink-0 items-center gap-[3px]"
         style={{
           // Matte red pill — semi-transparent brand red layered over the row's
           // dark background produces a low-saturation, muted maroon tone
@@ -132,19 +132,26 @@ export const TokenCountdown24h = memo(function TokenCountdown24h({
           // Slightly rounded rectangle (not full circle) — pill silhouette but
           // still reads as a rectangular badge.
           borderRadius: 4,
-          padding: "2px 6px",
-          // Small extra breathing room to the left of the pill so it doesn't
-          // crowd the age component sitting before it. The parent's `gap-1`
-          // already provides 4px between flex children; this nudges another
-          // 4px so the strip reads as [age] · [timer] with clearer rhythm.
-          marginLeft: 4,
-          fontSize: 11,
+          padding: "1px 5px",
+          // Tiny extra space before the pill so it doesn't crowd the age
+          // component sitting on its left.
+          marginLeft: 2,
+          // Sized smaller than before so the pill stays inside its column
+          // when the table is shrunk to narrow widths. Was 11px / 12-icon /
+          // 6px-pad — overflowed sub-`lg` viewports. The new values are
+          // ~15% smaller and fit cleanly.
+          fontSize: 10,
           lineHeight: 1,
           fontWeight: 700,
-          letterSpacing: 0.2,
+          letterSpacing: 0,
           color: MAYHEM_RED,
           whiteSpace: "nowrap",
           fontVariantNumeric: "tabular-nums",
+          // Defensive: if the surrounding strip is ever clipped by an
+          // overflow:hidden parent, this caps the pill's max width to its
+          // intrinsic content width plus a small buffer so a CSS regression
+          // can't make it stretch beyond what its content needs.
+          maxWidth: "100%",
         }}
         // Tooltip lifecycle mirrors the AMM-bubble tooltip pattern in
         // PulseTable: position via getBoundingClientRect on enter, fade
@@ -173,7 +180,7 @@ export const TokenCountdown24h = memo(function TokenCountdown24h({
           alt=""
           aria-hidden
           className="pointer-events-none rounded-sm object-contain"
-          style={{ width: 12, height: 12 }}
+          style={{ width: 11, height: 11 }}
         />
         <span ref={spanRef} />
       </div>
