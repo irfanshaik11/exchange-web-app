@@ -226,10 +226,16 @@ function FastImageInner({
   const retryCountRef = useRef(0);
   const MAX_VISIBILITY_RETRIES = 3;
 
-  // Auto-retry on load error with exponential backoff
+  // Auto-retry on load error with shortened backoff (200/500/1000ms instead
+  // of 2s/4s/8s — for 404s retries don't help, and the parent's onLoadFailed
+  // fallback chain wants to fire ASAP).
   const autoRetryCountRef = useRef(0);
   const autoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MAX_AUTO_RETRIES = 3;
+  const RETRY_DELAYS_MS = [200, 500, 1000];
+  // Track whether onLoadFailed has fired for the current URL (only fire once
+  // per URL so the parent doesn't get spammed across retries).
+  const onLoadFailedFiredRef = useRef(false);
 
   // Metadata resolution retry (for when resolveMetadataImage returns null due to timeout/congestion)
   const metadataRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -313,6 +319,7 @@ function FastImageInner({
   // Update ref and check tracker when URL changes
   useEffect(() => {
     autoRetryCountRef.current = 0;
+    onLoadFailedFiredRef.current = false; // reset per-URL fire-once flag
     setRetryVersion(0);
     if (autoRetryTimerRef.current) {
       clearTimeout(autoRetryTimerRef.current);
@@ -409,8 +416,19 @@ function FastImageInner({
     if (currentUrlRef.current) {
       globalLoadedImages.delete(currentUrlRef.current);
     }
+
+    // Fire onLoadFailed on the FIRST error (not after all retries).
+    // For 404s, retries won't help — the parent (e.g. PulseTable.TokenImage)
+    // wants to swap to a fallback src (URI-resolved image) immediately.
+    // Background retries still continue in case the CDN comes back, but the
+    // parent's fallback gets a head start instead of waiting 14s.
+    if (!onLoadFailedFiredRef.current) {
+      onLoadFailedFiredRef.current = true;
+      onLoadFailed?.();
+    }
+
     if (autoRetryCountRef.current < MAX_AUTO_RETRIES) {
-      const delay = Math.pow(2, autoRetryCountRef.current + 1) * 1000; // 2s, 4s, 8s
+      const delay = RETRY_DELAYS_MS[autoRetryCountRef.current] ?? 1000;
       autoRetryCountRef.current++;
       setImageError(true);
       setImageLoaded(false);
@@ -423,7 +441,6 @@ function FastImageInner({
     } else {
       setImageError(true);
       setImageLoaded(false);
-      onLoadFailed?.();
     }
   };
 
