@@ -472,6 +472,11 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
     bonding_curve_progress: launchpadToken.graduationPercent,
     uri: launchpadToken.image || null,
     image: launchpadToken.image || null,
+    // Mayhem Mode passthrough — this hard reshape would otherwise drop the
+    // upstream flag and the token couldn't paint its red ring / fire countdown.
+    is_mayhem_mode: !!(launchpadToken as any).is_mayhem_mode,
+    launch_time:
+      (launchpadToken as any).launch_time || launchpadToken.createdAt || null,
       }) as any,
     [],
   );

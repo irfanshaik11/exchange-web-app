@@ -349,6 +349,11 @@ export function applyDiscoverFilters(
       if (!(protocol.includes('pump') && isLive)) return false;
     }
 
+    // ── Only Mayhem Mode ──
+    // Filters down to tokens currently inside the 24h Mayhem hot window.
+    // Backend sets `is_mayhem_mode: true` for the duration of the window.
+    if (filters.onlyMayhemMode && !token.is_mayhem_mode) return false;
+
     // ── Global Fees Paid ──
     const minFees = parseNum(filters.globalFeesPaidMin);
     const maxFees = parseNum(filters.globalFeesPaidMax);
@@ -408,6 +413,7 @@ export function countActiveFilters(filters: PulseFilters): number {
   if (filters.twitterReusesMin || filters.twitterReusesMax) count++;
   if (filters.hasTwitter || filters.hasWebsite || filters.hasTelegram || filters.atLeastOneSocial) count++;
   if (filters.onlyPumpLive) count++;
+  if (filters.onlyMayhemMode) count++;
   return count;
 }
 
@@ -463,6 +469,7 @@ export function hasActiveFilters(filters: PulseFilters): boolean {
     !!filters.hasWebsite ||
     !!filters.hasTelegram ||
     !!filters.atLeastOneSocial ||
-    !!filters.onlyPumpLive
+    !!filters.onlyPumpLive ||
+    !!filters.onlyMayhemMode
   );
 }

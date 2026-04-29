@@ -116,6 +116,7 @@ import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents
 import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
 import { hasActiveFilters as checkActiveFilters } from "~/utils/discoverFilterUtils";
 import { TokenAge } from "./TokenAge";
+import { TokenCountdown24h } from "./TokenCountdown24h";
 
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { VirtualizedTokenList } from "./VirtualizedTokenList";
@@ -2067,6 +2068,11 @@ function TokenImage({
             className="relative rounded-lg"
             style={{
               border: `1px solid ${(() => {
+                // Mayhem Mode hijacks the base "loading track" border so it
+                // reads as a lighter red instead of the launchpad's ~25% hue.
+                // Matches the same alpha as non-Mayhem (`...40` ≈ 25%) so the
+                // ring weight is consistent across token types.
+                if ((token as any).is_mayhem_mode) return "#c83c5140";
                 const isNewColumn = columnType === "new";
                 if (
                   isNewColumn &&
@@ -2155,7 +2161,10 @@ function TokenImage({
               <path
                 d="M 66 66 L 8 66 Q 2 66 2 60 L 2 8 Q 2 2 8 2 L 60 2 Q 66 2 66 8 L 66 60 Q 66 66 60 66"
                 fill="none"
-                stroke={protocolColor}
+                // Mayhem Mode hijacks the launchpad-color progress arc and paints it
+                // brand red instead, so the image-loading ring matches the row's red
+                // identity (outline glow, protocol bubble, fire countdown badge).
+                stroke={(token as any).is_mayhem_mode ? "#c83c51" : protocolColor}
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -2166,30 +2175,45 @@ function TokenImage({
           </div>
         )}
 
-        {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
+        {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner.
+            When `is_mayhem_mode` is set, the bubble border + glow + icon all retint to #c83c51
+            so the protocol pin reads as part of the row's Mayhem treatment. */}
         <div
           className="pointer-events-auto absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
           style={{
             width: 16,
             height: 16,
             backgroundColor: "#000000",
-            border: `1px solid ${protocolColor}`,
-            boxShadow: `0 0 4px ${protocolColor}60`,
+            border: `1px solid ${(token as any).is_mayhem_mode ? "#c83c51" : protocolColor}`,
+            boxShadow: `0 0 4px ${(token as any).is_mayhem_mode ? "#c83c5160" : `${protocolColor}60`}`,
           }}
           onMouseEnter={(e) => { const tip = ammBubbleTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.left + r.width / 2}px`; tip.style.top = `${r.top - 6}px`; tip.style.transform = "translate(-50%, -100%)"; tip.style.opacity = "1"; } }}
           onMouseLeave={() => { const tip = ammBubbleTipRef.current; if (tip) tip.style.opacity = "0"; }}
         >
-          <img
-            src={tokenIcon}
-            alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
-            className={`pointer-events-none ${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
-            style={{
-              filter:
-                protocolColor === "#eab308"
-                  ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
-                  : "none",
-            }}
-          />
+          {(token as any).is_mayhem_mode ? (
+            // Mayhem Mode → swap the protocol logo entirely for the dedicated
+            // /public/Mayhem.webp asset on a black bubble. Use the same
+            // h-3/4 w-3/4 + object-contain sizing the other launchpad icons
+            // use so the whole Mayhem pill reads inside the 16px bubble
+            // instead of being cropped/zoomed by an edge-to-edge object-cover.
+            <img
+              src="/Mayhem.webp"
+              alt="Mayhem Mode"
+              className="pointer-events-none h-3/4 w-3/4 rounded-full object-contain"
+            />
+          ) : (
+            <img
+              src={tokenIcon}
+              alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
+              className={`pointer-events-none ${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+              style={{
+                filter:
+                  protocolColor === "#eab308"
+                    ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                    : "none",
+              }}
+            />
+          )}
         </div>
         {createPortal(
           <div
@@ -2197,7 +2221,10 @@ function TokenImage({
             className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
             style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
           >
-            {getAmmDisplayName(token)}
+            {/* When the bubble is showing the Mayhem.webp icon, label it "Mayhem"
+                so the tooltip matches what the user sees rather than the
+                underlying launchpad (which is still PumpFun/Bonk/etc. underneath). */}
+            {(token as any).is_mayhem_mode ? "Mayhem" : getAmmDisplayName(token)}
           </div>,
           document.body
         )}
@@ -3970,7 +3997,8 @@ function PulseTable({
       !filters.hasTwitter &&
       !filters.hasTelegram &&
       !filters.atLeastOneSocial &&
-      !filters.onlyPumpLive;
+      !filters.onlyPumpLive &&
+      !filters.onlyMayhemMode;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 🚀 FAST PATH FOR ALL COLUMNS - HTTP FIRST, WebSocket ON TOP
@@ -4734,6 +4762,14 @@ function PulseTable({
       });
     }
 
+    // Mayhem Mode — keep only tokens currently inside the 24h hot window.
+    // Backend sets `is_mayhem_mode: true` for the duration of the window.
+    if (filters.onlyMayhemMode) {
+      filtered = filtered.filter(
+        (token) => !!(token as any).is_mayhem_mode,
+      );
+    }
+
     // Sort tokens
     filtered.sort((a, b) => {
       // Special sorting for New Pairs: always sort by newest first (fastest path - no filtering delays)
@@ -4903,6 +4939,7 @@ function PulseTable({
     filters.tweetAgeUnit,
     filters.hasWebsite,
     filters.hasTwitter,
+    filters.onlyMayhemMode,
     filters.hasTelegram,
     filters.atLeastOneSocial,
     filters.onlyPumpLive,
@@ -5766,6 +5803,74 @@ function PulseTable({
                             </span>
                           </button>
                         ))}
+                        {/* Mayhem Mode chip — visually mirrors the protocol chips
+                            (same shape, hover treatment, scale-up on select), but
+                            toggles the `onlyMayhemMode` boolean filter rather than
+                            joining the protocols list. Brand red #c83c51 + fire
+                            icon match the row treatment so users see the same
+                            visual identity here as on a flagged token row. */}
+                        <button
+                          key="__mayhem_mode_chip"
+                          className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out"
+                          style={{
+                            backgroundColor: pendingFilters.onlyMayhemMode
+                              ? "#c83c51"
+                              : "transparent",
+                            border: pendingFilters.onlyMayhemMode
+                              ? "2px solid #c83c51"
+                              : "none",
+                            color: pendingFilters.onlyMayhemMode
+                              ? "#000000"
+                              : AX.text,
+                            borderRadius: "20px",
+                            boxShadow: pendingFilters.onlyMayhemMode
+                              ? "0 0 12px #c83c5140, 0 0 24px #c83c5120"
+                              : "none",
+                            transform: pendingFilters.onlyMayhemMode
+                              ? "scale(1.02)"
+                              : "scale(1)",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!pendingFilters.onlyMayhemMode) {
+                              e.currentTarget.style.backgroundColor = "#c83c5110";
+                              e.currentTarget.style.border = "1px solid #c83c51";
+                              e.currentTarget.style.color = "#c83c51";
+                              e.currentTarget.style.boxShadow = "0 0 8px #c83c5130";
+                              e.currentTarget.style.transform = "scale(1.05)";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!pendingFilters.onlyMayhemMode) {
+                              e.currentTarget.style.backgroundColor = "transparent";
+                              e.currentTarget.style.border = "none";
+                              e.currentTarget.style.color = AX.text;
+                              e.currentTarget.style.boxShadow = "none";
+                              e.currentTarget.style.transform = "scale(1)";
+                            }
+                          }}
+                          onClick={() => {
+                            handlePendingFilterChange((prev) => ({
+                              ...prev,
+                              onlyMayhemMode: !prev.onlyMayhemMode,
+                            }));
+                          }}
+                        >
+                          {/* Branded Mayhem artwork from public/Mayhem.webp.
+                              Sized to ~16px (h-4 w-4) to read at the chip's height,
+                              with `rounded-full` matching the protocol-icon bubble
+                              treatment elsewhere in the app. */}
+                          <img
+                            src="/Mayhem.webp"
+                            alt="Mayhem"
+                            className="pointer-events-none h-4 w-4 rounded-full object-cover"
+                          />
+                          <span
+                            className="truncate font-semibold"
+                            style={{ color: "inherit" }}
+                          >
+                            Mayhem
+                          </span>
+                        </button>
                       </div>
                     </div>
 
@@ -7818,7 +7923,6 @@ function PulseTable({
                   style={{
                     color: AX.text,
                     backgroundColor: "#13151b",
-                    border: "1px solid #1e2028",
                   }}
                   onMouseEnter={(e) => {
                     // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
@@ -8065,6 +8169,17 @@ function PulseTable({
                                   }
                                 />
                               </span>
+                              {/* Mayhem Mode 24h fire countdown — sits inline between
+                                  the age and the socials icons. The component returns
+                                  null after 24h so it self-removes when the window ends. */}
+                              {(token as any).is_mayhem_mode && (
+                                <TokenCountdown24h
+                                  startedAt={
+                                    (token as any).launch_time ||
+                                    (token as any).created_at
+                                  }
+                                />
+                              )}
                               {/* Socials */}
                               <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1.5">
                                 {/* Pump.fun Link - only show for pump tokens */}

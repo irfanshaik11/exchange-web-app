@@ -782,6 +782,11 @@ function normalizeToken(rawToken: any): PulseToken | null {
     })(),
     launch_time: rawToken.launch_time || rawToken.created_at || rawToken.createdAt,
 
+    // === Mayhem Mode flag ===
+    // Boolean from backend; normalizeToken explicitly enumerates fields
+    // (no ...rawToken spread), so this needs to be threaded through manually.
+    is_mayhem_mode: !!rawToken.is_mayhem_mode,
+
     // === Price data (ALL format variants for Token + PulseToken compatibility) ===
     price: priceValue,
     price_usd: priceValue,

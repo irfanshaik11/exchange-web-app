@@ -578,6 +578,12 @@ function normalizeToken(rawToken) {
     created_at: createdAtValue,
     launch_time: createdAtValue, // Alias for PulseTable
 
+    // === Mayhem Mode flag ===
+    // Boolean from backend; this normalizer explicitly enumerates fields
+    // (no ...rawToken spread to avoid postMessage bloat), so the flag has
+    // to be threaded through manually or it gets dropped.
+    is_mayhem_mode: !!rawToken.is_mayhem_mode,
+
     // === Price data (ALL format variants) ===
     price: priceValue,
     price_usd: priceValue,

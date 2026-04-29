@@ -73,3 +73,31 @@ kolWallets.forEach(
     });
   },
 );
+
+// ── Mayhem Bot wallets ──────────────────────────────────────────────
+// Trades from these wallets are painted as a distinct class on the
+// OHLC chart (parallel to dev / user / KOL classes). We keep the
+// original-case Solana address as the source of truth (easier to copy
+// from explorers or paste back into a search bar to verify) and
+// lower-case it once at build time for the lookup. This avoids the
+// hand-typed-lowercase transcription errors we hit during the first
+// rollout where a single character got dropped.
+const MAYHEM_WALLET_ADDRESSES_ORIGINAL_CASE = [
+  "Gygj9QQby4j2jryqyqBHvLP7ctv2SaANgh4sCb69BUpA", // Mayhem Bot
+];
+
+export const MAYHEM_WALLET_ADDRESSES = new Set<string>(
+  MAYHEM_WALLET_ADDRESSES_ORIGINAL_CASE.map((a) => a.toLowerCase()),
+);
+
+// Mayhem markers share one identity: brand red #c83c51, "MB"/"MS" label.
+// getMarks() only accepts CSS named colors — `crimson` (#dc143c) is the
+// closest standard name. getTimescaleMarks accepts hex, so it gets the
+// exact brand red.
+export const MAYHEM_MARK_COLOR_NAMED = "crimson";
+export const MAYHEM_MARK_COLOR_HEX = "#c83c51";
+
+// Image rendered inside the in-bar circle on the OHLC chart for Mayhem Bot
+// trades. Filename has a space, so it MUST be URL-encoded — passing
+// "/mayhem bot.png" raw would 404 in production builds.
+export const MAYHEM_MARK_IMAGE_URL = "/mayhem%20bot.png";
