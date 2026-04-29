@@ -231,6 +231,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // Dev wallet for blacklist feature
             dev_wallet: r.dev_wallet || r.creator_wallet || null,
             creator_wallet: r.creator_wallet || r.dev_wallet || null,
+            // Mayhem Mode — boolean flag from upstream. The hard reshape above
+            // explicitly enumerates fields, so unknown fields like this one
+            // need to be passed through manually or they're dropped.
+            is_mayhem_mode: !!r.is_mayhem_mode,
           };
         });
 

@@ -1,6 +1,12 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
 import { subscribe as subscribePendingTradeMarkers } from "../utils/pendingTradeMarkers";
-import { KOL_ADDRESS_MAP } from "../utils/kolLookup";
+import {
+  KOL_ADDRESS_MAP,
+  MAYHEM_WALLET_ADDRESSES,
+  MAYHEM_MARK_COLOR_NAMED,
+  MAYHEM_MARK_COLOR_HEX,
+  MAYHEM_MARK_IMAGE_URL,
+} from "../utils/kolLookup";
 import * as ohlcPrefetchManager from "../utils/ohlcPrefetchManager";
 
 
@@ -5312,9 +5318,12 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
               const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
               const isUser = currentUserWallet && maker === currentUserWallet.toLowerCase();
-              const kolInfo = KOL_ADDRESS_MAP.get(maker);
+              const isMayhem = MAYHEM_WALLET_ADDRESSES.has(maker);
+              // KOL bucket only kicks in if the maker isn't already classified
+              // as dev / user / mayhem — avoids double-rendering one trade.
+              const kolInfo = !isDev && !isUser && !isMayhem ? KOL_ADDRESS_MAP.get(maker) : null;
 
-              if (!isDev && !isUser && !kolInfo) return false;
+              if (!isDev && !isUser && !isMayhem && !kolInfo) return false;
 
               // Handle different timestamp formats
               let timestamp =
@@ -5427,11 +5436,12 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               walletAddress,
             } = computeTradeDisplayValues(trade);
 
-            // Determine if this is a dev trade, user trade, or KOL trade
+            // Determine if this is a dev trade, user trade, mayhem-bot trade, or KOL trade
             const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
             const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
             const isUser = currentUserWallet && maker === currentUserWallet.toLowerCase();
-            const kolInfo = !isDev && !isUser ? KOL_ADDRESS_MAP.get(maker) : null;
+            const isMayhem = !isDev && !isUser && MAYHEM_WALLET_ADDRESSES.has(maker);
+            const kolInfo = !isDev && !isUser && !isMayhem ? KOL_ADDRESS_MAP.get(maker) : null;
 
             let label: string;
             let markColor: string;
@@ -5458,6 +5468,20 @@ ${formattedDate} UTC
 Price: ${formattedPrice}
 Amount: ${formattedAmount} ${displaySymbol}
 Total: ${formattedTotalUsd}`;
+            } else if (isMayhem) {
+              // Mayhem Bot marker: green ring for buys, brand-red ring for sells.
+              // Mirrors the dev/user color scheme so a glance at any candle
+              // tells you the bot's side immediately. The bot avatar still
+              // renders inside the ring via imageUrl below.
+              label = isBuy ? "MB" : "MS";
+              markColor = isBuy ? "green" : MAYHEM_MARK_COLOR_NAMED;
+              markerText = `Mayhem Bot ${isBuy ? "Buy" : "Sell"} • ${displaySymbol}
+${formattedDate} UTC
+
+Price: ${formattedPrice}
+Amount: ${formattedAmount} ${displaySymbol}
+Total: ${formattedTotalUsd}
+Maker: ${walletAddress}`;
             } else if (kolInfo) {
               // KOL marker: unique color per KOL, 2-char label
               label = kolInfo.label;
@@ -5479,7 +5503,7 @@ Maker: ${walletAddress}`;
 
             // getMarks only supports named colors (NOT hex)
             const markData: any = {
-              id: `${isDev ? "dev" : isUser ? "user" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
+              id: `${isDev ? "dev" : isUser ? "user" : isMayhem ? "mayhem" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
               time: realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000,
               color: markColor,
               label: label,
@@ -5489,7 +5513,15 @@ Maker: ${walletAddress}`;
               minSize: 24,
               size: 1,
               shape: "circle",
-              ...(kolInfo?.avatarUrl ? { imageUrl: kolInfo.avatarUrl } : {}),
+              // Branded artwork for the in-bar circle: KOLs get their avatar,
+              // Mayhem Bot gets the dedicated /mayhem bot.png. TradingView's
+              // imageUrl renders inside the colored circle and falls back to
+              // the `label` text if the image 404s, so this is safe to layer.
+              ...(isMayhem
+                ? { imageUrl: MAYHEM_MARK_IMAGE_URL }
+                : kolInfo?.avatarUrl
+                  ? { imageUrl: kolInfo.avatarUrl }
+                  : {}),
             };
 
             return markData;
@@ -5525,14 +5557,15 @@ Maker: ${walletAddress}`;
             return;
           }
 
-          // Filter for dev + user trades within the requested time range
+          // Filter for dev + user + mayhem trades within the requested time range
           const matchedTrades = currentTradeData.filter((trade: any) => {
             const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
             if (!maker) return false;
 
             const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
             const isUser = currentUserWallet && maker === currentUserWallet.toLowerCase();
-            if (!isDev && !isUser) return false;
+            const isMayhem = MAYHEM_WALLET_ADDRESSES.has(maker);
+            if (!isDev && !isUser && !isMayhem) return false;
 
             const timestamp =
               trade.timestamp || trade.created_at || trade.unix_time;
@@ -5636,9 +5669,10 @@ Maker: ${walletAddress}`;
             // Determine trade type for timescale mark
             const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
             const isDev = currentCreatorAddress && maker === currentCreatorAddress.toLowerCase();
+            const isMayhem = !isDev && MAYHEM_WALLET_ADDRESSES.has(maker);
 
             // Timescale marks color assignment
-            // Dev: green/red, User: green/red
+            // Dev: green/red, Mayhem: brand red regardless of side, User: green/red
             let markColor: string;
             let markLabel: string;
             let markPrefix: string;
@@ -5654,6 +5688,13 @@ Maker: ${walletAddress}`;
                     : "#ef4444";
               markLabel = isBuy ? "DB" : "DS";
               markPrefix = isBuy ? "Dev Buy" : "Dev Sell";
+            } else if (isMayhem) {
+              // Mayhem Bot timescale mark — green for buys (#22c55e to match
+              // the dev/user palette), brand red #c83c51 for sells. Side-aware
+              // coloring matches the in-bar circle ring above.
+              markColor = isBuy ? "#22c55e" : MAYHEM_MARK_COLOR_HEX;
+              markLabel = isBuy ? "MB" : "MS";
+              markPrefix = isBuy ? "Mayhem Buy" : "Mayhem Sell";
             } else {
               // User trade
               markColor = isBuy ? "#22c55e" : "#ef4444"; // green / red hex
@@ -5662,7 +5703,7 @@ Maker: ${walletAddress}`;
             }
 
             return {
-              id: `${isDev ? "dev" : "user"}_timescale_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
+              id: `${isDev ? "dev" : isMayhem ? "mayhem" : "user"}_timescale_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
               time: realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000,
               color: markColor.toLowerCase(), // Ensure lowercase for TradingView
               label: markLabel,

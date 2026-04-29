@@ -66,6 +66,8 @@ export interface PulseFilters {
   hasTelegram: boolean;
   atLeastOneSocial: boolean;
   onlyPumpLive: boolean;
+  // Mayhem Mode — when true, only show tokens whose `is_mayhem_mode` flag is set.
+  onlyMayhemMode: boolean;
   // Sort
   sortBy: string;
   sortOrder: string;
@@ -129,6 +131,7 @@ export const defaultPulseFilters: PulseFilters = {
   hasTelegram: false,
   atLeastOneSocial: false,
   onlyPumpLive: false,
+  onlyMayhemMode: false,
   sortBy: "timestamp",
   sortOrder: "desc",
 };

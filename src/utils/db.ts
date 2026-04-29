@@ -111,6 +111,10 @@ export type Token = {
   // Dev/creator wallet for blacklist
   dev_wallet?: string;
   creator_wallet?: string;
+  // Mayhem Mode — true when token is inside the 24h Mayhem hot window.
+  // Drives red border, red protocol-icon tint, and fire countdown badge.
+  is_mayhem_mode?: boolean;
+  launch_time?: string;
 };
 
 /**

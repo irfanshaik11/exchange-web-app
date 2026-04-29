@@ -42,6 +42,11 @@ interface PulseToken {
   // Additional fields
   kol_count?: number;
   holder_count?: number;
+  // Mayhem Mode (24h hot window flag) — backend sets true on new pairs / final
+  // stretch / migrated tokens that are inside the Mayhem hot window.
+  is_mayhem_mode?: boolean;
+  created_at?: string;
+  launch_time?: string;
 }
 
 interface WebSocketMessage {
