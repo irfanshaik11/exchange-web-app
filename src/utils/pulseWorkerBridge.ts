@@ -952,15 +952,28 @@ function prewarmTokenImage(token: PulseToken) {
     }).catch(() => { /* silent */ });
   };
 
-  // Direct image URL — preload through proxy immediately
+  // Direct image URL — preload through proxy.
+  // SPECIAL CASE: cdn.interstate.so/{mint}.webp 404s for fresh pump tokens
+  // until the CDN is warmed (typically minutes). When we have a uri fallback,
+  // skip the CDN preload entirely — it would just generate a flood of 404s.
+  // The uri-resolved image is preloaded instead, and FastImage's onLoadFailed
+  // → directImageFailed swap (in PulseTable.TokenImage) handles the runtime
+  // case if the CDN attempt also fails.
   if (raw && !isMetadataUrl(raw)) {
+    const isInterstateCdn = raw.includes("cdn.interstate.so/");
+    const hasUriFallback =
+      uriFallback && uriFallback !== raw && isMetadataUrl(uriFallback);
+
+    if (isInterstateCdn && hasUriFallback) {
+      // Skip CDN preload — go straight to uri so we don't pollute the network
+      // log with 404s for tokens whose CDN entry isn't warmed yet.
+      resolveAndPreload(uriFallback);
+      return;
+    }
+
     const proxyUrl = computeHashImageUrl(raw) || raw;
     preloadImage(proxyUrl);
-    // ALSO resolve the URI fallback in parallel: the direct URL is often
-    // cdn.interstate.so/{mint}.webp which 404s for brand-new pump tokens
-    // until the CDN is warmed. Pre-resolving the uri means a fast swap is
-    // possible if the direct URL fails.
-    if (uriFallback && uriFallback !== raw && isMetadataUrl(uriFallback)) {
+    if (hasUriFallback) {
       resolveAndPreload(uriFallback);
     }
     return;
