@@ -904,22 +904,6 @@ const TokenInfo: React.FC<{
 
   return (
     <div className="flex items-center gap-2">
-      {/* Watchlist button */}
-      <button
-        onClick={handleWatchlistClick}
-        className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
-        style={{ color: isWatched ? '#f2c367' : AX.muted }}
-        title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted;
-        }}
-      >
-        {isWatched ? <FaStar className="w-5 h-5" /> : <FaRegStar className="w-5 h-5" />}
-      </button>
-      
       <InterstateTooltip
         width={undefined}
         height={undefined}
@@ -957,6 +941,21 @@ const TokenInfo: React.FC<{
             title="Copy contract address"
           >
             <Copy className="w-3.5 h-3.5" />
+          </button>
+          {/* Watchlist button */}
+          <button
+            onClick={handleWatchlistClick}
+            className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
+            style={{ color: isWatched ? '#f2c367' : AX.muted }}
+            title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted;
+            }}
+          >
+            {isWatched ? <FaStar className="w-3.5 h-3.5" /> : <FaRegStar className="w-3.5 h-3.5" />}
           </button>
         </div>
         
