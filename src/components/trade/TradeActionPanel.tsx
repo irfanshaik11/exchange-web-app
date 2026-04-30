@@ -3268,11 +3268,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       className="flex flex-col text-[12px] leading-tight"
       style={{ backgroundColor: '#101114', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
     >
-      <div className="group">
-      {/* ===== A. Time buttons (revealed on stats hover) ===== */}
-      <div className="px-3 pt-2 pb-2 border-neutral-800 hidden group-hover:block">
-        <div className="mx-auto w-full max-w-xl overflow-hidden">
-          <div className="flex rounded-xl border border-neutral-700">
+      <div className="group relative">
+      {/* ===== A. Time buttons (glass overlay on hover) ===== */}
+      <div className="absolute inset-0 z-20 hidden group-hover:flex pointer-events-auto bg-white/[0.06] backdrop-blur-md">
             {(["5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
               // NOTE: Percentage change display commented out - backend needs to add price_change_percent to volume data
               // let ch = 0;
@@ -3302,10 +3300,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   onClick={() => setTimeRange(rng)}
                   aria-pressed={timeRange === rng}
                   className={cx(
-                    "flex-1 text-center flex flex-col items-center justify-center cursor-pointer px-2 py-2 border-neutral-700",
-                    timeRange === rng ? "bg-neutral-700 ring-1 ring-white/10" : "hover:bg-neutral-700",
-                    rng == "5m" ? `rounded-tl-xl rounded-bl-xl` : ``,
-                    rng == "24h" ? `rounded-tr-xl rounded-br-xl` : `border-r`
+                    "flex-1 text-center flex flex-col items-center justify-center cursor-pointer px-2 py-1.5 transition-colors",
+                    timeRange === rng ? "bg-white/15" : "hover:bg-white/5",
+                    rng !== "24h" ? "border-r border-white/10" : ""
                   )}
                 >
                   <span
@@ -3325,12 +3322,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </button>
               );
             })}
-          </div>
-        </div>
       </div>
 
       {/* ===== B. Real-time Stats ===== */}
-      <div className="px-3 py-1.5 border-b border-[#2A2B33] !h-[60px] flex flex-col justify-center">
+      <div className="px-3 py-1.5 border-b border-[#2A2B33] !h-[68.5px] flex flex-col justify-center">
         <div className="grid grid-cols-4 gap-3 tabular-nums">
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide whitespace-nowrap">
@@ -4206,7 +4201,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* footer mini stats */}
-      <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
+      <div className="grid grid-cols-4 gap-1 p-3">
         <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
           <div className="flex items-center gap-1">
