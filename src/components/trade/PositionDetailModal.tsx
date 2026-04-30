@@ -693,12 +693,31 @@ export default function PositionDetailModal({
     return `${minutes}m`;
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard', {
+  const copyToClipboard = async (text: string) => {
+    const toastStyle = {
       duration: 2000,
       style: { background: '#1E1F26', color: '#E6E7EA', border: '1px solid #2A2B33' },
-    });
+    };
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        if (!ok) throw new Error('execCommand copy returned false');
+      }
+      toast.success('Copied to clipboard', toastStyle);
+    } catch {
+      toast.error('Failed to copy to clipboard', toastStyle);
+    }
   };
 
   // Custom dot renderer for chart
