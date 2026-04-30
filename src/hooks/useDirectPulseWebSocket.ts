@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { env } from '~/env';
 import { useRAFBatchedState } from './useRAFBatchedState';
+import { patchMetadataIfPlaceholder } from '~/utils/applyPriceUpdate';
 
 export interface DirectToken {
   mint: string;
@@ -105,15 +106,22 @@ export function useDirectPulseWebSocket(
   }, [maxTokens]);
 
   // Update existing token (price update)
-  const updateToken = useCallback((mint: string, updates: Partial<DirectToken>) => {
+  // Strips empty/placeholder metadata from `updates` so a stale price_update
+  // can never overwrite a real name/symbol/image we already resolved.
+  const updateToken = useCallback((mint: string, updates: Partial<DirectToken> & { image?: string; logo?: string; uri?: string }) => {
     if (!mountedRef.current) return;
 
     setTokens(prev => {
       const idx = prev.findIndex(t => t.mint === mint);
       if (idx === -1) return prev;
 
+      const existing = prev[idx];
+      const safeMetadata = patchMetadataIfPlaceholder(existing as any, updates);
+      // Drop name/symbol/image/logo/uri from raw updates so only the safe ones win
+      const { name: _n, symbol: _s, image: _i, logo: _l, uri: _u, ...rest } = updates as any;
+
       const newTokens = [...prev];
-      newTokens[idx] = { ...prev[idx], ...updates };
+      newTokens[idx] = { ...existing, ...rest, ...safeMetadata };
       return newTokens;
     });
   }, []);
@@ -161,6 +169,12 @@ export function useDirectPulseWebSocket(
                   ...((update.holder_count ?? update.holders) > 0 && { holder_count: update.holder_count ?? update.holders }),
                   price_change_5m: update.price_change_5m ?? update.priceChange5m,
                   price_change_24h: update.price_change_24h,
+                  // Metadata flow — updateToken's defensive predicate decides if these win
+                  name: update.name,
+                  symbol: update.symbol,
+                  image: update.image || update.image_uri || update.logo,
+                  logo: update.logo,
+                  uri: update.uri,
                 });
               }
             }

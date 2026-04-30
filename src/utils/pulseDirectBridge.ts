@@ -10,6 +10,7 @@
  */
 
 import { loadPulseCache, savePulseCache, type PulseToken } from './pulseCache';
+import { patchMetadataIfPlaceholder } from './applyPriceUpdate';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -559,6 +560,8 @@ function handlePriceUpdate(updates: any[]) {
           ...(update.total_sell_volume_6h != null && { total_sell_volume_6h: update.total_sell_volume_6h }),
           ...(update.total_buy_volume_24h != null && { total_buy_volume_24h: update.total_buy_volume_24h }),
           ...(update.total_sell_volume_24h != null && { total_sell_volume_24h: update.total_sell_volume_24h }),
+          // Metadata: only patch when current is empty/placeholder
+          ...patchMetadataIfPlaceholder(existing, update),
         };
         newData[key] = newArr;
         anyUpdated = true;

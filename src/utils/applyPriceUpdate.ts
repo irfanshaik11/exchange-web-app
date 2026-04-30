@@ -59,6 +59,58 @@ export interface PriceUpdate {
   dev_tokens_migrated?: number;
   // Smart money
   smart_money_count?: number;
+  // Metadata fields (indexer ships these on price_update once metadata fetch resolves —
+  // FE must patch them onto rows that came in via new_token before metadata was ready)
+  name?: string;
+  symbol?: string;
+  image?: string;
+  logo?: string;
+  uri?: string;
+}
+
+const NAME_PLACEHOLDER = /^(unknown)?$/i;
+const SYMBOL_PLACEHOLDER = /^(\?+)?$/;
+
+export function isPlaceholderName(s: unknown): boolean {
+  return typeof s !== 'string' || NAME_PLACEHOLDER.test(s.trim());
+}
+
+export function isPlaceholderSymbol(s: unknown): boolean {
+  return typeof s !== 'string' || SYMBOL_PLACEHOLDER.test(s.trim());
+}
+
+/**
+ * Returns the metadata fields that should be patched onto an existing token,
+ * applying the defensive rule: only patch a field when the current value is
+ * empty/placeholder AND the incoming value is non-empty/non-placeholder.
+ *
+ * This handles the late-metadata case where new_token arrives before the
+ * indexer has resolved metadata; a follow-up price_update carries the real
+ * name/symbol/image, but a much-later price_update could still carry empty
+ * strings (the broadcaster mirrors the DB row blindly), so we never let an
+ * empty/placeholder value overwrite a real one.
+ */
+export function patchMetadataIfPlaceholder(
+  token: { name?: string; symbol?: string; image?: string; logo?: string; uri?: string },
+  update: { name?: string; symbol?: string; image?: string; logo?: string; uri?: string }
+): { name?: string; symbol?: string; image?: string; logo?: string; uri?: string } {
+  const patch: Record<string, string> = {};
+  if (isPlaceholderName(token.name) && !isPlaceholderName(update.name)) {
+    patch.name = (update.name as string).trim();
+  }
+  if (isPlaceholderSymbol(token.symbol) && !isPlaceholderSymbol(update.symbol)) {
+    patch.symbol = (update.symbol as string).trim();
+  }
+  if (!token.image && typeof update.image === 'string' && update.image) {
+    patch.image = update.image;
+    patch.logo = update.logo || update.image;
+  } else if (!token.logo && typeof update.logo === 'string' && update.logo) {
+    patch.logo = update.logo;
+  }
+  if (!token.uri && typeof update.uri === 'string' && update.uri) {
+    patch.uri = update.uri;
+  }
+  return patch;
 }
 
 export interface TokenInfoUpdate {
@@ -171,6 +223,9 @@ export function applyPriceUpdate<T extends { mint: string }>(token: T, update: P
     // Smart money
     ...(update.smart_money_count !== undefined && Number(update.smart_money_count) > 0 &&
         { smart_money_count: update.smart_money_count }),
+
+    // Metadata: only patch when current is empty/placeholder
+    ...patchMetadataIfPlaceholder(token as any, update),
 
     // Timestamp
     updated_at: update.updated_at || (token as any).updated_at,

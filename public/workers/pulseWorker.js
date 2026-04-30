@@ -10,6 +10,45 @@ let newTokens = [];
 let finalStretchTokens = [];
 let migratedTokens = [];
 
+// ---------------------------------------------------------------------------
+// Late-metadata patch helpers (kept in sync with src/utils/applyPriceUpdate.ts)
+//
+// New tokens — especially auto-discovered DEX migrations — are broadcast over
+// `new_token` *before* the indexer's metadata fetch resolves. The first frame
+// has empty name/symbol/image; a follow-up `price_update` carries the real
+// values once metadata lands. We patch metadata onto existing rows ONLY when
+// the existing value is empty/placeholder AND the incoming value isn't itself
+// empty/placeholder — otherwise a stale price_update could blank out a real
+// name we already resolved.
+// ---------------------------------------------------------------------------
+const NAME_PLACEHOLDER_RE = /^(unknown)?$/i;
+const SYMBOL_PLACEHOLDER_RE = /^(\?+)?$/;
+function isPlaceholderName(s) {
+  return typeof s !== "string" || NAME_PLACEHOLDER_RE.test(s.trim());
+}
+function isPlaceholderSymbol(s) {
+  return typeof s !== "string" || SYMBOL_PLACEHOLDER_RE.test(s.trim());
+}
+function patchMetadataIfPlaceholder(token, update) {
+  const patch = {};
+  if (isPlaceholderName(token.name) && !isPlaceholderName(update.name)) {
+    patch.name = update.name.trim();
+  }
+  if (isPlaceholderSymbol(token.symbol) && !isPlaceholderSymbol(update.symbol)) {
+    patch.symbol = update.symbol.trim();
+  }
+  if (!token.image && typeof update.image === "string" && update.image) {
+    patch.image = update.image;
+    patch.logo = update.logo || update.image;
+  } else if (!token.logo && typeof update.logo === "string" && update.logo) {
+    patch.logo = update.logo;
+  }
+  if (!token.uri && typeof update.uri === "string" && update.uri) {
+    patch.uri = update.uri;
+  }
+  return patch;
+}
+
 // WebSocket connections
 let wsConnections = {};
 let wsBaseUrl = "";
@@ -802,11 +841,18 @@ function handlePriceUpdate(updates) {
  * Returns the updated token if found, null otherwise
  * CRITICAL: Must include BOTH PulseToken AND Token (db.ts) field names!
  *
- * IMPORTANT: Price updates only send a subset of fields (see price_update_broadcaster.go):
- * - mint, symbol, image, pair_address
- * - price_usd, market_cap_usd, liquidity_usd, volume_24h
- * - total_buys_5m, total_sells_5m, total_buyers_5m, total_sellers_5m, unique_wallets_5m
- * - total_buy_volume_5m, total_sell_volume_5m
+ * IMPORTANT: Price updates only send a subset of fields (see price_update_broadcaster.go).
+ * As of 2026-04-30 the broadcaster ships:
+ *   - mint, name, symbol, status, uri, image, logo, pair_address
+ *   - price_usd, market_cap_usd, liquidity_usd, volume_24h
+ *   - total_buys_5m, total_sells_5m, total_buyers_5m, total_sellers_5m, unique_wallets_5m
+ *   - total_buy_volume_5m, total_sell_volume_5m
+ *
+ * Late-metadata case: the first new_token frame for a token can land with empty
+ * name/symbol/image (indexer metadata fetch hasn't resolved). A follow-up
+ * price_update carries the real metadata, so we MUST patch it onto existing rows
+ * — but only via patchMetadataIfPlaceholder so a later empty/placeholder
+ * price_update can't blank out a real name we already resolved.
  *
  * Fields NOT sent by price_update: created_at, bonding_pct, 1h/6h/24h tx data, etc.
  * Use existing token values for those fields.
@@ -1090,9 +1136,9 @@ function updateTokenInArray(arr, mint, update) {
       token.globalFeesPaid,
     ),
 
-    // Image (price_update sends this)
-    image: update.image ?? token.image,
-    logo: update.image ?? token.logo,
+    // Metadata: only patch when current is empty/placeholder
+    // (covers name, symbol, image, logo, uri — see patchMetadataIfPlaceholder)
+    ...patchMetadataIfPlaceholder(token, update),
   };
 
   arr[idx] = updatedToken;

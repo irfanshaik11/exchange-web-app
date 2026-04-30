@@ -15,6 +15,7 @@ import { loadPulseCache, savePulseCache, type PulseToken } from './pulseCache';
 import { extractImageUrls, preloadImage } from './imagePreloader';
 import { resolveMetadataImage, isMetadataUrl, getCachedResolvedImage, extractTokenImage } from './images';
 import { computeHashImageUrl } from './imageHash';
+import { patchMetadataIfPlaceholder } from './applyPriceUpdate';
 
 type ConnectionStatus = {
   new: boolean;
@@ -1221,6 +1222,9 @@ function handlePriceUpdate(updates: any[]) {
           marketCapUSD: String(marketCapValue),
           volume24h: String(volumeValue),
           liquidityUSD: String(liquidityValue),
+
+          // Metadata: only patch when current is empty/placeholder
+          ...patchMetadataIfPlaceholder(token, update),
         };
         newData[key] = newArr;
         anyUpdated = true;

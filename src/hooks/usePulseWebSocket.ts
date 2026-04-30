@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 // REMOVED: flushSync import - React 18 batching is sufficient and prevents blank screens
 import { env } from '~/env';
+import { patchMetadataIfPlaceholder } from '~/utils/applyPriceUpdate';
 
 interface PulseToken {
   mint: string;
@@ -296,6 +297,8 @@ export function usePulseWebSocket(
                       ...(update.liquidity_usd !== undefined && Number(update.liquidity_usd) > 0 && { liquidity_usd: update.liquidity_usd }),
                       ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
                       ...(update.updated_at && { updated_at: update.updated_at }),
+                      // Metadata: only patch when current is empty/placeholder
+                      ...patchMetadataIfPlaceholder(token, update as any),
                     };
                   });
                   return hasChanges ? updated : tokens;
