@@ -1876,7 +1876,7 @@ const TokenInfoCell: React.FC<{
   return (
     <div className="flex flex-col gap-0.5">
       {/* Row 1: Holders + Top 10 */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-center gap-3">
         {holderCount !== undefined && holderCount > 0 && (
           <TokenMetric
             icon={<FaUsers size={11} />}
@@ -1895,7 +1895,7 @@ const TokenInfoCell: React.FC<{
         )}
       </div>
       {/* Row 2: Insider + Sniper + Bundle */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-center gap-3">
         {insiderPercent !== undefined && insiderPercent > 0 && (
           <TokenMetric
             icon={<RiGhostLine size={11} />}
