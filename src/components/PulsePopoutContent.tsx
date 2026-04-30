@@ -113,7 +113,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
   const isSolanaRoute = chain === 'sol';
   
   const chainButtonBase =
-    "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]";
+    "relative inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]";
   const solanaButtonClasses = `${chainButtonBase} ${
     isSolanaRoute
       ? "bg-[#222733] text-white shadow-lg shadow-emerald-500/20"
