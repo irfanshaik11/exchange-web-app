@@ -1027,7 +1027,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	return (
 		<>
 			<div
-				className="relative flex w-full flex-row items-center gap-2 pl-1.5 py-1.5 sm:gap-4 sm:pl-2 sm:py-2 md:gap-8 lg:gap-10 !h-[80px] !font-geist overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent"
+				className="relative flex w-full flex-row items-center gap-2 pl-1.5 py-1.5 sm:gap-4 sm:pl-2 sm:py-2 md:gap-8 lg:gap-10 !h-[60px] !font-geist overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent"
 				style={{ color: AX.text }}
 			>
 				{/* WS status banners hidden from users - errors logged to console only */}

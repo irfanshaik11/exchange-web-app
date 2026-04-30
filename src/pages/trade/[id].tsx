@@ -1295,7 +1295,7 @@ export default function TradePage() {
               </div>
 
               {/* Separator line after TradeHeader */}
-              <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
+              <div className="px-3 border-b border-[#2A2B33]" />
 
               <div 
                 id="chart-container-wrapper"

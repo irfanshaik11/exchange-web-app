@@ -215,10 +215,10 @@ export default function PulsePage() {
     isSolanaRoute,
   });
   const chainButtonBase =
-    "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.03] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
+    "relative inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-300 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
   const solanaButtonClasses = `${chainButtonBase} ${
     isSolanaRoute
-      ? "bg-white/[0.07] text-white border-white/[0.08]"
+      ? "text-white"
       : "text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
   // const bnbButtonClasses = `${chainButtonBase} ${
@@ -1481,7 +1481,7 @@ export default function PulsePage() {
         <div className="relative z-[10000]"><Header /></div>
         <div className="flex-1 min-h-0 p-1 pb-7 sm:p-1.5 sm:pb-7">
           <DockedPanelMarginWrapper>
-          <div className="relative flex h-full flex-col overflow-hidden rounded-t-2xl rounded-b-lg border border-white/[0.06]" style={{ backgroundColor: '#0a0b0d' }}>
+          <div className="relative flex h-full flex-col overflow-hidden">
             {/* Content */}
             <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-3 sm:px-1.5">
           <div className="mb-2">

@@ -1606,13 +1606,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           className="!font-geist flex items-center !text-[13px] transition-colors hover:brightness-110"
         >
           {/* Age / Time */}
-          <div className="w-[12%] truncate px-4 text-[13px] text-[#757e80]">
+          <div className="w-[15%] truncate px-4 text-[13px] text-[#757e80]">
             {showAge ? <TokenAge createdAt={n.timestampSec} /> : timeStr}
           </div>
 
           {/* Type */}
           <div
-            className={`w-[10%] px-2 text-[13px] font-medium ${
+            className={`w-[13%] px-2 text-[13px] font-medium ${
               n.isBuy ? "text-emerald-400" : "text-red-400"
             }`}
           >
@@ -1620,18 +1620,18 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* MC / Price */}
-          <div className="w-[13%] truncate px-2 text-[13px] text-[#c4cccc]">
+          <div className="w-[15%] truncate px-2 text-[13px] text-[#c4cccc]">
             {mcMode === "mc" ? mcStr : priceStr}
           </div>
 
           {/* Amount */}
-          <div className="w-[15%] truncate px-2 text-[13px] text-[#c4cccc]">
+          <div className="w-[17%] truncate px-2 text-[13px] text-[#c4cccc]">
             {tokenAmountStr}
           </div>
 
           {/* merged Total column */}
           <div
-            className="flex w-[15%] items-center self-stretch px-2 text-[13px] font-medium"
+            className="flex w-[17%] items-center self-stretch px-2 text-[13px] font-medium"
             style={
               showingUsd || hasSol
                 ? {
@@ -1664,7 +1664,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Trader */}
-          <div className="w-[35%] px-2 text-right align-middle text-[13px] text-[#c4cccc]">
+          <div className="w-[23%] px-2 text-right align-middle text-[13px] text-[#c4cccc]">
             <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2">
               {(() => {
                 const walletKey = (n.maker || "").toLowerCase();
@@ -1849,7 +1849,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
         >
           {/* Age / Time */}
           <div
-            className="w-[12%] px-4 py-3 text-left whitespace-nowrap"
+            className="w-[15%] px-4 py-3 text-left whitespace-nowrap"
             style={{ color: "#9ca3af" }}
           >
             <button
@@ -1868,7 +1868,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Type */}
-          <div className="w-[10%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+          <div className="w-[13%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
             <div className="flex items-center gap-1">
               <span className="text-[13px] font-medium">Type</span>
               <button
@@ -1897,7 +1897,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* MC / Price column with filter */}
-          <div className="w-[13%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+          <div className="w-[15%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -1925,7 +1925,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Amount with filter */}
-          <div className="w-[15%] px-2 py-3 text-left font-medium whitespace-nowrap">
+          <div className="w-[17%] px-2 py-3 text-left font-medium whitespace-nowrap">
             <SortableHeader
               label="Amount"
               sortDirection={filters.amount.sort}
@@ -1939,7 +1939,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Total USD / SOL/MON toggle column with filter */}
-          <div className="w-[15%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+          <div className="w-[17%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -1977,7 +1977,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Trader */}
-          <div className="w-[35%] px-2 py-3 text-right whitespace-nowrap text-[#757e80]">
+          <div className="w-[23%] px-2 py-3 text-right whitespace-nowrap text-[#757e80]">
             <div className="flex items-center justify-end gap-1">
               <span className="text-[13px] font-normal text-[#757e80]">
                 Trader

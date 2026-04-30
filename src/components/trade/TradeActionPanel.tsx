@@ -278,7 +278,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
   const insiderCount = token?.insider_count ?? undefined;
 
   return (
-    <div className="border-t border-[#2A2B33]">
+    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: '#101114' }}>
       <div className="flex items-center justify-between px-3 py-2">
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -313,7 +313,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
       {isOpen && (
         <div className="px-3 pb-3 space-y-2" style={{ backgroundColor: AX.bg }}>
           {/* Tax Percentage - Large Display */}
-          {/* <div className="rounded-md p-2.5 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+          {/* <div className="rounded-md p-2.5 border" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
             <div className="text-center">
               <div className="text-[12px] font-bold mb-0.5" style={{ color: AX.muted }}>
                 {token?.tax_percentage ? `${token.tax_percentage}%` : '0%'}
@@ -328,7 +328,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Token Metrics Grid - First Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Top 10 Holders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <BsPersonGear size={16} style={{ color: AX.aiGreen }} />
@@ -342,7 +342,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
 
             {/* Dev Holdings - with hover popout */}
             <div className="relative group h-[68px]">
-              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
                 <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <LuChefHat size={16} style={{ color: AX.aiGreen }} />
@@ -456,7 +456,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
 
             {/* Sniper Holdings - with first buyers hover popout */}
             <div className="relative group/snipers h-[68px]">
-              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
                 <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <FaCrosshairs size={16} style={{ color: AX.aiGreen }} />
@@ -580,7 +580,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Token Metrics Grid - Second Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Insider Holdings */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <RiGhostLine size={16} style={{ color: AX.aiGreen }} />
@@ -598,7 +598,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* Bundle Holdings */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaDice size={16} style={{ color: AX.aiGreen }} />
@@ -616,7 +616,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* LP Burned */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaFire size={16} style={{ color: AX.aiGreen }} />
@@ -635,7 +635,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Additional Metrics - Third Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Holders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaUsers className="text-white" size={16} />
@@ -648,7 +648,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* Pro Traders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <BiCandles className="text-white" size={16} />
@@ -661,7 +661,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* Dex Paid */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <img 
@@ -3233,7 +3233,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== B. Real-time Stats ===== */}
-      <div className="px-3 py-1.5 border-b border-[#2A2B33] !h-[80px] flex flex-col justify-center">
+      <div className="px-3 py-1.5 border-b border-[#2A2B33] !h-[60px] flex flex-col justify-center">
         <div className="grid grid-cols-4 gap-3 tabular-nums">
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide whitespace-nowrap">

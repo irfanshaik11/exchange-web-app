@@ -2916,10 +2916,10 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div className="flex flex-nowrap items-center gap-1 overflow-hidden bg-[#101114] px-2 sm:gap-2 sm:px-3 border-t border-b border-white/15">
+          <div className="flex h-10 flex-nowrap items-center gap-1 overflow-hidden bg-[#0A0B0D] px-2 sm:gap-2 sm:px-3 border-t border-b border-white/15">
             <div
               className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-2"
-              style={{ background: "#101114" }}
+              style={{ background: "#0A0B0D" }}
             >
               {/* COMMENTED OUT: Active Positions icon — may re-enable later
             <div className="group relative">
