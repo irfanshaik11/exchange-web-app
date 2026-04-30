@@ -215,10 +215,10 @@ export default function PulsePage() {
     isSolanaRoute,
   });
   const chainButtonBase =
-    "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.03] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
+    "relative inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-300 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
   const solanaButtonClasses = `${chainButtonBase} ${
     isSolanaRoute
-      ? "bg-white/[0.07] text-white border-white/[0.08]"
+      ? "text-white"
       : "text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
   // const bnbButtonClasses = `${chainButtonBase} ${
@@ -1481,7 +1481,7 @@ export default function PulsePage() {
         <div className="relative z-[10000]"><Header /></div>
         <div className="flex-1 min-h-0 p-1 pb-7 sm:p-1.5 sm:pb-7">
           <DockedPanelMarginWrapper>
-          <div className="relative flex h-full flex-col overflow-hidden rounded-t-2xl rounded-b-lg border border-white/[0.06]" style={{ backgroundColor: '#0a0b0d' }}>
+          <div className="relative flex h-full flex-col overflow-hidden">
             {/* Content */}
             <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-3 sm:px-1.5">
           <div className="mb-2">
@@ -1552,6 +1552,75 @@ export default function PulsePage() {
                   </Link> */}
                 </div>
               </div>
+              {/* Tab Navigation - Mobile/narrow only; sits inline to the right of Trenches at narrow widths */}
+              <div className="content-mobile-only flex-1 min-w-0 lg:hidden">
+                <div className="w-full flex gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-1">
+                  <button
+                    onClick={() => { setActiveTab("new"); posthog.capture("pulse_tab_switched", { tab: "new" }); }}
+                    className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
+                      activeTab === "new"
+                        ? "bg-[#7FFFC9] text-black"
+                        : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span>New</span>
+                      <span
+                        className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
+                          activeTab === "new"
+                            ? "bg-black/15 text-black/90"
+                            : "bg-neutral-800 text-neutral-400"
+                        }`}
+                      >
+                        {displayNewPairs.length}
+                      </span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab("final-stretch"); posthog.capture("pulse_tab_switched", { tab: "final-stretch" }); }}
+                    className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
+                      activeTab === "final-stretch"
+                        ? "bg-[#7FFFC9] text-black"
+                        : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span>Final</span>
+                      <span
+                        className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
+                          activeTab === "final-stretch"
+                            ? "bg-black/15 text-black/90"
+                            : "bg-neutral-800 text-neutral-400"
+                        }`}
+                      >
+                        {displayFinalStretch.length}
+                      </span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab("migrated"); posthog.capture("pulse_tab_switched", { tab: "migrated" }); }}
+                    className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
+                      activeTab === "migrated"
+                        ? "bg-[#7FFFC9] text-black"
+                        : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span>Migrated</span>
+                      <span
+                        className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
+                          activeTab === "migrated"
+                            ? "bg-black/15 text-black/90"
+                            : "bg-neutral-800 text-neutral-400"
+                        }`}
+                      >
+                        {displayMigrated.length}
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               {/* Blacklist Button — global, one for all columns */}
               <button
                 className="relative flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
@@ -1575,75 +1644,6 @@ export default function PulsePage() {
                 )}
               </button>
               {/* <PulseControlBar className="mb-0.5" /> */}
-            </div>
-
-            {/* Tab Navigation - Mobile Only (also when content is narrow due to docked panels) */}
-            <div className="content-mobile-only mt-3 mb-4 lg:hidden">
-              <div className="w-full flex gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-1">
-                <button
-                  onClick={() => { setActiveTab("new"); posthog.capture("pulse_tab_switched", { tab: "new" }); }}
-                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
-                    activeTab === "new"
-                      ? "bg-[#7FFFC9] text-black"
-                      : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
-                  }`}
-                >
-                  <div className="flex items-center justify-center gap-1.5">
-                    <span>New</span>
-                    <span
-                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
-                        activeTab === "new"
-                          ? "bg-black/15 text-black/90"
-                          : "bg-neutral-800 text-neutral-400"
-                      }`}
-                    >
-                      {displayNewPairs.length}
-                    </span>
-                  </div>
-                </button>
-                <button
-                  onClick={() => { setActiveTab("final-stretch"); posthog.capture("pulse_tab_switched", { tab: "final-stretch" }); }}
-                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
-                    activeTab === "final-stretch"
-                      ? "bg-[#7FFFC9] text-black"
-                      : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
-                  }`}
-                >
-                  <div className="flex items-center justify-center gap-1.5">
-                    <span>Final</span>
-                    <span
-                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
-                        activeTab === "final-stretch"
-                          ? "bg-black/15 text-black/90"
-                          : "bg-neutral-800 text-neutral-400"
-                      }`}
-                    >
-                      {displayFinalStretch.length}
-                    </span>
-                  </div>
-                </button>
-                <button
-                  onClick={() => { setActiveTab("migrated"); posthog.capture("pulse_tab_switched", { tab: "migrated" }); }}
-                  className={`relative flex-1 rounded-md px-3 py-2.5 text-xs font-semibold transition-all duration-200 ${
-                    activeTab === "migrated"
-                      ? "bg-[#7FFFC9] text-black"
-                      : "text-neutral-300 hover:bg-neutral-800/60 hover:text-neutral-100"
-                  }`}
-                >
-                  <div className="flex items-center justify-center gap-1.5">
-                    <span>Migrated</span>
-                    <span
-                      className={`inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold ${
-                        activeTab === "migrated"
-                          ? "bg-black/15 text-black/90"
-                          : "bg-neutral-800 text-neutral-400"
-                      }`}
-                    >
-                      {displayMigrated.length}
-                    </span>
-                  </div>
-                </button>
-              </div>
             </div>
           </div>
 

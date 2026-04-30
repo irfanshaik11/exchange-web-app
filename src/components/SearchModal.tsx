@@ -9,9 +9,12 @@ import React, {
 } from "react";
 import { useRouter } from "next/router";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
-import { FaSearch, FaTimes } from "react-icons/fa";
+import { FaSearch, FaTimes, FaFilter } from "react-icons/fa";
 import { FaRocket, FaFire, FaCrown, FaGraduationCap } from "react-icons/fa";
 import InterstatePopout from "./InterstatePopout";
+import DiscoverFilterModal from "./DiscoverFilterModal";
+import { defaultPulseFilters, type PulseFilters } from "~/contexts/PulseFiltersContext";
+import { hasActiveFilters as checkPulseActiveFilters } from "~/utils/discoverFilterUtils";
 import { LuChartNoAxesColumn, LuCopy } from "react-icons/lu";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { extractMetaImage } from "~/utils/images";
@@ -630,6 +633,37 @@ const SearchModalContent = React.memo(function SearchModalContent({
   });
   const [searchResults, setSearchResults] = useState<Token[]>([]);
   const [cachedTokens, setCachedTokens] = useState<any[]>([]);
+
+  // ─── PulseTable-style filters (reusing the DiscoverFilterModal) ───
+  // Two-tier state: `pulseFilters` is what's applied; `pendingPulseFilters`
+  // is the working copy shown in the modal until the user clicks Apply All.
+  const [pulseFilterModalOpen, setPulseFilterModalOpen] = useState(false);
+  const [pulseFilters, setPulseFilters] = useState<PulseFilters>(defaultPulseFilters);
+  const [pendingPulseFilters, setPendingPulseFilters] = useState<PulseFilters>(defaultPulseFilters);
+  const pulseHasPendingChanges = useMemo(
+    () => JSON.stringify(pulseFilters) !== JSON.stringify(pendingPulseFilters),
+    [pulseFilters, pendingPulseFilters]
+  );
+  const handlePulseFilterChange = useCallback(
+    (updater: (prev: PulseFilters) => PulseFilters) => {
+      setPendingPulseFilters((prev) => updater(prev));
+    },
+    []
+  );
+  const handlePulseApply = useCallback(() => {
+    setPulseFilters(pendingPulseFilters);
+    setPulseFilterModalOpen(false);
+  }, [pendingPulseFilters]);
+  const handlePulseReset = useCallback(() => {
+    setPendingPulseFilters(defaultPulseFilters);
+    setPulseFilters(defaultPulseFilters);
+  }, []);
+  const openPulseFilters = useCallback(() => {
+    // Sync pending with applied so the modal opens with current applied values
+    setPendingPulseFilters(pulseFilters);
+    setPulseFilterModalOpen(true);
+  }, [pulseFilters]);
+
   const [lastFetchTime, setLastFetchTime] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
   const [recentSearches, setRecentSearches] = useState<SearchHistoryItem[]>([]);
@@ -1512,21 +1546,32 @@ const SearchModalContent = React.memo(function SearchModalContent({
         onClose={onClose}
         align="center"
         zIndex={99999}
-        className="mx-auto w-full max-w-[94vw] rounded-xl bg-[#080808] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
-        disableClickOutside={false}
+        className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-xl bg-[#18181A] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
+        disableClickOutside={pulseFilterModalOpen}
       >
       {/* Close Button - Mobile */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2 sm:hidden">
         <div className="flex w-full items-center sm:w-auto">
           <BlockchainSwitcher />
         </div>
-        <button
-          onClick={onClose}
-          className="p-1 text-xl text-neutral-400 transition-colors hover:text-white"
-          aria-label="Close"
-        >
-          <FaTimes />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openPulseFilters}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
+            aria-label="Filters"
+            title="Filters"
+          >
+            <FaFilter size={12} />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1 text-xl text-neutral-400 transition-colors hover:text-white"
+            aria-label="Close"
+          >
+            <FaTimes />
+          </button>
+        </div>
       </div>
 
       {/* Filter and Sort Controls */}
@@ -1573,7 +1618,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             Sort by:
           </span>
 
-          <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#080808] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
+          <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
             {sortByOptions.map((option) => {
               const IconComponent = option.icon;
               const isActive = sortBy === option.key;
@@ -1606,81 +1651,33 @@ const SearchModalContent = React.memo(function SearchModalContent({
                   </button>
 
                   {/* Tooltip */}
-                  <div className="pointer-events-none absolute top-[-20px] left-1/2 -translate-x-1/2 -translate-y-full rounded-md border border-[#2a2a2a] bg-[#080808] px-2 py-1 text-[11px] whitespace-nowrap text-[#d1d1e9] opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-[-6px] group-hover:opacity-100">
+                  <div className="pointer-events-none absolute top-[-20px] left-1/2 -translate-x-1/2 -translate-y-full rounded-md border border-[#2a2a2a] bg-[#18181A] px-2 py-1 text-[11px] whitespace-nowrap text-[#d1d1e9] opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-[-6px] group-hover:opacity-100">
                     {tooltipText}
 
                     {/* Tooltip arrow */}
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-x-4 border-t-4 border-x-transparent border-t-[#080808]" />
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-x-4 border-t-4 border-x-transparent border-t-[#18181A]" />
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Quick Buy Controls - Thunder input + P1/P2/P3 pills (desktop only) */}
-          <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border"
-               style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '85px', width: '85px', height: '28px' }}>
-            <HiLightningBolt size={14} style={{ color: '#31e3ac' }} />
-            <input
-              type="text"
-              value={quickBuyAmount}
-              inputMode="decimal"
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                  setQuickBuyAmount(value);
-                  const numValue = Number(value) || 0;
-                  if (typeof window !== 'undefined') {
-                    localStorage.setItem('quickBuyAmount', numValue.toString());
-                  }
-                }
-              }}
-              onKeyDown={(e) => {
-                const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
-                if (allowedKeys.includes(e.key)) return;
-                if (e.key === '.') return;
-                if (!/^[0-9]$/.test(e.key)) {
-                  e.preventDefault();
-                }
-              }}
-              className="bg-transparent border-none outline-none text-sm font-medium w-12 text-center"
-              style={{ color: '#f0f5f5' }}
-            />
-          </div>
-
-          {/* P1 P2 P3 Preset Boxes (desktop only) */}
-          <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border"
-               style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '100px', width: '100px', height: '28px' }}>
-            {(['P1', 'P2', 'P3'] as const).map((pill) => {
-              const presetIndex = parseInt(pill.replace('P', '')) - 1;
-              return (
-                <button
-                  key={pill}
-                  className="px-1 text-sm font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded"
-                  style={{
-                    paddingTop: '2px',
-                    paddingBottom: '2px',
-                    backgroundColor: selectedPill === pill
-                      ? 'rgba(24, 196, 140, 0.15)'
-                      : 'rgba(22, 23, 28, 0.6)',
-                    color: selectedPill === pill ? '#f0f5f5' : '#666',
-                  }}
-                  onClick={() => {
-                    setSelectedPill(pill);
-                    setActivePreset(presetIndex);
-                  }}
-                >
-                  {pill}
-                </button>
-              );
-            })}
-          </div>
+          {/* Filter icon - sits inline with the Sort by pill so they align vertically */}
+          <button
+            type="button"
+            onClick={openPulseFilters}
+            className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
+            aria-label="Filters"
+            title="Filters"
+          >
+            <FaFilter size={12} />
+          </button>
         </div>
       </div>
 
       {/* Search Input */}
       <div className="relative px-3 py-2 sm:px-4 sm:py-3">
-        <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#080808] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#1a1a1a] sm:gap-3 sm:px-4 sm:py-3">
+        <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#18181A] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#18181A] sm:gap-3 sm:px-4 sm:py-3">
           <FaSearch className="flex-shrink-0 text-base text-[#666666] sm:text-lg" />
           <input
             ref={inputRef}
@@ -1729,13 +1726,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
       </div>
 
       {/* Token List */}
-      <div className="max-h-[60vh] min-h-[320px] flex-1 overflow-y-auto px-3 pt-2 sm:max-h-[70vh] sm:min-h-[450px] sm:px-3 sm:pt-3 md:px-4">
-        {(searchLoading || displayTokens.length > 0) && (
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-2 sm:px-3 sm:pt-3 md:px-4">
+        {searchLoading && (
           <div className="mb-2 sm:mb-3">
             <span className="text-sm tracking-wider text-[#9595B5] sm:text-base">
-              {searchLoading
-                ? "Searching..."
-                : `${displayTokens.length} ${displayTokens.length === 1 ? "Token" : "Tokens"}`}
+              Searching...
             </span>
           </div>
         )}
@@ -1744,7 +1739,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             {[...Array(5)].map((_, index) => (
               <div
                 key={index}
-                className="relative flex min-h-[120px] animate-pulse flex-col items-start justify-between gap-3 rounded-lg border border-[#FFFFFF0F] bg-[#080808] px-3 py-3 sm:min-h-[96px] sm:flex-row sm:items-center sm:gap-6 sm:px-5 sm:py-4"
+                className="relative flex min-h-[120px] animate-pulse flex-col items-start justify-between gap-3 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] px-3 py-3 sm:min-h-[96px] sm:flex-row sm:items-center sm:gap-6 sm:px-5 sm:py-4"
               >
                 <div className="flex w-full max-w-full items-center gap-3 sm:max-w-72 sm:gap-4">
                   {/* Logo skeleton */}
@@ -1870,7 +1865,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           } as Token & { launchpad_protocol?: string };
                           handleSelectToken(token);
                         }}
-                        className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#080808] px-3 py-2.5 transition-all duration-200 hover:z-30 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
+                        className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#18181A] px-3 py-2.5 transition-all duration-200 hover:z-30 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
                       >
                         {/* Token Logo with Protocol Border */}
                         <div
@@ -2079,7 +2074,21 @@ const SearchModalContent = React.memo(function SearchModalContent({
             ) : null}
           </div>
         ) : (
-          <ul className="flex h-full list-none flex-col overflow-y-auto pb-2">
+          <>
+            {/* Column headers (desktop only — mobile rows render with inline labels) */}
+            <div
+              className="hidden w-full items-center justify-between gap-4 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[#666666] sm:flex sm:px-4 md:gap-6 md:px-5"
+              style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+            >
+              <div className="w-full max-w-72 min-w-0 flex-1">Token</div>
+              <div className="flex flex-shrink-0 items-center gap-3 sm:text-[11px] md:gap-5">
+                <span className="w-20 text-center">MCap</span>
+                <span className="w-20 text-center">Vol</span>
+                <span className="w-20 text-center">Liq</span>
+              </div>
+              <span className="flex-shrink-0 text-center" style={{ width: "76px" }}>Quick Buy</span>
+            </div>
+          <ul className="flex h-full list-none flex-col gap-2 overflow-y-auto pb-2">
             {displayTokens.map((token, index) => {
               const mcRaw = token.fully_diluted_value || 0;
               const mc = formatMarketCap(mcRaw);
@@ -2107,9 +2116,21 @@ const SearchModalContent = React.memo(function SearchModalContent({
               );
             })}
           </ul>
+          </>
         )}
       </div>
     </InterstatePopout>
+
+    {/* Reuse the same filters UI as the pulse / discover pages */}
+    <DiscoverFilterModal
+      isOpen={pulseFilterModalOpen}
+      onClose={() => setPulseFilterModalOpen(false)}
+      pendingFilters={pendingPulseFilters}
+      hasPendingChanges={pulseHasPendingChanges}
+      onPendingFilterChange={handlePulseFilterChange}
+      onApply={handlePulseApply}
+      onReset={handlePulseReset}
+    />
     </>
   );
 });
@@ -2547,7 +2568,7 @@ const TokenListItem = React.memo(
     return (
       <>
         <li
-          className={`group relative block rounded-lg border bg-[#080808] px-3 py-3 text-sm transition-all duration-200 hover:z-30 sm:px-4 sm:py-4 sm:text-base md:px-5 ${
+          className={`group relative block rounded-lg border bg-[#18181A] px-3 py-3 text-sm transition-all duration-200 hover:z-30 sm:px-4 sm:py-4 sm:text-base md:px-5 ${
             isSelected
               ? "border-[#7FFFC940] bg-[#7FFFC908]"
               : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a]"
@@ -2629,7 +2650,7 @@ const TokenListItem = React.memo(
                     </div>
                   </div>
                   <div
-                    className="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#080808] bg-[#080808] transition-transform duration-200 group-hover:scale-110"
+                    className="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#18181A] bg-[#18181A] transition-transform duration-200 group-hover:scale-110"
                     style={{
                       borderColor: (token as any).is_mayhem_mode ? "#c83c51" : protocolColor,
                       boxShadow: `0 0 6px ${(token as any).is_mayhem_mode ? "#c83c5150" : `${protocolColor}50`}`,
@@ -2870,7 +2891,7 @@ const TokenListItem = React.memo(
                   </div>
                 </div>
                 <div
-                  className="pointer-events-none absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#080808] bg-[#080808] transition-transform duration-200 group-hover:scale-110"
+                  className="pointer-events-none absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#18181A] bg-[#18181A] transition-transform duration-200 group-hover:scale-110"
                   style={{
                     borderColor: (token as any).is_mayhem_mode ? "#c83c51" : protocolColor,
                     boxShadow: `0 0 6px ${(token as any).is_mayhem_mode ? "#c83c5150" : `${protocolColor}50`}`,
@@ -3261,17 +3282,11 @@ const TokenListItem = React.memo(
               </div>
             </div>
 
-            {/* MC, V and L */}
+            {/* MCap / Vol / Liq values - labels live in the column header above */}
             <div className="flex h-full flex-shrink-0 items-center gap-3 text-xs whitespace-nowrap text-[#9595B5] sm:text-sm md:gap-5">
-              <span>
-                MC: <span className="font-bold" style={{ color: mcColor }}>${mc}</span>
-              </span>
-              <span>
-                {volIs24h ? "V(24h): " : "V: "}<span className="font-bold text-white">${vol}</span>
-              </span>
-              <span>
-                L: <span className="font-bold text-white">${liq}</span>
-              </span>
+              <span className="w-20 text-center font-bold" style={{ color: mcColor }}>${mc}</span>
+              <span className="w-20 text-center font-bold text-white">${vol}</span>
+              <span className="w-20 text-center font-bold text-white">${liq}</span>
             </div>
 
             <button

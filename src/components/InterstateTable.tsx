@@ -13,6 +13,7 @@ import { BsPersonGear } from "react-icons/bs";
 import { RiGhostLine } from "react-icons/ri";
 import { GoStack } from "react-icons/go";
 import { FiGlobe } from "react-icons/fi";
+import { LuPill } from "react-icons/lu";
 import InterstateButton from "./InterstateButton";
 import Image from 'next/image';
 import InterstateTooltip from './InterstateTooltip';
@@ -91,14 +92,15 @@ interface HeaderConfig {
 // Constants
 const TABLE_HEADERS: HeaderConfig[] = [
   { key: 'name', label: 'Pair Info', align: 'left', width: 'w-64' },
+  { key: null, label: '24h', align: 'center', width: 'w-32' }, // Mini sparkline
   { key: 'fully_diluted_value', label: 'Market Cap', align: 'right', width: 'w-32' },
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
+  { key: 'price_percent_change', label: 'Price %', align: 'center', width: 'w-20' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
   { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
-  // { key: null, label: '24h', align: 'center', width: 'w-24' }, // Mini chart column
   // { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
   { key: null, label: 'Token Info', align: 'center', width: 'w-40' },
-  { key: null, label: 'Action', align: 'center', width: 'w-32' },
+  { key: null, label: 'Quick Buy', align: 'center', width: 'w-32' },
 ];
 
 // Sniper Icon component
@@ -227,10 +229,22 @@ const getNewPairVolume = (token: Token, solPrice: number): number => {
 };
 
 const getTxns = (token: Token, timeframe: string): { total: number; buys: number; sells: number } => {
-  // Try the specific timeframe first
-  let buys = getNumber(token as any, `total_buys_${timeframe}`);
-  let sells = getNumber(token as any, `total_sells_${timeframe}`);
-  
+  // Try every known field-name variant the backend has used for this timeframe.
+  // Field names have shifted over time (total_buys_*, buys_*, buyCount*, total_buyers_*),
+  // so we read from each so the Txns column populates regardless of source.
+  const codexBuyKey = timeframe === '1h' ? 'buyCount1' : timeframe === '6h' ? 'buyCount6' : timeframe === '24h' ? 'buyCount24' : timeframe === '5m' ? 'buyCount5m' : '';
+  const codexSellKey = timeframe === '1h' ? 'sellCount1' : timeframe === '6h' ? 'sellCount6' : timeframe === '24h' ? 'sellCount24' : timeframe === '5m' ? 'sellCount5m' : '';
+  let buys =
+    getNumber(token as any, `total_buys_${timeframe}`) ||
+    getNumber(token as any, `buys_${timeframe}`) ||
+    (codexBuyKey ? getNumber(token as any, codexBuyKey) : 0) ||
+    getNumber(token as any, `total_buyers_${timeframe}`);
+  let sells =
+    getNumber(token as any, `total_sells_${timeframe}`) ||
+    getNumber(token as any, `sells_${timeframe}`) ||
+    (codexSellKey ? getNumber(token as any, codexSellKey) : 0) ||
+    getNumber(token as any, `total_sellers_${timeframe}`);
+
   if (buys > 0 || sells > 0) {
     return { total: buys + sells, buys, sells };
   }
@@ -299,6 +313,11 @@ const getSortableValue = (token: Token, key: string, selectedTimeframe?: string)
     const buys = getTokenStat(token, 'total_buys', selectedTimeframe);
     const sells = getTokenStat(token, 'total_sells', selectedTimeframe);
     return buys + sells;
+  }
+
+  // Handle Price % sorting based on the currently-selected timeframe
+  if (key === 'price_percent_change' && selectedTimeframe) {
+    return getTokenStat(token, 'price_percent_change', selectedTimeframe);
   }
   
   // Handle timestamp sorting for New Pairs (newest first)
@@ -455,10 +474,14 @@ const TableHeader: React.FC<{
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => {
         let label = header.label;
-        // 24h mini chart column commented out
-        // if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
-        //   return null;
-        // }
+        // Hide 24h sparkline column for newPairs and dexscreener tabs
+        if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+          return null;
+        }
+        // Hide Price % column for newPairs and dexscreener tabs
+        if (header.label === 'Price %' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+          return null;
+        }
         // Hide Token Info / Holders column for newPairs and dexscreener
         if (header.label === 'Token Info' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
           return null;
@@ -467,16 +490,17 @@ const TableHeader: React.FC<{
         if (header.label === 'Volume' && tableType === 'newPairs') {
           return null;
         }
-        // Show TXNS column only for newPairs
-        if (header.label === 'TXNS' && tableType !== 'newPairs') {
+        // Show TXNS column for newPairs and trending tabs (hidden for dexscreener)
+        if (header.label === 'TXNS' && tableType === 'dexscreener') {
           return null;
         }
+        const hideOnNarrow = header.label === 'Token Info';
         return (
           <th
             key={idx}
             className={`${header.width} px-4 py-3 text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
               header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
-            }`}
+            } ${hideOnNarrow ? 'hidden xl:table-cell' : ''}`}
             style={{ color: '#787a8d', fontWeight: '300' }}
             onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
           >
@@ -667,44 +691,88 @@ const TokenAvatar: React.FC<{
     _proto.includes('moonit') || _proto.includes('moonshot') || _proto.includes('moonshoot')
   );
 
+  // Migration progress ring (matches PulseTable behavior). 0..1 fraction of bonding-curve fill.
+  // Hidden once the token has graduated (>= 100%) since trending is mostly post-migration.
+  const migrationProgress = (() => {
+    const bondingPct = (token as any).bonding_pct;
+    const bondingCurveProgress = (token as any).bonding_curve_progress;
+    const graduationPercent = (token as any).graduationPercent;
+    let pct = 0;
+    if (typeof bondingPct === 'number' && bondingPct >= 0) pct = bondingPct / 100;
+    else if (typeof bondingCurveProgress === 'number' && bondingCurveProgress >= 0) pct = bondingCurveProgress;
+    else if (typeof graduationPercent === 'number' && graduationPercent >= 0) pct = graduationPercent / 100;
+    if (pct >= 1 || pct <= 0) return 0;
+    return Math.min(pct, 1);
+  })();
+
   return (
-    <div className="relative h-12 w-12 flex items-center justify-center">
-      {/* Image container - circular */}
-      <div className="relative rounded-full overflow-hidden" style={{ width: '48px', height: '48px' }}>
-        {/* Stable placeholder: protocol-color tint + initial letter. Always rendered
-            beneath the image so the row appears instantly with no spinner-then-letter
-            cascade. Stays visible while the real image preloads, gets covered when
-            the image fades in on top, and remains visible if the image fails. */}
-        <div
-          className="absolute inset-0 flex items-center justify-center rounded-full"
-          style={{ backgroundColor: AX.surface2 /* neutral grey, blends with page bg */ }}
-        >
-          <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
+    <div className="relative flex items-center justify-center" style={{ width: '68px', height: '68px', overflow: 'visible' }}>
+      {/* Outer protocol-colored border ring (matches PulseTable styling) */}
+      <div
+        className="relative rounded-lg"
+        style={{
+          border: `1px solid ${protocolColor}`,
+          padding: '2px',
+          backgroundColor: '#0a0b0d',
+          width: '66px',
+          height: '66px',
+        }}
+      >
+        {/* Image container - rounded square (matches PulseTable styling) */}
+        <div className="relative rounded-md overflow-hidden" style={{ width: '60px', height: '60px' }}>
+          {/* Stable placeholder: protocol-color tint + initial letter. Always rendered
+              beneath the image so the row appears instantly with no spinner-then-letter
+              cascade. Stays visible while the real image preloads, gets covered when
+              the image fades in on top, and remains visible if the image fails. */}
+          <div
+            className="absolute inset-0 flex items-center justify-center rounded-md"
+            style={{ backgroundColor: AX.surface2 /* neutral grey, blends with page bg */ }}
+          >
+            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
+          </div>
+          {/* Real image, only mounted once fully preloaded. Fades in over the
+              placeholder via the .token-avatar-fade-in CSS keyframe (globals.css). */}
+          {visibleSrc && !imgError && (
+            <img
+              src={visibleSrc}
+              alt={token.name || token.symbol || ''}
+              width={60}
+              height={60}
+              // Browser-driven fade-in via keyframe (see globals.css token-avatar-fade-in).
+              // Runs once on mount because the <img> is only mounted after visibleSrc
+              // flips from '' to a fully-preloaded URL.
+              // Apply fade-in only on the FIRST load of this mint's image (cache
+              // miss at mount). Captured in a ref so className stays stable for the
+              // whole mount  the keyframe plays exactly once when the <img> first
+              // appears, and subsequent re-renders don't re-trigger it. Cache hits
+              // render with no class at all, instant, image stays constant.
+              className={`absolute inset-0 h-full w-full object-cover rounded-md ${
+                skipFadeRef.current ? '' : 'token-avatar-fade-in'
+              }`}
+              onError={() => setImgError(true)}
+            />
+          )}
         </div>
-        {/* Real image, only mounted once fully preloaded. Fades in over the
-            placeholder via the .token-avatar-fade-in CSS keyframe (globals.css). */}
-        {visibleSrc && !imgError && (
-          <img
-            src={visibleSrc}
-            alt={token.name || token.symbol || ''}
-            width={48}
-            height={48}
-            // Browser-driven fade-in via keyframe (see globals.css token-avatar-fade-in).
-            // Runs once on mount because the <img> is only mounted after visibleSrc
-            // flips from '' to a fully-preloaded URL.
-            // Apply fade-in only on the FIRST load of this mint's image (cache
-            // miss at mount). Captured in a ref so className stays stable for the
-            // whole mount  the keyframe plays exactly once when the <img> first
-            // appears, and subsequent re-renders don't re-trigger it. Cache hits
-            // render with no class at all, instant, image stays constant.
-            className={`absolute inset-0 h-full w-full object-cover rounded-full ${
-              skipFadeRef.current ? '' : 'token-avatar-fade-in'
-            }`}
-            onError={() => setImgError(true)}
-          />
-        )}
       </div>
-      
+
+      {/* Migration progress ring - clockwise from bottom-right around the 66x66 inner ring (matches PulseTable) */}
+      {migrationProgress > 0 && (
+        <div className="pointer-events-none absolute inset-0">
+          <svg className="h-full w-full" viewBox="0 0 68 68">
+            <path
+              d="M 66 66 L 8 66 Q 2 66 2 60 L 2 8 Q 2 2 8 2 L 60 2 Q 66 2 66 8 L 66 60 Q 66 66 60 66"
+              fill="none"
+              stroke={protocolColor}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={`${4 * 64}`}
+              strokeDashoffset={`${4 * 64 * (1 - migrationProgress)}`}
+            />
+          </svg>
+        </div>
+      )}
+
       {/* Protocol logo badge - bottom right */}
       <div
         className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full"
@@ -904,22 +972,6 @@ const TokenInfo: React.FC<{
 
   return (
     <div className="flex items-center gap-2">
-      {/* Watchlist button */}
-      <button
-        onClick={handleWatchlistClick}
-        className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
-        style={{ color: isWatched ? '#f2c367' : AX.muted }}
-        title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted;
-        }}
-      >
-        {isWatched ? <FaStar className="w-5 h-5" /> : <FaRegStar className="w-5 h-5" />}
-      </button>
-      
       <InterstateTooltip
         width={undefined}
         height={undefined}
@@ -933,10 +985,10 @@ const TokenInfo: React.FC<{
       
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
-          <span className="truncate text-base font-bold" style={{ color: AX.text }}>
+          <span className="truncate text-base font-bold min-w-[6ch]" style={{ color: AX.text }}>
             {token.symbol}
           </span>
-          <span className="truncate text-sm font-medium" style={{ color: AX.muted }}>
+          <span className="truncate text-sm font-medium min-w-0" style={{ color: AX.muted }}>
             {token.name}
           </span>
           {/* Copy contract button */}
@@ -957,6 +1009,21 @@ const TokenInfo: React.FC<{
             title="Copy contract address"
           >
             <Copy className="w-3.5 h-3.5" />
+          </button>
+          {/* Watchlist button */}
+          <button
+            onClick={handleWatchlistClick}
+            className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
+            style={{ color: isWatched ? '#f2c367' : AX.muted }}
+            title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted;
+            }}
+          >
+            {isWatched ? <FaStar className="w-3.5 h-3.5" /> : <FaRegStar className="w-3.5 h-3.5" />}
           </button>
         </div>
         
@@ -1047,6 +1114,35 @@ const TokenInfo: React.FC<{
                 <FiGlobe size={11} />
               </button>
             )}
+
+            {/* Pump.fun pill - only for pump.fun launchpad tokens or Mayhem-mode tokens */}
+            {(() => {
+              const proto = (token as any).launchpad_protocol?.toLowerCase() || '';
+              const mintAddr = (token.mint || (token as any).mint_address || '').toLowerCase();
+              const isPumpToken = proto.includes('pump') || mintAddr.endsWith('pump');
+              const isMayhem = !!(token as any).is_mayhem_mode;
+              if (!isPumpToken && !isMayhem) return null;
+              return (
+                <button
+                  className="flex items-center justify-center rounded p-0.5 transition-colors duration-200 cursor-pointer hover:bg-white/10"
+                  style={{ color: AX.muted }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = '#85d99f';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = AX.muted;
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const addr = token.mint || (token as any).mint_address || '';
+                    if (addr) window.open(`https://pump.fun/coin/${addr}`, '_blank');
+                  }}
+                  title="View on pump.fun"
+                >
+                  <LuPill size={11} />
+                </button>
+              );
+            })()}
 
             {/* Search icon with dropdown menu */}
             <div
@@ -1429,7 +1525,8 @@ const TxnsCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
   isDiscoverPage?: boolean;
-}> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
+  variant?: 'default' | 'compact';
+}> = ({ token, selectedTimeframe, isDiscoverPage = false, variant = 'default' }) => {
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
 
   // Always show transaction counts (no more rank display)
@@ -1442,6 +1539,39 @@ const TxnsCell: React.FC<{
     }
     return formatSmartNumber(value);
   };
+
+  // Compact variant - vertical buy/sell ratio bar + "buys / sells" numbers (used on trending)
+  if (variant === 'compact') {
+    const buyColor = isDiscoverPage ? '#85d99f' : '#34d399';
+    const sellColor = isDiscoverPage ? '#f26681' : '#f87171';
+    const ratio = total > 0 ? Math.max(0, Math.min(1, buys / total)) : 0.5;
+    const buyPct = total > 0 ? `${ratio * 100}%` : '50%';
+    const sellPct = total > 0 ? `${(1 - ratio) * 100}%` : '50%';
+
+    return (
+      <div className="flex items-center justify-end gap-2 h-full">
+        <div className="flex flex-col w-1 h-6 rounded-sm overflow-hidden" aria-hidden="true">
+          <div style={{ backgroundColor: buyColor, height: buyPct }} />
+          <div style={{ backgroundColor: sellColor, height: sellPct }} />
+        </div>
+        <div className="flex items-center text-sm font-medium">
+          <span className={isDiscoverPage ? 'number-font' : ''} style={{
+            color: buyColor,
+            ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
+          }}>
+            {formatTxnValue(buys)}
+          </span>
+          <span className="mx-1" style={{ color: AX.muted }}>/</span>
+          <span className={isDiscoverPage ? 'number-font' : ''} style={{
+            color: sellColor,
+            ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
+          }}>
+            {formatTxnValue(sells)}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full justify-center">
@@ -1877,7 +2007,7 @@ const TokenInfoCell: React.FC<{
   return (
     <div className="flex flex-col gap-0.5">
       {/* Row 1: Holders + Top 10 */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-center gap-3">
         {holderCount !== undefined && holderCount > 0 && (
           <TokenMetric
             icon={<FaUsers size={11} />}
@@ -1896,7 +2026,7 @@ const TokenInfoCell: React.FC<{
         )}
       </div>
       {/* Row 2: Insider + Sniper + Bundle */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-center gap-3">
         {insiderPercent !== undefined && insiderPercent > 0 && (
           <TokenMetric
             icon={<RiGhostLine size={11} />}
@@ -2008,11 +2138,20 @@ const TableRow: React.FC<{
       }}
       onClick={onClick}
     >
-      <td className="w-64 px-4 py-4 align-middle">
+      <td className="w-64 px-4 py-2.5 align-middle">
         <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
 
-      <td className="w-32 px-4 py-4 align-middle text-right">
+      {/* 24h Mini Sparkline column - shows recent token price movement (hidden for newPairs and dexscreener) */}
+      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
+        <td className="w-32 px-2 py-2.5 align-middle">
+          <div className="flex justify-center">
+            <MiniSparkline token={token} width={120} height={32} />
+          </div>
+        </td>
+      )}
+
+      <td className="w-32 px-4 py-2.5 align-middle text-right">
         <MarketCapCell
           token={token}
           selectedTimeframe={selectedTimeframe}
@@ -2021,7 +2160,7 @@ const TableRow: React.FC<{
         />
       </td>
 
-      <td className="w-28 px-4 py-4 align-middle text-right">
+      <td className="w-28 px-4 py-2.5 align-middle text-right">
         {/* {(() => {
           console.log('Liquidity Debug:', {
             tokenName: token.name,
@@ -2056,9 +2195,31 @@ const TableRow: React.FC<{
         })()}
       </td>
 
+      {/* Price % column - sits to the right of Liquidity (hidden for newPairs and dexscreener) */}
+      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
+        <td className="w-20 px-2 py-2.5 align-middle text-center">
+          {(() => {
+            const pct = getTokenStat(token, 'price_percent_change', selectedTimeframe);
+            const color = pct > 0 ? '#85d99f' : pct < 0 ? '#f26681' : AX.muted;
+            const formatted =
+              pct === 0
+                ? '0%'
+                : `${pct > 0 ? '' : '-'}${formatSmartNumber(Math.abs(pct))}%`;
+            return (
+              <span
+                className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`}
+                style={{ color }}
+              >
+                {formatted}
+              </span>
+            );
+          })()}
+        </td>
+      )}
+
       {/* Volume column - hidden for newPairs */}
       {tableType !== 'newPairs' && (
-      <td className="w-28 px-4 py-4 align-middle text-right">
+      <td className="w-28 px-4 py-2.5 align-middle text-right">
         <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
@@ -2072,21 +2233,15 @@ const TableRow: React.FC<{
       </td>
       )}
 
-      {tableType === 'newPairs' && (
-        <td className="w-24 px-4 py-4 align-middle text-right">
-          <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
+      {tableType !== 'dexscreener' && (
+        <td className="w-24 px-4 py-2.5 align-middle text-right">
+          <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} variant={tableType === 'newPairs' ? 'default' : 'compact'} />
         </td>
       )}
 
-      {/* 24h Mini Chart column - commented out
-      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
-        <td className="w-24 px-2 py-4 align-middle">
-          <MiniSparkline token={token} width={80} height={40} />
-        </td>
-      )} */}
 
       {/* Gas Fees column - commented out per user request
-      <td className="w-28 px-4 py-4 align-middle text-right">
+      <td className="w-28 px-4 py-2.5 align-middle text-right">
         <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
@@ -2099,14 +2254,14 @@ const TableRow: React.FC<{
       </td>
       */}
 
-      {/* Token Info column - displays holder metrics from trending WebSocket (hidden for newPairs and dexscreener) */}
+      {/* Token Info column - displays holder metrics from trending WebSocket (hidden for newPairs and dexscreener; hidden below xl so Action stays visible) */}
       {tableType !== 'dexscreener' && tableType !== 'newPairs' && (
-        <td className="w-40 px-2 py-4 align-middle">
+        <td className="w-40 px-2 py-2.5 align-middle hidden xl:table-cell">
           <TokenInfoCell token={token} isDiscoverPage={isDiscoverPage} tableType={tableType} />
         </td>
       )}
 
-      <td className="w-32 px-4 py-4 align-middle text-center">
+      <td className="w-32 px-4 py-2.5 align-middle text-center">
         {isDiscoverPage ? (
           <button
             onClick={handleQuickBuy}
@@ -2278,7 +2433,6 @@ export default function InterstateTable({
         .table-wrapper {
           table-layout: fixed;
           width: 100%;
-          min-width: 1000px;
         }
         .table-wrapper tbody tr {
           transition: none !important;

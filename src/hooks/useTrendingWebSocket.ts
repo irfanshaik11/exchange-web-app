@@ -106,6 +106,11 @@ export interface NormalizedTrendingToken {
   total_sells_6h?: number;
   total_buys_24h?: number;
   total_sells_24h?: number;
+  // Price % change per timeframe (Price % column)
+  price_percent_change_5m?: number;
+  price_percent_change_1h?: number;
+  price_percent_change_6h?: number;
+  price_percent_change_24h?: number;
   // Protocol/launchpad info for trade routing (critical for quick buy!)
   launchpad_protocol?: string;
   protocol?: string;
@@ -157,15 +162,36 @@ function normalizeToken(raw: any): NormalizedTrendingToken {
     priceUsd: raw.price_usd || raw.priceUsd || 0,
     marketCapUsd: raw.market_cap_usd || raw.marketCapUsd || 0,
     liquidityUsd: raw.liquidity_usd || raw.liquidityUsd || 0,
-    // Transaction counts for TXNS column
-    total_buys_5m: raw.total_buys_5m || 0,
-    total_sells_5m: raw.total_sells_5m || 0,
-    total_buys_1h: raw.total_buys_1h || 0,
-    total_sells_1h: raw.total_sells_1h || 0,
-    total_buys_6h: raw.total_buys_6h || 0,
-    total_sells_6h: raw.total_sells_6h || 0,
-    total_buys_24h: raw.total_buys_24h || 0,
-    total_sells_24h: raw.total_sells_24h || 0,
+    // Price % change per timeframe (for the Price % column on trending). Read
+    // every known variant so the column populates regardless of backend shape.
+    price_percent_change_5m:
+      raw.price_percent_change_5m ?? raw.price_change_5m ?? raw.priceChange5m ?? 0,
+    price_percent_change_1h:
+      raw.price_percent_change_1h ?? raw.price_change_1h ?? raw.priceChange1h ?? 0,
+    price_percent_change_6h:
+      raw.price_percent_change_6h ?? raw.price_change_6h ?? raw.priceChange6h ?? 0,
+    price_percent_change_24h:
+      raw.price_percent_change_24h ?? raw.price_change_24h ?? raw.priceChange24h ?? 0,
+    // Transaction counts for TXNS column. Server has historically used several
+    // shapes for these fields (total_buys_5m, buys_5m, buyCount5m, total_buyers_5m
+    // for unique buyers, etc.) — read from each so the trending feed reliably
+    // populates the column regardless of which backend variant is live.
+    total_buys_5m:
+      raw.total_buys_5m ?? raw.buys_5m ?? raw.buyCount5m ?? raw.total_buyers_5m ?? 0,
+    total_sells_5m:
+      raw.total_sells_5m ?? raw.sells_5m ?? raw.sellCount5m ?? raw.total_sellers_5m ?? 0,
+    total_buys_1h:
+      raw.total_buys_1h ?? raw.buys_1h ?? raw.buyCount1 ?? raw.total_buyers_1h ?? 0,
+    total_sells_1h:
+      raw.total_sells_1h ?? raw.sells_1h ?? raw.sellCount1 ?? raw.total_sellers_1h ?? 0,
+    total_buys_6h:
+      raw.total_buys_6h ?? raw.buys_6h ?? raw.buyCount6 ?? raw.buyCount4 ?? raw.total_buyers_6h ?? 0,
+    total_sells_6h:
+      raw.total_sells_6h ?? raw.sells_6h ?? raw.sellCount6 ?? raw.sellCount4 ?? raw.total_sellers_6h ?? 0,
+    total_buys_24h:
+      raw.total_buys_24h ?? raw.buys_24h ?? raw.buyCount24 ?? raw.total_buyers_24h ?? 0,
+    total_sells_24h:
+      raw.total_sells_24h ?? raw.sells_24h ?? raw.sellCount24 ?? raw.total_sellers_24h ?? 0,
     // CRITICAL: Preserve launchpad_protocol for pool type detection in quick buy
     // Without this, backend has to do expensive pool discovery (~6 seconds)
     launchpad_protocol: raw.launchpad_protocol || raw.launchpadProtocol || raw.protocol || '',
@@ -305,15 +331,33 @@ function connectGlobal() {
                   top10_holders_percent: update.top10_holders_percent ?? existing.top10_holders_percent,
                   sniper_percent: update.sniper_percent ?? existing.sniper_percent,
                   insider_percent: update.insider_percent ?? existing.insider_percent,
-                  // Transaction counts
-                  total_buys_5m: update.total_buys_5m ?? existing.total_buys_5m,
-                  total_sells_5m: update.total_sells_5m ?? existing.total_sells_5m,
-                  total_buys_1h: update.total_buys_1h ?? existing.total_buys_1h,
-                  total_sells_1h: update.total_sells_1h ?? existing.total_sells_1h,
-                  total_buys_6h: update.total_buys_6h ?? existing.total_buys_6h,
-                  total_sells_6h: update.total_sells_6h ?? existing.total_sells_6h,
-                  total_buys_24h: update.total_buys_24h ?? existing.total_buys_24h,
-                  total_sells_24h: update.total_sells_24h ?? existing.total_sells_24h,
+                  // Price % change (preserve across updates so the Price % column animates with new data)
+                  price_percent_change_5m:
+                    update.price_percent_change_5m ?? update.price_change_5m ?? update.priceChange5m ?? existing.price_percent_change_5m,
+                  price_percent_change_1h:
+                    update.price_percent_change_1h ?? update.price_change_1h ?? update.priceChange1h ?? existing.price_percent_change_1h,
+                  price_percent_change_6h:
+                    update.price_percent_change_6h ?? update.price_change_6h ?? update.priceChange6h ?? existing.price_percent_change_6h,
+                  price_percent_change_24h:
+                    update.price_percent_change_24h ?? update.price_change_24h ?? update.priceChange24h ?? existing.price_percent_change_24h,
+                  // Transaction counts (try every known field-name variant the
+                  // backend has used so partial updates still reflect in the UI).
+                  total_buys_5m:
+                    update.total_buys_5m ?? update.buys_5m ?? update.buyCount5m ?? update.total_buyers_5m ?? existing.total_buys_5m,
+                  total_sells_5m:
+                    update.total_sells_5m ?? update.sells_5m ?? update.sellCount5m ?? update.total_sellers_5m ?? existing.total_sells_5m,
+                  total_buys_1h:
+                    update.total_buys_1h ?? update.buys_1h ?? update.buyCount1 ?? update.total_buyers_1h ?? existing.total_buys_1h,
+                  total_sells_1h:
+                    update.total_sells_1h ?? update.sells_1h ?? update.sellCount1 ?? update.total_sellers_1h ?? existing.total_sells_1h,
+                  total_buys_6h:
+                    update.total_buys_6h ?? update.buys_6h ?? update.buyCount6 ?? update.buyCount4 ?? update.total_buyers_6h ?? existing.total_buys_6h,
+                  total_sells_6h:
+                    update.total_sells_6h ?? update.sells_6h ?? update.sellCount6 ?? update.sellCount4 ?? update.total_sellers_6h ?? existing.total_sells_6h,
+                  total_buys_24h:
+                    update.total_buys_24h ?? update.buys_24h ?? update.buyCount24 ?? update.total_buyers_24h ?? existing.total_buys_24h,
+                  total_sells_24h:
+                    update.total_sells_24h ?? update.sells_24h ?? update.sellCount24 ?? update.total_sellers_24h ?? existing.total_sells_24h,
                   volume_24h: update.volume_24h ?? existing.volume_24h,
                 };
                 globalTokenMaps[topic].set(mint, updated);

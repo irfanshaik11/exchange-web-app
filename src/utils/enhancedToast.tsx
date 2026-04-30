@@ -32,7 +32,7 @@ export interface EnhancedToastOptions extends ToastOptions {
 }
 
 const baseStyle = {
-  background: '#1E1F26',
+  background: '#101114',
   color: '#E6E7EA',
   borderRadius: '12px',
   fontSize: '14px',

@@ -324,7 +324,7 @@ export default function Footer() {
     }
   }, [headerBarVisible]);
   const { activePreset } = useQuickBuy();
-  const { solPrice, monPrice } = useSolPrice(); // Use shared price from context
+  const { solPrice, monPrice, ethPrice, btcPrice } = useSolPrice(); // Use shared price from context
   const chainPrice = currentChain === "monad" ? monPrice : solPrice;
   const { solBalance, chainBalances } = useUser();
   // Use chainBalances as the primary source for consistency with Header
@@ -844,6 +844,36 @@ export default function Footer() {
               {chainPrice > 0
                 ? `$${chainPrice.toFixed(currentChain === "monad" ? 4 : 2)}`
                 : "..."}
+            </span>
+          </div>
+
+          {/* ETH Price */}
+          <div className="hidden items-center gap-1 px-2 py-0.5 sm:flex">
+            <img
+              src="https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png"
+              alt="ETH"
+              className="h-4 min-h-4 w-4 min-w-4 rounded-full object-contain"
+            />
+            <span
+              className="text-[11px] font-medium sm:text-xs"
+              style={{ color: AX.green }}
+            >
+              {ethPrice > 0 ? `$${ethPrice.toFixed(2)}` : "..."}
+            </span>
+          </div>
+
+          {/* BTC Price */}
+          <div className="hidden items-center gap-1 px-2 py-0.5 sm:flex">
+            <img
+              src="https://s2.coinmarketcap.com/static/img/coins/64x64/1.png"
+              alt="BTC"
+              className="h-4 min-h-4 w-4 min-w-4 rounded-full object-contain"
+            />
+            <span
+              className="text-[11px] font-medium sm:text-xs"
+              style={{ color: AX.green }}
+            >
+              {btcPrice > 0 ? `$${btcPrice.toFixed(0)}` : "..."}
             </span>
           </div>
 

@@ -920,9 +920,11 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#1E1F26',
+            background: 'rgba(16, 17, 20, 0.6)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             color: '#E6E7EA',
-            border: '1px solid #4B5563',
+            border: '1px solid rgba(75, 85, 99, 0.4)',
             borderRadius: '12px',
             fontSize: '14px',
             fontWeight: '500',
@@ -933,7 +935,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           },
           success: {
             style: {
-              border: '1px solid #70E0B0',
+              border: 'none',
             },
           },
           error: {

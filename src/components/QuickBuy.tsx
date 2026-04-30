@@ -184,12 +184,12 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
   // Determine the wrapper className
   const defaultClass = "flex flex-col gap-2 rounded-xl border border-neutral-700/90 bg-neutral-900 px-3 py-3 text-neutral-100";
   // If className disables border/bg/rounded, use only className, else merge
-  const wrapperClass = className !== undefined ? `flex flex-col gap-2 px-3 py-3 ${className}` : defaultClass;
+  const wrapperClass = className !== undefined ? `flex flex-col gap-2 px-3 py-1 ${className}` : defaultClass;
 
   return (
     <div className={wrapperClass}>
       {/* Presets */}
-      <div className="flex gap-2 rounded-xl border border-[#2A2B33] px-1 py-1 bg-[#17191E]">
+      <div className="flex gap-2 px-1 py-1 bg-[#101114]">
         {presetLabels.map((label, i) => (
           <button
             key={label}
@@ -204,12 +204,11 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
         ))}
       </div>
       
-      {/* Grey line separator - extends beyond container */}
-      <div className="h-px bg-[#2A2B33] w-screen -mx-3"></div>
-      
       {/* Only show the rest if expanded */}
       {expanded && (
         <>
+        {/* Grey line separator - extends beyond container */}
+        <div className="h-px bg-[#2A2B33] w-screen -mx-3"></div>
         {/* Buy/Sell Tabs */}
         <div className="flex gap-1 rounded-lg px-1   ">
           <button
