@@ -2115,7 +2115,7 @@ export default function Header({
                               }
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-[32px] bg-transparent text-center text-[10px] font-medium outline-none"
+                            className="w-[60px] bg-transparent text-center text-[10px] font-medium outline-none"
                             style={{ color: "#85d99f" }}
                           />
                           {/* Currency label */}
