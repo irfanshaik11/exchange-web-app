@@ -1410,6 +1410,28 @@ function SocialIconsWithMetadata({
         </div>
       )}
 
+      {/* Pump.fun pill - only for pump.fun launchpad tokens or Mayhem-mode tokens */}
+      {(() => {
+        const proto = (token as any).launchpad_protocol?.toLowerCase() || '';
+        const mintAddr = (token.mint || '').toLowerCase();
+        const isPumpToken = proto.includes('pump') || mintAddr.endsWith('pump');
+        const isMayhem = !!(token as any).is_mayhem_mode;
+        if (!isPumpToken && !isMayhem) return null;
+        return (
+          <button
+            className="flex items-center justify-center rounded p-1 transition-colors duration-200 hover:bg-white/10"
+            title="View on pump.fun"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (token.mint) window.open(`https://pump.fun/coin/${token.mint}`, '_blank');
+            }}
+          >
+            <LuPill size={12} className="text-neutral-400 hover:text-white" />
+          </button>
+        );
+      })()}
+
       {/* Search Icon with Dropdown - PHASE 3: JS-based fixed positioning */}
       <div className="relative flex items-center">
         <button
@@ -2281,29 +2303,30 @@ function TokenImage({
               )}
             </>
           )}
-          {/* Blacklist Dev Wallet */}
-          {blDevWallet && (
-            <>
-              <button
-                className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
-                style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistDev?.(blDevWallet); }}
-                onMouseEnter={(e) => { const tip = blacklistDevTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
-                onMouseLeave={() => { const tip = blacklistDevTipRef.current; if (tip) tip.style.opacity = "0"; }}
-              >
-                <LuChefHat size={13} style={{ color: "#e5e7eb" }} />
-              </button>
-              {createPortal(
-                <div
-                  ref={blacklistDevTipRef}
-                  className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-                  style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
-                >
-                  Blacklist Dev
-                </div>,
-                document.body
-              )}
-            </>
+          {/* Blacklist Dev Wallet — always shown on hover; disabled visual when no dev wallet is known */}
+          <button
+            className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
+            disabled={!blDevWallet}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (blDevWallet) onBlacklistDev?.(blDevWallet);
+            }}
+            onMouseEnter={(e) => { const tip = blacklistDevTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
+            onMouseLeave={() => { const tip = blacklistDevTipRef.current; if (tip) tip.style.opacity = "0"; }}
+          >
+            <FaRegEyeSlash size={13} style={{ color: "#e5e7eb" }} />
+          </button>
+          {createPortal(
+            <div
+              ref={blacklistDevTipRef}
+              className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
+              style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+            >
+              {blDevWallet ? "Blacklist dev" : "Dev wallet unknown"}
+            </div>,
+            document.body
           )}
         </div>
 
@@ -5060,6 +5083,27 @@ function PulseTable({
     [memoizedTokens],
   );
 
+  // Pause-on-hover: while the cursor is over the column, freeze the rendered
+  // list so live WS updates don't add/remove/reorder rows under the cursor.
+  // Snapshot once at hover-in and keep it stable; on hover-out, switch back
+  // to the live filtered list.
+  const [frozenTokens, setFrozenTokens] = useState<
+    typeof filteredTokensForDisplay | null
+  >(null);
+  // Track latest filtered list so the mouse-enter handler can snapshot the
+  // newest data without depending on a re-render.
+  const latestFilteredRef = useRef(filteredTokensForDisplay);
+  useEffect(() => {
+    latestFilteredRef.current = filteredTokensForDisplay;
+  }, [filteredTokensForDisplay]);
+  const handleListMouseEnter = useCallback(() => {
+    setFrozenTokens(latestFilteredRef.current);
+  }, []);
+  const handleListMouseLeave = useCallback(() => {
+    setFrozenTokens(null);
+  }, []);
+  const displayTokensForList = frozenTokens ?? filteredTokensForDisplay;
+
   const PULSE_ROW_HEIGHT = 110; // 100px content + 10px gap
 
   // Add wave animation for Meteora tokens with bonding_pct > 98.6% in Final Stretch ONLY
@@ -5401,6 +5445,10 @@ function PulseTable({
                   ? "Migrated"
                   : title}
           </span>
+          {/* Pause indicator — shown when the user hovers the column and the live feed is frozen */}
+          {frozenTokens !== null && (
+            <FaPause size={11} style={{ color: "#199F72" }} aria-label="Feed paused" />
+          )}
         </div>
 
         {/* Right side container for pill and filter */}
@@ -8021,8 +8069,13 @@ function PulseTable({
           </div>
         </div>
       ) : (
+        <div
+          className="flex min-h-0 flex-1 flex-col"
+          onMouseEnter={handleListMouseEnter}
+          onMouseLeave={handleListMouseLeave}
+        >
         <VirtualizedTokenList
-          items={filteredTokensForDisplay}
+          items={displayTokensForList}
           itemSize={PULSE_ROW_HEIGHT}
           renderRow={(token: any, idx: number, style: React.CSSProperties) => {
               // Use mint directly in URL path for cleaner architecture
@@ -8164,12 +8217,51 @@ function PulseTable({
                       totalTokens={memoizedTokens.length} 
                     />
                   </div> */}
-                        <span
-                          className="mt-2 mb-1 max-w-[60px] truncate font-mono text-[9px] lg:max-w-[70px] lg:text-[10px]"
-                          style={{ color: AX.muted }}
+                        <button
+                          type="button"
+                          title="Copy address"
+                          className="mt-2 mb-1 max-w-[60px] cursor-pointer truncate font-mono text-[9px] transition-colors duration-200 hover:text-white lg:max-w-[70px] lg:text-[10px]"
+                          style={{ color: AX.muted, background: "none", border: "none", padding: 0 }}
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const fullAddress = (token as any)?.mint || (token as any)?.pair_address || (token as any)?.address || "";
+                            if (!fullAddress) return;
+                            const button = e.currentTarget as HTMLButtonElement;
+                            const flashSuccess = () => {
+                              if (button && button.style) {
+                                const originalColor = button.style.color || AX.muted;
+                                button.style.color = AX.aiGreen;
+                                setTimeout(() => {
+                                  if (button && button.style) {
+                                    button.style.color = originalColor;
+                                  }
+                                }, 1000);
+                              }
+                            };
+                            try {
+                              await navigator.clipboard.writeText(fullAddress);
+                              showCenteredSuccessToast("Copied to clipboard");
+                              flashSuccess();
+                            } catch (err) {
+                              console.error("Failed to copy to clipboard:", err);
+                              const textArea = document.createElement("textarea");
+                              textArea.value = fullAddress;
+                              document.body.appendChild(textArea);
+                              textArea.select();
+                              try {
+                                document.execCommand("copy");
+                                showCenteredSuccessToast("Copied to clipboard");
+                                flashSuccess();
+                              } catch (fallbackErr) {
+                                console.error("Fallback copy failed:", fallbackErr);
+                              }
+                              document.body.removeChild(textArea);
+                            }
+                          }}
                         >
                           {shortAddr(token)}
-                        </span>
+                        </button>
                       </div>
                       {/* Main Info Section */}
                       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -9088,6 +9180,7 @@ function PulseTable({
               );
             }}
         />
+        </div>
       )}
       {/* Shared singleton tooltips (only 3 divs instead of N*3) */}
       <div

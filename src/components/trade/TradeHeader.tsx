@@ -1901,28 +1901,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 					</div>
 				</div>
 
-				{onToggleRightPanel && (
-					<button
-						className={`hidden lg:flex ml-0.5 sm:ml-1 cursor-pointer flex-shrink-0 items-center justify-center ${isRightPanelVisible ? "-mr-2" : ""}`}
-						title={isRightPanelVisible ? "Hide Trade Panel" : "Show Trade Panel"}
-						onClick={(e) => {
-							e.stopPropagation();
-							onToggleRightPanel();
-						}}
-						style={{ color: AX.muted }}
-					>
-						{isRightPanelVisible ? (
-							<div className="bg-[#27282E] py-1 px-0.5 rounded-sm border border-[#2d2f33]">
-								<ChevronRight size={16} />
-							</div>
-						) : (
-							<div className="bg-[#27282E] py-1 px-0.5 rounded-tl-sm rounded-bl-sm border border-[#2d2f33]">
-								<ChevronLeft size={16} />
-							</div>
-						)}
-					</button>
-				)}
-
 				{/* tiny toast */}
 				{toastMessage && (
 					<div className="fixed top-4 left-1/2 z-[99999] -translate-x-1/2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">

@@ -13,6 +13,7 @@ import { BsPersonGear } from "react-icons/bs";
 import { RiGhostLine } from "react-icons/ri";
 import { GoStack } from "react-icons/go";
 import { FiGlobe } from "react-icons/fi";
+import { LuPill } from "react-icons/lu";
 import InterstateButton from "./InterstateButton";
 import Image from 'next/image';
 import InterstateTooltip from './InterstateTooltip';
@@ -91,14 +92,15 @@ interface HeaderConfig {
 // Constants
 const TABLE_HEADERS: HeaderConfig[] = [
   { key: 'name', label: 'Pair Info', align: 'left', width: 'w-64' },
-  { key: null, label: '24h', align: 'center', width: 'w-24' }, // Mini sparkline
+  { key: null, label: '24h', align: 'center', width: 'w-32' }, // Mini sparkline
   { key: 'fully_diluted_value', label: 'Market Cap', align: 'right', width: 'w-32' },
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
+  { key: 'price_percent_change', label: 'Price %', align: 'center', width: 'w-20' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
   { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
   // { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
   { key: null, label: 'Token Info', align: 'center', width: 'w-40' },
-  { key: null, label: 'Action', align: 'center', width: 'w-32' },
+  { key: null, label: 'Quick Buy', align: 'center', width: 'w-32' },
 ];
 
 // Sniper Icon component
@@ -227,10 +229,22 @@ const getNewPairVolume = (token: Token, solPrice: number): number => {
 };
 
 const getTxns = (token: Token, timeframe: string): { total: number; buys: number; sells: number } => {
-  // Try the specific timeframe first
-  let buys = getNumber(token as any, `total_buys_${timeframe}`);
-  let sells = getNumber(token as any, `total_sells_${timeframe}`);
-  
+  // Try every known field-name variant the backend has used for this timeframe.
+  // Field names have shifted over time (total_buys_*, buys_*, buyCount*, total_buyers_*),
+  // so we read from each so the Txns column populates regardless of source.
+  const codexBuyKey = timeframe === '1h' ? 'buyCount1' : timeframe === '6h' ? 'buyCount6' : timeframe === '24h' ? 'buyCount24' : timeframe === '5m' ? 'buyCount5m' : '';
+  const codexSellKey = timeframe === '1h' ? 'sellCount1' : timeframe === '6h' ? 'sellCount6' : timeframe === '24h' ? 'sellCount24' : timeframe === '5m' ? 'sellCount5m' : '';
+  let buys =
+    getNumber(token as any, `total_buys_${timeframe}`) ||
+    getNumber(token as any, `buys_${timeframe}`) ||
+    (codexBuyKey ? getNumber(token as any, codexBuyKey) : 0) ||
+    getNumber(token as any, `total_buyers_${timeframe}`);
+  let sells =
+    getNumber(token as any, `total_sells_${timeframe}`) ||
+    getNumber(token as any, `sells_${timeframe}`) ||
+    (codexSellKey ? getNumber(token as any, codexSellKey) : 0) ||
+    getNumber(token as any, `total_sellers_${timeframe}`);
+
   if (buys > 0 || sells > 0) {
     return { total: buys + sells, buys, sells };
   }
@@ -299,6 +313,11 @@ const getSortableValue = (token: Token, key: string, selectedTimeframe?: string)
     const buys = getTokenStat(token, 'total_buys', selectedTimeframe);
     const sells = getTokenStat(token, 'total_sells', selectedTimeframe);
     return buys + sells;
+  }
+
+  // Handle Price % sorting based on the currently-selected timeframe
+  if (key === 'price_percent_change' && selectedTimeframe) {
+    return getTokenStat(token, 'price_percent_change', selectedTimeframe);
   }
   
   // Handle timestamp sorting for New Pairs (newest first)
@@ -459,6 +478,10 @@ const TableHeader: React.FC<{
         if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
           return null;
         }
+        // Hide Price % column for newPairs and dexscreener tabs
+        if (header.label === 'Price %' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+          return null;
+        }
         // Hide Token Info / Holders column for newPairs and dexscreener
         if (header.label === 'Token Info' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
           return null;
@@ -467,8 +490,8 @@ const TableHeader: React.FC<{
         if (header.label === 'Volume' && tableType === 'newPairs') {
           return null;
         }
-        // Show TXNS column only for newPairs
-        if (header.label === 'TXNS' && tableType !== 'newPairs') {
+        // Show TXNS column for newPairs and trending tabs (hidden for dexscreener)
+        if (header.label === 'TXNS' && tableType === 'dexscreener') {
           return null;
         }
         const hideOnNarrow = header.label === 'Token Info';
@@ -1092,6 +1115,35 @@ const TokenInfo: React.FC<{
               </button>
             )}
 
+            {/* Pump.fun pill - only for pump.fun launchpad tokens or Mayhem-mode tokens */}
+            {(() => {
+              const proto = (token as any).launchpad_protocol?.toLowerCase() || '';
+              const mintAddr = (token.mint || (token as any).mint_address || '').toLowerCase();
+              const isPumpToken = proto.includes('pump') || mintAddr.endsWith('pump');
+              const isMayhem = !!(token as any).is_mayhem_mode;
+              if (!isPumpToken && !isMayhem) return null;
+              return (
+                <button
+                  className="flex items-center justify-center rounded p-0.5 transition-colors duration-200 cursor-pointer hover:bg-white/10"
+                  style={{ color: AX.muted }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = '#85d99f';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = AX.muted;
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const addr = token.mint || (token as any).mint_address || '';
+                    if (addr) window.open(`https://pump.fun/coin/${addr}`, '_blank');
+                  }}
+                  title="View on pump.fun"
+                >
+                  <LuPill size={11} />
+                </button>
+              );
+            })()}
+
             {/* Search icon with dropdown menu */}
             <div
               className="relative"
@@ -1473,7 +1525,8 @@ const TxnsCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
   isDiscoverPage?: boolean;
-}> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
+  variant?: 'default' | 'compact';
+}> = ({ token, selectedTimeframe, isDiscoverPage = false, variant = 'default' }) => {
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
 
   // Always show transaction counts (no more rank display)
@@ -1486,6 +1539,39 @@ const TxnsCell: React.FC<{
     }
     return formatSmartNumber(value);
   };
+
+  // Compact variant - vertical buy/sell ratio bar + "buys / sells" numbers (used on trending)
+  if (variant === 'compact') {
+    const buyColor = isDiscoverPage ? '#85d99f' : '#34d399';
+    const sellColor = isDiscoverPage ? '#f26681' : '#f87171';
+    const ratio = total > 0 ? Math.max(0, Math.min(1, buys / total)) : 0.5;
+    const buyPct = total > 0 ? `${ratio * 100}%` : '50%';
+    const sellPct = total > 0 ? `${(1 - ratio) * 100}%` : '50%';
+
+    return (
+      <div className="flex items-center justify-end gap-2 h-full">
+        <div className="flex flex-col w-1 h-6 rounded-sm overflow-hidden" aria-hidden="true">
+          <div style={{ backgroundColor: buyColor, height: buyPct }} />
+          <div style={{ backgroundColor: sellColor, height: sellPct }} />
+        </div>
+        <div className="flex items-center text-sm font-medium">
+          <span className={isDiscoverPage ? 'number-font' : ''} style={{
+            color: buyColor,
+            ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
+          }}>
+            {formatTxnValue(buys)}
+          </span>
+          <span className="mx-1" style={{ color: AX.muted }}>/</span>
+          <span className={isDiscoverPage ? 'number-font' : ''} style={{
+            color: sellColor,
+            ...(isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' })
+          }}>
+            {formatTxnValue(sells)}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full justify-center">
@@ -2052,18 +2138,20 @@ const TableRow: React.FC<{
       }}
       onClick={onClick}
     >
-      <td className="w-64 px-4 py-4 align-middle">
+      <td className="w-64 px-4 py-2.5 align-middle">
         <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
 
       {/* 24h Mini Sparkline column - shows recent token price movement (hidden for newPairs and dexscreener) */}
       {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
-        <td className="w-24 px-2 py-4 align-middle">
-          <MiniSparkline token={token} width={80} height={32} />
+        <td className="w-32 px-2 py-2.5 align-middle">
+          <div className="flex justify-center">
+            <MiniSparkline token={token} width={120} height={32} />
+          </div>
         </td>
       )}
 
-      <td className="w-32 px-4 py-4 align-middle text-right">
+      <td className="w-32 px-4 py-2.5 align-middle text-right">
         <MarketCapCell
           token={token}
           selectedTimeframe={selectedTimeframe}
@@ -2072,7 +2160,7 @@ const TableRow: React.FC<{
         />
       </td>
 
-      <td className="w-28 px-4 py-4 align-middle text-right">
+      <td className="w-28 px-4 py-2.5 align-middle text-right">
         {/* {(() => {
           console.log('Liquidity Debug:', {
             tokenName: token.name,
@@ -2107,9 +2195,31 @@ const TableRow: React.FC<{
         })()}
       </td>
 
+      {/* Price % column - sits to the right of Liquidity (hidden for newPairs and dexscreener) */}
+      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
+        <td className="w-20 px-2 py-2.5 align-middle text-center">
+          {(() => {
+            const pct = getTokenStat(token, 'price_percent_change', selectedTimeframe);
+            const color = pct > 0 ? '#85d99f' : pct < 0 ? '#f26681' : AX.muted;
+            const formatted =
+              pct === 0
+                ? '0%'
+                : `${pct > 0 ? '' : '-'}${formatSmartNumber(Math.abs(pct))}%`;
+            return (
+              <span
+                className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`}
+                style={{ color }}
+              >
+                {formatted}
+              </span>
+            );
+          })()}
+        </td>
+      )}
+
       {/* Volume column - hidden for newPairs */}
       {tableType !== 'newPairs' && (
-      <td className="w-28 px-4 py-4 align-middle text-right">
+      <td className="w-28 px-4 py-2.5 align-middle text-right">
         <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
@@ -2123,15 +2233,15 @@ const TableRow: React.FC<{
       </td>
       )}
 
-      {tableType === 'newPairs' && (
-        <td className="w-24 px-4 py-4 align-middle text-right">
-          <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
+      {tableType !== 'dexscreener' && (
+        <td className="w-24 px-4 py-2.5 align-middle text-right">
+          <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} variant={tableType === 'newPairs' ? 'default' : 'compact'} />
         </td>
       )}
 
 
       {/* Gas Fees column - commented out per user request
-      <td className="w-28 px-4 py-4 align-middle text-right">
+      <td className="w-28 px-4 py-2.5 align-middle text-right">
         <div className={`text-base font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
           color: AX.text,
           ...(isDiscoverPage ? {} : {
@@ -2146,12 +2256,12 @@ const TableRow: React.FC<{
 
       {/* Token Info column - displays holder metrics from trending WebSocket (hidden for newPairs and dexscreener; hidden below xl so Action stays visible) */}
       {tableType !== 'dexscreener' && tableType !== 'newPairs' && (
-        <td className="w-40 px-2 py-4 align-middle hidden xl:table-cell">
+        <td className="w-40 px-2 py-2.5 align-middle hidden xl:table-cell">
           <TokenInfoCell token={token} isDiscoverPage={isDiscoverPage} tableType={tableType} />
         </td>
       )}
 
-      <td className="w-32 px-4 py-4 align-middle text-center">
+      <td className="w-32 px-4 py-2.5 align-middle text-center">
         {isDiscoverPage ? (
           <button
             onClick={handleQuickBuy}
