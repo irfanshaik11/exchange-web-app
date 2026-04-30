@@ -64,7 +64,7 @@ const MONAD_RED = "#f26682";
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
-	bg: "#111214",
+	bg: "#101114",
 	surface: "#1A1A1A",
 	surface2: "#17191E",
 	border: "#2A2B33",
@@ -1027,29 +1027,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	return (
 		<>
 			<div
-				className="relative flex w-full flex-row items-center gap-2 pl-1.5 py-1.5 sm:gap-4 sm:pl-2 sm:py-2 md:gap-8 lg:gap-10 !font-geist overflow-x-auto scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent"
+				className="relative flex w-full flex-row items-center gap-2 pl-1.5 py-1.5 sm:gap-4 sm:pl-2 sm:py-2 md:gap-8 lg:gap-10 !h-[60px] !font-geist overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent"
 				style={{ color: AX.text }}
 			>
 				{/* WS status banners hidden from users - errors logged to console only */}
 
 				{/* LEFT: token avatar + meta */}
 				<div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
-					{/* Star icon - far left */}
-					<button
-						onClick={handleWatchlistClick}
-						className="cursor-pointer flex-shrink-0 transition-colors hover:bg-white/10 rounded p-1"
-						aria-label={
-							isWatched ? "Remove from Watchlist" : "Add to Watchlist"
-						}
-						title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-					>
-						{isWatched ? (
-							<FaStar className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-yellow-400" />
-						) : (
-							<FaRegStar className="w-4 h-4 sm:w-3.5 sm:h-3.5" style={{ color: AX.muted }} />
-						)}
-					</button>
-
 					{/* Avatar with PulseTable-style border + protocol badge */}
 					<div
 						className="relative flex cursor-pointer items-center justify-center rounded-sm transition-all duration-300 ease-out"
@@ -1198,8 +1182,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 					{/* Name / symbol / age + quick actions */}
 					<div className="flex min-w-0 flex-1 flex-col">
 						<div className="flex items-center gap-1 sm:gap-1.5">
-							<span className="truncate text-xs sm:text-xl">{resolvedSymbol}</span>
-							<span className="hidden truncate text-[10px] sm:inline sm:text-base" style={{ color: AX.muted }}>
+							<span className="truncate text-[9px] sm:text-[15px]">{resolvedSymbol}</span>
+							<span className="hidden truncate text-[8px] sm:inline sm:text-xs" style={{ color: AX.muted }}>
 								{resolvedName}
 							</span>
 
@@ -1306,6 +1290,20 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 								style={{ color: AX.muted }}
 							>
 								<IoShareSocialOutline size={12} className="sm:w-3.5 sm:h-3.5" />
+							</button>
+
+							<button
+								onClick={handleWatchlistClick}
+								className="ml-0.5 sm:ml-1 cursor-pointer flex-shrink-0"
+								aria-label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+								title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+								style={{ color: AX.muted }}
+							>
+								{isWatched ? (
+									<FaStar size={12} className="sm:w-3.5 sm:h-3.5 text-yellow-400" />
+								) : (
+									<FaRegStar size={12} className="sm:w-3.5 sm:h-3.5" />
+								)}
 							</button>
 						</div>
 
@@ -1901,31 +1899,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 					</div>
 				</div>
 
-				{onToggleRightPanel && (
-					<button
-						className={`hidden lg:flex ml-0.5 sm:ml-1 cursor-pointer flex-shrink-0 items-center justify-center ${isRightPanelVisible ? "-mr-2" : ""}`}
-						title={isRightPanelVisible ? "Hide Trade Panel" : "Show Trade Panel"}
-						onClick={(e) => {
-							e.stopPropagation();
-							onToggleRightPanel();
-						}}
-						style={{ color: AX.muted }}
-					>
-						{isRightPanelVisible ? (
-							<div className="bg-[#27282E] py-1 px-0.5 rounded-sm border border-[#2d2f33]">
-								<ChevronRight size={16} />
-							</div>
-						) : (
-							<div className="bg-[#27282E] py-1 px-0.5 rounded-tl-sm rounded-bl-sm border border-[#2d2f33]">
-								<ChevronLeft size={16} />
-							</div>
-						)}
-					</button>
-				)}
-
 				{/* tiny toast */}
 				{toastMessage && (
-					<div className="fixed top-4 left-1/2 z-[99999] -translate-x-1/2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
+					<div className="fixed top-4 left-1/2 z-[99999] -translate-x-1/2 rounded-md bg-[#101114] px-3 py-1.5 text-sm text-white">
 						{toastMessage}
 					</div>
 				)}

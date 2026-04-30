@@ -5543,6 +5543,10 @@ Maker: ${walletAddress}`;
         onDataCallback: any,
         resolution: string,
       ) => {
+        // Timescale marks (Dev / User / Mayhem) disabled
+        onDataCallback([]);
+        return;
+
         const shouldLogMarks = marksLogCountRef.current % 10 === 1;
         try {
           const currentTradeData = latestTradeDataRef.current || [];

@@ -41,7 +41,7 @@ const CodexHolders = dynamic(() => import("../../components/trade/CodexHolders")
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
-  bg: "#0C0C0F",
+  bg: "#101114",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -240,9 +240,9 @@ export default function TradePage() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   
   // Minimum chart height (including header) - chart should never shrink below this
-  const MIN_CHART_HEIGHT = 277;
-  const DEFAULT_CHART_HEIGHT_RATIO = 0.5149;
-  const SSR_DEFAULT_CHART_HEIGHT = 713;
+  const MIN_CHART_HEIGHT = 336;
+  const DEFAULT_CHART_HEIGHT_RATIO = 0.623;
+  const SSR_DEFAULT_CHART_HEIGHT = 862;
   
   // Calculate responsive min/max based on viewport
   const getResponsiveLimits = useCallback(() => {
@@ -1239,9 +1239,9 @@ export default function TradePage() {
   return (
     <>
       <div
-        className="min-h-screen w-full flex flex-col overflow-y-auto"
+        className="min-h-screen w-full flex flex-col overflow-y-auto overflow-x-hidden"
         style={{
-          backgroundColor: "#111214",
+          backgroundColor: "#101114",
           color: AX.text,
           fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
         }}
@@ -1295,7 +1295,7 @@ export default function TradePage() {
               </div>
 
               {/* Separator line after TradeHeader */}
-              <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
+              <div className="px-3 border-b border-[#2A2B33]" />
 
               <div 
                 id="chart-container-wrapper"
@@ -1478,7 +1478,7 @@ export default function TradePage() {
 
           {/* RIGHT: action panel + reused image + similar tokens */}
           {isRightPanelVisible && (
-            <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col pb-12">
+            <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden md:flex flex-col pb-12">
 
               {/* Token Info / actions */}
               <div className="right-rail-panel token-info-panel">
@@ -1523,7 +1523,7 @@ export default function TradePage() {
           )}
 
           {/* Trade button for mobile */}
-          <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">
+          <div className="fixed bottom-0 left-0 w-full p-4 z-50 md:hidden mb-10">
             <button className="w-full bg-emerald-500 text-white p-2 rounded-lg cursor-pointer"
                     onClick={() => setShowMobileTradeModal(true)}>
               Trade
@@ -1535,10 +1535,10 @@ export default function TradePage() {
 
       {/* Mobile Trade Modal */}
       {showMobileTradeModal && (
-        <div className="fixed inset-0 z-[100] lg:hidden">
+        <div className="fixed inset-0 z-[100] md:hidden">
           <div className={`absolute inset-0 bg-black/70 bg-opacity-50 transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`} onClick={closeModal}/>
           <div ref={modalDragRef}
-               className={`absolute bottom-0 left-0 right-0 bg-[#111214] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
+               className={`absolute bottom-0 left-0 right-0 bg-[#101114] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
                style={{ touchAction: "none" }}>
             <div className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing select-none"
                  onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}

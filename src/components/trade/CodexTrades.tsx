@@ -61,7 +61,7 @@ interface TradeFilters {
 }
 
 const AX = {
-  bg: "#111214",
+  bg: "#101114",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -1601,18 +1601,18 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           key={n.keyPart || n.idx}
           style={{
             ...style,
-            backgroundColor: index % 2 === 0 ? "#111214" : "#161719",
+            backgroundColor: index % 2 === 0 ? "#101114" : "#161719",
           }}
           className="!font-geist flex items-center !text-[13px] transition-colors hover:brightness-110"
         >
           {/* Age / Time */}
-          <div className="w-[12%] truncate px-4 text-[13px] text-[#757e80]">
+          <div className="w-[15%] truncate px-4 text-[13px] text-[#757e80]">
             {showAge ? <TokenAge createdAt={n.timestampSec} /> : timeStr}
           </div>
 
           {/* Type */}
           <div
-            className={`w-[10%] px-2 text-[13px] font-medium ${
+            className={`w-[13%] px-2 text-[13px] font-medium ${
               n.isBuy ? "text-emerald-400" : "text-red-400"
             }`}
           >
@@ -1620,18 +1620,18 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* MC / Price */}
-          <div className="w-[13%] truncate px-2 text-[13px] text-[#c4cccc]">
+          <div className="w-[15%] truncate px-2 text-[13px] text-[#c4cccc]">
             {mcMode === "mc" ? mcStr : priceStr}
           </div>
 
           {/* Amount */}
-          <div className="w-[15%] truncate px-2 text-[13px] text-[#c4cccc]">
+          <div className="w-[17%] truncate px-2 text-[13px] text-[#c4cccc]">
             {tokenAmountStr}
           </div>
 
           {/* merged Total column */}
           <div
-            className="flex w-[15%] items-center self-stretch px-2 text-[13px] font-medium"
+            className="flex w-[17%] items-center self-stretch px-2 text-[13px] font-medium"
             style={
               showingUsd || hasSol
                 ? {
@@ -1664,7 +1664,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Trader */}
-          <div className="w-[35%] px-2 text-right align-middle text-[13px] text-[#c4cccc]">
+          <div className="w-[23%] px-2 text-right align-middle text-[13px] text-[#c4cccc]">
             <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2">
               {(() => {
                 const walletKey = (n.maker || "").toLowerCase();
@@ -1805,7 +1805,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-[#111214]">
+    <div className="flex h-full w-full flex-col bg-[#101114]">
       {/* Filter Popout */}
       {activeFilterPopout && (
         <FilterPopout
@@ -1841,15 +1841,15 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
         position={filterPopoutPosition}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col bg-[#111214]">
+      <div className="flex min-h-0 flex-1 flex-col bg-[#101114]">
         {/* Column header — sits above virtual list, not inside it */}
         <div
-          className="!font-geist flex items-center border-t border-b border-[#27282e] bg-[#111214] !text-xs"
+          className="!font-geist flex items-center border-t border-b border-[#27282e] bg-[#101114] !text-xs"
           style={{ flexShrink: 0 }}
         >
           {/* Age / Time */}
           <div
-            className="w-[12%] px-4 py-3 text-left whitespace-nowrap"
+            className="w-[15%] px-4 py-3 text-left whitespace-nowrap"
             style={{ color: "#9ca3af" }}
           >
             <button
@@ -1868,7 +1868,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Type */}
-          <div className="w-[10%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+          <div className="w-[13%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
             <div className="flex items-center gap-1">
               <span className="text-[13px] font-medium">Type</span>
               <button
@@ -1897,7 +1897,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* MC / Price column with filter */}
-          <div className="w-[13%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+          <div className="w-[15%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -1925,7 +1925,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Amount with filter */}
-          <div className="w-[15%] px-2 py-3 text-left font-medium whitespace-nowrap">
+          <div className="w-[17%] px-2 py-3 text-left font-medium whitespace-nowrap">
             <SortableHeader
               label="Amount"
               sortDirection={filters.amount.sort}
@@ -1939,7 +1939,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Total USD / SOL/MON toggle column with filter */}
-          <div className="w-[15%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
+          <div className="w-[17%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -1977,7 +1977,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           </div>
 
           {/* Trader */}
-          <div className="w-[35%] px-2 py-3 text-right whitespace-nowrap text-[#757e80]">
+          <div className="w-[23%] px-2 py-3 text-right whitespace-nowrap text-[#757e80]">
             <div className="flex items-center justify-end gap-1">
               <span className="text-[13px] font-normal text-[#757e80]">
                 Trader
@@ -2014,11 +2014,11 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
         {/* Virtualized trade rows (or loading/empty states) */}
         {isLoading ? (
-          <div className="bg-[#111214] py-6 text-center text-neutral-500">
+          <div className="bg-[#101114] py-6 text-center text-neutral-500">
             Loading trades...
           </div>
         ) : !normalized.length ? (
-          <div className="bg-[#111214] py-6 text-center text-neutral-500">
+          <div className="bg-[#101114] py-6 text-center text-neutral-500">
             No trades available.
           </div>
         ) : (
@@ -2027,14 +2027,14 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
             itemSize={44}
             renderRow={renderTradeRow}
             overscanCount={10}
-            className="bg-[#111214]"
+            className="bg-[#101114]"
           />
         )}
 
         {/* p95 heat footer */}
         {!!p95Display && (
           <div
-            className="flex items-center gap-2 bg-[#111214] px-2 py-1.5 text-[10px]"
+            className="flex items-center gap-2 bg-[#101114] px-2 py-1.5 text-[10px]"
             style={{ color: "#6b7280", flexShrink: 0 }}
           >
             <span className="inline-block">

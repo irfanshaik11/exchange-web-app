@@ -1070,10 +1070,10 @@ export default function MonadTradePage() {
             <div id="tabs-pane" className="flex-1 flex flex-col min-h-0" style={{ overflow: 'hidden' }}>
               {/* Tab Header */}
               <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between flex-shrink-0">
-                <div className="flex gap-4 items-center">
+                <div className="flex gap-4 items-center overflow-x-auto scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent min-w-0 flex-1">
                   <button
                     onClick={() => setSelectedTab("Transactions")}
-                    className={`px-3 py-1 font-semibold transition-colors ${
+                    className={`px-3 py-1 font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
                       selectedTab === "Transactions"
                         ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
@@ -1084,7 +1084,7 @@ export default function MonadTradePage() {
                   </button>
                   <button
                     onClick={() => setSelectedTab("Top Traders")}
-                    className={`px-3 py-1 font-semibold transition-colors ${
+                    className={`px-3 py-1 font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
                       selectedTab === "Top Traders"
                         ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
@@ -1095,7 +1095,7 @@ export default function MonadTradePage() {
                   </button>
                   <button
                     onClick={() => setSelectedTab("Holders")}
-                    className={`px-3 py-1 font-semibold transition-colors ${
+                    className={`px-3 py-1 font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
                       selectedTab === "Holders"
                         ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
@@ -1106,7 +1106,7 @@ export default function MonadTradePage() {
                   </button>
                   <button
                     onClick={() => setSelectedTab("Dev Tokens")}
-                    className={`px-3 py-1 font-semibold transition-colors ${
+                    className={`px-3 py-1 font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
                       selectedTab === "Dev Tokens"
                         ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
@@ -1117,7 +1117,7 @@ export default function MonadTradePage() {
                   </button>
                 </div>
                 <button
-                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full ml-auto"
+                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full ml-auto flex-shrink-0 whitespace-nowrap"
                   style={{ backgroundColor: AX.bg, color: AX.mint }}
                   onClick={() => setIsInstantTradeOpen(true)}
                 >
@@ -1157,14 +1157,14 @@ export default function MonadTradePage() {
           </div>
 
           {/* RIGHT: action panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col overflow-y-auto h-full pb-12">
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden md:flex flex-col overflow-y-auto h-full pb-12">
             <div className="right-rail-panel token-info-panel">
               <MonadTradeActionPanel token={displayToken as any} />
             </div>
           </div>
 
           {/* Trade button for mobile */}
-          <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">
+          <div className="fixed bottom-0 left-0 w-full p-4 z-50 md:hidden mb-10">
             <button className="w-full bg-emerald-500 text-white p-2 rounded-lg cursor-pointer"
                     onClick={() => setShowMobileTradeModal(true)}>
               Trade
@@ -1175,7 +1175,7 @@ export default function MonadTradePage() {
 
       {/* Mobile Trade Modal */}
       {showMobileTradeModal && (
-        <div className="fixed inset-0 z-[100] lg:hidden">
+        <div className="fixed inset-0 z-[100] md:hidden">
           <div className={`absolute inset-0 bg-black/70 bg-opacity-50 transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`} onClick={closeModal}/>
           <div ref={modalDragRef}
                className={`absolute bottom-0 left-0 right-0 bg-[#111214] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}

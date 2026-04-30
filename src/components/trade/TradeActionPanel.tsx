@@ -278,7 +278,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
   const insiderCount = token?.insider_count ?? undefined;
 
   return (
-    <div className="border-t border-[#2A2B33]">
+    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: '#101114' }}>
       <div className="flex items-center justify-between px-3 py-2">
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -313,7 +313,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
       {isOpen && (
         <div className="px-3 pb-3 space-y-2" style={{ backgroundColor: AX.bg }}>
           {/* Tax Percentage - Large Display */}
-          {/* <div className="rounded-md p-2.5 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+          {/* <div className="rounded-md p-2.5 border" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
             <div className="text-center">
               <div className="text-[12px] font-bold mb-0.5" style={{ color: AX.muted }}>
                 {token?.tax_percentage ? `${token.tax_percentage}%` : '0%'}
@@ -328,7 +328,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Token Metrics Grid - First Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Top 10 Holders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <BsPersonGear size={16} style={{ color: AX.aiGreen }} />
@@ -342,7 +342,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
 
             {/* Dev Holdings - with hover popout */}
             <div className="relative group h-[68px]">
-              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
                 <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <LuChefHat size={16} style={{ color: AX.aiGreen }} />
@@ -456,7 +456,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
 
             {/* Sniper Holdings - with first buyers hover popout */}
             <div className="relative group/snipers h-[68px]">
-              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
                 <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
                     <FaCrosshairs size={16} style={{ color: AX.aiGreen }} />
@@ -580,7 +580,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Token Metrics Grid - Second Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Insider Holdings */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <RiGhostLine size={16} style={{ color: AX.aiGreen }} />
@@ -598,7 +598,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* Bundle Holdings */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaDice size={16} style={{ color: AX.aiGreen }} />
@@ -616,7 +616,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* LP Burned */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaFire size={16} style={{ color: AX.aiGreen }} />
@@ -635,7 +635,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Additional Metrics - Third Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Holders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <FaUsers className="text-white" size={16} />
@@ -648,7 +648,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* Pro Traders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <BiCandles className="text-white" size={16} />
@@ -661,7 +661,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
             </div>
 
             {/* Dex Paid */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
                   <img 
@@ -763,7 +763,7 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
       </button>
 
       {isOpen && (
-        <div style={{ backgroundColor: '#111214' }}>
+        <div style={{ backgroundColor: '#101114' }}>
           {/* Liquidity Section */}
           <div className="px-3 py-2.5 space-y-2">
             {/* Total Liquidity */}
@@ -3169,10 +3169,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   return (
     <div
       className="flex flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#111214', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
+      style={{ backgroundColor: '#101114', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
     >
-      {/* ===== A. Time buttons ===== */}
-      <div className="px-3 pt-2 pb-2 border-neutral-800">
+      <div className="group">
+      {/* ===== A. Time buttons (revealed on stats hover) ===== */}
+      <div className="px-3 pt-2 pb-2 border-neutral-800 hidden group-hover:block">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
           <div className="flex rounded-xl border border-neutral-700">
             {(["5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
@@ -3232,7 +3233,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== B. Real-time Stats ===== */}
-      <div className="px-3 py-1.5 border-b border-[#2A2B33]">
+      <div className="px-3 py-1.5 border-b border-[#2A2B33] !h-[60px] flex flex-col justify-center">
         <div className="grid grid-cols-4 gap-3 tabular-nums">
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide whitespace-nowrap">
@@ -3268,11 +3269,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           <div className="absolute right-0 top-0 h-full" style={{ width: `${sellPercentage}%`, background: AX.sell }} />
         </div>
       </div>
+      </div>
 
       {/* ===== C. Buy/Sell switcher ===== */}
       <div className="px-3 py-1.5 -mt-px border-b border-[#2A2B33]">
         <div className="mx-auto w-full max-w-xl relative">
-          <div className="relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
+          <div className="relative h-9 rounded-lg border border-[#2A2B33] bg-[#101114] overflow-hidden">
             <div
               className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
               style={{
@@ -3395,7 +3397,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       {/* ===== F. Amount ===== */}
       <div className="px-3 pt-2">
         <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B]">
-          <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+          <div className="flex items-center justify-between gap-3 px-3 py-0.5">
             <div className="flex items-center gap-1">
               <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
                 {isSniperMode ? "Sniper Amount" : "Amount"}
@@ -3404,7 +3406,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 type="text"
                 inputMode="decimal"
                 pattern="[0-9]*[.,]?[0-9]*"
-                className="h-8 w-20 bg-transparent border-none text-left pl-2
+                className="h-6 w-20 bg-transparent border-none text-left pl-2
                            text-[12px] font-normal text-[#E6E7EA] tabular-nums
                            placeholder:text-[#9CA3AF] focus:outline-none"
                 style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
@@ -3480,7 +3482,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             const isSellWithPosition = mode === "sell" && positionData && positionData.remaining > 0;
             const isBuyWithPrice = mode === "buy" && effectiveBuyTokenPrice > 0;
             const showSubtext = isSellWithPosition || isBuyWithPrice;
-            const presetRowHeight = showSubtext ? "h-12" : "h-9";
+            const presetRowHeight = showSubtext ? "h-9" : "h-7";
             return (
           <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
             <div className="grid grid-cols-5">
@@ -3498,7 +3500,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="h-full w-full bg-[#25282B] text-center text-[12px] font-semibold text-[#E6E7EA]
+                        className="h-full w-full bg-[#101114] text-center text-[12px] font-semibold text-[#E6E7EA]
                                    outline-none focus:bg-[#1E1F26]"
                         value={presetDrafts[i] ?? ""}
                         onChange={(e) => {
@@ -3525,7 +3527,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       `${presetRowHeight} border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums`,
                       active
                         ? "bg-[#2A2B33] text-[#E6E7EA]"
-                        : "bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                        : "bg-[#101114] hover:bg-[#1E1F26] text-[#E6E7EA]"
                     )}
                     onClick={() => {
                       if (isSniperMode) {
@@ -3552,7 +3554,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingPresets(true)}
-                  className={`${presetRowHeight} bg-[#25282B] hover:bg-[#1E1F26] text-[#E6E7EA]`}
+                  className={`${presetRowHeight} bg-[#101114] hover:bg-[#1E1F26] text-[#E6E7EA]`}
                   title="Edit preset values"
                 >
                   <LuPencil className="mx-auto h-4 w-4" />
@@ -3945,7 +3947,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
@@ -3974,7 +3976,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
@@ -4003,7 +4005,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#25282B] border border-[#2A2B33]">
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
           <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
@@ -4051,7 +4053,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               : 'PnL: realized (from closed sells). Click to switch to unrealized.'
           }
           onClick={() => setPnlMode((m) => (m === 'unrealized' ? 'realized' : 'unrealized'))}
-          className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33] hover:bg-[#1E1F26] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#70E0B0] transition-colors cursor-pointer"
+          className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33] hover:bg-[#1E1F26] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#70E0B0] transition-colors cursor-pointer"
         >
           <span className="flex items-center gap-1 text-[9px] text-[#9CA3AF] uppercase tracking-wide">
             {pnlMode === 'unrealized' ? 'UPnL' : 'PnL'}

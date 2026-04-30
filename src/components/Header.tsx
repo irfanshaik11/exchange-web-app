@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import {
   FaSearch,
   FaStar,
+  FaRegStar,
   FaChevronLeft,
   FaChevronRight,
   FaBell,
@@ -1840,7 +1841,7 @@ export default function Header({
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-md border transition-all duration-200 lg:hidden"
+              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-md border transition-all duration-200 md:hidden"
               style={{
                 borderColor: AX.border,
                 color: AX.text,
@@ -1874,8 +1875,8 @@ export default function Header({
               </h3>
             </Link>
 
-            {/* Navigation container with arrows - hidden on small/medium, visible from lg */}
-            <div className="relative hidden min-w-0 flex-1 items-center gap-0 overflow-hidden sm:gap-1 lg:flex">
+            {/* Navigation container with arrows - hidden on small, visible from md (50% web app width) */}
+            <div className="relative hidden min-w-0 flex-1 items-center gap-0 overflow-hidden sm:gap-1 md:flex">
               {/* Left arrow - hidden on very small screens to save space (user can swipe nav) */}
               {showLeftArrow && (
                 <button
@@ -1921,9 +1922,7 @@ export default function Header({
                       className={`flex min-h-[44px] flex-shrink-0 items-center rounded-md px-2.5 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3 sm:py-1 sm:text-sm`}
                       style={{
                         color: isActive ? "#18c48c" : "#9ca3af",
-                        backgroundColor: isActive
-                          ? "rgba(24, 196, 140, 0.1)"
-                          : "transparent",
+                        backgroundColor: "transparent",
                         position: "relative",
                         zIndex: 1001,
                         pointerEvents: "auto",
@@ -1933,14 +1932,11 @@ export default function Header({
                       onMouseEnter={(e) => {
                         if (!isActive) {
                           e.currentTarget.style.color = "#18c48c";
-                          e.currentTarget.style.backgroundColor =
-                            "rgba(24, 196, 140, 0.08)";
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!isActive) {
                           e.currentTarget.style.color = "#9ca3af";
-                          e.currentTarget.style.backgroundColor = "transparent";
                         }
                       }}
                     >
@@ -2119,7 +2115,7 @@ export default function Header({
                               }
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-[32px] bg-transparent text-center text-[10px] font-medium outline-none"
+                            className="w-[60px] bg-transparent text-center text-[10px] font-medium outline-none"
                             style={{ color: "#85d99f" }}
                           />
                           {/* Currency label */}
@@ -2221,7 +2217,7 @@ export default function Header({
                 {/* Search button (desktop) - squarish pill */}
                 <button
                   onClick={() => openSearch()}
-                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-md border px-3 transition-all duration-200 ease-out lg:flex"
+                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-md border px-3 transition-all duration-200 ease-out md:flex"
                   style={{
                     backgroundColor: "rgba(13, 16, 21, 0.8)",
                     borderColor: AX.border,
@@ -2920,10 +2916,10 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div className="flex flex-nowrap items-center gap-1 overflow-hidden bg-[#0C0C0F] px-2 py-1 sm:gap-2 sm:px-3 sm:py-0.5">
+          <div className="flex h-10 flex-nowrap items-center gap-1 overflow-hidden bg-[#0A0B0D] px-2 sm:gap-2 sm:px-3 border-t border-b border-white/15">
             <div
-              className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-3 py-1"
-              style={{ background: "#13151b" }}
+              className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-2"
+              style={{ background: "#0A0B0D" }}
             >
               {/* COMMENTED OUT: Active Positions icon — may re-enable later
             <div className="group relative">
@@ -2978,21 +2974,21 @@ export default function Header({
             </div>
             END COMMENTED OUT: Active Positions icon */}
 
-              {/* Watchlist label button — opens watchlist modal */}
+              {/* Watchlist icon button — opens watchlist modal */}
               <button
-                className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1"
+                className="flex shrink-0 cursor-pointer items-center justify-center px-1.5 py-1"
                 style={{ color: "#c5cdd8" }}
                 onClick={() => setWatchlistOpen(true)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(255, 255, 255, 0.06)";
+                  e.currentTarget.style.color = "#ffffff";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
+                  e.currentTarget.style.color = "#c5cdd8";
                 }}
+                aria-label="Watchlist"
+                title="Watchlist"
               >
-                <span className="text-xs font-medium">Watchlist</span>
-                <FaSortAmountDown size={10} style={{ color: "#8b94a5" }} />
+                <FaRegStar size={13} />
               </button>
 
               {/* COMMENTED OUT: Watchlist Star icon — replaced with text label above
@@ -3048,13 +3044,11 @@ export default function Header({
             </div>
             END COMMENTED OUT: Watchlist Star icon */}
 
-              {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
-              {isHydrated && watchlist.length > 0 && (
-                <div
-                  className="h-4 border-r"
-                  style={{ borderColor: "#262a35" }}
-                />
-              )}
+              {/* Divider after watchlist icon */}
+              <div
+                className="h-3.5 border-r"
+                style={{ borderColor: "#262a35" }}
+              />
 
               {/* COMMENTED OUT: "All" dropdown — replaced by "Watchlist" label above
             {isHydrated && watchlist.length > 0 && (
@@ -3221,12 +3215,12 @@ export default function Header({
       {mobileMenuOpen && (
         <>
           <div
-            className="fixed inset-0 z-[10003] bg-black/60 transition-opacity duration-200 lg:hidden"
+            className="fixed inset-0 z-[10003] bg-black/60 transition-opacity duration-200 md:hidden"
             aria-hidden
             onClick={() => setMobileMenuOpen(false)}
           />
           <div
-            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#0a0b0d] shadow-2xl lg:hidden"
+            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#0a0b0d] shadow-2xl md:hidden"
             style={{ borderColor: AX.border }}
             role="dialog"
             aria-modal="true"
