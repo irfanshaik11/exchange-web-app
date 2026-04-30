@@ -5439,7 +5439,7 @@ function PulseTable({
             className="hidden flex-shrink-0 items-center justify-center gap-1 rounded-md border px-2 sm:flex"
             style={{
               borderColor: AX.border,
-              backgroundColor: "#272a2e",
+              backgroundColor: "#101114",
               paddingTop: "4px",
               paddingBottom: "4px",
               width: "90px",

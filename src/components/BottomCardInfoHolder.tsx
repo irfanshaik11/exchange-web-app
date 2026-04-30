@@ -114,7 +114,7 @@ const BottomCardHolderInfo: React.FC<BottomCardInfoHolderProps> = ({
 
   // Determine the color to use - prioritize explicit iconColor, then risk colors, then legacy green/red
   const color = iconColor || riskColors.text || (green ? "#31e3ac" : "#f26681");
-  const bgColor = "transparent";
+  const bgColor = "#101114";
   const borderColor = useRiskColors && !iconColor ? riskColors.border : "#27282e";
 
   // Update tooltip position when shown
