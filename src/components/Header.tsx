@@ -2214,10 +2214,10 @@ export default function Header({
                   </div>
                 )}
 
-                {/* Search button (desktop) - squarish pill */}
+                {/* Search button (desktop) - squarish pill; collapses to icon-only below lg */}
                 <button
                   onClick={() => openSearch()}
-                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-md border px-3 transition-all duration-200 ease-out md:flex"
+                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-md border px-2 transition-all duration-200 ease-out md:flex lg:px-3"
                   style={{
                     backgroundColor: "rgba(13, 16, 21, 0.8)",
                     borderColor: AX.border,
@@ -2233,10 +2233,10 @@ export default function Header({
                   }}
                 >
                   <FaSearch size={11} />
-                  <span className="text-xs whitespace-nowrap text-neutral-500">
+                  <span className="hidden text-xs whitespace-nowrap text-neutral-500 lg:inline">
                     Search
                   </span>
-                  <span className="ml-2 rounded border border-neutral-700/60 bg-neutral-800/60 px-1.5 py-0.5 text-[10px] leading-none text-neutral-400">
+                  <span className="ml-2 hidden rounded border border-neutral-700/60 bg-neutral-800/60 px-1.5 py-0.5 text-[10px] leading-none text-neutral-400 lg:inline-block">
                     /
                   </span>
                 </button>

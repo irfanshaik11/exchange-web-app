@@ -3310,7 +3310,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== D. Tabs ===== */}
       <div className="px-3 pt-1 pb-1.5 border-b border-[#2A2B33]">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center justify-center gap-6">
           {(["market", "limit", "adv"] as const).map((t) => (
             <button
               key={t}

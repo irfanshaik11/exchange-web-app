@@ -123,12 +123,12 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
   // For Monad, only allow 'trending' and 'newPairs' tabs
   // Initialize activeTab from localStorage to persist across navigation
   // Default is 'trending' - changed key to reset user preferences
-  const [activeTab, setActiveTab] = useState<'trending' | 'trending2' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>(() => {
+  const [activeTab, setActiveTab] = useState<'trending' | 'trending2' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live' | 'gainers' | 'top'>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('discover_tab_v3');
-        if (saved && ['trending', 'trending2', 'newPairs', 'xStocks', 'surge', 'dex', 'live'].includes(saved)) {
-          const savedTab = saved as 'trending' | 'trending2' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live';
+        if (saved && ['trending', 'trending2', 'newPairs', 'xStocks', 'surge', 'dex', 'live', 'gainers', 'top'].includes(saved)) {
+          const savedTab = saved as 'trending' | 'trending2' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live' | 'gainers' | 'top';
           // Check if we're on monad chain - if so, only allow trending or newPairs
           const urlParams = new URLSearchParams(window.location.search);
           const initialChain = urlParams.get('chain') || 'sol';
@@ -161,6 +161,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
       setActiveTab('trending');
     }
   }, [currentChain, activeTab]);
+
+  // Gainers and Top tabs render the same trending data as the Trending tab
+  const isTrendingDataTab = activeTab === 'trending' || activeTab === 'gainers' || activeTab === 'top';
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -565,7 +568,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     timeframe: selectedTimeframe,
     chain: currentChain,
     // Only enable for Monad or non-trending tabs
-    limit: (currentChain === 'monad' || activeTab !== 'trending') ? 500 : 0
+    limit: (currentChain === 'monad' || !isTrendingDataTab) ? 500 : 0
   });
 
   // Use WebSocket for Solana trending - real-time updates!
@@ -580,8 +583,8 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     lastUpdate: wsLastUpdate,
   } = useTrendingWebSocket({
     timeframe: trendingWsTimeframe, // Just for filtering which data to return
-    // Only enable for Solana chain on trending tab
-    enabled: currentChain === 'sol' && activeTab === 'trending',
+    // Only enable for Solana chain on trending-style tabs (Trending, Gainers, Top)
+    enabled: currentChain === 'sol' && isTrendingDataTab,
   });
 
   // DexScreener trending (Trending 2 tab)
@@ -590,17 +593,17 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
 
   // Merge data sources: WebSocket for Solana trending, fallback for everything else
   const allTokens = useMemo(() => {
-    if (currentChain === 'sol' && activeTab === 'trending') {
+    if (currentChain === 'sol' && isTrendingDataTab) {
       // Use WebSocket data for Solana trending
       return wsTokens as unknown as TokenWithDexPaid[];
     }
     return fallbackTokens;
-  }, [currentChain, activeTab, wsTokens, fallbackTokens]);
+  }, [currentChain, isTrendingDataTab, wsTokens, fallbackTokens]);
 
-  const tokensLoading = currentChain === 'sol' && activeTab === 'trending' ? wsLoading : fallbackLoading;
-  const isConnected = currentChain === 'sol' && activeTab === 'trending' ? wsConnected : fallbackConnected;
-  const tokenError = currentChain === 'sol' && activeTab === 'trending' ? wsError : fallbackError;
-  const isReconnecting = currentChain === 'sol' && activeTab === 'trending' ? wsReconnecting : fallbackReconnecting;
+  const tokensLoading = currentChain === 'sol' && isTrendingDataTab ? wsLoading : fallbackLoading;
+  const isConnected = currentChain === 'sol' && isTrendingDataTab ? wsConnected : fallbackConnected;
+  const tokenError = currentChain === 'sol' && isTrendingDataTab ? wsError : fallbackError;
+  const isReconnecting = currentChain === 'sol' && isTrendingDataTab ? wsReconnecting : fallbackReconnecting;
 
   // Log when hook data changes to track chain switching
   useEffect(() => {
@@ -609,11 +612,11 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
       activeTab,
       tokenCount: allTokens?.length || 0,
       loading: tokensLoading,
-      usingWebSocket: currentChain === 'sol' && activeTab === 'trending',
+      usingWebSocket: currentChain === 'sol' && isTrendingDataTab,
       wsConnected,
       wsLastUpdate,
     });
-  }, [allTokens, tokensLoading, currentChain, activeTab, wsConnected, wsLastUpdate]);
+  }, [allTokens, tokensLoading, currentChain, activeTab, isTrendingDataTab, wsConnected, wsLastUpdate]);
 
   // Featured tokens for Monad trending section
   const [featuredTokens, setFeaturedTokens] = useState<TokenWithDexPaid[]>([]);
@@ -3086,7 +3089,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
   // For Solana trending, we use wsTokens directly (React state) instead of tokenMapRef (ref)
   // This prevents flicker during tab switches because wsTokens is properly tracked by React
   useEffect(() => {
-    if (activeTab === "trending") {
+    if (isTrendingDataTab) {
       // CRITICAL FIX: For Solana trending, use wsTokens directly instead of tokenMapRef
       // This prevents data mixing and flicker when switching tabs because:
       // 1. wsTokens is React state from useTrendingWebSocket, properly tracked
@@ -3623,7 +3626,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
   const renderPrimaryTable = () => {
     if (displayed.length > 0) {
       return (
-        <section aria-label="Trending" className={activeTab === "trending" ? "pb-16" : ""}>
+        <section aria-label="Trending" className={isTrendingDataTab ? "pb-16" : ""}>
           <InterstateTable
             rows={displayed.map((token, i) => ({
               token: token as Token,
@@ -3646,7 +3649,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     // Otherwise, an empty `displayed` means the filter correctly excluded everything.
     if (!discoverHasActive && allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
       return (
-        <section aria-label="Trending" className={activeTab === "trending" ? "pb-16" : ""}>
+        <section aria-label="Trending" className={isTrendingDataTab ? "pb-16" : ""}>
           <InterstateTable
             rows={allTokens.map((token, i) => ({
               token: token as Token,
@@ -3814,19 +3817,19 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           {/* Tabs Section - Scrollable on mobile */}
           <div className="scrollbar-hide -mx-4 flex min-w-0 flex-1 items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
             <button
-              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("trending"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
               Trending
             </button>
             {/* <button
-              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending2" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium ${activeTab === "trending2" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("trending2"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
               Trending 2
             </button> */}
             <button
-              className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("newPairs"); setShowDiscoverFilter(false); setSortKey("timestamp"); setSortDirection("desc"); }}
             >
               New Pairs
@@ -3849,7 +3852,19 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                   Surge
                 </button> */}
                 <button
-                  className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium ${activeTab === "gainers" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  onClick={() => { setActiveTab("gainers"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
+                >
+                  Gainers
+                </button>
+                <button
+                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium ${activeTab === "top" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  onClick={() => { setActiveTab("top"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
+                >
+                  Top
+                </button>
+                <button
+                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
                   onClick={() => { setActiveTab("live"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
                   Pump Live
@@ -3880,13 +3895,13 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
               activeTab !== "xStocks" &&
               activeTab !== "surge" &&
               // Show timeframes for Solana trending with WebSocket support
-              (activeTab !== "trending" || currentChain === "sol") && (
+              (!isTrendingDataTab || currentChain === "sol") && (
                 <div className={`relative h-7 min-w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
-                  {/* For trending tab, only show 5m, 1h, 6h (WebSocket supported timeframes) */}
-                  {((activeTab === "trending" ? ["5m", "1h", "6h"] : ["5m", "1h", "6h", "24h"]) as Timeframe[]).map(
+                  {/* For trending-style tabs, only show 5m, 1h, 6h (WebSocket supported timeframes) */}
+                  {((isTrendingDataTab ? ["5m", "1h", "6h"] : ["5m", "1h", "6h", "24h"]) as Timeframe[]).map(
                     (tf: Timeframe) => (
                       <button
-                          className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
+                          className={`flex h-5 cursor-pointer items-center justify-center rounded px-1 text-sm font-medium leading-none whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
                         onClick={() => handleTimeframeClick(tf)}
                         onMouseEnter={variant !== 'popup' ? (e) => { if (selectedTimeframe !== tf) e.currentTarget.style.color = "#f0f5f5"; } : undefined}
                         onMouseLeave={variant !== 'popup' ? (e) => { if (selectedTimeframe !== tf) e.currentTarget.style.color = ""; } : undefined}
@@ -4058,7 +4073,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                     className="relative flex items-center justify-center"
                   >
                     <button
-                      className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
+                      className={`flex h-5 cursor-pointer items-center justify-center rounded px-1 text-sm font-medium leading-none transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
                       onClick={() => {
                         setSelectedPill(pill);
                         setActivePreset(presetIndex);
@@ -4149,8 +4164,8 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
 
         {/* Main Content */}
         <main className="relative z-10 w-full flex-1 overflow-y-auto min-h-0">
-          {/* Always-mounted: Trending — hidden via CSS when not active */}
-          <div style={{ display: activeTab === 'trending' ? undefined : 'none' }}>
+          {/* Always-mounted: Trending (also used for Gainers and Top tabs) — hidden via CSS when not active */}
+          <div style={{ display: isTrendingDataTab ? undefined : 'none' }}>
             {renderPrimaryTable()}
           </div>
 
