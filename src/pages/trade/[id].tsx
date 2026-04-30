@@ -468,6 +468,14 @@ export default function TradePage() {
           created_at: normalizedTokenCreatedAt ?? normalizedOptimisticCreatedAt,
           launch_time: normalizedTokenLaunchTime ?? normalizedOptimisticLaunchTime,
           image: token.image ?? token.image_url ?? token.logo ?? (baseOptimistic as any).image,
+          // Mayhem Mode is always sourced from the live WS snapshot if
+          // available — REST `token` and `optimisticToken` may not carry the
+          // flag yet because their payloads pre-date this feature.
+          is_mayhem_mode:
+            (wsTokenInfo as any)?.is_mayhem_mode ??
+            (token as any).is_mayhem_mode ??
+            (baseOptimistic as any).is_mayhem_mode ??
+            false,
         };
       }
     }
@@ -489,6 +497,17 @@ export default function TradePage() {
           pair_address: cachedTokenMetadata.pair_address || "",
           created_at: normalizedCacheCreatedAt || normalizedOptCreatedAt || null,
           liquidity_usd: (cachedTokenMetadata as any).liquidity_usd ?? (baseOptimistic as any).liquidity_usd,
+          // Cache may not carry Mayhem flag (entries written before the feature
+          // shipped). Always prefer the live WS snapshot value when available.
+          is_mayhem_mode:
+            (wsTokenInfo as any)?.is_mayhem_mode ??
+            (cachedTokenMetadata as any).is_mayhem_mode ??
+            (baseOptimistic as any).is_mayhem_mode ??
+            false,
+          launch_time:
+            (cachedTokenMetadata as any).launch_time ||
+            (wsTokenInfo as any)?.launch_time ||
+            (baseOptimistic as any).launch_time,
         };
       }
     }
@@ -505,6 +524,17 @@ export default function TradePage() {
           market_cap_usd: optimisticToken.market_cap_usd ?? wsTokenInfo.market_cap_usd,
           liquidity_usd: optimisticToken.liquidity_usd ?? wsTokenInfo.liquidity_usd,
           created_at: optimisticToken.created_at || wsTokenInfo.created_at,
+          launch_time:
+            (optimisticToken as any).launch_time ||
+            (wsTokenInfo as any).launch_time ||
+            optimisticToken.created_at ||
+            wsTokenInfo.created_at,
+          // Mayhem Mode passthrough — explicit construction would otherwise
+          // strip the flag. Prefer the freshest WS snapshot value.
+          is_mayhem_mode:
+            (wsTokenInfo as any).is_mayhem_mode ??
+            (optimisticToken as any).is_mayhem_mode ??
+            false,
         };
       }
       return optimisticToken;
@@ -522,6 +552,9 @@ export default function TradePage() {
         market_cap_usd: wsTokenInfo.market_cap_usd,
         liquidity_usd: wsTokenInfo.liquidity_usd,
         created_at: wsTokenInfo.created_at,
+        launch_time:
+          (wsTokenInfo as any).launch_time || wsTokenInfo.created_at,
+        is_mayhem_mode: !!(wsTokenInfo as any).is_mayhem_mode,
       };
     }
 
@@ -535,7 +568,14 @@ export default function TradePage() {
     return null;
   }, [token, cachedTokenMetadata, optimisticToken, idString, isRouterReady, wsTokenInfo]);
 
-  // Validate correctTokenData matches current id to prevent showing stale data
+  // Validate correctTokenData matches current id to prevent showing stale data.
+  //
+  // CRITICAL: correctTokenData is fetched from /v1/search which doesn't carry
+  // `is_mayhem_mode` or `launch_time`. The trade page's <TradeHeader> prop
+  // priority is `validatedCorrectTokenData || displayToken`, so when the
+  // search-fetched object wins, Mayhem visual treatment never lights up
+  // even though displayToken has the flag. We overlay the WS snapshot's
+  // Mayhem fields here so whichever branch wins, the flag flows through.
   const validatedCorrectTokenData = React.useMemo(() => {
     if (!correctTokenData) return null;
 
@@ -546,11 +586,21 @@ export default function TradePage() {
       correctTokenData.address === idString;
 
     if (matchesId) {
-      return correctTokenData;
+      return {
+        ...correctTokenData,
+        is_mayhem_mode:
+          (wsTokenInfo as any)?.is_mayhem_mode ??
+          correctTokenData.is_mayhem_mode ??
+          false,
+        launch_time:
+          (wsTokenInfo as any)?.launch_time ||
+          correctTokenData.launch_time ||
+          correctTokenData.created_at,
+      };
     }
 
     return null;
-  }, [correctTokenData, idString]);
+  }, [correctTokenData, idString, wsTokenInfo]);
 
   // Fetch search data (launchpad_protocol, created_at, image) and creator address
   // Triggered by resolvedTokenMint so it fires even when useSingleTokenPolling returns null

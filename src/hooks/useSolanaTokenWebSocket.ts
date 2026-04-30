@@ -141,6 +141,11 @@ export interface SolanaTokenInfo {
   holder_count?: number;
   // Fee tracking
   total_fees_lamports?: number;
+  // Mayhem Mode — true when the token is inside the 24h Mayhem hot window.
+  // Drives the trade header's red image border, red protocol bubble with
+  // Mayhem.webp icon, and the inline 24h fire countdown badge.
+  is_mayhem_mode?: boolean;
+  launch_time?: string;
 }
 
 // Volume data for a specific timeframe

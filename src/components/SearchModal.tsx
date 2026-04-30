@@ -17,6 +17,7 @@ import { fetchTokenMetadata } from "~/utils/functions";
 import { extractMetaImage } from "~/utils/images";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import FastImage from "./FastImage";
+import { TokenCountdown24h } from "./TokenCountdown24h";
 import { IoShareSocialOutline } from "react-icons/io5";
 import { LuPill, LuSearch } from "react-icons/lu";
 import type { Timeframe } from "../pages/index";
@@ -76,6 +77,10 @@ export interface Token {
   amm: string;
   uri: string;
   pair_address: string; // Added for consistency
+  // Mayhem Mode flag — drives red borders, Mayhem.webp protocol icon,
+  // and the 24h fire countdown badge in the search results.
+  is_mayhem_mode?: boolean;
+  launch_time?: string;
 }
 
 export type SortOption = "smart" | "time" | "market_cap" | "volume_1h" | "liquidity";
@@ -945,7 +950,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
               token.launchpad_protocol ||
               token.launchpad_name ||
               token.protocol,
-          } as Token & { launchpad_protocol?: string };
+            // Mayhem Mode — propagate from the raw API response so the row's
+            // red border + protocol icon swap + countdown badge can render.
+            is_mayhem_mode: !!token.is_mayhem_mode,
+            launch_time: token.launch_time || token.created_at,
+          } as Token & { launchpad_protocol?: string; is_mayhem_mode?: boolean; launch_time?: string };
         });
 
         // Only set results if this is still the latest request
@@ -1303,6 +1312,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
         launchpad_protocol: (token as any).launchpad_protocol,
         chain: chain,
         resolvedImageUrl: resolvedImageByMint.get(token.mint) || undefined,
+        // Persist Mayhem fields so the recent-searches list keeps showing the
+        // red treatment + countdown for tokens still inside the 24h window.
+        is_mayhem_mode: !!(token as any).is_mayhem_mode,
+        launch_time: (token as any).launch_time,
+        created_at: token.created_at,
       };
       addToHistory(historyItem, user?.id);
       isDev && console.log("Saved to search history:", { userId: user?.id, token: historyItem.symbol });
@@ -1866,10 +1880,10 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           <div
                             className="relative rounded-lg transition-all duration-200 group-hover:scale-105"
                             style={{
-                              border: `2px solid ${itemProtocolColor}`,
+                              border: `2px solid ${(item as any).is_mayhem_mode ? "#c83c51" : itemProtocolColor}`,
                               padding: 2,
                               backgroundColor: "#06070b",
-                              boxShadow: `0 0 8px ${itemProtocolColor}20`,
+                              boxShadow: `0 0 8px ${(item as any).is_mayhem_mode ? "#c83c5120" : `${itemProtocolColor}20`}`,
                             }}
                           >
                             <div className="relative h-12 w-12 overflow-hidden rounded-md sm:h-14 sm:w-14">
@@ -1893,10 +1907,17 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               width: 20,
                               height: 20,
                               backgroundColor: "#000000",
-                              border: `1px solid ${itemProtocolColor}`,
-                              boxShadow: `0 0 4px ${itemProtocolColor}60`,
+                              border: `1px solid ${(item as any).is_mayhem_mode ? "#c83c51" : itemProtocolColor}`,
+                              boxShadow: `0 0 4px ${(item as any).is_mayhem_mode ? "#c83c5160" : `${itemProtocolColor}60`}`,
                             }}
                           >
+                            {(item as any).is_mayhem_mode ? (
+                              <img
+                                src="/Mayhem.webp"
+                                alt="Mayhem Mode"
+                                className="h-3/4 w-3/4 rounded-full object-contain"
+                              />
+                            ) : (
                             <img
                               src={itemProtocolIcon}
                               alt="Protocol logo"
@@ -1911,6 +1932,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                                 (e.target as HTMLImageElement).style.display = "none";
                               }}
                             />
+                            )}
                           </div>
                         </div>
                         {/* Token Info */}
@@ -1930,6 +1952,14 @@ const SearchModalContent = React.memo(function SearchModalContent({
                             <span>
                               L: <span className="font-medium text-white">${liq}</span>
                             </span>
+                            {(item as any).is_mayhem_mode && (
+                              <TokenCountdown24h
+                                startedAt={
+                                  (item as any).launch_time ||
+                                  (item as any).created_at
+                                }
+                              />
+                            )}
                           </div>
                         </div>
                         {/* Quick Action */}
@@ -2146,6 +2176,19 @@ const TokenListItem = React.memo(
     const searchRouter = useRouter();
     const mcColor = getMarketCapColor(mcRaw);
     const tokenIsNew = isNewToken(token.created_at);
+    // TEMP DIAGNOSTIC — verify the Mayhem flag is reaching this row.
+    // Remove once confirmed working in the search modal.
+    if ((token as any).is_mayhem_mode) {
+      // eslint-disable-next-line no-console
+      console.log("[SearchModal Mayhem token]", {
+        symbol: token.symbol,
+        mint: token.mint?.slice(0, 8),
+        is_mayhem_mode: (token as any).is_mayhem_mode,
+        launch_time: (token as any).launch_time,
+        created_at: token.created_at,
+        launchpad_protocol: (token as any).launchpad_protocol,
+      });
+    }
     const tokenIsTrending = isTrendingToken(token);
     const [logoUrl, setLogoUrl] = useState<string | null>(
       // Prioritize uri (metadata JSON with image) over logo (often empty)
@@ -2564,10 +2607,10 @@ const TokenListItem = React.memo(
                     <div
                       className="relative rounded-lg transition-all duration-200 group-hover:scale-105"
                       style={{
-                        border: `2px solid ${protocolColor}`,
+                        border: `2px solid ${(token as any).is_mayhem_mode ? "#c83c51" : protocolColor}`,
                         padding: 2,
                         backgroundColor: "#06070b",
-                        boxShadow: `0 0 8px ${protocolColor}20`,
+                        boxShadow: `0 0 8px ${(token as any).is_mayhem_mode ? "#c83c5120" : `${protocolColor}20`}`,
                       }}
                     >
                       <div className="relative h-11 w-11 overflow-hidden rounded-md">
@@ -2588,10 +2631,17 @@ const TokenListItem = React.memo(
                   <div
                     className="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#080808] bg-[#080808] transition-transform duration-200 group-hover:scale-110"
                     style={{
-                      borderColor: protocolColor,
-                      boxShadow: `0 0 6px ${protocolColor}50`,
+                      borderColor: (token as any).is_mayhem_mode ? "#c83c51" : protocolColor,
+                      boxShadow: `0 0 6px ${(token as any).is_mayhem_mode ? "#c83c5150" : `${protocolColor}50`}`,
                     }}
                   >
+                    {(token as any).is_mayhem_mode ? (
+                      <img
+                        src="/Mayhem.webp"
+                        alt="Mayhem Mode"
+                        className="h-3/4 w-3/4 rounded-full object-contain"
+                      />
+                    ) : (
                     <img
                       src={tokenIcon}
                       alt="Protocol logo"
@@ -2606,6 +2656,7 @@ const TokenListItem = React.memo(
                         (e.target as HTMLImageElement).style.display = "none";
                       }}
                     />
+                    )}
                   </div>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -2655,6 +2706,14 @@ const TokenListItem = React.memo(
               <span className="rounded-md bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-semibold text-neutral-300">
                 {ageLabel}
               </span>
+              {(token as any).is_mayhem_mode && (
+                <TokenCountdown24h
+                  startedAt={
+                    (token as any).launch_time ||
+                    (token as any).created_at
+                  }
+                />
+              )}
               <div className="relative flex items-center gap-2 text-neutral-500">
                 <button
                   type="button"
@@ -2789,10 +2848,10 @@ const TokenListItem = React.memo(
                   <div
                     className="relative rounded-lg transition-all duration-200"
                     style={{
-                      border: `2px solid ${protocolColor}`,
+                      border: `2px solid ${(token as any).is_mayhem_mode ? "#c83c51" : protocolColor}`,
                       padding: 2,
                       backgroundColor: "#06070b",
-                      boxShadow: `0 0 8px ${protocolColor}20`,
+                      boxShadow: `0 0 8px ${(token as any).is_mayhem_mode ? "#c83c5120" : `${protocolColor}20`}`,
                     }}
                   >
                     <div className="relative h-14 w-14 overflow-hidden rounded-md">
@@ -2813,10 +2872,17 @@ const TokenListItem = React.memo(
                 <div
                   className="pointer-events-none absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#080808] bg-[#080808] transition-transform duration-200 group-hover:scale-110"
                   style={{
-                    borderColor: protocolColor,
-                    boxShadow: `0 0 6px ${protocolColor}50`,
+                    borderColor: (token as any).is_mayhem_mode ? "#c83c51" : protocolColor,
+                    boxShadow: `0 0 6px ${(token as any).is_mayhem_mode ? "#c83c5150" : `${protocolColor}50`}`,
                   }}
                 >
+                  {(token as any).is_mayhem_mode ? (
+                    <img
+                      src="/Mayhem.webp"
+                      alt="Mayhem Mode"
+                      className="h-3/4 w-3/4 rounded-full object-contain"
+                    />
+                  ) : (
                   <img
                     src={tokenIcon}
                     alt="Protocol logo"
@@ -2831,6 +2897,7 @@ const TokenListItem = React.memo(
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
                   />
+                  )}
                 </div>
               </div>
 
@@ -2864,6 +2931,14 @@ const TokenListItem = React.memo(
                   <span className="rounded-md bg-[#1a1a1a] px-2 py-0.5 text-xs font-semibold text-neutral-300">
                     {ageLabel}
                   </span>
+                  {(token as any).is_mayhem_mode && (
+                    <TokenCountdown24h
+                      startedAt={
+                        (token as any).launch_time ||
+                        (token as any).created_at
+                      }
+                    />
+                  )}
                   <div className="relative flex items-center gap-2.5 text-neutral-500">
                     <button
                       type="button"
