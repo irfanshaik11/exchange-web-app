@@ -1922,9 +1922,7 @@ export default function Header({
                       className={`flex min-h-[44px] flex-shrink-0 items-center rounded-md px-2.5 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3 sm:py-1 sm:text-sm`}
                       style={{
                         color: isActive ? "#18c48c" : "#9ca3af",
-                        backgroundColor: isActive
-                          ? "rgba(24, 196, 140, 0.1)"
-                          : "transparent",
+                        backgroundColor: "transparent",
                         position: "relative",
                         zIndex: 1001,
                         pointerEvents: "auto",
@@ -1934,14 +1932,11 @@ export default function Header({
                       onMouseEnter={(e) => {
                         if (!isActive) {
                           e.currentTarget.style.color = "#18c48c";
-                          e.currentTarget.style.backgroundColor =
-                            "rgba(24, 196, 140, 0.08)";
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!isActive) {
                           e.currentTarget.style.color = "#9ca3af";
-                          e.currentTarget.style.backgroundColor = "transparent";
                         }
                       }}
                     >
@@ -2222,7 +2217,7 @@ export default function Header({
                 {/* Search button (desktop) - squarish pill */}
                 <button
                   onClick={() => openSearch()}
-                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-md border px-3 transition-all duration-200 ease-out lg:flex"
+                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-md border px-3 transition-all duration-200 ease-out md:flex"
                   style={{
                     backgroundColor: "rgba(13, 16, 21, 0.8)",
                     borderColor: AX.border,

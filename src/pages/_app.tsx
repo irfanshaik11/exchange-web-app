@@ -920,7 +920,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#1E1F26',
+            background: '#101114',
             color: '#E6E7EA',
             border: '1px solid #4B5563',
             borderRadius: '12px',

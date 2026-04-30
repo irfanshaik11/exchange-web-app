@@ -1027,7 +1027,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	return (
 		<>
 			<div
-				className="relative flex w-full flex-row items-center gap-2 pl-1.5 py-1.5 sm:gap-4 sm:pl-2 sm:py-2 md:gap-8 lg:gap-10 !font-geist overflow-x-auto scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent"
+				className="relative flex w-full flex-row items-center gap-2 pl-1.5 py-1.5 sm:gap-4 sm:pl-2 sm:py-2 md:gap-8 lg:gap-10 !h-[80px] !font-geist overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent"
 				style={{ color: AX.text }}
 			>
 				{/* WS status banners hidden from users - errors logged to console only */}
@@ -1182,8 +1182,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 					{/* Name / symbol / age + quick actions */}
 					<div className="flex min-w-0 flex-1 flex-col">
 						<div className="flex items-center gap-1 sm:gap-1.5">
-							<span className="truncate text-xs sm:text-xl">{resolvedSymbol}</span>
-							<span className="hidden truncate text-[10px] sm:inline sm:text-base" style={{ color: AX.muted }}>
+							<span className="truncate text-[9px] sm:text-[15px]">{resolvedSymbol}</span>
+							<span className="hidden truncate text-[8px] sm:inline sm:text-xs" style={{ color: AX.muted }}>
 								{resolvedName}
 							</span>
 
@@ -1901,7 +1901,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
 				{/* tiny toast */}
 				{toastMessage && (
-					<div className="fixed top-4 left-1/2 z-[99999] -translate-x-1/2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
+					<div className="fixed top-4 left-1/2 z-[99999] -translate-x-1/2 rounded-md bg-[#101114] px-3 py-1.5 text-sm text-white">
 						{toastMessage}
 					</div>
 				)}
