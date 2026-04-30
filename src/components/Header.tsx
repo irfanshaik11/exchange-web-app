@@ -103,7 +103,7 @@ const _stableEnrichedWatchlist: Token[] = [];
 
 /* ---- style palette ---- */
 const AX = {
-  bg: "#0a0b0d",
+  bg: "#050608",
   surface: "#0d1015",
   surface2: "#12141a",
   border: "rgba(255,255,255,0.06)",
@@ -1830,11 +1830,11 @@ export default function Header({
   return (
     <>
       <header
-        className={`${isSticky ? "sticky top-0 z-[9999]" : "relative z-[9999]"} w-full max-w-[100vw] overflow-x-hidden bg-[#0a0b0d] backdrop-blur-sm`}
+        className={`${isSticky ? "sticky top-0 z-[9999]" : "relative z-[9999]"} w-full max-w-[100vw] overflow-x-hidden bg-[#050608] backdrop-blur-sm`}
       >
         <div
           className="flex max-w-full flex-nowrap items-center justify-between gap-1 px-2 py-2 md:px-4"
-          style={{ backgroundColor: "#0a0b0d" }}
+          style={{ backgroundColor: "#050608" }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2 md:gap-3">
 						{/* Hamburger button */}
@@ -2916,10 +2916,10 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div className="flex h-10 flex-nowrap items-center gap-1 overflow-hidden bg-[#0A0B0D] px-2 sm:gap-2 sm:px-3 border-t border-b border-white/15">
+          <div className="flex flex-nowrap items-center gap-1 overflow-hidden bg-[#050608] px-2 py-1 sm:gap-2 sm:px-3 sm:py-0.5">
             <div
-              className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-2"
-              style={{ background: "#0A0B0D" }}
+              className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md px-3 py-1"
+              style={{ background: "#13151b" }}
             >
               {/* COMMENTED OUT: Active Positions icon — may re-enable later
             <div className="group relative">
@@ -2974,21 +2974,21 @@ export default function Header({
             </div>
             END COMMENTED OUT: Active Positions icon */}
 
-              {/* Watchlist text button — opens watchlist modal */}
+              {/* Watchlist label button — opens watchlist modal */}
               <button
-                className="flex shrink-0 cursor-pointer items-center justify-center px-1.5 py-1 text-xs font-medium"
+                className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1"
                 style={{ color: "#c5cdd8" }}
                 onClick={() => setWatchlistOpen(true)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.color = "#ffffff";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(255, 255, 255, 0.06)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.color = "#c5cdd8";
+                  e.currentTarget.style.backgroundColor = "transparent";
                 }}
-                aria-label="Watchlist"
-                title="Watchlist"
               >
-                Watchlist
+                <span className="text-xs font-medium">Watchlist</span>
+                <FaSortAmountDown size={10} style={{ color: "#8b94a5" }} />
               </button>
 
               {/* COMMENTED OUT: Watchlist Star icon — replaced with text label above
@@ -3044,11 +3044,13 @@ export default function Header({
             </div>
             END COMMENTED OUT: Watchlist Star icon */}
 
-              {/* Divider after watchlist icon */}
-              <div
-                className="h-3.5 border-r"
-                style={{ borderColor: "#262a35" }}
-              />
+              {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
+              {isHydrated && watchlist.length > 0 && (
+                <div
+                  className="h-4 border-r"
+                  style={{ borderColor: "#262a35" }}
+                />
+              )}
 
               {/* COMMENTED OUT: "All" dropdown — replaced by "Watchlist" label above
             {isHydrated && watchlist.length > 0 && (
@@ -3220,7 +3222,7 @@ export default function Header({
             onClick={() => setMobileMenuOpen(false)}
           />
           <div
-            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#0a0b0d] shadow-2xl md:hidden"
+            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#050608] shadow-2xl md:hidden"
             style={{ borderColor: AX.border }}
             role="dialog"
             aria-modal="true"

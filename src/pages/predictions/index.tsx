@@ -249,24 +249,23 @@ export default function PredictionsPage() {
           <Header />
         </div>
 
-        {/* Restricted regions — flush banner directly under the header (IP-aware label) */}
-        <div
-          className="flex items-center justify-center gap-1.5 py-1.5 relative z-[9999]"
-          style={{
-            backgroundColor: 'rgba(248,113,113,0.08)',
-            borderBottom: '1px solid rgba(248,113,113,0.18)',
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-          <span className="text-[11px] font-medium" style={{ color: '#F87171' }}>
-            {geoblockStatus?.blocked && geoblockStatus.country
-              ? `Trading unavailable in ${geoblockStatus.country}`
-              : 'Trading unavailable in restricted regions'}
-          </span>
+        {/* Rounded content wrapper — slight inset from viewport edges */}
+        <div className="flex-1 flex flex-col rounded-t-2xl border border-white/[0.06] overflow-hidden mx-2 mt-3">
+
+        {/* Restricted regions — discreet pill notice inside the card (IP-aware label) */}
+        <div className="flex justify-center pt-2.5 pb-1">
+          <div className="inline-flex items-center justify-center gap-1.5 px-8 py-1 rounded-full border border-red-500/25 bg-red-500/[0.08]">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span className="text-[10.5px] font-medium text-red-400/90">
+              {geoblockStatus?.blocked && geoblockStatus.country
+                ? `Trading unavailable in ${geoblockStatus.country}`
+                : 'Trading unavailable in restricted regions'}
+            </span>
+          </div>
         </div>
 
         {/* Navigation — sidebar or top bar based on user preference */}
@@ -717,6 +716,7 @@ export default function PredictionsPage() {
 
           <Footer />
 
+        </div>
         </div>
       </div>
 
