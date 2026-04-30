@@ -5442,7 +5442,7 @@ function PulseTable({
               backgroundColor: "#272a2e",
               paddingTop: "4px",
               paddingBottom: "4px",
-              width: "65px",
+              width: "90px",
               height: "26px",
             }}
           >
