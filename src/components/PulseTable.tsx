@@ -5060,7 +5060,7 @@ function PulseTable({
     [memoizedTokens],
   );
 
-  const PULSE_ROW_HEIGHT = 104; // 100px content + 4px gap
+  const PULSE_ROW_HEIGHT = 110; // 100px content + 10px gap
 
   // Add wave animation for Meteora tokens with bonding_pct > 98.6% in Final Stretch ONLY
   // PERFORMANCE: Skip this effect entirely for New Pairs and Migrated columns
@@ -5442,7 +5442,7 @@ function PulseTable({
               backgroundColor: "#272a2e",
               paddingTop: "4px",
               paddingBottom: "4px",
-              width: "65px",
+              width: "90px",
               height: "26px",
             }}
           >

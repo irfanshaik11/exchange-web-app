@@ -2974,9 +2974,9 @@ export default function Header({
             </div>
             END COMMENTED OUT: Active Positions icon */}
 
-              {/* Watchlist icon button — opens watchlist modal */}
+              {/* Watchlist text button — opens watchlist modal */}
               <button
-                className="flex shrink-0 cursor-pointer items-center justify-center px-1.5 py-1"
+                className="flex shrink-0 cursor-pointer items-center justify-center px-1.5 py-1 text-xs font-medium"
                 style={{ color: "#c5cdd8" }}
                 onClick={() => setWatchlistOpen(true)}
                 onMouseEnter={(e) => {
@@ -2988,7 +2988,7 @@ export default function Header({
                 aria-label="Watchlist"
                 title="Watchlist"
               >
-                <FaRegStar size={13} />
+                Watchlist
               </button>
 
               {/* COMMENTED OUT: Watchlist Star icon — replaced with text label above

@@ -3810,9 +3810,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
             </div>
 
         {/* Tab Navigation - in popup variant use Trenches-style bordered pill container */}
-        <div className={`relative z-10 mt-3 mb-4 flex flex-shrink-0 flex-col gap-3 px-4 sm:mt-4 sm:px-6 lg:gap-6 lg:px-8 ${variant === 'popup' ? 'lg:flex-col' : 'lg:flex-row lg:items-center lg:justify-between'}`}>
+        <div className={`relative z-10 mt-3 mb-4 flex flex-shrink-0 gap-3 px-4 sm:mt-4 sm:px-6 lg:gap-6 lg:px-8 ${variant === 'popup' ? 'flex-col' : 'flex-row items-center justify-between'}`}>
           {/* Tabs Section - Scrollable on mobile */}
-          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
+          <div className="scrollbar-hide -mx-4 flex min-w-0 flex-1 items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0 lg:pb-0">
             <button
               className={`text-sm whitespace-nowrap transition-colors sm:text-base lg:text-xl font-medium ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("trending"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
@@ -3865,7 +3865,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           </div>
 
           {/* Right controls - In popup take full width and wrap to next line(s); otherwise row on desktop */}
-          <div className={`flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4 ${variant === 'popup' ? 'w-full' : ''}`}>
+          <div className={`flex items-center gap-2 sm:gap-3 lg:gap-4 ${variant === 'popup' ? 'w-full flex-wrap' : 'flex-nowrap flex-shrink-0'}`}>
             {/* Connection status - commented out per user request */}
             {/* <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
