@@ -91,11 +91,11 @@ interface HeaderConfig {
 // Constants
 const TABLE_HEADERS: HeaderConfig[] = [
   { key: 'name', label: 'Pair Info', align: 'left', width: 'w-64' },
+  { key: null, label: '24h', align: 'center', width: 'w-24' }, // Mini sparkline
   { key: 'fully_diluted_value', label: 'Market Cap', align: 'right', width: 'w-32' },
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
   { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
-  // { key: null, label: '24h', align: 'center', width: 'w-24' }, // Mini chart column
   // { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
   { key: null, label: 'Token Info', align: 'center', width: 'w-40' },
   { key: null, label: 'Action', align: 'center', width: 'w-32' },
@@ -455,10 +455,10 @@ const TableHeader: React.FC<{
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => {
         let label = header.label;
-        // 24h mini chart column commented out
-        // if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
-        //   return null;
-        // }
+        // Hide 24h sparkline column for newPairs and dexscreener tabs
+        if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+          return null;
+        }
         // Hide Token Info / Holders column for newPairs and dexscreener
         if (header.label === 'Token Info' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
           return null;
@@ -2056,6 +2056,13 @@ const TableRow: React.FC<{
         <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
 
+      {/* 24h Mini Sparkline column - shows recent token price movement (hidden for newPairs and dexscreener) */}
+      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
+        <td className="w-24 px-2 py-4 align-middle">
+          <MiniSparkline token={token} width={80} height={32} />
+        </td>
+      )}
+
       <td className="w-32 px-4 py-4 align-middle text-right">
         <MarketCapCell
           token={token}
@@ -2122,12 +2129,6 @@ const TableRow: React.FC<{
         </td>
       )}
 
-      {/* 24h Mini Chart column - commented out
-      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
-        <td className="w-24 px-2 py-4 align-middle">
-          <MiniSparkline token={token} width={80} height={40} />
-        </td>
-      )} */}
 
       {/* Gas Fees column - commented out per user request
       <td className="w-28 px-4 py-4 align-middle text-right">

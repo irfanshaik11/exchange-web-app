@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from "react";
+import { createPortal } from "react-dom";
 import { LuPencil, LuCheck, LuArrowLeftRight } from "react-icons/lu";
 import { formatSmartNumber, formatMarketCap, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
-import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt, FaTrophy, FaDice, FaUsers, FaChartBar, FaCrown, FaCrosshairs, FaFire } from "react-icons/fa";
+import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt, FaTrophy, FaDice, FaUsers, FaChartBar, FaCrown, FaCrosshairs, FaFire, FaWallet, FaCheck } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
 import { createLimitOrder, tradeBuy, tradeSellPercentage, getLimitOrderExecutionResult, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
@@ -1207,7 +1208,103 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, [mode, tab, timeRange, amount, targetMC, sliderPct, updateExternalParams]);
 
   const { presets: qbPresets, activePreset } = useQuickBuy();
-  const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds, primaryWalletAddresses } = useUser();
+  const {
+    user,
+    solBalance,
+    refreshBalance,
+    walletList,
+    walletBalances,
+    selectedWalletIds,
+    primaryWalletAddresses,
+    setSelectedWalletsForChain,
+    selectAllWalletsForChain,
+    selectWalletsWithFunds,
+  } = useUser();
+
+  // Wallet picker (Solana) — selection state lives in UserContext, this just wires
+  // the trigger button + dropdown UI on top of the trade tabs.
+  const [walletPickerOpen, setWalletPickerOpen] = useState(false);
+  const walletPickerRef = useRef<HTMLDivElement | null>(null);
+  const walletTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const walletDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [walletPickerAnchor, setWalletPickerAnchor] = useState<{ top: number; right: number } | null>(null);
+  const [copiedWalletAddr, setCopiedWalletAddr] = useState<string | null>(null);
+
+  const solWallets = useMemo(
+    () => (walletList || []).filter((w: any) => w?.solanaAddress && !w?.isArchived),
+    [walletList]
+  );
+  const selectedWalletSet = useMemo(
+    () => new Set<string>(selectedWalletIds?.sol || []),
+    [selectedWalletIds?.sol]
+  );
+  const selectedWalletCount = solWallets.filter((w: any) => selectedWalletSet.has(w.id)).length;
+  const allWalletsSelected = solWallets.length > 0 && selectedWalletCount === solWallets.length;
+  const totalSelectedSolBalance = solWallets
+    .filter((w: any) => selectedWalletSet.has(w.id))
+    .reduce((acc: number, w: any) => {
+      const addr = (w.solanaAddress || "").trim();
+      const bal = addr ? walletBalances?.[addr] ?? w.balance ?? 0 : 0;
+      return acc + (bal || 0);
+    }, 0);
+
+  // Click-outside to close the wallet picker (covers both trigger and portaled dropdown)
+  useEffect(() => {
+    if (!walletPickerOpen) return;
+    const handle = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        walletPickerRef.current?.contains(target) ||
+        walletDropdownRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setWalletPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [walletPickerOpen]);
+
+  // Track trigger button position so the portaled dropdown can anchor under it
+  useEffect(() => {
+    if (!walletPickerOpen) {
+      setWalletPickerAnchor(null);
+      return;
+    }
+    const update = () => {
+      const el = walletTriggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setWalletPickerAnchor({
+        top: r.bottom + 4,
+        right: window.innerWidth - r.right,
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [walletPickerOpen]);
+
+  const toggleWalletSelection = useCallback(
+    (walletId: string) => {
+      const next = new Set(selectedWalletSet);
+      if (next.has(walletId)) next.delete(walletId);
+      else next.add(walletId);
+      setSelectedWalletsForChain?.(Array.from(next), "sol");
+    },
+    [selectedWalletSet, setSelectedWalletsForChain]
+  );
+
+  const handleCopyWalletAddress = useCallback((address: string) => {
+    if (!address) return;
+    navigator.clipboard.writeText(address);
+    setCopiedWalletAddr(address);
+    setTimeout(() => setCopiedWalletAddr((cur) => (cur === address ? null : cur)), 1200);
+  }, []);
 
   // Prefetch ATA existence so buy validation is instant (cache warms on mount)
   useEffect(() => {
@@ -3309,14 +3406,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== D. Tabs ===== */}
-      <div className="px-3 pt-1 pb-1.5 border-b border-[#2A2B33]">
-        <div className="flex items-center justify-center gap-6">
+      <div className="relative px-3 pt-2.5 pb-1 border-b border-[#2A2B33]">
+        <div className="flex items-center justify-start gap-6">
           {(["market", "limit", "adv"] as const).map((t) => (
             <button
               key={t}
               className={cx(
-                tabBtn, 
-                "hover:text-[#E6E7EA]", 
+                tabBtn,
+                "hover:text-[#E6E7EA]",
                 tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]",
                 isMigratingToken && t === "market" && "opacity-50 cursor-not-allowed blur-sm"
               )}
@@ -3330,6 +3427,169 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </button>
           ))}
         </div>
+
+        {/* Wallet picker trigger - right side of tabs (dropdown is portaled below) */}
+        <div ref={walletPickerRef} className="absolute right-3 top-1/2 -translate-y-1/2">
+          <button
+            ref={walletTriggerRef}
+            type="button"
+            onClick={() => setWalletPickerOpen((v) => !v)}
+            className="flex items-center gap-2 rounded-md border bg-[#101114] px-2 py-1 text-[11px] font-medium text-[#E6E7EA] transition-colors hover:border-[#70E0B0]"
+            style={{ borderColor: AX.border }}
+            title="Select trading wallets"
+          >
+            <span className="flex items-center gap-1">
+              <FaWallet size={11} style={{ color: AX.muted }} />
+              <span>{selectedWalletCount}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <SiSolana size={11} style={{ fill: "url(#sol-gradient-trade)" }} />
+              <span>{totalSelectedSolBalance.toFixed(2)}</span>
+            </span>
+          </button>
+          {/* Shared SVG gradient definition for SiSolana icons inside the wallet picker */}
+          <svg width="0" height="0" className="absolute" aria-hidden="true">
+            <defs>
+              <linearGradient id="sol-gradient-trade" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#9945FF" />
+                <stop offset="100%" stopColor="#14F195" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        {/* Wallet picker dropdown - portaled to body so it never gets clipped or stacked behind trade-panel content */}
+        {walletPickerOpen && walletPickerAnchor && typeof document !== "undefined" && createPortal(
+          <div
+            ref={walletDropdownRef}
+            className="fixed w-72 overflow-hidden rounded-lg border shadow-xl"
+            style={{
+              top: walletPickerAnchor.top,
+              right: walletPickerAnchor.right,
+              backgroundColor: AX.bg,
+              borderColor: AX.border,
+              zIndex: 99999,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+              {/* Selection action row */}
+              <div className="flex items-center gap-2 border-b p-2" style={{ borderColor: AX.border }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (allWalletsSelected) setSelectedWalletsForChain?.([], "sol");
+                    else selectAllWalletsForChain?.("sol");
+                  }}
+                  className="rounded-full px-3 py-1 text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: allWalletsSelected ? AX.surface2 : AX.surface,
+                    color: AX.text,
+                    border: `1px solid ${allWalletsSelected ? AX.mint : AX.border}`,
+                  }}
+                >
+                  {allWalletsSelected ? "Unselect All" : "Select All"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectWalletsWithFunds?.("sol")}
+                  className="rounded-full px-3 py-1 text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: AX.surface,
+                    color: AX.muted,
+                    border: `1px solid ${AX.border}`,
+                  }}
+                >
+                  Select All with Balance
+                </button>
+              </div>
+
+              {/* Wallet list */}
+              <div className="max-h-72 overflow-y-auto">
+                {solWallets.length === 0 ? (
+                  <div className="p-4 text-center text-xs" style={{ color: AX.muted }}>
+                    No Solana wallets yet.
+                  </div>
+                ) : (
+                  solWallets.map((wallet: any) => {
+                    const isSelected = selectedWalletSet.has(wallet.id);
+                    const isPrimary = wallet.isPrimary;
+                    const address = (wallet.solanaAddress || "").trim();
+                    const balance = address
+                      ? walletBalances?.[address] ?? wallet.balance ?? 0
+                      : wallet.balance ?? 0;
+                    const truncated =
+                      address && address.length > 8
+                        ? `${address.slice(0, 4)}...${address.slice(-4)}`
+                        : address || "—";
+                    return (
+                      <div
+                        key={wallet.id}
+                        className="flex items-center gap-3 border-b px-3 py-2 last:border-b-0"
+                        style={{ borderColor: AX.border }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleWalletSelection(wallet.id)}
+                          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition-all"
+                          style={{
+                            borderColor: isSelected ? "#F97316" : isPrimary ? "#F97316" : AX.border,
+                            backgroundColor: isSelected ? "#F9731633" : "transparent",
+                          }}
+                          title={isSelected ? "Unselect wallet" : "Select wallet"}
+                        >
+                          {isSelected && (
+                            <div className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "#F97316" }} />
+                          )}
+                        </button>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="truncate text-sm font-medium"
+                              style={{ color: isPrimary ? "#F97316" : AX.text }}
+                            >
+                              {wallet.label || "Unnamed Wallet"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[11px]" style={{ color: AX.muted }}>
+                              {truncated}
+                            </span>
+                            {address && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopyWalletAddress(address);
+                                }}
+                                className="text-[#9CA3AF] transition-colors hover:text-white"
+                                title="Copy address"
+                              >
+                                {copiedWalletAddr === address ? (
+                                  <FaCheck size={10} style={{ color: AX.mint }} />
+                                ) : (
+                                  <FaCopy size={10} />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div
+                          className="flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px]"
+                          style={{ backgroundColor: AX.surface, color: AX.text }}
+                        >
+                          <SiSolana size={10} style={{ fill: "url(#sol-gradient-trade)" }} />
+                          <span>{(balance || 0).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>,
+            document.body
+          )}
       </div>
 
       {/* ===== Migration Message for High Bonding Meteora Tokens ===== */}
