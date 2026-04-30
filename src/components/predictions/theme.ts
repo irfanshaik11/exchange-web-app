@@ -52,7 +52,7 @@ export const PortfolioTheme = {
 // Every prediction component should import from here instead of defining inline palettes.
 export const T = {
   // Base — Polymarket-matched dark palette
-  bg: "#131517",
+  bg: "#050608",
   bgCard: "#1c1f24",
   bgCardHover: "#252930",
   bgElevated: "#1e2228",

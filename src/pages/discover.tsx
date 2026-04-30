@@ -3789,9 +3789,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
   }, [displayed]);
 
   const innerContent = (
-          <div className={`relative overflow-hidden border border-white/[0.06] flex flex-col ${variant === 'popup' ? 'h-full min-h-[400px] bg-white/[0.03] backdrop-blur-xl' : 'h-[calc(100vh-80px)]'}`}>
+          <div className={`relative overflow-hidden rounded-2xl border border-white/[0.06] flex flex-col ${variant === 'popup' ? 'h-full min-h-[400px] bg-white/[0.03] backdrop-blur-xl' : 'h-[calc(100vh-80px)]'}`}>
             {/* Background image inside the container */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
               <div
                 className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
                 style={{ backgroundImage: 'url(/ranks/Background2.png)' }}
