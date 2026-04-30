@@ -240,9 +240,9 @@ export default function TradePage() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   
   // Minimum chart height (including header) - chart should never shrink below this
-  const MIN_CHART_HEIGHT = 350; 
-  const DEFAULT_CHART_HEIGHT_RATIO = 0.65;
-  const SSR_DEFAULT_CHART_HEIGHT = 900;
+  const MIN_CHART_HEIGHT = 277;
+  const DEFAULT_CHART_HEIGHT_RATIO = 0.5149;
+  const SSR_DEFAULT_CHART_HEIGHT = 713;
   
   // Calculate responsive min/max based on viewport
   const getResponsiveLimits = useCallback(() => {

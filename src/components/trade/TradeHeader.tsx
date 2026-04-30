@@ -1020,7 +1020,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	return (
 		<>
 			<div
-				className="relative flex w-full flex-col gap-2 pl-1.5 py-1.5 sm:flex-row sm:items-center sm:gap-4 sm:pl-2 sm:py-2 md:gap-8 lg:gap-10 !font-geist"
+				className="relative flex w-full flex-row items-center gap-2 pl-1.5 py-1.5 sm:gap-4 sm:pl-2 sm:py-2 md:gap-8 lg:gap-10 !font-geist overflow-x-auto scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent"
 				style={{ color: AX.text }}
 			>
 				{/* WS status banners hidden from users - errors logged to console only */}
@@ -1249,7 +1249,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 							</button>
 						</div>
 
-						<div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] sm:gap-1 sm:text-xs lg:gap-2">
+						<div className="mt-1 flex flex-nowrap items-center gap-1 text-[10px] sm:gap-1 sm:text-xs lg:gap-2">
 							<span className="whitespace-nowrap">{tokenAgeLabel}</span>
 							{/* Socials */}
 							<div className="relative flex items-center gap-0.5 text-neutral-400 sm:gap-1 lg:gap-1">
@@ -1571,7 +1571,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 									)}
 								</div>
 
-								<div className="ml-1 flex flex-row flex-wrap gap-1.5 sm:gap-2 font-light">
+								<div className="ml-1 flex flex-row flex-nowrap gap-1.5 sm:gap-2 font-light">
 									{/* Check if this is a Monad token - hide icons for Monad */}
 									{(() => {
 										const protocol = extractProtocolRaw(token);
@@ -1725,14 +1725,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 				</div>
 
 				{/* CENTER: compact stats */}
-				<div className="flex flex-1 flex-wrap items-center gap-3 sm:gap-4 lg:gap-6">
+				<div className="flex flex-shrink-0 flex-nowrap items-center gap-3 sm:gap-4 lg:gap-6">
 					<div className="text-left">
 						<div className="flex items-center gap-1 text-sm sm:text-base lg:text-[20px] tabular-nums">
 							{formattedMarketCap === "-" ? "-" : `$${formattedMarketCap}`}
 						</div>
 					</div>
 
-					<div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
+					<div className="flex flex-nowrap items-center gap-2 sm:gap-3 lg:gap-4">
 						<StatInline label="Price">
 							${<SubscriptNumber value={price} />}
 						</StatInline>
