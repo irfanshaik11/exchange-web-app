@@ -1034,22 +1034,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 
 				{/* LEFT: token avatar + meta */}
 				<div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
-					{/* Star icon - far left */}
-					<button
-						onClick={handleWatchlistClick}
-						className="cursor-pointer flex-shrink-0 transition-colors hover:bg-white/10 rounded p-1"
-						aria-label={
-							isWatched ? "Remove from Watchlist" : "Add to Watchlist"
-						}
-						title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-					>
-						{isWatched ? (
-							<FaStar className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-yellow-400" />
-						) : (
-							<FaRegStar className="w-4 h-4 sm:w-3.5 sm:h-3.5" style={{ color: AX.muted }} />
-						)}
-					</button>
-
 					{/* Avatar with PulseTable-style border + protocol badge */}
 					<div
 						className="relative flex cursor-pointer items-center justify-center rounded-sm transition-all duration-300 ease-out"
@@ -1306,6 +1290,20 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 								style={{ color: AX.muted }}
 							>
 								<IoShareSocialOutline size={12} className="sm:w-3.5 sm:h-3.5" />
+							</button>
+
+							<button
+								onClick={handleWatchlistClick}
+								className="ml-0.5 sm:ml-1 cursor-pointer flex-shrink-0"
+								aria-label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+								title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+								style={{ color: AX.muted }}
+							>
+								{isWatched ? (
+									<FaStar size={12} className="sm:w-3.5 sm:h-3.5 text-yellow-400" />
+								) : (
+									<FaRegStar size={12} className="sm:w-3.5 sm:h-3.5" />
+								)}
 							</button>
 						</div>
 
