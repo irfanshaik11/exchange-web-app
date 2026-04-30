@@ -61,7 +61,7 @@ interface TradeFilters {
 }
 
 const AX = {
-  bg: "#111214",
+  bg: "#101114",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -1601,7 +1601,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           key={n.keyPart || n.idx}
           style={{
             ...style,
-            backgroundColor: index % 2 === 0 ? "#111214" : "#161719",
+            backgroundColor: index % 2 === 0 ? "#101114" : "#161719",
           }}
           className="!font-geist flex items-center !text-[13px] transition-colors hover:brightness-110"
         >
@@ -1805,7 +1805,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-[#111214]">
+    <div className="flex h-full w-full flex-col bg-[#101114]">
       {/* Filter Popout */}
       {activeFilterPopout && (
         <FilterPopout
@@ -1841,10 +1841,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
         position={filterPopoutPosition}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col bg-[#111214]">
+      <div className="flex min-h-0 flex-1 flex-col bg-[#101114]">
         {/* Column header — sits above virtual list, not inside it */}
         <div
-          className="!font-geist flex items-center border-t border-b border-[#27282e] bg-[#111214] !text-xs"
+          className="!font-geist flex items-center border-t border-b border-[#27282e] bg-[#101114] !text-xs"
           style={{ flexShrink: 0 }}
         >
           {/* Age / Time */}
@@ -2014,11 +2014,11 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
         {/* Virtualized trade rows (or loading/empty states) */}
         {isLoading ? (
-          <div className="bg-[#111214] py-6 text-center text-neutral-500">
+          <div className="bg-[#101114] py-6 text-center text-neutral-500">
             Loading trades...
           </div>
         ) : !normalized.length ? (
-          <div className="bg-[#111214] py-6 text-center text-neutral-500">
+          <div className="bg-[#101114] py-6 text-center text-neutral-500">
             No trades available.
           </div>
         ) : (
@@ -2027,14 +2027,14 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
             itemSize={44}
             renderRow={renderTradeRow}
             overscanCount={10}
-            className="bg-[#111214]"
+            className="bg-[#101114]"
           />
         )}
 
         {/* p95 heat footer */}
         {!!p95Display && (
           <div
-            className="flex items-center gap-2 bg-[#111214] px-2 py-1.5 text-[10px]"
+            className="flex items-center gap-2 bg-[#101114] px-2 py-1.5 text-[10px]"
             style={{ color: "#6b7280", flexShrink: 0 }}
           >
             <span className="inline-block">

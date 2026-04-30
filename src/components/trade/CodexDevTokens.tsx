@@ -96,7 +96,7 @@ function mapWebSocketDevTokenToDisplay(wsToken: SolanaDevToken) {
 }
 
 const AX = {
-  bg: "#111214",
+  bg: "#101114",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
@@ -585,7 +585,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token, chain = 'sol', o
                     key={devToken.token.address}
                     className="transition-colors cursor-pointer hover:brightness-110"
                     style={{
-                      backgroundColor: idx % 2 === 0 ? "#111214" : "#15161a",
+                      backgroundColor: idx % 2 === 0 ? "#101114" : "#15161a",
                     }}
                     onClick={() => {
                       const mintAddress = devToken.token.address;

@@ -10,7 +10,7 @@ interface CodexHoldersProps {
 }
 
 const AX = {
-  bg: "#111214",
+  bg: "#101114",
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",

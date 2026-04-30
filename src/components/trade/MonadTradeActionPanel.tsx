@@ -516,7 +516,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   if (!token || (!token.name && !token.symbol)) {
     return (
       <div
-        className="flex flex-col text-[12px] leading-tight bg-[#111214]"
+        className="flex flex-col text-[12px] leading-tight bg-[#101114]"
         style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', paddingBottom: '100px' }}
       >
         <div className="h-full bg-neutral-800/50 rounded-lg p-4">
@@ -923,7 +923,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   return (
     <div
       className="flex flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#111214', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', paddingBottom: '100px' }}
+      style={{ backgroundColor: '#101114', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
       {/* Commented out - Monad may not have timeframe data
@@ -1822,7 +1822,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         </button>
         
         {isPoolInfoOpen && (
-          <div className="border-t border-[#2A2B33] bg-[#111214]">
+          <div className="border-t border-[#2A2B33] bg-[#101114]">
             {/* Pool Info Section */}
             <div className="px-3 py-2.5 space-y-2.5">
               {/* Total Liq */}

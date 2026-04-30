@@ -763,7 +763,7 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
       </button>
 
       {isOpen && (
-        <div style={{ backgroundColor: '#111214' }}>
+        <div style={{ backgroundColor: '#101114' }}>
           {/* Liquidity Section */}
           <div className="px-3 py-2.5 space-y-2">
             {/* Total Liquidity */}
@@ -3169,7 +3169,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   return (
     <div
       className="flex flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#111214', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
+      style={{ backgroundColor: '#101114', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
       <div className="px-3 pt-2 pb-2 border-neutral-800">
