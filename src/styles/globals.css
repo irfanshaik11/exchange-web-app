@@ -369,6 +369,27 @@ input[type="number"] {
   animation: none !important;
 }
 
+/*
+ * Token avatar fade-in.
+ *
+ * Used by the New Pairs / Trending row avatars (TokenAvatar in InterstateTable.tsx)
+ * to smoothly cross-fade the real token image over its placeholder once preloading
+ * finishes. The animation runs once, on mount of the <img>, because the <img> only
+ * mounts after `visibleSrc` flips from '' to a fully-preloaded URL. Letting the
+ * browser drive this via @keyframes (rather than a JS opacity-flip in a callback
+ * ref) avoids the "no paint at opacity:0 first → transition starts from opacity:1
+ * → instant pop" footgun, and is immune to React StrictMode double-invocation.
+ */
+@keyframes tokenAvatarFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* 50ms — borderline imperceptible, the fade is almost instant with just a
+   tiny softening of the edge. Maximum sensation of speed. */
+.token-avatar-fade-in {
+  animation: tokenAvatarFadeIn 50ms ease-out;
+}
+
 /* Bottom card info badges - horizontal scroll without visible scrollbar */
 .badges-scroll {
   -ms-overflow-style: none;
