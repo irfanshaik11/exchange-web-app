@@ -11,6 +11,11 @@ export type SearchHistoryItem = Pick<Token, "mint" | "symbol" | "name" | "logo" 
   launchpad_protocol?: string;
   chain?: string;
   resolvedImageUrl?: string;
+  // Mayhem Mode — persisted so the recent-searches list can render the same
+  // red border + protocol icon + countdown badge as fresh search results.
+  is_mayhem_mode?: boolean;
+  launch_time?: string;
+  created_at?: string;
 };
 
 /**
