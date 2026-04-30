@@ -1070,10 +1070,10 @@ export default function MonadTradePage() {
             <div id="tabs-pane" className="flex-1 flex flex-col min-h-0" style={{ overflow: 'hidden' }}>
               {/* Tab Header */}
               <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between flex-shrink-0">
-                <div className="flex gap-4 items-center">
+                <div className="flex gap-4 items-center overflow-x-auto scrollbar-thin scrollbar-thumb-[#2A2B33] scrollbar-track-transparent min-w-0 flex-1">
                   <button
                     onClick={() => setSelectedTab("Transactions")}
-                    className={`px-3 py-1 font-semibold transition-colors ${
+                    className={`px-3 py-1 font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
                       selectedTab === "Transactions"
                         ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
@@ -1084,7 +1084,7 @@ export default function MonadTradePage() {
                   </button>
                   <button
                     onClick={() => setSelectedTab("Top Traders")}
-                    className={`px-3 py-1 font-semibold transition-colors ${
+                    className={`px-3 py-1 font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
                       selectedTab === "Top Traders"
                         ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
@@ -1095,7 +1095,7 @@ export default function MonadTradePage() {
                   </button>
                   <button
                     onClick={() => setSelectedTab("Holders")}
-                    className={`px-3 py-1 font-semibold transition-colors ${
+                    className={`px-3 py-1 font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
                       selectedTab === "Holders"
                         ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
@@ -1106,7 +1106,7 @@ export default function MonadTradePage() {
                   </button>
                   <button
                     onClick={() => setSelectedTab("Dev Tokens")}
-                    className={`px-3 py-1 font-semibold transition-colors ${
+                    className={`px-3 py-1 font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
                       selectedTab === "Dev Tokens"
                         ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
@@ -1117,7 +1117,7 @@ export default function MonadTradePage() {
                   </button>
                 </div>
                 <button
-                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full ml-auto"
+                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full ml-auto flex-shrink-0 whitespace-nowrap"
                   style={{ backgroundColor: AX.bg, color: AX.mint }}
                   onClick={() => setIsInstantTradeOpen(true)}
                 >
