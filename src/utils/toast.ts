@@ -17,7 +17,7 @@ const baseStyle = {
 } as const;
 
 const defaultBorders: Record<ToastKind, string> = {
-  success: "1px solid #70E0B0",
+  success: "1px solid #FFFFFF",
   error: "1px solid #ff6b6b",
 };
 

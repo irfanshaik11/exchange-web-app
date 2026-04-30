@@ -3,16 +3,22 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useRef 
 interface SolPriceContextType {
   solPrice: number;
   monPrice: number;
+  ethPrice: number;
+  btcPrice: number;
 }
 
-const SolPriceContext = createContext<SolPriceContextType>({ solPrice: 0, monPrice: 0 });
+const SolPriceContext = createContext<SolPriceContextType>({ solPrice: 0, monPrice: 0, ethPrice: 0, btcPrice: 0 });
 
 export function SolPriceProvider({ children }: { children: React.ReactNode }) {
   const [solPrice, setSolPrice] = useState<number>(0);
   const [monPrice, setMonPrice] = useState<number>(0);
+  const [ethPrice, setEthPrice] = useState<number>(0);
+  const [btcPrice, setBtcPrice] = useState<number>(0);
 
   // Track last successfully fetched price so we never fall back to a stale hardcoded value
   const lastGoodSolPriceRef = useRef<number>(0);
+  const lastGoodEthPriceRef = useRef<number>(0);
+  const lastGoodBtcPriceRef = useRef<number>(0);
 
   useEffect(() => {
     const fetchSolPrice = async () => {
@@ -105,8 +111,83 @@ export function SolPriceProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
+  // ETH + BTC prices — Pyth primary, CoinGecko fallback. Fetched together since
+  // both feeds can be requested in one Pyth call.
+  useEffect(() => {
+    const fetchEthBtcPrices = async () => {
+      // Primary: Pyth Network (batched in one request)
+      try {
+        const ETH_USD_FEED = '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace';
+        const BTC_USD_FEED = '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43';
+        const response = await fetch(
+          `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${ETH_USD_FEED}&ids%5B%5D=${BTC_USD_FEED}`,
+          { signal: AbortSignal.timeout(5000) }
+        ).catch(() => null);
+
+        if (response?.ok) {
+          const data = await response.json().catch(() => null);
+          const items = Array.isArray(data?.parsed) ? data.parsed : [];
+          let gotEth = false;
+          let gotBtc = false;
+          for (const item of items) {
+            const id = (item?.id || '').toLowerCase();
+            const price = item?.price;
+            if (!price?.price || price?.expo === undefined) continue;
+            const value = Number(price.price) * Math.pow(10, price.expo);
+            if (!(value > 0)) continue;
+            if (id.includes('ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace')) {
+              lastGoodEthPriceRef.current = value;
+              setEthPrice(value);
+              gotEth = true;
+            } else if (id.includes('e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43')) {
+              lastGoodBtcPriceRef.current = value;
+              setBtcPrice(value);
+              gotBtc = true;
+            }
+          }
+          if (gotEth && gotBtc) return;
+        }
+      } catch {
+        // Fall through to CoinGecko
+      }
+
+      // Fallback: CoinGecko (one batched request)
+      try {
+        const response = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin&vs_currencies=usd',
+          { signal: AbortSignal.timeout(10000) }
+        ).catch(() => null);
+
+        if (response?.ok) {
+          const data = await response.json().catch(() => null);
+          const eth = Number(data?.ethereum?.usd ?? 0);
+          const btc = Number(data?.bitcoin?.usd ?? 0);
+          if (eth > 0) {
+            lastGoodEthPriceRef.current = eth;
+            setEthPrice(eth);
+          }
+          if (btc > 0) {
+            lastGoodBtcPriceRef.current = btc;
+            setBtcPrice(btc);
+          }
+          return;
+        }
+      } catch {
+        // Both APIs failed
+      }
+
+      // Both failed — keep last known good values
+      if (lastGoodEthPriceRef.current > 0) setEthPrice(lastGoodEthPriceRef.current);
+      if (lastGoodBtcPriceRef.current > 0) setBtcPrice(lastGoodBtcPriceRef.current);
+    };
+
+    fetchEthBtcPrices();
+    const interval = setInterval(fetchEthBtcPrices, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <SolPriceContext.Provider value={useMemo(() => ({ solPrice, monPrice }), [solPrice, monPrice])}>
+    <SolPriceContext.Provider value={useMemo(() => ({ solPrice, monPrice, ethPrice, btcPrice }), [solPrice, monPrice, ethPrice, btcPrice])}>
       {children}
     </SolPriceContext.Provider>
   );
