@@ -157,7 +157,11 @@ const TRENDING_TABLE_HEADERS: HeaderConfig[] = [
     width: "w-24",
   },
   { key: "volume", label: "Volume", align: "right", width: "w-28" },
-  { key: "txns", label: "TXNS", align: "right", width: "w-32" },
+  // TXNS data is "buys / sells" — much wider than the 4-letter label, so
+  // right-aligning the header parks it in the corner while the data extends
+  // visually leftward. Centering the header puts it over the data's visual
+  // middle so they read as belonging together.
+  { key: "txns", label: "TXNS", align: "center", width: "w-32" },
   { key: null, label: "Holders", align: "center", width: "w-64" },
   { key: null, label: "Buy", align: "center", width: "w-28" },
 ];
