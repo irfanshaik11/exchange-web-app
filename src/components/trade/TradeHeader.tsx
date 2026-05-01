@@ -597,6 +597,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	// transition) instead of relying on the native browser title attribute,
 	// which has a noticeable delay and no styling.
 	const ammBubbleTipRef = useRef<HTMLDivElement>(null);
+	// Tooltips for Crown (dev migration), Trophy (KOL count), and People (holders)
+	// must be portal-rendered: the TradeHeader root has `overflow-x-auto`, which
+	// per CSS spec forces `overflow-y` to non-visible too, clipping any absolute
+	// child that extends past the header's bounds (e.g. into the chart toolbar
+	// below). createPortal + position:fixed escapes the clipped container.
+	const devTipRef = useRef<HTMLDivElement>(null);
+	const kolTipRef = useRef<HTMLDivElement>(null);
+	const holderTipRef = useRef<HTMLDivElement>(null);
 
 	// State for fetched age from Monad search endpoint (Solana uses wsTokenInfo.created_at directly)
 	const [fetchedCreatedAt, setFetchedCreatedAt] = useState<
@@ -1671,62 +1679,119 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										return (
 											<>
 												{/* Crown Icon - Dev Migration Stats */}
-												<div className="group/dev relative flex items-center gap-0.5 sm:gap-1 cursor-pointer">
+												<div
+													className="relative flex items-center gap-0.5 sm:gap-1 cursor-pointer"
+													onMouseEnter={(e) => {
+														const tip = devTipRef.current;
+														if (tip) {
+															const r = e.currentTarget.getBoundingClientRect();
+															tip.style.left = `${r.right + 8}px`;
+															tip.style.top = `${r.top}px`;
+															tip.style.opacity = "1";
+														}
+													}}
+													onMouseLeave={() => {
+														const tip = devTipRef.current;
+														if (tip) tip.style.opacity = "0";
+													}}
+												>
 													<PiCrownSimpleLight size={14} className="sm:w-4 sm:h-4" style={{ color: "#dcc13c" }} />
 													<span className="text-xs sm:text-sm text-white">
 														{devMigrated}/{devCreated}
 													</span>
-													{/* Dev Migration Tooltip - solid background, no shadow */}
-													<div
-														className="pointer-events-none absolute left-full top-0 ml-2 min-w-[180px] rounded-lg opacity-0 group-hover/dev:opacity-100 group-hover/dev:pointer-events-auto transition-opacity duration-100 z-[99999] overflow-hidden"
-														style={{
-															backgroundColor: AX.surface,
-															border: `1px solid ${AX.border}`,
-														}}
-													>
-														<div className="px-3 py-2 space-y-1.5">
-															<div className="flex justify-between items-center">
-																<span className="text-sm" style={{ color: AX.muted }}>Dev Migrated</span>
-																<span className="text-sm font-medium" style={{ color: AX.text }}>{devMigrated}</span>
-															</div>
-															<div className="flex justify-between items-center">
-																<span className="text-sm" style={{ color: AX.muted }}>Dev Launched</span>
-																<span className="text-sm font-medium" style={{ color: AX.text }}>{devCreated}</span>
-															</div>
-															<div className="flex justify-between items-center">
-																<span className="text-sm" style={{ color: AX.muted }}>Migrated</span>
-																<span className="text-sm font-medium" style={{ color: AX.text }}>{devMigratedPct}%</span>
-															</div>
-														</div>
-														<div className="px-3 py-2" style={{ borderTop: `1px solid ${AX.border}`, backgroundColor: AX.surface2 }}>
-															<span className="text-xs" style={{ color: AX.muted }}>Click to open Dev Tokens</span>
-														</div>
-													</div>
 												</div>
+												{typeof document !== "undefined" &&
+													createPortal(
+														<div
+															ref={devTipRef}
+															className="pointer-events-none fixed z-[99999] min-w-[180px] rounded-lg overflow-hidden"
+															style={{
+																backgroundColor: AX.surface,
+																border: `1px solid ${AX.border}`,
+																opacity: 0,
+																transition: "opacity 100ms",
+															}}
+														>
+															<div className="px-3 py-2 space-y-1.5">
+																<div className="flex justify-between items-center">
+																	<span className="text-sm" style={{ color: AX.muted }}>Dev Migrated</span>
+																	<span className="text-sm font-medium" style={{ color: AX.text }}>{devMigrated}</span>
+																</div>
+																<div className="flex justify-between items-center">
+																	<span className="text-sm" style={{ color: AX.muted }}>Dev Launched</span>
+																	<span className="text-sm font-medium" style={{ color: AX.text }}>{devCreated}</span>
+																</div>
+																<div className="flex justify-between items-center">
+																	<span className="text-sm" style={{ color: AX.muted }}>Migrated</span>
+																	<span className="text-sm font-medium" style={{ color: AX.text }}>{devMigratedPct}%</span>
+																</div>
+															</div>
+															<div className="px-3 py-2" style={{ borderTop: `1px solid ${AX.border}`, backgroundColor: AX.surface2 }}>
+																<span className="text-xs" style={{ color: AX.muted }}>Click to open Dev Tokens</span>
+															</div>
+														</div>,
+														document.body,
+													)}
 
 												{/* KOL Count - Trophy Icon */}
-												<div className="group/kol relative flex items-center gap-0.5 sm:gap-1 text-violet-200">
+												<div
+													className="relative flex items-center gap-0.5 sm:gap-1 text-violet-200"
+													onMouseEnter={(e) => {
+														const tip = kolTipRef.current;
+														if (tip) {
+															const r = e.currentTarget.getBoundingClientRect();
+															tip.style.left = `${r.right + 8}px`;
+															tip.style.top = `${r.top}px`;
+															tip.style.opacity = "1";
+														}
+													}}
+													onMouseLeave={() => {
+														const tip = kolTipRef.current;
+														if (tip) tip.style.opacity = "0";
+													}}
+												>
 													<CiTrophy size={14} className="sm:w-4 sm:h-4" />
 													<span className="text-xs sm:text-sm text-white">{kolCount}</span>
-													{/* Tooltip - solid background, no shadow */}
-													<div
-														className="pointer-events-none absolute left-full top-0 z-[99999] ml-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-100 group-hover/kol:opacity-100"
-														style={{
-															backgroundColor: AX.surface,
-															border: `1px solid ${AX.border}`,
-														}}
-													>
-														<span className="text-sm font-medium" style={{ color: AX.text }}>
-															KOL Count
-														</span>
-														<p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
-															Key Opinion Leaders holding this token
-														</p>
-													</div>
 												</div>
+												{typeof document !== "undefined" &&
+													createPortal(
+														<div
+															ref={kolTipRef}
+															className="pointer-events-none fixed z-[99999] rounded-lg px-3 py-2 whitespace-nowrap"
+															style={{
+																backgroundColor: AX.surface,
+																border: `1px solid ${AX.border}`,
+																opacity: 0,
+																transition: "opacity 100ms",
+															}}
+														>
+															<span className="text-sm font-medium" style={{ color: AX.text }}>
+																KOL Count
+															</span>
+															<p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
+																Key Opinion Leaders holding this token
+															</p>
+														</div>,
+														document.body,
+													)}
 
 												{/* People Icon - Total Holders */}
-												<div className="group/holder relative flex items-center gap-0.5 sm:gap-1">
+												<div
+													className="relative flex items-center gap-0.5 sm:gap-1"
+													onMouseEnter={(e) => {
+														const tip = holderTipRef.current;
+														if (tip) {
+															const r = e.currentTarget.getBoundingClientRect();
+															tip.style.left = `${r.right + 8}px`;
+															tip.style.top = `${r.top}px`;
+															tip.style.opacity = "1";
+														}
+													}}
+													onMouseLeave={() => {
+														const tip = holderTipRef.current;
+														if (tip) tip.style.opacity = "0";
+													}}
+												>
 													<div
 														className="flex cursor-help items-center justify-center rounded"
 														style={{ color: "#36d8ff" }}
@@ -1745,22 +1810,28 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 															return holders.toString();
 														})()}
 													</span>
-													{/* Tooltip - solid background, no shadow */}
-													<div
-														className="pointer-events-none absolute left-full top-0 z-[99999] ml-2 rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-100 group-hover/holder:opacity-100"
-														style={{
-															backgroundColor: AX.surface,
-															border: `1px solid ${AX.border}`,
-														}}
-													>
-														<span className="text-sm font-medium" style={{ color: AX.text }}>
-															Holder Count
-														</span>
-														<p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
-															Total wallets holding this token
-														</p>
-													</div>
 												</div>
+												{typeof document !== "undefined" &&
+													createPortal(
+														<div
+															ref={holderTipRef}
+															className="pointer-events-none fixed z-[99999] rounded-lg px-3 py-2 whitespace-nowrap"
+															style={{
+																backgroundColor: AX.surface,
+																border: `1px solid ${AX.border}`,
+																opacity: 0,
+																transition: "opacity 100ms",
+															}}
+														>
+															<span className="text-sm font-medium" style={{ color: AX.text }}>
+																Holder Count
+															</span>
+															<p className="mt-0.5 text-xs" style={{ color: AX.muted }}>
+																Total wallets holding this token
+															</p>
+														</div>,
+														document.body,
+													)}
 												{/* <div className="flex items-center gap-0.5 sm:gap-1 text-violet-200">
 													<PiRobotLight size={14} className="sm:w-4 sm:h-4" />
 													<span className="text-xs sm:text-sm text-white">0</span>
