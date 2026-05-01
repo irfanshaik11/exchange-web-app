@@ -517,14 +517,14 @@ export default function LiveTradesPanel({
                       }}
                       className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-150 ease-out"
                       style={{
-                        backgroundColor: "#18c48c",
-                        color: "#000000",
+                        backgroundColor: "transparent",
+                        color: "#18c48c",
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "#14a87a";
+                        e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.12)";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "#18c48c";
+                        e.currentTarget.style.backgroundColor = "transparent";
                       }}
                     >
                       <HiLightningBolt className="h-2.5 w-2.5" />
