@@ -2217,11 +2217,18 @@ const TxnsCell: React.FC<{
 // fetch never passed from/to, so the curve was effectively the last few hours
 // of 5m candles regardless of what the column header said. Now driven by the
 // user-selected timeframe with a real time-bounded window.
-const TIMEFRAME_CONFIG: Record<string, { windowSec: number; interval: string; label: string }> = {
-  '5m':  { windowSec: 5 * 60,        interval: '1m',  label: '5M'  },  // ~5 candles
-  '1h':  { windowSec: 60 * 60,       interval: '1m',  label: '1H'  },  // ~60 candles
-  '6h':  { windowSec: 6 * 60 * 60,   interval: '5m',  label: '6H'  },  // ~72 candles
-  '24h': { windowSec: 24 * 60 * 60,  interval: '30m', label: '24H' },  // ~48 candles
+// 5m uses 1s candles to give the sparkline real density (~300 points).
+// At 1m candles the 5-min window only has ~5 points and the polyline
+// renders as 1–2 line segments — looks like a flat diagonal even on
+// tokens that actually moved during the window.
+const TIMEFRAME_CONFIG: Record<
+  string,
+  { windowSec: number; interval: string; label: string }
+> = {
+  "5m": { windowSec: 5 * 60, interval: "1s", label: "5M" }, // ~300 candles
+  "1h": { windowSec: 60 * 60, interval: "1m", label: "1H" }, // ~60 candles
+  "6h": { windowSec: 6 * 60 * 60, interval: "5m", label: "6H" }, // ~72 candles
+  "24h": { windowSec: 24 * 60 * 60, interval: "30m", label: "24H" }, // ~48 candles
 };
 
 // Cache keyed by mint+timeframe so switching timeframes doesn't reuse stale
@@ -2237,14 +2244,15 @@ const MiniSparkline: React.FC<{
   width?: number;
   height?: number;
   selectedTimeframe?: string;
-}> = ({ token, width = 80, height = 32, selectedTimeframe = '24h' }) => {
+}> = ({ token, width = 80, height = 32, selectedTimeframe = "24h" }) => {
   const [priceData, setPriceData] = useState<number[]>([]);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const mintAddress =
     token.mint || (token as any).contractAddress || (token as any).address;
 
-  const tfConfig = TIMEFRAME_CONFIG[selectedTimeframe] || TIMEFRAME_CONFIG['24h'];
+  const tfConfig =
+    TIMEFRAME_CONFIG[selectedTimeframe] || TIMEFRAME_CONFIG["24h"];
   const cacheKey = `${mintAddress}|${selectedTimeframe}`;
 
   // Use existing price change from token data as a placeholder direction hint
@@ -2301,14 +2309,24 @@ const MiniSparkline: React.FC<{
           setPriceData([]);
         }
       } catch (err) {
-        console.debug("[Sparkline] Failed to fetch for", mintAddress, selectedTimeframe);
+        console.debug(
+          "[Sparkline] Failed to fetch for",
+          mintAddress,
+          selectedTimeframe,
+        );
       } finally {
         setLoading(false);
       }
     };
 
     fetchSparkline();
-  }, [cacheKey, mintAddress, selectedTimeframe, tfConfig.interval, tfConfig.windowSec]);
+  }, [
+    cacheKey,
+    mintAddress,
+    selectedTimeframe,
+    tfConfig.interval,
+    tfConfig.windowSec,
+  ]);
 
   // Generate a simple placeholder line based on existing price change data
   const generatePlaceholderLine = () => {
