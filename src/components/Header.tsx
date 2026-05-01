@@ -1921,7 +1921,7 @@ export default function Header({
                       href={chainAwareHref(link.href)}
                       className={`flex min-h-[44px] flex-shrink-0 items-center rounded-md px-2.5 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3 sm:py-1 sm:text-sm`}
                       style={{
-                        color: isActive ? "#18c48c" : "#9ca3af",
+                        color: isActive ? "#18c48c" : "#ffffff",
                         backgroundColor: "transparent",
                         position: "relative",
                         zIndex: 1001,
@@ -1936,7 +1936,7 @@ export default function Header({
                       }}
                       onMouseLeave={(e) => {
                         if (!isActive) {
-                          e.currentTarget.style.color = "#9ca3af";
+                          e.currentTarget.style.color = "#ffffff";
                         }
                       }}
                     >

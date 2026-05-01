@@ -119,14 +119,10 @@ const TABLE_HEADERS: HeaderConfig[] = [
     align: "right",
     width: "w-28",
   },
-  {
-    key: "price_percent_change",
-    label: "Price %",
-    align: "center",
-    width: "w-20",
-  },
   { key: "volume", label: "Volume", align: "right", width: "w-28" },
-  { key: "txns", label: "TXNS", align: "right", width: "w-24" },
+  // TXNS centered because the buys/sells data is much wider than the label
+  // (Irfan's prod change in #793). Trending uses TRENDING_TABLE_HEADERS below.
+  { key: "txns", label: "TXNS", align: "center", width: "w-24" },
   // { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
   { key: null, label: "Token Info", align: "center", width: "w-40" },
   { key: null, label: "Quick Buy", align: "center", width: "w-32" },
@@ -683,6 +679,8 @@ const TableHeader: React.FC<{
             return null;
           }
           // Hide Price % column for newPairs and dexscreener tabs
+          // (Price % is no longer in shared TABLE_HEADERS after Irfan's #793,
+          // but stays in TRENDING_TABLE_HEADERS — guard kept for safety.)
           if (
             header.label === "Price %" &&
             (tableType === "newPairs" || tableType === "dexscreener")
@@ -2128,7 +2126,9 @@ const TxnsCell: React.FC<{
     const sellPct = total > 0 ? `${(1 - ratio) * 100}%` : "50%";
 
     return (
-      <div className="flex h-full items-center justify-end gap-2">
+      // Center buys/sells block in the cell so it visually pairs with the
+      // centered TXNS header (Irfan's prod change in #793).
+      <div className="flex h-full items-center justify-center gap-2">
         <div
           className="flex h-6 w-1 flex-col overflow-hidden rounded-sm"
           aria-hidden="true"
@@ -2923,7 +2923,9 @@ const TableRow: React.FC<{
           })()}
         </td>
 
-        {/* Price % column - sits to the right of Liquidity (hidden for newPairs and dexscreener) */}
+        {/* Price % column — kept for trending only via TRENDING_TABLE_HEADERS;
+            Irfan's prod #793 dropped it from the shared TABLE_HEADERS for
+            other tabs. Render is gated to non-newPairs/non-dexscreener. */}
         {tableType !== "newPairs" && tableType !== "dexscreener" && (
           <td
             className={`${isTrending ? "w-24" : "w-20"} px-2 py-2.5 text-center align-middle`}
@@ -2979,8 +2981,11 @@ const TableRow: React.FC<{
         )}
 
         {tableType !== "dexscreener" && (
+          // TXNS data is centered (matches the centered header) for the
+          // compact buys/sells variant. New Pairs uses the default variant
+          // which is right-aligned single-number transaction count.
           <td
-            className={`${isTrending ? "w-32" : "w-24"} px-4 py-2.5 text-right align-middle`}
+            className={`${isTrending ? "w-32" : "w-24"} px-4 py-2.5 align-middle ${tableType === "newPairs" ? "text-right" : "text-center"}`}
           >
             <TxnsCell
               token={token}

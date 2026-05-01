@@ -3826,8 +3826,8 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
 
         {/* Tab Navigation - in popup variant use Trenches-style bordered pill container */}
         <div className={`relative z-10 mt-3 mb-4 flex flex-shrink-0 gap-3 px-4 sm:mt-4 sm:px-6 lg:gap-6 lg:px-8 ${variant === 'popup' ? 'flex-col' : 'flex-row items-center justify-between'}`}>
-          {/* Tabs Section - Scrollable on mobile */}
-          <div className="scrollbar-hide -mx-4 flex min-w-0 flex-1 items-center gap-3 overflow-x-auto px-4 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0">
+          {/* Tabs Section - Scrollable on mobile (horizontal only; vertical scroll is clamped) */}
+          <div className="scrollbar-hide -mx-4 flex min-w-0 flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden px-4 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0">
             <button
               className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("trending"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
