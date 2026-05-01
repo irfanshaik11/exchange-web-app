@@ -103,6 +103,21 @@ const TABLE_HEADERS: HeaderConfig[] = [
   { key: null, label: 'Quick Buy', align: 'center', width: 'w-32' },
 ];
 
+// Trending-only headers. Wider Token + Holders columns so long symbols don't
+// truncate (CZGOBLINS) and 5 holder-metric chips fit on one row. TXNS gets
+// breathing room so its buy/sell numbers stop visually colliding with Volume.
+const TRENDING_TABLE_HEADERS: HeaderConfig[] = [
+  { key: 'name',                 label: 'Token',      align: 'left',   width: 'w-72' },
+  { key: null,                   label: '24h',        align: 'center', width: 'w-28' },
+  { key: 'fully_diluted_value',  label: 'Market Cap', align: 'right',  width: 'w-28' },
+  { key: 'total_liquidity_usd',  label: 'Liquidity',  align: 'right',  width: 'w-28' },
+  { key: 'price_percent_change', label: 'Price %',    align: 'center', width: 'w-24' },
+  { key: 'volume',               label: 'Volume',     align: 'right',  width: 'w-28' },
+  { key: 'txns',                 label: 'TXNS',       align: 'right',  width: 'w-32' },
+  { key: null,                   label: 'Holders',    align: 'center', width: 'w-64' },
+  { key: null,                   label: 'Buy',        align: 'center', width: 'w-28' },
+];
+
 // Sniper Icon component
 const SnipperIcon = ({ size = 16, ...props }: { size?: number; [key: string]: any }) => (
   <svg
@@ -469,10 +484,14 @@ const TableHeader: React.FC<{
   onSort?: (key: string) => void;
   isDiscoverPage?: boolean;
   tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
-}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false, tableType = 'trending' }) => (
+}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false, tableType = 'trending' }) => {
+  const isTrending = tableType === 'trending';
+  const headers = isTrending ? TRENDING_TABLE_HEADERS : TABLE_HEADERS;
+
+  return (
   <thead>
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
-      {TABLE_HEADERS.map((header, idx) => {
+      {headers.map((header, idx) => {
         let label = header.label;
         // Hide 24h sparkline column for newPairs and dexscreener tabs
         if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
@@ -483,7 +502,7 @@ const TableHeader: React.FC<{
           return null;
         }
         // Hide Token Info / Holders column for newPairs and dexscreener
-        if (header.label === 'Token Info' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
+        if ((header.label === 'Token Info' || header.label === 'Holders') && (tableType === 'newPairs' || tableType === 'dexscreener')) {
           return null;
         }
         // Hide Volume column for newPairs (WS volume data not yet wired to display)
@@ -494,14 +513,25 @@ const TableHeader: React.FC<{
         if (header.label === 'TXNS' && tableType === 'dexscreener') {
           return null;
         }
-        const hideOnNarrow = header.label === 'Token Info';
+        const hideOnNarrow = header.label === 'Token Info' || header.label === 'Holders';
+
+        // Trending headers: bigger, more legible, label nudged off the column
+        // edge so it sits over the data centroid (avatar + symbol/name) instead
+        // of floating above the avatar alone.
+        const trendingPaddingLeft = header.label === 'Token' ? 'pl-[60px]' : '';
+        const trendingClasses = isTrending
+          ? `text-[12px] font-semibold tracking-[0.06em] ${trendingPaddingLeft}`
+          : `${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide`;
+        const trendingColor = isTrending ? '#a8acc4' : '#787a8d';
+        const trendingFontWeight = isTrending ? '600' : '300';
+
         return (
           <th
             key={idx}
-            className={`${header.width} px-4 py-3 text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
+            className={`${header.width} ${isTrending ? 'whitespace-nowrap' : ''} px-4 py-3 text-${header.align} ${trendingClasses} uppercase ${
               header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
             } ${hideOnNarrow ? 'hidden xl:table-cell' : ''}`}
-            style={{ color: '#787a8d', fontWeight: '300' }}
+            style={{ color: trendingColor, fontWeight: trendingFontWeight }}
             onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
           >
             {label}
@@ -513,7 +543,8 @@ const TableHeader: React.FC<{
       })}
     </tr>
   </thead>
-);
+  );
+};
 
 // Monad Icon Component - uses Monad favicon
 const MonadIcon = ({ size = 16 }: { size?: number }) => (
@@ -807,7 +838,9 @@ const TokenInfo: React.FC<{
   sortedRows: InterstateTableRow[];
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
-}> = ({ token, i, sortedRows, isDiscoverPage = false, chain = 'sol' }) => {
+  tableType?: 'trending' | 'newPairs' | 'xStocks' | 'dexscreener';
+}> = ({ token, i, sortedRows, isDiscoverPage = false, chain = 'sol', tableType = 'trending' }) => {
+  const isTrending = tableType === 'trending';
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
@@ -983,52 +1016,107 @@ const TokenInfo: React.FC<{
         <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
       </InterstateTooltip>
       
-      <div className="flex flex-col min-w-0 flex-1">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="truncate text-base font-bold min-w-[6ch]" style={{ color: AX.text }}>
+      <div className={`flex flex-col min-w-0 flex-1 ${isTrending ? 'gap-0.5' : ''}`}>
+        {/* Line 1: Symbol (and on non-trending, name + actions inline) */}
+        <div className={`flex items-center gap-2 ${isTrending ? '' : 'mb-1'}`}>
+          <span
+            className={`truncate font-bold ${isTrending ? 'text-[15px] flex-shrink-0' : 'text-base min-w-[6ch]'}`}
+            style={{ color: AX.text, ...(isTrending ? { maxWidth: '14ch' } : {}) }}
+            title={isTrending ? token.symbol : undefined}
+          >
             {token.symbol}
           </span>
-          <span className="truncate text-sm font-medium min-w-0" style={{ color: AX.muted }}>
+          {!isTrending && (
+            <span className="truncate text-sm font-medium min-w-0" style={{ color: AX.muted }}>
+              {token.name}
+            </span>
+          )}
+          {/* Age (trending only — sits next to symbol on line 1) */}
+          {isTrending && tokenAge && (
+            <span
+              className={`text-xs ${isDiscoverPage ? 'number-font' : ''}`}
+              style={{
+                color: ageColor,
+                fontWeight: 700,
+                ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' })
+              }}
+            >
+              {tokenAge}
+            </span>
+          )}
+          {/* Spacer + always-on actions on the right (trending only) */}
+          {isTrending && <div className="ml-auto flex items-center gap-1.5">
+            <button
+              onClick={handleWatchlistClick}
+              className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
+              style={{ color: isWatched ? '#f2c367' : AX.muted }}
+              title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
+              onMouseEnter={(e) => { e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted; }}
+            >
+              {isWatched ? <FaStar className="w-3.5 h-3.5" /> : <FaRegStar className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              className="transition-colors duration-200 cursor-pointer hover:opacity-80"
+              style={{ color: AX.muted }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = AX.aiCyan; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = AX.muted; }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const contractAddress = token.mint || token.pair_address;
+                copyToClipboard(contractAddress, "Contract address copied to clipboard!");
+              }}
+              title="Copy contract address"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          </div>}
+          {/* Original copy + watchlist for non-trending modes */}
+          {!isTrending && <>
+            <button
+              className="transition-colors duration-200 cursor-pointer hover:opacity-80"
+              style={{ color: AX.muted }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = AX.aiCyan; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = AX.muted; }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const contractAddress = token.mint || token.pair_address;
+                copyToClipboard(contractAddress, "Contract address copied to clipboard!");
+              }}
+              title="Copy contract address"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleWatchlistClick}
+              className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
+              style={{ color: isWatched ? '#f2c367' : AX.muted }}
+              title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
+              onMouseEnter={(e) => { e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted; }}
+            >
+              {isWatched ? <FaStar className="w-3.5 h-3.5" /> : <FaRegStar className="w-3.5 h-3.5" />}
+            </button>
+          </>}
+        </div>
+
+        {/* Line 2 (trending only): name on its own line so it can truncate without squeezing the symbol. */}
+        {isTrending && (
+          <span
+            className="truncate text-xs font-medium min-w-0"
+            style={{ color: AX.muted }}
+            title={token.name}
+          >
             {token.name}
           </span>
-          {/* Copy contract button */}
-          <button
-            className="transition-colors duration-200 cursor-pointer hover:opacity-80"
-            style={{ color: AX.muted }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = AX.aiCyan;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = AX.muted;
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              const contractAddress = token.mint || token.pair_address;
-              copyToClipboard(contractAddress, "Contract address copied to clipboard!");
-            }}
-            title="Copy contract address"
-          >
-            <Copy className="w-3.5 h-3.5" />
-          </button>
-          {/* Watchlist button */}
-          <button
-            onClick={handleWatchlistClick}
-            className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
-            style={{ color: isWatched ? '#f2c367' : AX.muted }}
-            title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted;
-            }}
-          >
-            {isWatched ? <FaStar className="w-3.5 h-3.5" /> : <FaRegStar className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {tokenAge && (
+        )}
+
+        {/* Line 3 (trending) / Line 2 (others): age + dense social cluster.
+            For trending the age is moved up to line 1, and this row only holds
+            the X/TG/Web/Pump/Search/Copy icons — hidden by default and revealed
+            when the row is hovered (group-hover) so the row stays clean. */}
+        <div className={`flex items-center gap-2 ${isTrending ? 'opacity-0 group-hover:opacity-100 transition-opacity duration-150' : ''}`}>
+          {!isTrending && tokenAge && (
             <span className={`text-sm ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
               {tokenAge}
             </span>
@@ -2004,6 +2092,59 @@ const TokenInfoCell: React.FC<{
   const yellowColor = '#f2c367';
   const redColor = '#f26681';
 
+  // Trending: all five metrics on a single horizontal row (column was widened
+  // to w-52 to accommodate). Other tabs keep the original 2-row stack.
+  const isTrending = tableType === 'trending';
+
+  if (isTrending) {
+    // Tighter chip-row gap (gap-1.5) so 4–5 metric chips fit on a single row in
+    // the widened w-60 column. flex-wrap is the safety net for extreme cases.
+    return (
+      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+        {holderCount !== undefined && holderCount > 0 && (
+          <TokenMetric
+            icon={<FaUsers size={11} />}
+            value={formatSmartNumber(holderCount)}
+            color={greenColor}
+            tooltip={`Holders: ${holderCount.toLocaleString()}`}
+          />
+        )}
+        {top10Percent !== undefined && top10Percent > 0 && (
+          <TokenMetric
+            icon={<BsPersonGear size={11} />}
+            value={`${formatPercent(top10Percent)}%`}
+            color={greenColor}
+            tooltip={`Top 10 Holders: ${formatPercent(top10Percent)}%`}
+          />
+        )}
+        {insiderPercent !== undefined && insiderPercent > 0 && (
+          <TokenMetric
+            icon={<RiGhostLine size={11} />}
+            value={`${formatPercent(insiderPercent)}%`}
+            color={yellowColor}
+            tooltip={`Insider Holding: ${formatPercent(insiderPercent)}%`}
+          />
+        )}
+        {sniperPercent !== undefined && sniperPercent > 0 && (
+          <TokenMetric
+            icon={<SnipperIcon size={11} />}
+            value={`${formatPercent(sniperPercent)}%`}
+            color={redColor}
+            tooltip={`Sniper Holding: ${formatPercent(sniperPercent)}%`}
+          />
+        )}
+        {bundlePercent !== undefined && bundlePercent > 0 && (
+          <TokenMetric
+            icon={<GoStack size={11} />}
+            value={`${formatPercent(bundlePercent)}%`}
+            color={yellowColor}
+            tooltip={`Bundler Holdings: ${formatPercent(bundlePercent)}%`}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-0.5">
       {/* Row 1: Holders + Top 10 */}
@@ -2117,9 +2258,14 @@ const TableRow: React.FC<{
     ? (i % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)')
     : 'transparent';
   
+  // Trending tab gets a redesigned row layout: wider Token + Holders columns,
+  // wider TXNS so its buy/sell numbers stop touching the Volume cell, and
+  // `group` so child cells can hover-reveal the dense socials/copy/search row.
+  const isTrending = tableType === 'trending';
+
   return (
-    <tr 
-      className={`cursor-pointer h-16 border-b`}
+    <tr
+      className={`group cursor-pointer h-16 border-b`}
       style={{
         borderColor: isDiscoverPage ? 'rgba(255, 255, 255, 0.03)' : AX.border,
         backgroundColor: rowBgColor,
@@ -2138,20 +2284,20 @@ const TableRow: React.FC<{
       }}
       onClick={onClick}
     >
-      <td className="w-64 px-4 py-2.5 align-middle">
-        <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
+      <td className={`${isTrending ? 'w-72' : 'w-64'} px-4 py-2.5 align-middle`}>
+        <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} tableType={tableType} />
       </td>
 
       {/* 24h Mini Sparkline column - shows recent token price movement (hidden for newPairs and dexscreener) */}
       {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
-        <td className="w-32 px-2 py-2.5 align-middle">
+        <td className={`${isTrending ? 'w-28' : 'w-32'} px-2 py-2.5 align-middle`}>
           <div className="flex justify-center">
-            <MiniSparkline token={token} width={120} height={32} />
+            <MiniSparkline token={token} width={isTrending ? 100 : 120} height={32} />
           </div>
         </td>
       )}
 
-      <td className="w-32 px-4 py-2.5 align-middle text-right">
+      <td className={`${isTrending ? 'w-28' : 'w-32'} px-4 py-2.5 align-middle text-right`}>
         <MarketCapCell
           token={token}
           selectedTimeframe={selectedTimeframe}
@@ -2197,7 +2343,7 @@ const TableRow: React.FC<{
 
       {/* Price % column - sits to the right of Liquidity (hidden for newPairs and dexscreener) */}
       {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
-        <td className="w-20 px-2 py-2.5 align-middle text-center">
+        <td className={`${isTrending ? 'w-24' : 'w-20'} px-2 py-2.5 align-middle text-center`}>
           {(() => {
             const pct = getTokenStat(token, 'price_percent_change', selectedTimeframe);
             const color = pct > 0 ? '#85d99f' : pct < 0 ? '#f26681' : AX.muted;
@@ -2234,7 +2380,7 @@ const TableRow: React.FC<{
       )}
 
       {tableType !== 'dexscreener' && (
-        <td className="w-24 px-4 py-2.5 align-middle text-right">
+        <td className={`${isTrending ? 'w-32' : 'w-24'} px-4 py-2.5 align-middle text-right`}>
           <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} variant={tableType === 'newPairs' ? 'default' : 'compact'} />
         </td>
       )}
@@ -2256,12 +2402,12 @@ const TableRow: React.FC<{
 
       {/* Token Info column - displays holder metrics from trending WebSocket (hidden for newPairs and dexscreener; hidden below xl so Action stays visible) */}
       {tableType !== 'dexscreener' && tableType !== 'newPairs' && (
-        <td className="w-40 px-2 py-2.5 align-middle hidden xl:table-cell">
+        <td className={`${isTrending ? 'w-64' : 'w-40'} px-2 py-2.5 align-middle hidden xl:table-cell`}>
           <TokenInfoCell token={token} isDiscoverPage={isDiscoverPage} tableType={tableType} />
         </td>
       )}
 
-      <td className="w-32 px-4 py-2.5 align-middle text-center">
+      <td className={`${isTrending ? 'w-28' : 'w-32'} px-4 py-2.5 align-middle text-center`}>
         {isDiscoverPage ? (
           <button
             onClick={handleQuickBuy}
