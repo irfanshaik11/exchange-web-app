@@ -146,12 +146,6 @@ const TRENDING_TABLE_HEADERS: HeaderConfig[] = [
     align: "right",
     width: "w-28",
   },
-  {
-    key: "price_percent_change",
-    label: "Price %",
-    align: "center",
-    width: "w-24",
-  },
   { key: "volume", label: "Volume", align: "right", width: "w-28" },
   // TXNS data is "buys / sells" — much wider than the 4-letter label, so
   // right-aligning the header parks it in the corner while the data extends
@@ -674,15 +668,6 @@ const TableHeader: React.FC<{
           // Hide 24h sparkline column for newPairs and dexscreener tabs
           if (
             header.label === "24h" &&
-            (tableType === "newPairs" || tableType === "dexscreener")
-          ) {
-            return null;
-          }
-          // Hide Price % column for newPairs and dexscreener tabs
-          // (Price % is no longer in shared TABLE_HEADERS after Irfan's #793,
-          // but stays in TRENDING_TABLE_HEADERS — guard kept for safety.)
-          if (
-            header.label === "Price %" &&
             (tableType === "newPairs" || tableType === "dexscreener")
           ) {
             return null;
@@ -1479,12 +1464,10 @@ const TokenInfo: React.FC<{
         )}
 
         {/* Line 3 (trending) / Line 2 (others): age + dense social cluster.
-            For trending the age is moved up to line 1, and this row only holds
-            the X/TG/Web/Pump/Search/Copy icons — hidden by default and revealed
-            when the row is hovered (group-hover) so the row stays clean. */}
-        <div
-          className={`flex items-center gap-2 ${isTrending ? "opacity-0 transition-opacity duration-150 group-hover:opacity-100" : ""}`}
-        >
+            For trending the age is moved up to line 1, and this row holds
+            the X/TG/Web/Pump/Search/Copy icons — kept always visible (user
+            preference: power traders want one-click access to those links). */}
+        <div className="flex items-center gap-2">
           {!isTrending && tokenAge && (
             <span
               className={`text-sm ${isDiscoverPage ? "number-font" : "text-emerald-400"}`}
@@ -2922,37 +2905,6 @@ const TableRow: React.FC<{
             );
           })()}
         </td>
-
-        {/* Price % column — kept for trending only via TRENDING_TABLE_HEADERS;
-            Irfan's prod #793 dropped it from the shared TABLE_HEADERS for
-            other tabs. Render is gated to non-newPairs/non-dexscreener. */}
-        {tableType !== "newPairs" && tableType !== "dexscreener" && (
-          <td
-            className={`${isTrending ? "w-24" : "w-20"} px-2 py-2.5 text-center align-middle`}
-          >
-            {(() => {
-              const pct = getTokenStat(
-                token,
-                "price_percent_change",
-                selectedTimeframe,
-              );
-              const color =
-                pct > 0 ? "#85d99f" : pct < 0 ? "#f26681" : AX.muted;
-              const formatted =
-                pct === 0
-                  ? "0%"
-                  : `${pct > 0 ? "" : "-"}${formatSmartNumber(Math.abs(pct))}%`;
-              return (
-                <span
-                  className={`text-sm font-medium ${isDiscoverPage ? "number-font" : ""}`}
-                  style={{ color }}
-                >
-                  {formatted}
-                </span>
-              );
-            })()}
-          </td>
-        )}
 
         {/* Volume column - hidden for newPairs */}
         {tableType !== "newPairs" && (
