@@ -19,6 +19,11 @@ const TRENDING_CACHE_VERSION = 'v3'; // Bumped to invalidate caches that contain
 // legitimately-rising new token still appears, narrow enough to drop the outliers.
 const MAX_TRENDING_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Trending snapshot cache TTL in localStorage. Keep short — the WS reconnects
+// quickly on page load, so the cache is just a smooth-paint hedge, not a source
+// of truth. Longer windows risk showing stale prices/volumes during reconnect.
+const TRENDING_CACHE_TTL_MS = 5 * 60 * 1000;
+
 // Blacklisted token addresses - these will never be shown in trending
 // These are stablecoins and wrapped tokens that shouldn't appear in memecoin trending
 const BLACKLISTED_TOKENS = new Set([
@@ -59,9 +64,8 @@ function loadTrendingCache(timeframe: TrendingTimeframe): NormalizedTrendingToke
     if (!cached) return null;
 
     const cacheData = JSON.parse(cached);
-    // Cache is valid for 5 minutes
     const cacheAge = Date.now() - cacheData.timestamp;
-    if (cacheAge > 5 * 60 * 1000) return null;
+    if (cacheAge > TRENDING_CACHE_TTL_MS) return null;
 
     // Defense-in-depth: re-filter any tokens that aged past the trending window
     // while sitting in the cache (snapshot writer also filters before saving).
