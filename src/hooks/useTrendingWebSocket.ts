@@ -10,7 +10,19 @@ function getTrendingWsUrl(): string {
 
 // Cache key and version for localStorage persistence
 const TRENDING_CACHE_KEY = 'trending_ws_cache';
-const TRENDING_CACHE_VERSION = 'v2'; // Bumped to invalidate old cache with USDT
+const TRENDING_CACHE_VERSION = 'v3'; // Bumped to invalidate caches that contained established tokens (TRUMP/PENGU/USD1)
+
+// Maximum token age allowed on the memecoin trending feed.
+// The backend sometimes ranks established/major tokens (TRUMP at 465d, PENGU at 153d,
+// USD1 at 120d) into the snapshot, which crowds out genuinely-trending fresh memes
+// and visibly diverges from GMGN/Axiom trending. Cap at 7 days — wide enough that any
+// legitimately-rising new token still appears, narrow enough to drop the outliers.
+const MAX_TRENDING_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Trending snapshot cache TTL in localStorage. Keep short — the WS reconnects
+// quickly on page load, so the cache is just a smooth-paint hedge, not a source
+// of truth. Longer windows risk showing stale prices/volumes during reconnect.
+const TRENDING_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Blacklisted token addresses - these will never be shown in trending
 // These are stablecoins and wrapped tokens that shouldn't appear in memecoin trending
@@ -52,11 +64,13 @@ function loadTrendingCache(timeframe: TrendingTimeframe): NormalizedTrendingToke
     if (!cached) return null;
 
     const cacheData = JSON.parse(cached);
-    // Cache is valid for 5 minutes
     const cacheAge = Date.now() - cacheData.timestamp;
-    if (cacheAge > 5 * 60 * 1000) return null;
+    if (cacheAge > TRENDING_CACHE_TTL_MS) return null;
 
-    return cacheData.tokens;
+    // Defense-in-depth: re-filter any tokens that aged past the trending window
+    // while sitting in the cache (snapshot writer also filters before saving).
+    const tokens: NormalizedTrendingToken[] = Array.isArray(cacheData.tokens) ? cacheData.tokens : [];
+    return tokens.filter(t => !isTooOldForTrending(t));
   } catch (err) {
     return null;
   }
@@ -65,6 +79,19 @@ function loadTrendingCache(timeframe: TrendingTimeframe): NormalizedTrendingToke
 // Helper to check if a token is blacklisted
 function isBlacklisted(mint: string): boolean {
   return BLACKLISTED_TOKENS.has(mint);
+}
+
+// Helper to check if a token is too old for the memecoin trending feed.
+// Accepts ISO strings ("2026-04-29T04:27:45Z") or numeric epoch (seconds or ms).
+// If `created_at` is missing/unparseable, returns false (don't filter — be conservative).
+function isTooOldForTrending(token: { created_at?: string | number; createdAt?: string | number }): boolean {
+  const raw = token.created_at ?? token.createdAt;
+  if (raw === undefined || raw === null || raw === '') return false;
+  const parsed = typeof raw === 'number' ? raw : Date.parse(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return false;
+  // Some backends emit unix seconds; coerce anything < 1e12 (~Sep 2001 in ms) to ms.
+  const tsMs = parsed < 1e12 ? parsed * 1000 : parsed;
+  return Date.now() - tsMs > MAX_TRENDING_AGE_MS;
 }
 
 // Timeframe type
@@ -180,10 +207,16 @@ function normalizeToken(raw: any, timeframe?: TrendingTimeframe): NormalizedTren
     price_usd: raw.price_usd || raw.priceUsd || 0,
     fully_diluted_value: raw.market_cap_usd || raw.marketCapUsd || raw.fully_diluted_value || 0,
     total_liquidity_usd: raw.liquidity_usd || raw.liquidityUsd || raw.total_liquidity_usd || 0,
-    volume_1h: raw.volume_usd || raw.volume_1h || 0,
-    volume_5m: raw.volume_5m || raw.volume_usd || 0,
-    volume_6h: raw.volume_6h || raw.volume_usd || 0,
-    volume_24h: raw.volume_24h || raw.volume_usd || 0,
+    // Per-timeframe volume comes from the backend's per-window fields.
+    // Do NOT fall back to volume_usd: that's the Redis sorted-set score (used
+    // for ranking) and is NOT timeframe-specific. Falling through to it
+    // collapses all four timeframes to the same arbitrary number. If the
+    // backend omits a window (omitempty when value is 0), default to 0 — that
+    // accurately means "no activity in this window."
+    volume_5m: raw.volume_5m ?? 0,
+    volume_1h: raw.volume_1h ?? 0,
+    volume_6h: raw.volume_6h ?? 0,
+    volume_24h: raw.volume_24h ?? 0,
     holder_count: raw.holder_count || raw.holderCount || 0,
     rank: raw.rank || 0,
     status: raw.status || 'ACTIVE',
@@ -317,7 +350,12 @@ function connectGlobal() {
                   filteredCount++;
                   return;
                 }
-                const normalized = normalizeToken(token, tf);
+                // Skip established tokens older than the trending window
+                if (isTooOldForTrending(token)) {
+                  filteredCount++;
+                  return;
+                }
+                const normalized = normalizeToken(token);
                 globalTokenMaps[tf].set(normalized.mint, normalized);
               });
               // Save to localStorage cache for instant display on tab switch
@@ -360,7 +398,11 @@ function connectGlobal() {
                   total_liquidity_usd: update.liquidity_usd ?? existing.total_liquidity_usd,
                   liquidityUsd: update.liquidity_usd ?? existing.liquidityUsd,
                   holder_count: update.holder_count ?? existing.holder_count,
-                  volume_1h: update.volume_usd ?? existing.volume_1h,
+                  // Prefer per-timeframe volume_1h over the legacy volume_usd score
+                  // (matches normalizeToken; see comment there).
+                  volume_1h: update.volume_1h ?? update.volume_usd ?? existing.volume_1h,
+                  volume_5m: update.volume_5m ?? existing.volume_5m,
+                  volume_6h: update.volume_6h ?? existing.volume_6h,
                   bundle_percent: update.bundle_percent ?? existing.bundle_percent,
                   top10_holders_percent: update.top10_holders_percent ?? existing.top10_holders_percent,
                   sniper_percent: update.sniper_percent ?? existing.sniper_percent,
@@ -409,7 +451,9 @@ function connectGlobal() {
               message.data.added.forEach((token: any) => {
                 // Skip blacklisted tokens
                 if (isBlacklisted(token.mint)) return;
-                const normalized = normalizeToken(token, topic);
+                // Skip established tokens older than the trending window
+                if (isTooOldForTrending(token)) return;
+                const normalized = normalizeToken(token);
                 globalTokenMaps[topic].set(normalized.mint, normalized);
                 hasChanges = true;
               });

@@ -2780,44 +2780,60 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     return total > 0 ? total : txnCount;
   }, []);
 
-  // Composite scoring function for ranking tokens
-  // Combines: Transactions (40%), Volume (30%), Market Cap (15%), Liquidity (15%)
-  // Uses logarithmic scaling to handle the wide range of values in crypto
+  // Buy/sell ratio in the selected timeframe. Returns 0..1 where >0.5 means more
+  // buys than sells (upward momentum). Tokens with no activity in the window
+  // return 0 so they sink to the bottom of the score.
+  const getBuyPressureForTimeframe = useCallback((t: any, tf: Timeframe) => {
+    const tfMap: Record<Timeframe, string> = {
+      '5m': '5m',
+      '1h': '1h',
+      '6h': '6h',
+      '24h': '24h',
+    };
+    const suffix = tfMap[tf] || '5m';
+    const buys = Number(t?.[`total_buys_${suffix}`]) || 0;
+    const sells = Number(t?.[`total_sells_${suffix}`]) || 0;
+    const total = buys + sells;
+    if (total <= 0) return 0;
+    return buys / total;
+  }, []);
+
+  // Composite scoring function for ranking tokens.
+  // Reverse-engineered against Axiom (pure-TXNS desc) and GMGN (multi-factor with
+  // holder/buy-pressure weighting). Volume and market cap removed entirely — both
+  // are wash-trade vectors: a token can post $5M+ "volume" with a few bots cycling
+  // dust liquidity, while real trending tokens show high TXN counts and growing
+  // unique-holder counts that are far harder to fake.
+  // - TXNS 60%: Hardest signal to fake (each tx burns gas, each wallet pays fees)
+  // - Holders 20%: Unique participants — wash trading does not grow this
+  // - Buy pressure 15%: buys / (buys+sells) in window — momentum signal
+  // - Liquidity 5%: Tiny tiebreak so dust-pool tokens don't beat tradeable ones
+  // Uses logarithmic scaling to handle the wide range of values in crypto.
   const getCompositeScore = useCallback((t: any, tf: Timeframe, maxValues: {
     maxTxns: number;
-    maxVolume: number;
-    maxMc: number;
+    maxHolders: number;
     maxLiq: number;
   }) => {
-    const { maxTxns, maxVolume, maxMc, maxLiq } = maxValues;
+    const { maxTxns, maxHolders, maxLiq } = maxValues;
 
-    // Get raw values
     const txns = getTxnsForTimeframe(t, tf);
-    const volume = getVolumeForTimeframe(t, tf);
-    const mc = Number((t as any).fully_diluted_value || (t as any).market_cap_usd) || 0;
+    const holders = Number((t as any).holder_count || (t as any).holderCount) || 0;
     const liq = Number((t as any).total_liquidity_usd || (t as any).liquidity_usd) || 0;
+    const buyPressure = getBuyPressureForTimeframe(t, tf);
 
-    // Normalize to 0-1 using log scale (handles wide value ranges better)
-    // Add 1 before log to handle 0 values
+    // Normalize to 0-1 using log scale (handles wide value ranges better).
+    // Add 1 before log to handle 0 values.
     const normalize = (val: number, max: number) => {
       if (max <= 0) return 0;
       return Math.log10(val + 1) / Math.log10(max + 1);
     };
 
     const txnScore = normalize(txns, maxTxns);
-    const volScore = normalize(volume, maxVolume);
-    const mcScore = normalize(mc, maxMc);
+    const holdersScore = normalize(holders, maxHolders);
     const liqScore = normalize(liq, maxLiq);
 
-    // Weighted combination:
-    // - Transactions 40%: Most important for trending (activity indicator)
-    // - Volume 30%: Trading interest
-    // - Market Cap 15%: Size/legitimacy
-    // - Liquidity 15%: Tradability
-    const score = (txnScore * 0.40) + (volScore * 0.30) + (mcScore * 0.15) + (liqScore * 0.15);
-
-    return score;
-  }, [getTxnsForTimeframe, getVolumeForTimeframe]);
+    return (txnScore * 0.60) + (holdersScore * 0.20) + (buyPressure * 0.15) + (liqScore * 0.05);
+  }, [getTxnsForTimeframe, getBuyPressureForTimeframe]);
 
   // Map AMM IDs to protocol patterns (same logic as PulseTable)
   const mapAmmToProtocolPatterns = useCallback((ammId: string): string[] => {
@@ -3152,10 +3168,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
       // Pre-calculate max values for composite score normalization
       const maxValues = sortKey === 'score' ? {
         maxTxns: Math.max(...sortedTokens.map(t => getTxnsForTimeframe(t, selectedTimeframe)), 1),
-        maxVolume: Math.max(...sortedTokens.map(t => getVolumeForTimeframe(t, selectedTimeframe)), 1),
-        maxMc: Math.max(...sortedTokens.map(t => Number((t as any).fully_diluted_value) || 0), 1),
+        maxHolders: Math.max(...sortedTokens.map(t => Number((t as any).holder_count) || 0), 1),
         maxLiq: Math.max(...sortedTokens.map(t => Number((t as any).total_liquidity_usd) || 0), 1),
-      } : { maxTxns: 1, maxVolume: 1, maxMc: 1, maxLiq: 1 };
+      } : { maxTxns: 1, maxHolders: 1, maxLiq: 1 };
 
       sortedTokens.sort((a, b) => {
         // Final safety check in sort
@@ -3165,7 +3180,6 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
 
         let aVal = 0, bVal = 0;
         if (sortKey === 'score') {
-          // Composite score: balances txns (40%), volume (30%), MC (15%), liquidity (15%)
           aVal = getCompositeScore(a, selectedTimeframe, maxValues);
           bVal = getCompositeScore(b, selectedTimeframe, maxValues);
         } else if (sortKey === 'txns') {
@@ -3477,10 +3491,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     // Pre-calculate max values for composite score normalization
     const maxValuesNewPairs = sortKey === 'score' ? {
       maxTxns: Math.max(...sortedTokens.map(t => getTxnsForTimeframe(t, selectedTimeframe)), 1),
-      maxVolume: Math.max(...sortedTokens.map(t => getVolumeForTimeframe(t, selectedTimeframe)), 1),
-      maxMc: Math.max(...sortedTokens.map(t => Number((t as any).fully_diluted_value) || 0), 1),
+      maxHolders: Math.max(...sortedTokens.map(t => Number((t as any).holder_count) || 0), 1),
       maxLiq: Math.max(...sortedTokens.map(t => Number((t as any).total_liquidity_usd) || 0), 1),
-    } : { maxTxns: 1, maxVolume: 1, maxMc: 1, maxLiq: 1 };
+    } : { maxTxns: 1, maxHolders: 1, maxLiq: 1 };
 
     sortedTokens.sort((a, b) => {
       if (!a || !b) return 0;
@@ -3568,10 +3581,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     // Pre-calculate max values for composite score normalization
     const maxValuesXStocks = sortKey === 'score' ? {
       maxTxns: Math.max(...filtered.map(t => getTxnsForTimeframe(t, selectedTimeframe)), 1),
-      maxVolume: Math.max(...filtered.map(t => getVolumeForTimeframe(t, selectedTimeframe)), 1),
-      maxMc: Math.max(...filtered.map(t => Number((t as any).fully_diluted_value) || 0), 1),
+      maxHolders: Math.max(...filtered.map(t => Number((t as any).holder_count) || 0), 1),
       maxLiq: Math.max(...filtered.map(t => Number((t as any).total_liquidity_usd) || 0), 1),
-    } : { maxTxns: 1, maxVolume: 1, maxMc: 1, maxLiq: 1 };
+    } : { maxTxns: 1, maxHolders: 1, maxLiq: 1 };
 
     // Sort tokens
     const sortedTokens = [...filtered].sort((a, b) => {
