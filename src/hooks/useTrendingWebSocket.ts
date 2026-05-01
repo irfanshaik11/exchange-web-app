@@ -134,8 +134,44 @@ interface UseTrendingWebSocketOptions {
   enabled?: boolean;
 }
 
+// Resolve a price-change percentage for a token in a given timeframe slot.
+// The trending feed groups tokens by timeframe (snapshot.{5m,1h,6h}), and the
+// upstream Codex format emits a single `change` field per token whose meaning
+// is implied by which array it came from. `change` is a fraction (0.05 = 5%),
+// so we multiply by 100. Per-timeframe explicit fields take precedence when
+// present.
+function pickPriceChangePct(
+  raw: any,
+  slotTimeframe: '5m' | '1h' | '6h' | '24h',
+  rawTimeframe?: TrendingTimeframe,
+): number | undefined {
+  const explicit =
+    raw[`price_percent_change_${slotTimeframe}`] ??
+    raw[`price_change_${slotTimeframe}`] ??
+    raw[`priceChange${slotTimeframe}`] ??
+    raw[`change_${slotTimeframe}`];
+  if (explicit !== undefined && explicit !== null && explicit !== '') {
+    const n = typeof explicit === 'number' ? explicit : parseFloat(explicit);
+    if (Number.isFinite(n)) return n;
+  }
+  // Fall back to the single `change` field only for the slot that matches the
+  // bucket this token came from — populating other slots from it would be wrong.
+  if (rawTimeframe === slotTimeframe) {
+    const single = raw.change ?? raw.priceChange ?? raw.price_change;
+    if (single !== undefined && single !== null && single !== '') {
+      const n = typeof single === 'number' ? single : parseFloat(single);
+      if (Number.isFinite(n)) {
+        // Fraction (e.g. 0.05) → percentage. Values already in percentage units
+        // (|n| > 1) are passed through unchanged.
+        return Math.abs(n) <= 1 ? n * 100 : n;
+      }
+    }
+  }
+  return undefined;
+}
+
 // Normalize token data from WebSocket to match InterstateTable format
-function normalizeToken(raw: any): NormalizedTrendingToken {
+function normalizeToken(raw: any, timeframe?: TrendingTimeframe): NormalizedTrendingToken {
   return {
     contractAddress: raw.mint || raw.contractAddress || '',
     mint: raw.mint || raw.contractAddress || '',
@@ -162,16 +198,14 @@ function normalizeToken(raw: any): NormalizedTrendingToken {
     priceUsd: raw.price_usd || raw.priceUsd || 0,
     marketCapUsd: raw.market_cap_usd || raw.marketCapUsd || 0,
     liquidityUsd: raw.liquidity_usd || raw.liquidityUsd || 0,
-    // Price % change per timeframe (for the Price % column on trending). Read
-    // every known variant so the column populates regardless of backend shape.
-    price_percent_change_5m:
-      raw.price_percent_change_5m ?? raw.price_change_5m ?? raw.priceChange5m ?? 0,
-    price_percent_change_1h:
-      raw.price_percent_change_1h ?? raw.price_change_1h ?? raw.priceChange1h ?? 0,
-    price_percent_change_6h:
-      raw.price_percent_change_6h ?? raw.price_change_6h ?? raw.priceChange6h ?? 0,
-    price_percent_change_24h:
-      raw.price_percent_change_24h ?? raw.price_change_24h ?? raw.priceChange24h ?? 0,
+    // Price % change per timeframe (Price % column). Backend may send explicit
+    // per-window fields, or a single Codex `change` field whose timeframe is
+    // implied by which array (`timeframe` arg) the token came from. See
+    // pickPriceChangePct for details.
+    price_percent_change_5m: pickPriceChangePct(raw, '5m', timeframe) ?? 0,
+    price_percent_change_1h: pickPriceChangePct(raw, '1h', timeframe) ?? 0,
+    price_percent_change_6h: pickPriceChangePct(raw, '6h', timeframe) ?? 0,
+    price_percent_change_24h: pickPriceChangePct(raw, '24h', timeframe) ?? 0,
     // Transaction counts for TXNS column. Server has historically used several
     // shapes for these fields (total_buys_5m, buys_5m, buyCount5m, total_buyers_5m
     // for unique buyers, etc.) — read from each so the trending feed reliably
@@ -283,7 +317,7 @@ function connectGlobal() {
                   filteredCount++;
                   return;
                 }
-                const normalized = normalizeToken(token);
+                const normalized = normalizeToken(token, tf);
                 globalTokenMaps[tf].set(normalized.mint, normalized);
               });
               // Save to localStorage cache for instant display on tab switch
@@ -331,15 +365,20 @@ function connectGlobal() {
                   top10_holders_percent: update.top10_holders_percent ?? existing.top10_holders_percent,
                   sniper_percent: update.sniper_percent ?? existing.sniper_percent,
                   insider_percent: update.insider_percent ?? existing.insider_percent,
-                  // Price % change (preserve across updates so the Price % column animates with new data)
+                  // Price % change. Use the same resolver as snapshot/added so the
+                  // Codex single-`change` field path works on incremental updates.
+                  // `topic` carries which timeframe bucket this update belongs to.
+                  // pickPriceChangePct returns undefined when the field is absent
+                  // from the update, so `??` correctly preserves existing on partial
+                  // updates while still allowing a real 0% to overwrite.
                   price_percent_change_5m:
-                    update.price_percent_change_5m ?? update.price_change_5m ?? update.priceChange5m ?? existing.price_percent_change_5m,
+                    pickPriceChangePct(update, '5m', topic) ?? existing.price_percent_change_5m,
                   price_percent_change_1h:
-                    update.price_percent_change_1h ?? update.price_change_1h ?? update.priceChange1h ?? existing.price_percent_change_1h,
+                    pickPriceChangePct(update, '1h', topic) ?? existing.price_percent_change_1h,
                   price_percent_change_6h:
-                    update.price_percent_change_6h ?? update.price_change_6h ?? update.priceChange6h ?? existing.price_percent_change_6h,
+                    pickPriceChangePct(update, '6h', topic) ?? existing.price_percent_change_6h,
                   price_percent_change_24h:
-                    update.price_percent_change_24h ?? update.price_change_24h ?? update.priceChange24h ?? existing.price_percent_change_24h,
+                    pickPriceChangePct(update, '24h', topic) ?? existing.price_percent_change_24h,
                   // Transaction counts (try every known field-name variant the
                   // backend has used so partial updates still reflect in the UI).
                   total_buys_5m:
@@ -370,7 +409,7 @@ function connectGlobal() {
               message.data.added.forEach((token: any) => {
                 // Skip blacklisted tokens
                 if (isBlacklisted(token.mint)) return;
-                const normalized = normalizeToken(token);
+                const normalized = normalizeToken(token, topic);
                 globalTokenMaps[topic].set(normalized.mint, normalized);
                 hasChanges = true;
               });
