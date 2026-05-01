@@ -2185,18 +2185,7 @@ export default function TrackersPage() {
                                               }
                                               onRemove={handleRemoveWallet}
                                               onClick={(wallet) => {
-                                                const chain =
-                                                  watched?.chain ??
-                                                  (wallet.address.startsWith(
-                                                    "0x",
-                                                  )
-                                                    ? "monad"
-                                                    : "sol");
-                                                const url =
-                                                  chain === "sol"
-                                                    ? `https://solscan.io/account/${wallet.address}`
-                                                    : `https://monadvision.com/address/${wallet.address}`;
-                                                window.open(url, "_blank");
+                                                setScannedWallet(wallet);
                                               }}
                                               onNotificationToggle={async (
                                                 address,

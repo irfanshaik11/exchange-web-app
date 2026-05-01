@@ -515,7 +515,7 @@ export default function LiveTradesPanel({
                         e.stopPropagation();
                         onQuickBuy(trade);
                       }}
-                      className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-150 ease-out"
+                      className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-150 ease-out"
                       style={{
                         backgroundColor: "#18c48c",
                         color: "#000000",
@@ -527,7 +527,7 @@ export default function LiveTradesPanel({
                         e.currentTarget.style.backgroundColor = "#18c48c";
                       }}
                     >
-                      <HiLightningBolt className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                      <HiLightningBolt className="h-2.5 w-2.5" />
                       <span>{quickBuyAmount} SOL</span>
                     </button>
                   </div>

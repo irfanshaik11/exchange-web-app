@@ -95,9 +95,8 @@ const TABLE_HEADERS: HeaderConfig[] = [
   { key: null, label: '24h', align: 'center', width: 'w-32' }, // Mini sparkline
   { key: 'fully_diluted_value', label: 'Market Cap', align: 'right', width: 'w-32' },
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
-  { key: 'price_percent_change', label: 'Price %', align: 'center', width: 'w-20' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
-  { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
+  { key: 'txns', label: 'TXNS', align: 'center', width: 'w-24' },
   // { key: 'total_fees_lamports', label: 'Gas Fees', align: 'right', width: 'w-28' },
   { key: null, label: 'Token Info', align: 'center', width: 'w-40' },
   { key: null, label: 'Quick Buy', align: 'center', width: 'w-32' },
@@ -476,10 +475,6 @@ const TableHeader: React.FC<{
         let label = header.label;
         // Hide 24h sparkline column for newPairs and dexscreener tabs
         if (header.label === '24h' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
-          return null;
-        }
-        // Hide Price % column for newPairs and dexscreener tabs
-        if (header.label === 'Price %' && (tableType === 'newPairs' || tableType === 'dexscreener')) {
           return null;
         }
         // Hide Token Info / Holders column for newPairs and dexscreener
@@ -1549,7 +1544,7 @@ const TxnsCell: React.FC<{
     const sellPct = total > 0 ? `${(1 - ratio) * 100}%` : '50%';
 
     return (
-      <div className="flex items-center justify-end gap-2 h-full">
+      <div className="flex items-center justify-center gap-2 h-full">
         <div className="flex flex-col w-1 h-6 rounded-sm overflow-hidden" aria-hidden="true">
           <div style={{ backgroundColor: buyColor, height: buyPct }} />
           <div style={{ backgroundColor: sellColor, height: sellPct }} />
@@ -2195,28 +2190,6 @@ const TableRow: React.FC<{
         })()}
       </td>
 
-      {/* Price % column - sits to the right of Liquidity (hidden for newPairs and dexscreener) */}
-      {tableType !== 'newPairs' && tableType !== 'dexscreener' && (
-        <td className="w-20 px-2 py-2.5 align-middle text-center">
-          {(() => {
-            const pct = getTokenStat(token, 'price_percent_change', selectedTimeframe);
-            const color = pct > 0 ? '#85d99f' : pct < 0 ? '#f26681' : AX.muted;
-            const formatted =
-              pct === 0
-                ? '0%'
-                : `${pct > 0 ? '' : '-'}${formatSmartNumber(Math.abs(pct))}%`;
-            return (
-              <span
-                className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`}
-                style={{ color }}
-              >
-                {formatted}
-              </span>
-            );
-          })()}
-        </td>
-      )}
-
       {/* Volume column - hidden for newPairs */}
       {tableType !== 'newPairs' && (
       <td className="w-28 px-4 py-2.5 align-middle text-right">
@@ -2234,7 +2207,7 @@ const TableRow: React.FC<{
       )}
 
       {tableType !== 'dexscreener' && (
-        <td className="w-24 px-4 py-2.5 align-middle text-right">
+        <td className={`w-24 px-4 py-2.5 align-middle ${tableType === 'newPairs' ? 'text-right' : 'text-center'}`}>
           <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} variant={tableType === 'newPairs' ? 'default' : 'compact'} />
         </td>
       )}

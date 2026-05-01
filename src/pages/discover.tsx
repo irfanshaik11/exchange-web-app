@@ -3829,19 +3829,19 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           {/* Tabs Section - Scrollable on mobile */}
           <div className="scrollbar-hide -mx-4 flex min-w-0 flex-1 items-center gap-3 overflow-x-auto px-4 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0">
             <button
-              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-none ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("trending"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
               Trending
             </button>
             {/* <button
-              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-none ${activeTab === "trending2" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "trending2" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("trending2"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
               Trending 2
             </button> */}
             <button
-              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-none ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => { setActiveTab("newPairs"); setShowDiscoverFilter(false); setSortKey("timestamp"); setSortDirection("desc"); }}
             >
               New Pairs
@@ -3864,19 +3864,19 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                   Surge
                 </button> */}
                 <button
-                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-none ${activeTab === "gainers" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "gainers" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
                   onClick={() => { setActiveTab("gainers"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
                   Gainers
                 </button>
                 <button
-                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-none ${activeTab === "top" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "top" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
                   onClick={() => { setActiveTab("top"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
                   Top
                 </button>
                 <button
-                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-none ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
                   onClick={() => { setActiveTab("live"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
                   Pump Live

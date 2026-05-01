@@ -1546,7 +1546,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         onClose={onClose}
         align="center"
         zIndex={99999}
-        className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-xl bg-[#18181A] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
+        className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-xl border border-white bg-[#18181A] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
         disableClickOutside={pulseFilterModalOpen}
       >
       {/* Close Button - Mobile */}

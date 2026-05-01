@@ -1212,6 +1212,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     user,
     solBalance,
     refreshBalance,
+    refreshAllBalances,
     walletList,
     walletBalances,
     selectedWalletIds,
@@ -1247,6 +1248,39 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       const bal = addr ? walletBalances?.[addr] ?? w.balance ?? 0 : 0;
       return acc + (bal || 0);
     }, 0);
+
+  // Fetch live balances for every SOL wallet on the trade page so the picker pill
+  // reflects real on-chain values (refreshBalance only covers the primary wallet).
+  useEffect(() => {
+    if (!solWallets.length) return;
+    const wallets = solWallets
+      .map((w: any) => ({
+        address: (w.solanaAddress || "").trim(),
+        chain: "sol" as const,
+      }))
+      .filter((w) => w.address);
+    if (wallets.length > 0) {
+      refreshAllBalances(wallets);
+    }
+  }, [solWallets, refreshAllBalances]);
+
+  // Default-select the primary wallet on first load so the pill shows the user's
+  // balance instead of 0/0.00 before they open the picker. Runs only while the
+  // selection is empty — clearing all wallets after this is preserved as user intent.
+  const didAutoSelectRef = useRef(false);
+  useEffect(() => {
+    if (didAutoSelectRef.current) return;
+    if (solWallets.length === 0) return;
+    if (selectedWalletSet.size > 0) {
+      didAutoSelectRef.current = true;
+      return;
+    }
+    const primary = solWallets.find((w: any) => w?.isPrimary) ?? solWallets[0];
+    if (primary?.id) {
+      setSelectedWalletsForChain?.([primary.id], "sol");
+      didAutoSelectRef.current = true;
+    }
+  }, [solWallets, selectedWalletSet, setSelectedWalletsForChain]);
 
   // Click-outside to close the wallet picker (covers both trigger and portaled dropdown)
   useEffect(() => {
