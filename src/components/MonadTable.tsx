@@ -3523,8 +3523,10 @@ function MonadTable({
           tokenSymbol: token.symbol,
           tokenDecimals: token.decimals,
           poolAddress,
-          pairAddress:
-            token.pair_address || (token as any).migrated_pool_address || "",
+          // pairAddress is for tracking history (canonical original pair); do
+          // not fall back to migrated_pool_address here. Trading pool comes from
+          // poolAddress above (which already prefers migrated || pair).
+          pairAddress: token.pair_address || "",
           poolType: getPoolTypeFromToken(token),
           slippage: slippageValue,
           priorityFee: priorityFeeValue,

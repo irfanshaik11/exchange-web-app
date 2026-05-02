@@ -8,9 +8,18 @@ interface PollingState {
 }
 
 /**
- * Fetch the correct pair address from the token service using GET /v1/get-pair/{mint}
- * This uses Redis cache-through pattern for fast lookups
- * Exported for use by quick buy and other trade flows
+ * Fetch the correct trading pool address from the token service via GET /v1/get-pair/{mint}.
+ *
+ * For migrated tokens, returns `migrated_pool_address` (the live AMM pool after
+ * bonding-curve migration). For pre-migration tokens, falls back to `pair_address`
+ * (the bonding-curve pool — the only pool that exists in that lifecycle phase).
+ *
+ * Despite the legacy name, this returns the trading pool — not strictly the
+ * original `pair_address`. Migrated tokens often have a stale `pair_address`
+ * that points at the original bonding curve, and trading on it can route swaps
+ * to the wrong pool. Always prefer migrated when present.
+ *
+ * Uses the token-service Redis cache-through pattern for fast lookups.
  */
 export async function fetchVerifiedPairAddress(mintAddress: string): Promise<string | null> {
   if (!TOKEN_SERVICE_URL || !mintAddress) return null;
@@ -26,7 +35,14 @@ export async function fetchVerifiedPairAddress(mintAddress: string): Promise<str
     if (!response.ok) return null;
 
     const data = await response.json();
+    const migratedPoolAddress = data?.migrated_pool_address;
     const pairAddress = data?.pair_address;
+
+    // Prefer migrated_pool_address (live AMM after migration); fall back to
+    // pair_address (bonding curve) for pre-migration tokens.
+    if (typeof migratedPoolAddress === "string" && migratedPoolAddress.length > 0) {
+      return migratedPoolAddress;
+    }
     if (typeof pairAddress === "string" && pairAddress.length > 0) {
       return pairAddress;
     }

@@ -879,9 +879,15 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     let __markId = "";
 
     try {
-      // Verify pool address from token service
+      // Resolve pool: prefer migrated_pool_address (live AMM after migration);
+      // fall back to pair_address (bonding curve) only when not migrated. Re-
+      // verify with token-service ONLY when we don't already have a migrated
+      // pool locally — `/v1/get-pair/{mint}` returns bonding-curve pair_address
+      // only, which for migrated tokens is stale/contaminated and would
+      // downgrade our local migrated value.
       let poolAddress = (token as any).migrated_pool_address || token.pair_address || '';
-      if (token.mint) {
+      const hasMigratedPoolLocally = !!(token as any).migrated_pool_address;
+      if (!hasMigratedPoolLocally && token.mint) {
         const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
         if (verifiedPairAddress) {
           poolAddress = verifiedPairAddress;
@@ -1487,15 +1493,35 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               : 0;
           const primarySolAddr = primaryWalletAddresses.solana || '';
 
+          // Resolve trading pool: prefer migrated_pool_address (live AMM after
+          // migration), fall back to pair_address (bonding curve). Re-verify
+          // with token-service ONLY when we don't already have a migrated pool
+          // locally — `/v1/get-pair/{mint}` returns bonding-curve pair_address
+          // only, which for migrated tokens is stale/contaminated. Without this
+          // guard, migrated tokens get their good local migrated_pool_address
+          // overridden by a bad pair_address (root cause of the TRUMP→BARRON
+          // dust-sell incident).
+          let effectivePoolAddress =
+            (token as any).migrated_pool_address || token.pair_address || '';
+          const hasMigratedPoolLocally = !!(token as any).migrated_pool_address;
+          if (!hasMigratedPoolLocally && token.mint) {
+            const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
+            if (verifiedPairAddress) {
+              effectivePoolAddress = verifiedPairAddress;
+            }
+          }
+
           const sellResult = await tradeSellPercentage(
             {
               tokenAddress,
               percentageToSell: percentage,
-              poolAddress: token.pair_address || '',
+              poolAddress: effectivePoolAddress || undefined,
               baseMint: tokenAddress,
               quoteMint: SOL_MINT_ADDRESS,
               poolType,
-              originalPairAddress: token.pair_address || '',
+              // originalPairAddress is for tracking history (always the original
+              // pair_address), distinct from the execution poolAddress above.
+              originalPairAddress: token.pair_address || undefined,
               slippage: getEffectiveSlippage(sellSettings.maxSlippage, false) * 100,
               priorityFee: sellSettings.priority ?? 0.0001,
               bribe: sellSettings.bribe ?? 0,
