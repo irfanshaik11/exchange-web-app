@@ -123,8 +123,13 @@ const LIMIT_ORDER_MAX_POLLS = 40;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Fallback to fetch pair address from token service when not available locally
- * Uses GET /v1/get-pair/{mint} endpoint with Redis cache-through pattern
+ * Fallback to fetch the trading pool address from token service when not available locally.
+ * Uses GET /v1/get-pair/{mint} with Redis cache-through pattern.
+ *
+ * For migrated tokens, returns `migrated_pool_address` (the live AMM pool); for
+ * pre-migration tokens, falls back to `pair_address` (bonding curve). Migrated
+ * tokens can have a stale `pair_address` pointing at the dead bonding curve, so
+ * we must never prefer it when migrated_pool_address is present.
  */
 async function fetchPairAddressFromTokenService(mintAddress: string): Promise<string | null> {
   if (!TOKEN_SERVICE_URL || !mintAddress) return null;
@@ -143,7 +148,13 @@ async function fetchPairAddressFromTokenService(mintAddress: string): Promise<st
     }
 
     const data = await response.json();
+    const migratedPoolAddress = data?.migrated_pool_address;
     const pairAddress = data?.pair_address;
+
+    // Prefer migrated_pool_address (live AMM) over pair_address (bonding curve).
+    if (typeof migratedPoolAddress === "string" && migratedPoolAddress.length > 0) {
+      return migratedPoolAddress;
+    }
     if (typeof pairAddress === "string" && pairAddress.length > 0) {
       return pairAddress;
     }
@@ -2046,7 +2057,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
     }
 
-    const poolAddress = effectivePoolAddress || token.pair_address || token.migrated_pool_address || "";
+    // Trading pool: prefer migrated (live AMM) over pair_address (bonding curve).
+    // `effectivePoolAddress` already encodes that priority via the resolver hook;
+    // the explicit fallbacks here mirror it in case the hook value is empty.
+    const poolAddress = effectivePoolAddress || token.migrated_pool_address || token.pair_address || "";
     if (!poolAddress) {
       showEnhancedToast("error", "Pool information unavailable", {
         title: "Cannot Arm Sniper",
@@ -2099,7 +2113,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           tokenSymbol: token.symbol,
           tokenDecimals: token.decimals,
           poolAddress,
-          pairAddress: token.pair_address || token.migrated_pool_address || "",
+          // pairAddress is for tracking history (canonical original pair); do NOT
+          // fall back to migrated_pool_address here — that field is for execution.
+          pairAddress: token.pair_address || "",
           poolType: computedPoolType,
           slippage: slippageValue,
           priorityFee: priorityFeeValue,
@@ -2191,7 +2207,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       return;
     }
 
-    const poolAddress = effectivePoolAddress || token.pair_address || token.migrated_pool_address || "";
+    // Trading pool: prefer migrated (live AMM) over pair_address (bonding curve).
+    const poolAddress = effectivePoolAddress || token.migrated_pool_address || token.pair_address || "";
     if (!poolAddress) {
       showEnhancedToast("error", "Pool information unavailable", {
         title: "Cannot Arm Dev Mirror",

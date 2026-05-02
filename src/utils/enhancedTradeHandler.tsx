@@ -426,12 +426,22 @@ export async function executeEnhancedTrade(
     // Step 1: Pre-transaction validation (NO TOAST YET - show only after backend confirms trade)
     // This prevents showing "Placing trade..." when the backend might reject it due to slippage or other errors
     const poolType = getPoolTypeFromToken(token);
-    // Use comprehensive pool address detection
+    // Use comprehensive pool address detection (prefers migrated_pool_address)
     let effectivePoolAddress = getEffectivePoolAddress(token);
 
-    // CRITICAL: Verify the pair address from the token service
-    // This ensures we use the correct/up-to-date pool address for trades
-    if (token.mint) {
+    // Re-verify the pool address with token-service, but ONLY when the local
+    // token object lacks a migrated pool. The `/v1/get-pair/{mint}` endpoint
+    // returns the bonding-curve `pair_address` only — for migrated tokens that
+    // address is stale (or, in confirmed cases like TRUMP, contaminated and
+    // pointing at a foreign Meteora DBC pool). If we already have
+    // `migrated_pool_address` locally, the local value is strictly more
+    // accurate than what /v1/get-pair can give us, so we must not override.
+    const hasMigratedPoolLocally = !!(
+      (token as any).migrated_pool_address ||
+      (token as any).migratedPoolAddress ||
+      (token as any).migrated_poolAddress
+    );
+    if (!hasMigratedPoolLocally && token.mint) {
       const verifiedPairAddress = await fetchVerifiedPairAddress(token.mint);
       if (verifiedPairAddress) {
         effectivePoolAddress = verifiedPairAddress;
