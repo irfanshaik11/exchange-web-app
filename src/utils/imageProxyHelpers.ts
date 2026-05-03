@@ -349,13 +349,16 @@ export async function resolveJsonMetadataImage(
 export function resolveFinalContentType(headerContentType: string, body: Buffer): string {
   let contentType = headerContentType.split(';')[0].trim().toLowerCase();
 
-  if (!isValidImageMimeType(contentType)) {
-    const inferredType = inferImageMimeType(body);
-    if (inferredType) {
-      contentType = inferredType;
-    } else {
-      contentType = contentType || 'application/octet-stream';
-    }
+  // Always sniff magic bytes first. Trusting the upstream Content-Type alone
+  // lets a malicious upstream return SVG/GIF bytes under an `image/png` header,
+  // which would bypass shouldSkipResize and feed unsupported bytes into sharp.
+  // Magic bytes are the source of truth; fall back to header only when bytes
+  // give us nothing useful.
+  const inferredType = inferImageMimeType(body);
+  if (inferredType) {
+    contentType = inferredType;
+  } else if (!isValidImageMimeType(contentType)) {
+    contentType = contentType || 'application/octet-stream';
   }
 
   return contentType.split(';')[0].trim() || 'application/octet-stream';

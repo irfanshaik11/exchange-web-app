@@ -22,6 +22,11 @@ const config = {
   },
   // Transpile these packages to fix CommonJS/ESM issues
   transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit',  '@turnkey/react-wallet-kit', '@turnkey/core', '@wallet-standard/app', '@wallet-standard/base'],
+  // Keep `sharp` (native addon) external to the serverless function bundle.
+  // Vercel ships sharp natively in its runtime; bundling would either fail on
+  // the .node binary or duplicate it. The `/api/img/[hash]` route relies on
+  // this for the on-demand WebP resize pipeline.
+  serverExternalPackages: ['sharp'],
   // Optimize package imports for faster loading
   experimental: {
     optimizePackageImports: ['react-icons', 'lucide-react'],
