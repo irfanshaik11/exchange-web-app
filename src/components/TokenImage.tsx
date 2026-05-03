@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import Image from 'next/image';
-import { withImageFallback } from '../utils/images';
-import AvatarImage from './AvatarImage';
-import { FaStar, FaRegStar } from 'react-icons/fa';
-import { useWatchlist } from './WatchlistContext';
-import type { Token } from '../utils/db';
-import InterstatePopout from './InterstatePopout';
+import React, { useState } from "react";
+import Image from "next/image";
+import { withImageFallback } from "../utils/images";
+import AvatarImage from "./AvatarImage";
+import { FaStar, FaRegStar } from "react-icons/fa";
+import { useWatchlist } from "./WatchlistContext";
+import type { Token } from "../utils/db";
+import InterstatePopout from "./InterstatePopout";
 
 interface TokenImageProps {
   token: Token;
@@ -13,7 +13,11 @@ interface TokenImageProps {
   className?: string;
 }
 
-export default function TokenImage({ token, size = 32, className = '' }: TokenImageProps) {
+export default function TokenImage({
+  token,
+  size = 32,
+  className = "",
+}: TokenImageProps) {
   const [isHovered, setIsHovered] = useState(false);
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
   const isWatched = isInWatchlist(token.pair_address);
@@ -29,14 +33,12 @@ export default function TokenImage({ token, size = 32, className = '' }: TokenIm
 
   return (
     <div
-      className={`relative group ${className}`}
+      className={`group relative ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      style={{ display: 'inline-block' }}
+      style={{ display: "inline-block" }}
     >
-      <div
-        className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-yellow-400 bg-neutral-800 cursor-pointer"
-      >
+      <div className="flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-neutral-800">
         <AvatarImage
           src={token.logo}
           name={token.name}
@@ -47,9 +49,7 @@ export default function TokenImage({ token, size = 32, className = '' }: TokenIm
         />
       </div>
       {/* Star overlay */}
-      <div
-        className="absolute inset-0 flex items-center justify-center bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-      >
+      <div className="absolute inset-0 flex items-center justify-center rounded bg-black/50 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <button
           onClick={handleWatchlistClick}
           className="text-xl transition-transform hover:scale-110"
@@ -66,20 +66,19 @@ export default function TokenImage({ token, size = 32, className = '' }: TokenIm
         open={isHovered}
         onClose={() => setIsHovered(false)}
         align="top-right"
-        className="w-64 bg-red-700 border-4 border-yellow-400 rounded-xl shadow-2xl z-[99999] flex items-center justify-center"
-        overlayClassName="bg-green-400 z-[99999]"
+        className="z-[99999] flex w-64 items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl"
       >
-        <div className="w-48 h-48 rounded-lg overflow-hidden bg-neutral-800 flex items-center justify-center border-2 border-neutral-700">
+        <div className="flex h-48 w-48 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
           <AvatarImage
             src={token.logo}
             name={token.name}
             symbol={token.symbol}
             width={192}
             height={192}
-            className="w-full h-full object-contain"
+            loading="eager"
+            className="h-full w-full object-contain"
           />
         </div>
-        <div style={{color: 'white', fontWeight: 'bold'}}>TEST: Popout is rendering!</div>
       </InterstatePopout>
     </div>
   );

@@ -368,7 +368,14 @@ async function fetchSolanaMetadata(
           createdAt: token.created_timestamp || token.created_at,
           priceUsd: toOptionalNumber(market.price_usd ?? token.usd_price ?? token.price_usd),
           marketCapUsd: toOptionalNumber(market.market_cap_usd ?? token.market_cap_usd ?? token.market_cap),
-          migrated_pool_address: token.migrated_pool_address || token.pair_address || undefined,
+          // Preserve the literal `migrated_pool_address` field. Do NOT fall back
+          // to `pair_address` here — those are semantically distinct: migrated
+          // is the live AMM after bonding-curve migration, pair_address is the
+          // bonding curve. Conflating them tricks downstream consumers into
+          // thinking a non-migrated token is migrated and routes trades to the
+          // wrong pool. Trade-execution paths derive the effective pool via
+          // `migrated_pool_address || pair_address` themselves.
+          migrated_pool_address: token.migrated_pool_address || undefined,
         };
       }
     } else {
