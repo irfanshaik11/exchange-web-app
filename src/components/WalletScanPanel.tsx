@@ -90,6 +90,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 }) => {
   // Get latest trades from context (same as Live Trades)
   const { latestTrades } = useWalletTracker();
+
+  // Only re-fetch history when the count of trades for THIS wallet changes,
+  // not on every unrelated trade from other tracked wallets.
+  const walletTradeCount = useMemo(
+    () => latestTrades.filter(t => t.wallet.toLowerCase() === wallet.address.toLowerCase()).length,
+    [latestTrades, wallet.address]
+  );
+
   // Get SOL price from context
   const { solPrice } = useSolPrice();
   // Use SOL price with fallback if not available
@@ -1018,7 +1026,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     // Use void to explicitly mark promise as intentionally not awaited
     void fetchHistory();
-  }, [wallet?.address, latestTrades]); // Removed tab dependency - fetch when wallet changes
+  }, [wallet?.address, walletTradeCount]); // Re-fetch only when this wallet's trade count changes
 
   // Fetch token metadata for all mints in closed orders and active positions
   useEffect(() => {
