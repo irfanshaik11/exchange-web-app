@@ -1,6 +1,6 @@
 const isDev = process.env.NODE_ENV !== 'production';
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import type { Wallet, TradeRow } from "~/utils/functions";
 import {
   formatSmartNumber,
@@ -97,6 +97,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     () => latestTrades.filter(t => t.wallet.toLowerCase() === wallet.address.toLowerCase()).length,
     [latestTrades, wallet.address]
   );
+
+  // Track the previous wallet address so we can distinguish a wallet change
+  // (needs full reload + loading state) from a new-trade update (silent refresh).
+  const prevWalletAddressRef = useRef<string | null>(null);
 
   // Get SOL price from context
   const { solPrice } = useSolPrice();
@@ -842,22 +846,24 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       return;
     }
     
-    // If history is still loading, show loading state
+    // If history is still loading (initial wallet load), show loading state
     if (historyLoading) {
       setActivityLoading(true);
       setActivityError(null);
       return;
     }
-    
-    setActivityLoading(true);
+
+    // Only show loading spinner when there's no existing data yet (initial load).
+    // Background refreshes (new real-time trades) update silently.
+    if (openPositionTransactions.length === 0) {
+      setActivityLoading(true);
+    }
     setActivityError(null);
-    
+
     // Convert each open position transaction to TradeRow format
+    // (synchronous transform — no async delay needed)
     const updateActivity = async () => {
       try {
-        // Add a small delay to ensure loading state is visible
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
         const activityRows: TradeRow[] = openPositionTransactions.map((openTx, idx) => {
           const trade = openTx.trade;
           
@@ -955,10 +961,19 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     if (!wallet?.address) {
       setHistory([]);
       setHistoryLoading(false);
+      prevWalletAddressRef.current = null;
       return;
     }
 
-    setHistoryLoading(true);
+    // Only show the loading spinner when the wallet itself changes.
+    // When walletTradeCount increases (new real-time trade), we silently
+    // refresh in the background so the popup doesn't flicker.
+    const isWalletChange = prevWalletAddressRef.current !== wallet.address;
+    prevWalletAddressRef.current = wallet.address;
+
+    if (isWalletChange) {
+      setHistoryLoading(true);
+    }
     setHistoryError(null);
 
     // Get real-time trades from context filtered by wallet address
