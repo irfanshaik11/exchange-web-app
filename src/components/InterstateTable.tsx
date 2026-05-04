@@ -1336,27 +1336,9 @@ const TokenInfo: React.FC<{
               {token.name}
             </span>
           )}
-          {/* Age (trending only — sits next to symbol on line 1) */}
-          {isTrending && tokenAge && (
-            <span
-              className={`text-xs ${isDiscoverPage ? "number-font" : ""}`}
-              style={{
-                color: ageColor,
-                fontWeight: 700,
-                ...(isDiscoverPage
-                  ? {}
-                  : {
-                      fontFamily:
-                        'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-                    }),
-              }}
-            >
-              {tokenAge}
-            </span>
-          )}
-          {/* Spacer + always-on actions on the right (trending only) */}
+          {/* Always-on actions next to the token symbol (trending only) */}
           {isTrending && (
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={handleWatchlistClick}
                 className="flex cursor-pointer items-center justify-center transition-colors duration-200 hover:opacity-80"
@@ -1401,6 +1383,24 @@ const TokenInfo: React.FC<{
                 <Copy className="h-3.5 w-3.5" />
               </button>
             </div>
+          )}
+          {/* Age (trending only — sits after the action icons on line 1) */}
+          {isTrending && tokenAge && (
+            <span
+              className={`text-xs ${isDiscoverPage ? "number-font" : ""}`}
+              style={{
+                color: ageColor,
+                fontWeight: 700,
+                ...(isDiscoverPage
+                  ? {}
+                  : {
+                      fontFamily:
+                        'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                    }),
+              }}
+            >
+              {tokenAge}
+            </span>
           )}
           {/* Original copy + watchlist for non-trending modes */}
           {!isTrending && (
