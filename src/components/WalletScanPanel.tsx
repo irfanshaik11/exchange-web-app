@@ -131,7 +131,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState("Activity");
-  const [top100Search, setTop100Search] = useState("");
 
   // Wallet scan state
   const [scanData, setScanData] = useState<TradeRow[]>([]);
@@ -753,9 +752,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     unrealizedPnl: number; // Estimated PnL from remaining (0 for now, could fetch current price)
     totalPnl: number; // Realized + Unrealized
     pnlPercentage: number; // PnL as percentage of cost basis
+    isOpen: boolean; // Whether the position still has remaining tokens above dust
   }
 
-  const aggregatedPositions = useMemo((): AggregatedPosition[] => {
+  const allAggregatedPositions = useMemo((): AggregatedPosition[] => {
     if (!history || history.length === 0) return [];
 
     // Group trades by mint (token) to calculate aggregated positions
@@ -867,45 +867,52 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         }
       }
 
+      // Calculate realized PnL (from sold portion)
+      const realizedPnl = totalSoldValue - realizedCost;
+
+      // Unrealized PnL (for now, assume 0 - could fetch current price later)
+      const unrealizedPnl = 0; // remainingValue - remainingCost (if we had current price)
+
+      // Total PnL = realized + unrealized
+      const totalPnl = realizedPnl + unrealizedPnl;
+
+      // PnL percentage based on cost basis
+      const costBasis = totalBoughtValue;
+      const pnlPercentage = costBasis > 0 ? (totalPnl / costBasis) * 100 : 0;
+
       // Only include positions above dust thresholds — FIFO float subtraction
       // can leave ~1e-14 residuals on fully-exited positions.
       const DUST_USD = 0.01;
       const dustAmount = totalBoughtAmount * 1e-9;
-      if (remainingAmount > dustAmount && remainingCost > DUST_USD) {
-        // Calculate realized PnL (from sold portion)
-        const realizedPnl = totalSoldValue - realizedCost;
-        
-        // Unrealized PnL (for now, assume 0 - could fetch current price later)
-        const unrealizedPnl = 0; // remainingValue - remainingCost (if we had current price)
-        
-        // Total PnL = realized + unrealized
-        const totalPnl = realizedPnl + unrealizedPnl;
-        
-        // PnL percentage based on cost basis
-        const costBasis = totalBoughtValue;
-        const pnlPercentage = costBasis > 0 ? (totalPnl / costBasis) * 100 : 0;
+      const isOpen = remainingAmount > dustAmount && remainingCost > DUST_USD;
 
-        aggregated.push({
-          mint,
-          tokenName: position.tokenName,
-          tokenSymbol: position.tokenSymbol,
-          boughtAmount: totalBoughtAmount,
-          boughtValue: totalBoughtValue,
-          soldAmount: totalSoldAmount,
-          soldValue: totalSoldValue,
-          remainingAmount,
-          remainingValue: remainingCost, // Cost basis of remaining
-          realizedPnl,
-          unrealizedPnl,
-          totalPnl,
-          pnlPercentage,
-        });
-      }
+      aggregated.push({
+        mint,
+        tokenName: position.tokenName,
+        tokenSymbol: position.tokenSymbol,
+        boughtAmount: totalBoughtAmount,
+        boughtValue: totalBoughtValue,
+        soldAmount: totalSoldAmount,
+        soldValue: totalSoldValue,
+        remainingAmount: isOpen ? remainingAmount : 0,
+        remainingValue: isOpen ? remainingCost : 0, // Cost basis of remaining
+        realizedPnl,
+        unrealizedPnl,
+        totalPnl,
+        pnlPercentage,
+        isOpen,
+      });
     });
 
     // Sort by total PnL (highest first)
     return aggregated.sort((a, b) => b.totalPnl - a.totalPnl);
   }, [history, currentSolPrice]);
+
+  // Active positions: only open (not fully exited)
+  const aggregatedPositions = useMemo(
+    () => allAggregatedPositions.filter((p) => p.isOpen),
+    [allAggregatedPositions],
+  );
 
   // Calculate total portfolio value and unrealized PnL
   const portfolioMetrics = useMemo(() => {
@@ -941,19 +948,12 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     };
   }, [aggregatedPositions, walletBalance, currentSolPrice]);
 
-  // Calculate top 100 positions by PnL
-  const top100Positions = useMemo((): AggregatedPosition[] => {
-    const top100 = aggregatedPositions.slice(0, 100);
-    if (!top100Search.trim()) return top100;
-    const q = top100Search.trim().toLowerCase();
-    return top100.filter((p) => {
-      const meta = tokenMetadata.get(p.mint);
-      const name = (p.tokenName || meta?.name || "").toLowerCase();
-      const symbol = (p.tokenSymbol || meta?.symbol || "").toLowerCase();
-      const mint = (p.mint || "").toLowerCase();
-      return name.includes(q) || symbol.includes(q) || mint.includes(q);
-    });
-  }, [aggregatedPositions, top100Search, tokenMetadata]);
+  // Top 100 positions by PnL — includes closed positions so wallets
+  // with no open positions still show their historical trades.
+  const top100Positions = useMemo(
+    () => allAggregatedPositions.slice(0, 100),
+    [allAggregatedPositions],
+  );
 
   // Update activity data when openPositionTransactions changes (depends on history)
   // Activity tab shows each individual transaction (buy or sell) that is part of an open position
@@ -1524,19 +1524,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 );
               })}
             </div>
-            {tab === "Top 100" && (
-              <div className="mt-2 flex items-center gap-2 pb-1">
-                <input
-                  type="text"
-                  value={top100Search}
-                  onChange={(e) => setTop100Search(e.target.value)}
-                  placeholder="Search by name or address"
-                  className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 placeholder-neutral-500 focus:border-blue-500 focus:outline-none"
-                  style={{ minWidth: 180 }}
-                />
-                <span className="text-xs font-semibold text-neutral-400">↑ USD</span>
-              </div>
-            )}
           </div>
           {/* Tab Content Area */}
           <div className="flex-1 overflow-auto px-8">
