@@ -1179,7 +1179,12 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     batchFetchChainTokenMetadata(mintsToFetch)
       .then((metadata) => {
         isDev && console.log("[WalletScan] Fetched token metadata:", metadata);
-        setTokenMetadata(metadata);
+        if (metadata.size === 0) return;
+        setTokenMetadata((prev) => {
+          const next = new Map(prev);
+          metadata.forEach((value, key) => next.set(key, value));
+          return next;
+        });
       })
       .catch((err) => {
         console.error("[WalletScan] Error fetching token metadata:", err);
