@@ -11,20 +11,13 @@ import InterstatePopout from "./InterstatePopout";
 import {
   FaRegCopy,
   FaCheck,
-  FaStar,
-  FaSearch,
   FaRegChartBar,
-  FaBell,
   FaExternalLinkAlt,
   FaArrowUp,
   FaArrowDown,
-  FaRegCalendar,
 } from "react-icons/fa";
 import { FiExternalLink } from "react-icons/fi";
 import type { Token } from "~/utils/db";
-import { AiOutlineCalendar } from "react-icons/ai";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
 import { batchFetchChainTokenMetadata } from "~/utils/tokenMetadata";
 import {
   getWalletSolBalance,
@@ -159,15 +152,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [tokenBalanceError, setTokenBalanceError] = useState<string | null>(
     null,
   );
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [notify, setNotify] = useState(false);
   const [selectedRange, setSelectedRange] = useState("Max");
   const timeRanges = ["1d", "7d", "30d", "Max"];
   const [toast, setToast] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [currency, setCurrency] = useState<"USD" | "SOL">("USD");
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Calculate closed orders from history (only completed positions)
   const closedOrders = useMemo((): ClosedOrder[] => {
@@ -760,8 +749,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         }
       }
 
-      // Only include positions with remaining amount > 0 (active positions)
-      if (remainingAmount > 0 && remainingCost > 0) {
+      // Only include positions above dust thresholds — FIFO float subtraction
+      // can leave ~1e-14 residuals on fully-exited positions.
+      const DUST_USD = 0.01;
+      const dustAmount = totalBoughtAmount * 1e-9;
+      if (remainingAmount > dustAmount && remainingCost > DUST_USD) {
         // Calculate realized PnL (from sold portion)
         const realizedPnl = totalSoldValue - realizedCost;
         
@@ -1134,51 +1126,30 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               {copied && (
                 <span className="ml-1 text-xs text-emerald-400">Copied!</span>
               )}
-              <span className="mx-2 text-neutral-500">|</span>
-              {tokenBalanceLoading || tokenLoading ? (
-                <span className="animate-pulse text-neutral-500">—</span>
-              ) : tokenBalanceError ? (
-                <span className="text-red-400">Error</span>
+              {tokenBalanceLoading || tokenLoading ? null : tokenBalanceError ? (
+                <>
+                  <span className="mx-2 text-neutral-500">|</span>
+                  <span className="text-red-400">Error</span>
+                </>
               ) : tokenBalance !== null && token ? (
-                <span className="text-neutral-300">
-                  {tokenBalance} {token.symbol}
-                </span>
+                <>
+                  <span className="mx-2 text-neutral-500">|</span>
+                  <span className="text-neutral-300">
+                    {tokenBalance} {token.symbol}
+                  </span>
+                </>
               ) : (
-                <span className="text-red-400">No balance</span>
+                <>
+                  <span className="mx-2 text-neutral-500">|</span>
+                  <span className="text-red-400">No balance</span>
+                </>
               )}
             </span>
           </div>
           <div className="absolute top-1/2 right-16 flex -translate-y-1/2 items-center gap-4">
-            <FaStar
-              className={`cursor-pointer text-base transition-colors ${isFavorite ? "text-yellow-400" : "text-neutral-500 hover:text-yellow-400"}`}
-              title="Track Wallet"
-              onClick={() => {
-                setIsFavorite((fav) => !fav);
-                setToast("Wallet updated successfully");
-              }}
-            />
-            <FaBell
-              className={`cursor-pointer text-base transition-colors ${notify ? "text-blue-400" : "text-neutral-500 hover:text-blue-400"}`}
-              title="Notify"
-              onClick={() => {
-                setNotify((n) => !n);
-                setToast("Wallet updated successfully");
-              }}
-            />
             <FaExternalLinkAlt
               className="cursor-pointer text-base text-neutral-500 hover:text-blue-400"
               title="Open in Solscan"
-              onClick={() => {
-                window.open(
-                  `https://solscan.io/account/${wallet.address}`,
-                  "_blank",
-                );
-                setToast("Wallet updated successfully");
-              }}
-            />
-            <FaSearch
-              className="cursor-pointer text-base text-neutral-500 hover:text-blue-400"
-              title="Search on Solscan"
               onClick={() => {
                 window.open(
                   `https://solscan.io/account/${wallet.address}`,
@@ -1269,35 +1240,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               <div className="flex w-full flex-row items-start justify-between">
                 <div className="mt-1 mb-1 w-full pl-2 text-left text-xs text-neutral-400">
                   PNL
-                </div>
-                <div className="relative mt-1 mr-2">
-                  <button
-                    className="rounded p-1 text-neutral-400 transition-colors hover:text-blue-400"
-                    title={
-                      selectedDate
-                        ? `Selected: ${selectedDate.toLocaleDateString()}`
-                        : "Select date"
-                    }
-                    onClick={() => setShowDatePicker((v) => !v)}
-                  >
-                    <AiOutlineCalendar className="text-lg" />
-                  </button>
-                  {showDatePicker && (
-                    <div className="absolute top-8 right-0 z-50">
-                      <DatePicker
-                        selected={selectedDate}
-                        onChange={(date: Date | null) => {
-                          setSelectedDate(date);
-                          setShowDatePicker(false);
-                        }}
-                        inline
-                        showMonthDropdown
-                        showYearDropdown
-                        dropdownMode="select"
-                        calendarClassName="bg-neutral-900 text-white border border-neutral-700 rounded shadow-lg dark-datepicker"
-                      />
-                    </div>
-                  )}
                 </div>
               </div>
               <div className="flex flex-1 flex-col items-center justify-center">
@@ -1744,19 +1686,20 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             <tr
                               key={position.mint || idx}
                               className="transition-colors hover:bg-neutral-800"
-                              onClick={() => {
-                                // Navigate to token page using mint (faster WebSocket connection)
-                                const trade = history.find(t => t.mint === position.mint);
-                                const addr = position.mint || trade?.pair_address;
-                                if (addr) {
-                                  window.open(`/trade/${addr}`, '_blank');
-                                }
-                              }}
                             >
-                              <td className="px-4 py-3">
+                              <td
+                                className="cursor-pointer px-4 py-3"
+                                onClick={() => {
+                                  const trade = history.find(t => t.mint === position.mint);
+                                  const addr = position.mint || trade?.pair_address;
+                                  if (addr) {
+                                    window.open(`/trade/${addr}`, '_blank');
+                                  }
+                                }}
+                              >
                                 <div className="flex flex-col">
                                   <span
-                                    className="font-semibold text-white"
+                                    className="font-semibold text-white hover:text-blue-400"
                                     title={position.mint || undefined}
                                   >
                                     {displayName || displaySymbol}
@@ -1932,25 +1875,26 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                           return (
                             <tr
                               key={position.mint || idx}
-                              className="transition-colors hover:bg-neutral-800 cursor-pointer"
-                              onClick={() => {
-                                // Navigate to token page using mint (faster WebSocket connection)
-                                const trade = history.find(t => t.mint === position.mint);
-                                const addr = position.mint || trade?.pair_address;
-                                if (addr) {
-                                  window.open(`/trade/${addr}`, '_blank');
-                                }
-                              }}
+                              className="transition-colors hover:bg-neutral-800"
                             >
                               <td className="px-4 py-3 text-neutral-400">
                                 <div className="font-mono text-sm">
                                   #{rank}
                                 </div>
                               </td>
-                              <td className="px-4 py-3">
+                              <td
+                                className="cursor-pointer px-4 py-3"
+                                onClick={() => {
+                                  const trade = history.find(t => t.mint === position.mint);
+                                  const addr = position.mint || trade?.pair_address;
+                                  if (addr) {
+                                    window.open(`/trade/${addr}`, '_blank');
+                                  }
+                                }}
+                              >
                                 <div className="flex flex-col">
                                   <span
-                                    className="font-semibold text-white"
+                                    className="font-semibold text-white hover:text-blue-400"
                                     title={position.mint || undefined}
                                   >
                                     {displayName || displaySymbol}
