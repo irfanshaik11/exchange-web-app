@@ -24,6 +24,7 @@ interface ActivityProps {
   tokenMetadataCache?: Record<string, TokenMetadata>; // Optional: shared cache
   onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
   isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
+  maxTokenNameLength?: number; // Optional: truncate displayed token name to N characters
 }
 
 function shortAddr(addr: string) {
@@ -114,14 +115,19 @@ function formatAge(timestamp: number | string, currentTime: number): string {
   }
 }
 
-const Activity: React.FC<ActivityProps> = ({ 
-  trades, 
-  loading, 
+const Activity: React.FC<ActivityProps> = ({
+  trades,
+  loading,
   onTokenNamesChange,
   tokenMetadataCache,
   onUpdateCache,
-  isCacheValid
+  isCacheValid,
+  maxTokenNameLength
 }) => {
+  const truncateName = (name: string) =>
+    maxTokenNameLength && name.length > maxTokenNameLength
+      ? `${name.slice(0, maxTokenNameLength)}…`
+      : name;
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [pumpfunImages, setPumpfunImages] = useState<Record<string, string>>({});
   const [currentTime, setCurrentTime] = useState(Date.now());
@@ -707,7 +713,7 @@ const Activity: React.FC<ActivityProps> = ({
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="font-medium text-sm text-neutral-100 truncate">
-                          {metadata?.name || trade.tokenName || shortAddr(trade.tokenAddress)}
+                          {truncateName(metadata?.name || trade.tokenName || shortAddr(trade.tokenAddress))}
                         </div>
                         <div className="text-xs text-neutral-400 font-mono truncate" title={trade.tokenAddress}>
                           {shortAddr(trade.tokenAddress)}
