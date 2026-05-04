@@ -1933,9 +1933,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead className="sticky top-0 border-b border-neutral-800 bg-black">
                       <tr className="text-xs text-neutral-400 uppercase">
                         <th className="px-4 py-3 text-left font-semibold">
-                          Rank
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold">
                           Token
                         </th>
                         <th className="px-4 py-3 text-right font-semibold">
@@ -1945,11 +1942,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                           Sold
                         </th>
                         <th className="px-4 py-3 text-right font-semibold">
-                          Remaining
-                        </th>
-                        <th className="px-4 py-3 text-right font-semibold">
                           PnL
                         </th>
+                        <th className="w-10" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
@@ -1969,84 +1964,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             metadata?.name ||
                             position.mint?.slice(0, 8) + "..." ||
                             "Unknown";
-
-                          // Format bought
-                          const boughtDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-emerald-400 font-semibold">
-                                ${formatSmartNumber(position.boughtValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.boughtAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format sold
-                          const soldDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-red-400 font-semibold">
-                                ${formatSmartNumber(position.soldValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.soldAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format remaining
-                          const remainingDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-white font-semibold">
-                                ${formatSmartNumber(position.remainingValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.remainingAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format PnL
-                          const pnlDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span
-                                className={`font-semibold ${
-                                  position.totalPnl >= 0
-                                    ? "text-emerald-400"
-                                    : "text-red-400"
-                                }`}
-                              >
-                                {position.totalPnl >= 0 ? "+" : ""}
-                                ${formatSmartNumber(Math.abs(position.totalPnl))}
-                              </span>
-                              <span
-                                className={`text-xs ${
-                                  position.pnlPercentage >= 0
-                                    ? "text-emerald-400/70"
-                                    : "text-red-400/70"
-                                }`}
-                              >
-                                {position.pnlPercentage >= 0 ? "+" : ""}
-                                {position.pnlPercentage.toFixed(2)}%
-                              </span>
-                            </div>
-                          );
-
-                          // Calculate rank (1-indexed)
-                          const rank = idx + 1;
+                          const imageUrl = metadata?.imageUrl || "";
 
                           return (
                             <tr
                               key={position.mint || idx}
-                              className="transition-colors hover:bg-neutral-800"
+                              className="transition-colors hover:bg-neutral-800/60"
                             >
-                              <td className="px-4 py-3 text-neutral-400">
-                                <div className="font-mono text-sm">
-                                  #{rank}
-                                </div>
-                              </td>
                               <td
-                                className="cursor-pointer px-4 py-3"
+                                className="cursor-pointer px-4 py-2"
                                 onClick={() => {
                                   const trade = history.find(t => t.mint === position.mint);
                                   const addr = position.mint || trade?.pair_address;
@@ -2055,41 +1981,91 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                   }
                                 }}
                               >
-                                <div className="flex flex-col">
-                                  <span
-                                    className="font-semibold text-white hover:text-blue-400"
-                                    title={position.mint || undefined}
-                                  >
-                                    {truncateTokenName(displayName || displaySymbol)}
-                                  </span>
-                                  {displayName &&
-                                    displaySymbol &&
-                                    displayName !== displaySymbol && (
-                                      <span className="text-[10px] text-neutral-500">
-                                        {displaySymbol}
-                                      </span>
-                                    )}
-                                  {!displayName &&
-                                    !displaySymbol &&
-                                    position.mint && (
-                                      <span className="font-mono text-[10px] text-neutral-500">
-                                        {position.mint.slice(0, 4)}...
-                                        {position.mint.slice(-4)}
-                                      </span>
-                                    )}
+                                <div className="flex items-center gap-2">
+                                  <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
+                                    <FastImage
+                                      src={imageUrl}
+                                      alt={displayName || displaySymbol || "Token"}
+                                      symbol={displaySymbol || undefined}
+                                      name={displayName || undefined}
+                                      width={32}
+                                      height={32}
+                                      className="h-full w-full object-cover"
+                                      showBubble={false}
+                                    />
+                                  </div>
+                                  <div className="flex min-w-0 flex-col">
+                                    <span
+                                      className="truncate text-sm font-semibold text-white hover:text-blue-400"
+                                      title={position.mint || undefined}
+                                    >
+                                      {truncateTokenName(displayName || displaySymbol)}
+                                    </span>
+                                    <span className="truncate text-[11px] text-neutral-500">
+                                      {displaySymbol}
+                                    </span>
+                                  </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {boughtDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold text-neutral-100">
+                                    ${formatSmartNumber(position.boughtValue)}
+                                  </span>
+                                  <span className="text-xs text-neutral-500">
+                                    {formatSmartNumber(position.boughtAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {soldDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold text-neutral-100">
+                                    ${formatSmartNumber(position.soldValue)}
+                                  </span>
+                                  <span className="text-xs text-neutral-500">
+                                    {formatSmartNumber(position.soldAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {remainingDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span
+                                    className={`font-semibold ${
+                                      position.totalPnl >= 0
+                                        ? "text-emerald-400"
+                                        : "text-red-400"
+                                    }`}
+                                  >
+                                    {position.totalPnl >= 0 ? "+" : ""}$
+                                    {formatSmartNumber(Math.abs(position.totalPnl))}
+                                  </span>
+                                  <span
+                                    className={`text-xs ${
+                                      position.pnlPercentage >= 0
+                                        ? "text-emerald-400/70"
+                                        : "text-red-400/70"
+                                    }`}
+                                  >
+                                    {position.pnlPercentage >= 0 ? "+" : ""}
+                                    {position.pnlPercentage.toFixed(2)}%
+                                  </span>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {pnlDisplay}
+                              <td className="pr-3 py-2">
+                                <div className="h-6 w-6 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800 ml-auto">
+                                  <FastImage
+                                    src={imageUrl}
+                                    alt={displaySymbol || "Token"}
+                                    symbol={displaySymbol || undefined}
+                                    name={displayName || undefined}
+                                    width={24}
+                                    height={24}
+                                    className="h-full w-full object-cover"
+                                    showBubble={false}
+                                  />
+                                </div>
                               </td>
                             </tr>
                           );
