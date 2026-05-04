@@ -32,13 +32,16 @@ import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
   type PnlChartDataPoint,
 } from "./charts/RealizedPnlChart";
+import FastImage from "./FastImage";
+import useDevTokensByWallet from "../hooks/useDevTokensByWallet";
+import { IoIosCloseCircleOutline } from "react-icons/io";
 
 interface WalletScanPanelProps {
   wallet: Wallet;
   onClose: () => void;
 }
 
-const TABS = ["Active Positions", "History", "Top 100", "Activity"];
+const TABS = ["Active Positions", "History", "Top 100", "Activity", "Dev Tokens"];
 
 const MAX_TOKEN_NAME_LENGTH = 10;
 const truncateTokenName = (name: string | null | undefined): string => {
@@ -94,6 +97,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 }) => {
   // Get latest trades from context (same as Live Trades)
   const { latestTrades } = useWalletTracker();
+
+  const {
+    tokens: devTokens,
+    isLoading: devTokensLoading,
+  } = useDevTokensByWallet(wallet?.address);
 
   // Only re-fetch history when the count of trades for THIS wallet changes,
   // not on every unrelated trade from other tracked wallets.
@@ -153,7 +161,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     closedAt: number; // Timestamp of the sell (when position was closed)
   }
   const [tokenMetadata, setTokenMetadata] = useState<
-    Map<string, { symbol?: string | null; name?: string | null }>
+    Map<
+      string,
+      {
+        symbol?: string | null;
+        name?: string | null;
+        imageUrl?: string | null;
+      }
+    >
   >(new Map());
   const [token, setToken] = useState<Token | null>(null);
   const [tokenLoading, setTokenLoading] = useState(true);
@@ -166,7 +181,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [selectedRange, setSelectedRange] = useState("Max");
   const timeRanges = ["1d", "7d", "30d", "Max"];
   const [toast, setToast] = useState<string | null>(null);
-  const [currency, setCurrency] = useState<"USD" | "SOL">("USD");
 
   // Calculate closed orders from history (only completed positions)
   const closedOrders = useMemo((): ClosedOrder[] => {
@@ -1463,19 +1477,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 </button>
               ))}
             </div>
-            {tab !== "Activity" && (
-              <div className="flex items-center gap-2">
-                <button
-                  className={`border border-neutral-700 px-3 py-1 text-xs font-semibold ${currency === "USD" ? "bg-blue-500 text-white" : "bg-neutral-800 text-neutral-300"} rounded-full transition-colors`}
-                  onClick={() =>
-                    setCurrency(currency === "USD" ? "SOL" : "USD")
-                  }
-                  style={{ minWidth: 56 }}
-                >
-                  {currency === "USD" ? "USD" : "SOL"}
-                </button>
-              </div>
-            )}
           </div>
           {/* Tab Content Area */}
           <div className="flex-1 overflow-auto px-8">
@@ -1548,23 +1549,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             order.mint?.slice(0, 8) + "..." ||
                             "Unknown";
 
-                          // Format bought/sold amounts
-                          const boughtDisplay = currency === "USD"
-                            ? `$${formatSmartNumber(order.boughtValue)}`
-                            : (
-                                <span className="flex items-center justify-end">
-                                  <img 
-                                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png" 
-                                    alt="SOL" 
-                                    className="w-5 h-5 inline-block"
-                                  />
-                                  {formatSmartNumber(order.boughtAmount)}
-                                </span>
-                              );
-
-                          const soldDisplay = currency === "USD"
-                            ? `$${formatSmartNumber(order.soldValue)}`
-                            : formatSmartNumber(order.soldAmount);
+                          const boughtDisplay = `$${formatSmartNumber(order.boughtValue)}`;
+                          const soldDisplay = `$${formatSmartNumber(order.soldValue)}`;
 
                           // Format PnL
                           const pnlDisplay = `${order.pnl >= 0 ? "+" : ""}$${formatSmartNumber(Math.abs(order.pnl))}`;
@@ -1581,28 +1567,33 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <div className="flex flex-col">
-                                  <span
-                                    className="font-semibold text-white"
-                                    title={order.mint || undefined}
-                                  >
-                                    {truncateTokenName(displayName || displaySymbol)}
-                                  </span>
-                                  {displayName &&
-                                    displaySymbol &&
-                                    displayName !== displaySymbol && (
-                                      <span className="text-[10px] text-neutral-500">
-                                        {displaySymbol}
-                                      </span>
-                                    )}
-                                  {!displayName &&
-                                    !displaySymbol &&
-                                    order.mint && (
-                                      <span className="font-mono text-[10px] text-neutral-500">
-                                        {order.mint.slice(0, 4)}...
-                                        {order.mint.slice(-4)}
-                                      </span>
-                                    )}
+                                <div className="flex items-center gap-2">
+                                  <div className="h-7 w-7 flex-shrink-0 overflow-hidden rounded-full">
+                                    <FastImage
+                                      src={metadata?.imageUrl || ""}
+                                      alt={displayName || displaySymbol || "Token"}
+                                      symbol={displaySymbol || undefined}
+                                      name={displayName || undefined}
+                                      width={28}
+                                      height={28}
+                                      className="h-full w-full object-cover"
+                                      showBubble={false}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col min-w-0">
+                                    <span
+                                      className="truncate font-semibold text-white"
+                                      title={order.mint || undefined}
+                                    >
+                                      {truncateTokenName(
+                                        displayName ||
+                                          displaySymbol ||
+                                          (order.mint
+                                            ? `${order.mint.slice(0, 4)}...${order.mint.slice(-4)}`
+                                            : "Unknown"),
+                                      )}
+                                    </span>
+                                  </div>
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-right text-neutral-300">
@@ -2032,6 +2023,112 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                       maxTokenNameLength={10}
                     />
                   </div>
+                )}
+              </div>
+            )}
+            {tab === "Dev Tokens" && (
+              <div className="h-full w-full">
+                {devTokensLoading ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="animate-pulse text-neutral-400">
+                      Loading dev tokens...
+                    </div>
+                  </div>
+                ) : devTokens.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="text-neutral-500">
+                      No tokens launched by this wallet
+                    </div>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 border-b border-neutral-800 bg-black text-xs text-neutral-400">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold">
+                          Token
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold">
+                          Migrated
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Market Cap
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Liquidity
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800">
+                      {devTokens.map((dt) => {
+                        const isMigrated = !!dt.token.migrated_pool_address;
+                        const ageSec = Math.max(
+                          0,
+                          Math.floor(Date.now() / 1000 - dt.token.createdAt),
+                        );
+                        const age =
+                          ageSec >= 86400
+                            ? `${Math.floor(ageSec / 86400)}d`
+                            : ageSec >= 3600
+                              ? `${Math.floor(ageSec / 3600)}h`
+                              : ageSec >= 60
+                                ? `${Math.floor(ageSec / 60)}m`
+                                : `${ageSec}s`;
+                        const formatUsdShort = (raw: string) => {
+                          const n = parseFloat(raw);
+                          if (!Number.isFinite(n)) return "$0";
+                          if (n >= 1_000_000)
+                            return `$${(n / 1_000_000).toFixed(1)}M`;
+                          if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+                          return `$${n.toFixed(0)}`;
+                        };
+                        return (
+                          <tr
+                            key={dt.token.address}
+                            className="cursor-pointer transition-colors hover:bg-neutral-800"
+                            onClick={() =>
+                              window.open(
+                                `/trade/${dt.token.address}`,
+                                "_blank",
+                              )
+                            }
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col">
+                                <span
+                                  className="font-semibold text-white"
+                                  title={dt.token.address}
+                                >
+                                  {truncateTokenName(
+                                    dt.token.symbol ||
+                                      dt.token.name ||
+                                      `${dt.token.address.slice(0, 4)}...${dt.token.address.slice(-4)}`,
+                                  )}
+                                </span>
+                                <span className="text-xs text-neutral-500">
+                                  {age} ago
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {isMigrated ? (
+                                <span className="text-emerald-400">✓</span>
+                              ) : (
+                                <span className="text-rose-400">
+                                  <IoIosCloseCircleOutline size={16} />
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right text-neutral-300">
+                              {formatUsdShort(dt.marketCap)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-neutral-300">
+                              {formatUsdShort(dt.liquidity)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
             )}
