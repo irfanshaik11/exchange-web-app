@@ -1087,15 +1087,25 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       (trade) => trade.wallet.toLowerCase() === wallet.address.toLowerCase(),
     );
 
+    // Compute window based on selected range; omit windowMs for Max to get all data
+    const rangeWindowMs =
+      selectedRange === "1d"
+        ? 1 * 24 * 60 * 60 * 1000
+        : selectedRange === "7d"
+          ? 7 * 24 * 60 * 60 * 1000
+          : selectedRange === "30d"
+            ? 30 * 24 * 60 * 60 * 1000
+            : undefined; // Max — no limit
+
     // Fetch historical data using the same function as Live Trades
     const fetchHistory = async () => {
       try {
         // Add a small delay to prevent race conditions
         await new Promise(resolve => setTimeout(resolve, 50));
-        
+
         const historicalTrades = await getWalletTradeHistory([wallet.address], {
-          limit: 200,
-          windowMs: 7 * 24 * 60 * 60 * 1000, // 7 days, same as Live Trades
+          limit: 500,
+          ...(rangeWindowMs !== undefined ? { windowMs: rangeWindowMs } : {}),
         });
 
         // Merge real-time and historical trades, removing duplicates by tx
@@ -1147,7 +1157,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     // Use void to explicitly mark promise as intentionally not awaited
     void fetchHistory();
-  }, [wallet?.address, walletTradeCount]); // Re-fetch only when this wallet's trade count changes
+  }, [wallet?.address, walletTradeCount, selectedRange]); // Re-fetch when wallet, trade count, or time range changes
 
   // Reset fetched-metadata tracking when wallet changes so new wallet's tokens are fetched fresh.
   useEffect(() => {
