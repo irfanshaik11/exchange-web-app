@@ -35,6 +35,7 @@ import { useSolPrice } from '../SolPriceContext';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
 import { preloadTradeChart } from '~/utils/preloadTradeChart';
 import { useSolanaPositionWebSocketContext } from '~/contexts/SolanaPositionWebSocketContext';
+import { fetchAllSolanaWalletTokens } from '~/hooks/useWalletTokenBalances';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -1031,7 +1032,42 @@ const Positions: React.FC<PositionsProps> = ({
           return;
         }
 
-        const fetchedPositions = result.data;
+        let fetchedPositions = result.data;
+
+        // For Solana: also discover tokens held externally (not traded through Interstate)
+        if (blockchain !== 'monad') {
+          const walletAddr = primaryWalletAddresses?.solana || user?.publicKey;
+          if (walletAddr) {
+            try {
+              const allWalletTokens = await fetchAllSolanaWalletTokens(walletAddr);
+              const backendAddresses = new Set(
+                fetchedPositions.map((p) => p.tokenAddress.toLowerCase())
+              );
+              const externalTokens = allWalletTokens.filter(
+                (t) => !backendAddresses.has(t.tokenAddress.toLowerCase())
+              );
+              if (externalTokens.length > 0) {
+                const externalPositions: PositionRow[] = externalTokens.map((t) => ({
+                  tokenAddress: t.tokenAddress,
+                  bought: t.balance,
+                  boughtUsdValue: 0,
+                  sold: 0,
+                  soldUsdValue: 0,
+                  remaining: t.balance,
+                  remainingUsdValue: 0,
+                  pnl: 0,
+                  pnlPercentage: 0,
+                  actions: 'sell',
+                  blockchain: 'solana',
+                }));
+                fetchedPositions = [...fetchedPositions, ...externalPositions];
+              }
+            } catch (err) {
+              // Non-critical: log and continue with backend-only positions
+              console.warn('[Positions] Failed to fetch external wallet tokens:', err);
+            }
+          }
+        }
 
         // Reverse so newest positions appear at the top
         const reversedPositions = [...fetchedPositions].reverse();
