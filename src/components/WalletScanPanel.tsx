@@ -29,6 +29,9 @@ import {
 import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
 import { useSolPrice } from "./SolPriceContext";
+import RealizedPnlChart, {
+  type PnlChartDataPoint,
+} from "./charts/RealizedPnlChart";
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -36,6 +39,14 @@ interface WalletScanPanelProps {
 }
 
 const TABS = ["Active Positions", "History", "Top 100", "Activity"];
+
+const MAX_TOKEN_NAME_LENGTH = 10;
+const truncateTokenName = (name: string | null | undefined): string => {
+  if (!name) return "";
+  return name.length > MAX_TOKEN_NAME_LENGTH
+    ? `${name.slice(0, MAX_TOKEN_NAME_LENGTH)}…`
+    : name;
+};
 
 // Helper to format timestamp as relative time (like "5m", "3h", "2d")
 function formatTimeAgo(timestamp: string | number | Date): string {
@@ -155,7 +166,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [selectedRange, setSelectedRange] = useState("Max");
   const timeRanges = ["1d", "7d", "30d", "Max"];
   const [toast, setToast] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
   const [currency, setCurrency] = useState<"USD" | "SOL">("USD");
 
   // Calculate closed orders from history (only completed positions)
@@ -355,6 +365,89 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       categoryCounts,
       progressPercentage,
     };
+  }, [closedOrders, selectedRange]);
+
+  // Build per-trade Realized PnL chart data, scoped to selectedRange
+  const pnlChartData = useMemo((): PnlChartDataPoint[] => {
+    if (!closedOrders || closedOrders.length === 0) return [];
+
+    const now = Date.now();
+    let scoped = closedOrders;
+    if (selectedRange !== "Max") {
+      const windowMs =
+        selectedRange === "1d"
+          ? 24 * 60 * 60 * 1000
+          : selectedRange === "7d"
+            ? 7 * 24 * 60 * 60 * 1000
+            : 30 * 24 * 60 * 60 * 1000;
+      const cutoff = now - windowMs;
+      scoped = closedOrders.filter((o) => o.closedAt >= cutoff);
+    }
+
+    if (scoped.length === 0) return [];
+
+    const ordered = [...scoped].sort((a, b) => a.closedAt - b.closedAt);
+
+    const formatTime = (ts: number) =>
+      new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const formatDate = (ts: number) =>
+      new Date(ts).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+    const points: PnlChartDataPoint[] = [
+      {
+        time: formatTime(ordered[0].closedAt),
+        date: formatDate(ordered[0].closedAt),
+        cumulativePnl: 0,
+        tradePnl: 0,
+        tokenSymbol: "",
+        tokenName: "",
+        index: 0,
+      },
+    ];
+
+    let cum = 0;
+    ordered.forEach((order, i) => {
+      cum += order.pnl;
+      points.push({
+        time: formatTime(order.closedAt),
+        date: formatDate(order.closedAt),
+        cumulativePnl: cum,
+        tradePnl: order.pnl,
+        tokenSymbol: order.sellTrade.symbol || order.buyTrade.symbol || "",
+        tokenName: order.sellTrade.name || order.buyTrade.name || "",
+        index: i + 1,
+      });
+    });
+
+    return points;
+  }, [closedOrders, selectedRange]);
+
+  const realizedPnlPercentage = useMemo(() => {
+    if (!closedOrders || closedOrders.length === 0) return 0;
+
+    const now = Date.now();
+    let scoped = closedOrders;
+    if (selectedRange !== "Max") {
+      const windowMs =
+        selectedRange === "1d"
+          ? 24 * 60 * 60 * 1000
+          : selectedRange === "7d"
+            ? 7 * 24 * 60 * 60 * 1000
+            : 30 * 24 * 60 * 60 * 1000;
+      const cutoff = now - windowMs;
+      scoped = closedOrders.filter((o) => o.closedAt >= cutoff);
+    }
+
+    const totalCostBasis = scoped.reduce((sum, o) => sum + o.boughtValue, 0);
+    if (totalCostBasis <= 0) return 0;
+    const totalPnl = scoped.reduce((sum, o) => sum + o.pnl, 0);
+    return (totalPnl / totalCostBasis) * 100;
   }, [closedOrders, selectedRange]);
 
   // Convert TradeEvent to TradeRow format for Activity component
@@ -1235,19 +1328,41 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 )}
               </div>
             </div>
-            {/* PNL with TradingView Chart */}
-            <div className="flex min-w-[180px] flex-1 flex-col justify-between">
-              <div className="flex w-full flex-row items-start justify-between">
-                <div className="mt-1 mb-1 w-full pl-2 text-left text-xs text-neutral-400">
-                  PNL
-                </div>
+            {/* Realized PNL with chart */}
+            <div className="flex min-w-[260px] flex-[2] flex-col">
+              <div className="mb-1 flex items-center gap-2 text-xs text-neutral-400">
+                Realized PNL
+                <span
+                  className="text-[10px] text-neutral-500"
+                  title="Cumulative realized PnL from closed positions over the selected time range. Bars show per-trade PnL; the line shows running total."
+                >
+                  (i)
+                </span>
               </div>
-              <div className="flex flex-1 flex-col items-center justify-center">
-                <div className="mb-2 font-mono text-4xl text-neutral-300">
-                  {performanceMetrics.totalPnl >= 0 ? "+" : ""}
-                  ${formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
-                </div>
-                <div className="h-1 w-2/3 rounded-full bg-neutral-700" />
+              <div
+                className={`text-3xl font-bold ${performanceMetrics.totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}
+              >
+                {performanceMetrics.totalPnl >= 0 ? "+" : "-"}$
+                {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
+              </div>
+              <div
+                className={`text-sm font-semibold ${realizedPnlPercentage >= 0 ? "text-emerald-400/80" : "text-red-400/80"}`}
+              >
+                {realizedPnlPercentage >= 0 ? "+" : ""}
+                {realizedPnlPercentage.toFixed(2)}%
+              </div>
+              <div className="mt-2 h-[180px] w-full">
+                {historyLoading ? (
+                  <div className="flex h-full items-center justify-center text-xs text-neutral-500">
+                    Loading chart...
+                  </div>
+                ) : pnlChartData.length <= 1 ? (
+                  <div className="flex h-full items-center justify-center text-xs text-neutral-500">
+                    No closed trades in this range
+                  </div>
+                ) : (
+                  <RealizedPnlChart data={pnlChartData} />
+                )}
               </div>
             </div>
             {/* Performance */}
@@ -1350,14 +1465,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             </div>
             {tab !== "Activity" && (
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search..."
-                  className="rounded-full border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-white focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                  style={{ minWidth: 120 }}
-                />
                 <button
                   className={`border border-neutral-700 px-3 py-1 text-xs font-semibold ${currency === "USD" ? "bg-blue-500 text-white" : "bg-neutral-800 text-neutral-300"} rounded-full transition-colors`}
                   onClick={() =>
@@ -1416,21 +1523,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
                       {closedOrders
-                        .filter((order) => {
-                          if (!searchTerm) return true;
-                          const term = searchTerm.toLowerCase();
-                          const metadata = tokenMetadata.get(order.mint);
-                          return (
-                            order.buyTrade.symbol?.toLowerCase().includes(term) ||
-                            order.buyTrade.name?.toLowerCase().includes(term) ||
-                            order.sellTrade.symbol?.toLowerCase().includes(term) ||
-                            order.sellTrade.name?.toLowerCase().includes(term) ||
-                            metadata?.symbol?.toLowerCase().includes(term) ||
-                            metadata?.name?.toLowerCase().includes(term) ||
-                            order.mint?.toLowerCase().includes(term) ||
-                            order.sellTrade.tx?.toLowerCase().includes(term)
-                          );
-                        })
                         .map((order, idx) => {
                           // Format time - when the position was closed (sell time)
                           const timeAgo = formatTimeAgo(order.closedAt);
@@ -1494,7 +1586,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                     className="font-semibold text-white"
                                     title={order.mint || undefined}
                                   >
-                                    {displayName || displaySymbol}
+                                    {truncateTokenName(displayName || displaySymbol)}
                                   </span>
                                   {displayName &&
                                     displaySymbol &&
@@ -1595,15 +1687,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
                       {aggregatedPositions
-                        .filter((position) => {
-                          if (!searchTerm) return true;
-                          const term = searchTerm.toLowerCase();
-                          return (
-                            position.tokenSymbol?.toLowerCase().includes(term) ||
-                            position.tokenName?.toLowerCase().includes(term) ||
-                            position.mint?.toLowerCase().includes(term)
-                          );
-                        })
                         .map((position, idx) => {
                           const metadata = tokenMetadata.get(position.mint);
                           const displayName =
@@ -1702,7 +1785,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                     className="font-semibold text-white hover:text-blue-400"
                                     title={position.mint || undefined}
                                   >
-                                    {displayName || displaySymbol}
+                                    {truncateTokenName(displayName || displaySymbol)}
                                   </span>
                                   {displayName &&
                                     displaySymbol &&
@@ -1779,18 +1862,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
                       {top100Positions
-                        .filter((position) => {
-                          if (!searchTerm) return true;
-                          const term = searchTerm.toLowerCase();
-                          const metadata = tokenMetadata.get(position.mint);
-                          return (
-                            position.tokenSymbol?.toLowerCase().includes(term) ||
-                            position.tokenName?.toLowerCase().includes(term) ||
-                            metadata?.symbol?.toLowerCase().includes(term) ||
-                            metadata?.name?.toLowerCase().includes(term) ||
-                            position.mint?.toLowerCase().includes(term)
-                          );
-                        })
                         .map((position, idx) => {
                           const metadata = tokenMetadata.get(position.mint);
                           const displayName =
@@ -1897,7 +1968,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                     className="font-semibold text-white hover:text-blue-400"
                                     title={position.mint || undefined}
                                   >
-                                    {displayName || displaySymbol}
+                                    {truncateTokenName(displayName || displaySymbol)}
                                   </span>
                                   {displayName &&
                                     displaySymbol &&
@@ -1958,6 +2029,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                       trades={activityData}
                       loading={false}
                       tokenMetadataCache={{}}
+                      maxTokenNameLength={10}
                     />
                   </div>
                 )}
