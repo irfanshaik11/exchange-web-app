@@ -948,12 +948,13 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     };
   }, [aggregatedPositions, walletBalance, currentSolPrice]);
 
-  // Top 100 positions by PnL — includes closed positions so wallets
-  // with no open positions still show their historical trades.
-  const top100Positions = useMemo(
-    () => allAggregatedPositions.slice(0, 100),
-    [allAggregatedPositions],
-  );
+  // Top 100 positions by PnL — open positions always shown first (so Activity
+  // tab tokens are always visible), then closed positions fill remaining slots.
+  const top100Positions = useMemo(() => {
+    const open = allAggregatedPositions.filter(p => p.isOpen);
+    const closed = allAggregatedPositions.filter(p => !p.isOpen);
+    return [...open, ...closed].slice(0, 100);
+  }, [allAggregatedPositions]);
 
   // Update activity data when openPositionTransactions changes (depends on history)
   // Activity tab shows each individual transaction (buy or sell) that is part of an open position

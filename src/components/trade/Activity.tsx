@@ -407,16 +407,8 @@ const Activity: React.FC<ActivityProps> = ({
               const age = formatAge(timestamp, currentTime);
 
               // Format market cap — use the historical value saved in DB at time of trade
-              let marketCapValue = toNumber(trade.marketCap);
-
-              // Fallback: if DB value is missing or 0 (old trades before OHLC fix), use live metadata
-              if ((!marketCapValue || marketCapValue <= 0) && metadata?.marketCapUsd && metadata.marketCapUsd > 0) {
-                marketCapValue = metadata.marketCapUsd;
-              }
-
-              if (!marketCapValue || marketCapValue <= 0) {
-                marketCapValue = null;
-              }
+              const marketCapRaw = toNumber(trade.marketCap);
+              const marketCapValue = marketCapRaw > 0 ? marketCapRaw : null;
               
               const formattedMarketCap = marketCapValue && marketCapValue > 0 ? `$${formatMarketCap(marketCapValue)}` : 'N/A';
               
