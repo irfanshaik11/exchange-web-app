@@ -380,7 +380,7 @@ export function formatSmartNumber(num: number): string {
           break;
         }
       }
-      if (zeroCount >= 2 && sigDigits) {
+      if (zeroCount >= 2 && zeroCount <= 4 && sigDigits) {
         const subMap: Record<string, string> = {
           "0": "₀",
           "1": "₁",

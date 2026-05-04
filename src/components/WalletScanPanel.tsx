@@ -116,6 +116,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   // (needs full reload + loading state) from a new-trade update (silent refresh).
   const prevWalletAddressRef = useRef<string | null>(null);
 
+  // Track which mints have already had metadata fetched to prevent re-fetch loops.
+  const fetchedMetadataMintsRef = useRef<Set<string>>(new Set());
+
   // Get SOL price from context
   const { solPrice } = useSolPrice();
   // Use SOL price with fallback if not available
@@ -1146,29 +1149,38 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     void fetchHistory();
   }, [wallet?.address, walletTradeCount]); // Re-fetch only when this wallet's trade count changes
 
-  // Fetch token metadata for all mints in closed orders and active positions
+  // Reset fetched-metadata tracking when wallet changes so new wallet's tokens are fetched fresh.
+  useEffect(() => {
+    fetchedMetadataMintsRef.current = new Set();
+  }, [wallet.address]);
+
+  // Fetch token metadata for all mints in closed orders and active positions.
+  // Uses a ref (fetchedMetadataMintsRef) to track already-fetched mints so that
+  // calling setTokenMetadata does NOT re-trigger this effect — previously
+  // including `tokenMetadata` in deps caused an infinite ~3s refresh loop.
   useEffect(() => {
     // Combine mints from both closed orders and active positions
     const allMints = new Set<string>();
-    
+
     closedOrders.forEach((order) => {
       if (order.mint) allMints.add(order.mint);
     });
-    
+
     aggregatedPositions.forEach((position) => {
       if (position.mint) allMints.add(position.mint);
     });
 
     if (allMints.size === 0) return;
 
-    // Extract unique mints that don't have symbol/name
-    const mintsToFetch = Array.from(allMints).filter((mint) => {
-      // Check if we already have metadata for this mint
-      const metadata = tokenMetadata.get(mint);
-      return !metadata?.symbol || !metadata?.name;
-    });
+    // Only fetch mints we haven't fetched yet for this wallet session
+    const mintsToFetch = Array.from(allMints).filter(
+      (mint) => !fetchedMetadataMintsRef.current.has(mint),
+    );
 
     if (mintsToFetch.length === 0) return;
+
+    // Mark as fetching immediately to prevent concurrent duplicate fetches
+    mintsToFetch.forEach((mint) => fetchedMetadataMintsRef.current.add(mint));
 
     isDev && console.log(
       "[WalletScan] Fetching metadata for",
@@ -1188,8 +1200,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       })
       .catch((err) => {
         console.error("[WalletScan] Error fetching token metadata:", err);
+        // On error, unmark so they can be retried on next data change
+        mintsToFetch.forEach((mint) => fetchedMetadataMintsRef.current.delete(mint));
       });
-  }, [closedOrders, aggregatedPositions, tokenMetadata]);
+  }, [closedOrders, aggregatedPositions]); // tokenMetadata intentionally excluded — see comment above
 
   const handleCopy = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
