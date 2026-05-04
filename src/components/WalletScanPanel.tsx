@@ -43,7 +43,7 @@ interface WalletScanPanelProps {
   onClose: () => void;
 }
 
-const TABS = ["Active Positions", "History", "Top 100", "Activity", "Dev Tokens"];
+const TABS = ["Active Positions", "History", "Top 100", "Dev Tokens", "Activity"];
 
 const MAX_TOKEN_NAME_LENGTH = 10;
 const truncateTokenName = (name: string | null | undefined): string => {
@@ -1966,9 +1966,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                           Sold
                         </th>
                         <th className="px-4 py-3 text-right font-semibold">
-                          PnL ↑
+                          PNL ↑
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">Action</th>
+                        <th className="px-4 py-3 text-right font-semibold">$</th>
+                        <th className="px-4 py-3 text-right font-semibold"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
@@ -2056,17 +2057,25 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               <td className="px-4 py-2 text-right">
                                 <span
                                   className={`font-semibold ${
+                                    position.pnlPercentage >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                  }`}
+                                >
+                                  {position.pnlPercentage >= 0 ? "+" : ""}
+                                  {position.pnlPercentage.toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                <span
+                                  className={`font-semibold ${
                                     position.totalPnl >= 0
                                       ? "text-emerald-400"
                                       : "text-red-400"
                                   }`}
                                 >
                                   {position.totalPnl >= 0 ? "+" : ""}$
-                                  {formatSmartNumber(Math.abs(position.totalPnl))}{" "}
-                                  <span className="font-normal opacity-80">
-                                    ({position.pnlPercentage >= 0 ? "+" : ""}
-                                    {position.pnlPercentage.toFixed(1)}%)
-                                  </span>
+                                  {formatSmartNumber(Math.abs(position.totalPnl))}
                                 </span>
                               </td>
                               <td className="px-4 py-2 text-right">
