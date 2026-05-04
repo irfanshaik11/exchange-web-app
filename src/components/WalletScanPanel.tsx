@@ -35,6 +35,8 @@ import RealizedPnlChart, {
 import FastImage from "./FastImage";
 import useDevTokensByWallet from "../hooks/useDevTokensByWallet";
 import { IoIosCloseCircleOutline } from "react-icons/io";
+import { getProtocolBranding } from "~/utils/protocolBranding";
+import Image from "next/image";
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -167,6 +169,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         symbol?: string | null;
         name?: string | null;
         imageUrl?: string | null;
+        protocol?: string | null;
+        launchpad?: string | null;
       }
     >
   >(new Map());
@@ -1567,34 +1571,102 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="h-7 w-7 flex-shrink-0 overflow-hidden rounded-full">
-                                    <FastImage
-                                      src={metadata?.imageUrl || ""}
-                                      alt={displayName || displaySymbol || "Token"}
-                                      symbol={displaySymbol || undefined}
-                                      name={displayName || undefined}
-                                      width={28}
-                                      height={28}
-                                      className="h-full w-full object-cover"
-                                      showBubble={false}
-                                    />
-                                  </div>
-                                  <div className="flex flex-col min-w-0">
-                                    <span
-                                      className="truncate font-semibold text-white"
-                                      title={order.mint || undefined}
-                                    >
-                                      {truncateTokenName(
-                                        displayName ||
-                                          displaySymbol ||
-                                          (order.mint
-                                            ? `${order.mint.slice(0, 4)}...${order.mint.slice(-4)}`
-                                            : "Unknown"),
-                                      )}
-                                    </span>
-                                  </div>
-                                </div>
+                                {(() => {
+                                  const protocolSource =
+                                    metadata?.protocol ||
+                                    metadata?.launchpad ||
+                                    (order.mint?.toLowerCase().endsWith("pump")
+                                      ? "pumpfun"
+                                      : "");
+                                  const branding = getProtocolBranding(
+                                    protocolSource || "",
+                                  );
+                                  const protocolColor = branding.color;
+                                  const tokenIcon = branding.iconUrl;
+                                  const isFullCircleImage = branding.isFullCircle;
+                                  const shortAddress = order.mint
+                                    ? `${order.mint.slice(0, 4)}...${order.mint.slice(-4)}`
+                                    : "";
+                                  return (
+                                    <div className="flex items-center gap-3">
+                                      <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
+                                        <div
+                                          className="relative rounded-lg transition-all duration-300 ease-out"
+                                          style={{
+                                            border: protocolSource
+                                              ? `1px solid ${protocolColor}`
+                                              : "1px solid rgba(128, 128, 128, 0.3)",
+                                            padding: "2px",
+                                          }}
+                                        >
+                                          <div
+                                            className="relative rounded-lg"
+                                            style={{
+                                              border: "1px solid rgba(192, 192, 192, 0.5)",
+                                              padding: "2px",
+                                            }}
+                                          >
+                                            <div className="relative h-10 w-10 overflow-hidden rounded-lg">
+                                              <FastImage
+                                                src={metadata?.imageUrl || ""}
+                                                alt={
+                                                  displayName ||
+                                                  displaySymbol ||
+                                                  "Token"
+                                                }
+                                                symbol={displaySymbol || undefined}
+                                                name={displayName || undefined}
+                                                width={40}
+                                                height={40}
+                                                className="h-full w-full object-cover"
+                                                showBubble={false}
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {protocolSource && tokenIcon && (
+                                          <div
+                                            className="absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full bg-white"
+                                            style={{
+                                              width: 18,
+                                              height: 18,
+                                              border: `2px solid ${protocolColor}`,
+                                              boxShadow: `0 0 4px ${protocolColor}60`,
+                                            }}
+                                          >
+                                            <Image
+                                              src={tokenIcon}
+                                              alt={`${protocolSource} logo`}
+                                              width={14}
+                                              height={14}
+                                              className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex min-w-0 flex-col">
+                                        <span
+                                          className="truncate text-sm font-medium text-neutral-100"
+                                          title={order.mint || undefined}
+                                        >
+                                          {truncateTokenName(
+                                            displayName ||
+                                              displaySymbol ||
+                                              shortAddress,
+                                          )}
+                                        </span>
+                                        {shortAddress && (
+                                          <span
+                                            className="truncate font-mono text-xs text-neutral-400"
+                                            title={order.mint || undefined}
+                                          >
+                                            {shortAddress}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="px-4 py-3 text-right text-neutral-300">
                                 {boughtDisplay}
