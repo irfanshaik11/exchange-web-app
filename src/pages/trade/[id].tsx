@@ -31,6 +31,7 @@ import useTokenSupply from "../../hooks/useTokenSupply";
 import AdvancedOHLCChart, { type AdvancedOHLCChartHandle } from "../../components/AdvancedOHLCChart";
 import { usePendingTradeMarkers } from "../../hooks/usePendingTradeMarkers";
 import { subscribe as subscribePendingTrades } from "../../utils/pendingTradeMarkers";
+import { useSolPrice } from "../../components/SolPriceContext";
 
 // Lazy load other heavy components to reduce initial bundle size
 //const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
@@ -744,6 +745,7 @@ export default function TradePage() {
   // executeEnhancedTrade. Persisted to localStorage so they survive reload.
   const userWalletForMarkers = primaryWalletAddresses?.solana || user?.publicKey || null;
   const pendingTrades = usePendingTradeMarkers(resolvedTokenMint, userWalletForMarkers);
+  const { solPrice: currentSolPriceUsd } = useSolPrice();
 
   // Imperative ref to the chart so we can fire refreshMarks() immediately on
   // pending-store mutations, bypassing the chart's internal 800ms debounce.
@@ -797,6 +799,14 @@ export default function TradePage() {
         id: p.id,
         price_usd: p.priceUsd,
         amount: p.amountSol ?? p.amountToken,
+        // Compute total_usd so the chart tooltip shows the correct value:
+        // amountSol × SOL/USD price, or amountToken × per-token USD price.
+        total_usd:
+          p.amountSol && currentSolPriceUsd
+            ? p.amountSol * currentSolPriceUsd
+            : p.amountToken && p.priceUsd
+              ? p.amountToken * p.priceUsd
+              : undefined,
         __optimistic: true,
         __optimisticId: p.id,
         // createdAt — used by fuzzy-match guard to reject WS trades older
@@ -941,7 +951,7 @@ export default function TradePage() {
     }
 
     return combined;
-  }, [wsHistoricalTrades, pendingTrades]);
+  }, [wsHistoricalTrades, pendingTrades, currentSolPriceUsd]);
 
   // No auto-removal of confirmed optimistic rows from the store. Even when
   // the WS feed currently has the trade, that buffer is finite (~200 trades)

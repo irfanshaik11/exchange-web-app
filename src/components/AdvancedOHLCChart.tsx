@@ -3751,6 +3751,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       let price = Number.isFinite(parsedPrice) ? parsedPrice : fallbackPrice;
 
       const amountRaw =
+        trade.token_amount ||
         trade.amount ||
         trade.data?.amountNonLiquidityToken ||
         trade.data?.amount0 ||
@@ -3768,6 +3769,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
       const totalUsdRaw =
         trade.totalUSD ||
+        trade.total_usd ||
         trade.data?.priceUsdTotal ||
         trade.priceUsdTotal ||
         trade.originalEvent?.data?.priceUsdTotal ||
@@ -5483,9 +5485,9 @@ Amount: ${formattedAmount} ${displaySymbol}
 Total: ${formattedTotalUsd}
 Maker: ${walletAddress}`;
             } else if (kolInfo) {
-              // KOL marker: unique color per KOL, 2-char label
+              // KOL marker: green for buys, red for sells
               label = kolInfo.label;
-              markColor = kolInfo.namedColor;
+              markColor = isBuy ? "green" : "red";
               const kolDisplayName = kolInfo.name || kolInfo.twitterUsername;
               markerText = `KOL ${isBuy ? "Buy" : "Sell"}: ${kolDisplayName} • ${displaySymbol}
 ${formattedDate} UTC
