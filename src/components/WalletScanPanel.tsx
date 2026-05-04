@@ -131,6 +131,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState("Activity");
+  const [top100Search, setTop100Search] = useState("");
 
   // Wallet scan state
   const [scanData, setScanData] = useState<TradeRow[]>([]);
@@ -939,10 +940,17 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
   // Calculate top 100 positions by PnL
   const top100Positions = useMemo((): AggregatedPosition[] => {
-    // aggregatedPositions is already sorted by PnL (highest first)
-    // Just take the top 100
-    return aggregatedPositions.slice(0, 100);
-  }, [aggregatedPositions]);
+    const top100 = aggregatedPositions.slice(0, 100);
+    if (!top100Search.trim()) return top100;
+    const q = top100Search.trim().toLowerCase();
+    return top100.filter((p) => {
+      const meta = tokenMetadata.get(p.mint);
+      const name = (p.tokenName || meta?.name || "").toLowerCase();
+      const symbol = (p.tokenSymbol || meta?.symbol || "").toLowerCase();
+      const mint = (p.mint || "").toLowerCase();
+      return name.includes(q) || symbol.includes(q) || mint.includes(q);
+    });
+  }, [aggregatedPositions, top100Search, tokenMetadata]);
 
   // Update activity data when openPositionTransactions changes (depends on history)
   // Activity tab shows each individual transaction (buy or sell) that is part of an open position
@@ -1500,16 +1508,32 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           {/* Tabs */}
           <div className="mt-2 flex items-center justify-between border-b border-neutral-800 px-8">
             <div className="mt-2 flex flex-row gap-10 text-sm">
-              {TABS.map((t) => (
-                <button
-                  key={t}
-                  className={`border-b-2 py-2 transition-colors duration-200 ${tab === t ? "border-blue-400 font-semibold text-blue-400" : "border-transparent text-neutral-400 hover:text-white"}`}
-                  onClick={() => setTab(t)}
-                >
-                  {t}
-                </button>
-              ))}
+              {TABS.map((t) => {
+                const label = t === "Dev Tokens" ? `Dev Tokens (${devTokens.length})` : t;
+                return (
+                  <button
+                    key={t}
+                    className={`border-b-2 py-2 transition-colors duration-200 ${tab === t ? "border-blue-400 font-semibold text-blue-400" : "border-transparent text-neutral-400 hover:text-white"}`}
+                    onClick={() => setTab(t)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
+            {tab === "Top 100" && (
+              <div className="mt-2 flex items-center gap-2 pb-1">
+                <input
+                  type="text"
+                  value={top100Search}
+                  onChange={(e) => setTop100Search(e.target.value)}
+                  placeholder="Search by name or address"
+                  className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 placeholder-neutral-500 focus:border-blue-500 focus:outline-none"
+                  style={{ minWidth: 180 }}
+                />
+                <span className="text-xs font-semibold text-neutral-400">↑ USD</span>
+              </div>
+            )}
           </div>
           {/* Tab Content Area */}
           <div className="flex-1 overflow-auto px-8">
@@ -1942,9 +1966,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                           Sold
                         </th>
                         <th className="px-4 py-3 text-right font-semibold">
-                          PnL
+                          PnL ↑
                         </th>
-                        <th className="w-10" />
+                        <th className="px-4 py-3 text-right font-semibold">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
@@ -2030,42 +2054,35 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 </div>
                               </td>
                               <td className="px-4 py-2 text-right">
-                                <div className="flex flex-col items-end">
-                                  <span
-                                    className={`font-semibold ${
-                                      position.totalPnl >= 0
-                                        ? "text-emerald-400"
-                                        : "text-red-400"
-                                    }`}
-                                  >
-                                    {position.totalPnl >= 0 ? "+" : ""}$
-                                    {formatSmartNumber(Math.abs(position.totalPnl))}
+                                <span
+                                  className={`font-semibold ${
+                                    position.totalPnl >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                  }`}
+                                >
+                                  {position.totalPnl >= 0 ? "+" : ""}$
+                                  {formatSmartNumber(Math.abs(position.totalPnl))}{" "}
+                                  <span className="font-normal opacity-80">
+                                    ({position.pnlPercentage >= 0 ? "+" : ""}
+                                    {position.pnlPercentage.toFixed(1)}%)
                                   </span>
-                                  <span
-                                    className={`text-xs ${
-                                      position.pnlPercentage >= 0
-                                        ? "text-emerald-400/70"
-                                        : "text-red-400/70"
-                                    }`}
-                                  >
-                                    {position.pnlPercentage >= 0 ? "+" : ""}
-                                    {position.pnlPercentage.toFixed(2)}%
-                                  </span>
-                                </div>
+                                </span>
                               </td>
-                              <td className="pr-3 py-2">
-                                <div className="h-6 w-6 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800 ml-auto">
-                                  <FastImage
-                                    src={imageUrl}
-                                    alt={displaySymbol || "Token"}
-                                    symbol={displaySymbol || undefined}
-                                    name={displayName || undefined}
-                                    width={24}
-                                    height={24}
-                                    className="h-full w-full object-cover"
-                                    showBubble={false}
-                                  />
-                                </div>
+                              <td className="px-4 py-2 text-right">
+                                <button
+                                  className="text-neutral-400 hover:text-white transition-colors"
+                                  onClick={() => {
+                                    const trade = history.find(t => t.mint === position.mint);
+                                    const addr = position.mint || trade?.pair_address;
+                                    if (addr) {
+                                      window.open(`/trade/${addr}`, '_blank');
+                                    }
+                                  }}
+                                  title="Open trade"
+                                >
+                                  <FiExternalLink size={14} />
+                                </button>
                               </td>
                             </tr>
                           );
