@@ -837,7 +837,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       const totalSoldValue = position.sells.reduce((sum, s) => sum + s.revenue, 0);
 
       // Calculate remaining using FIFO matching
-      let remainingBuys = [...position.buys];
+      // Use copies that track remaining amount AND remaining cost per buy independently,
+      // so costPerUnit stays correct when a buy is partially consumed by multiple sells.
+      let remainingBuys = position.buys.map(b => ({ amount: b.amount, cost: b.cost }));
       let remainingAmount = totalBoughtAmount;
       let remainingCost = totalBoughtValue;
       let realizedCost = 0; // Cost basis of sold tokens
@@ -853,6 +855,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           const matchedCost = matchedAmount * costPerUnit;
 
           buy.amount -= matchedAmount;
+          buy.cost -= matchedCost;
           remainingSellAmount -= matchedAmount;
           remainingAmount -= matchedAmount;
           remainingCost -= matchedCost;
