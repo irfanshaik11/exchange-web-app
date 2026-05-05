@@ -534,7 +534,13 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   tokenAgeSec,
   circulatingSupply,
 }, ref) => {
-  const MARKET_CAP_MULTIPLIER = circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY;
+  // Multiplier is held in a ref so WS handlers / TV datafeed callbacks
+  // registered before /v1/supply resolves still pick up the correct value
+  // on every tick instead of being frozen at chart-mount supply (often the
+  // 1B DEFAULT_SUPPLY fallback). See the effect below for the update + repaint.
+  const multiplierRef = useRef<number>(
+    circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY,
+  );
 
   // DEBUG: Confirm component is rendering with latest code
 
@@ -587,6 +593,27 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     syncLinesInFlightRef.current = false;
   }, [displayMode]);
 
+  // Keep multiplierRef pinned to the latest circulating supply. The WS handlers
+  // and TradingView datafeed `getBars` capture transformBar at registration time,
+  // so without a ref every live tick / history pull would multiply by whatever
+  // supply existed at chart mount (often DEFAULT_SUPPLY=1B during the brief
+  // window before /v1/supply resolves). When the supply does change, force a
+  // single resetData() so the already-rendered bars repaint with the fresh
+  // multiplier — `lastGoodCandlesRef` stores raw USD, so re-running through
+  // transformBar with the new ref value produces correct MC values.
+  useEffect(() => {
+    const next =
+      circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY;
+    if (multiplierRef.current === next) return;
+    multiplierRef.current = next;
+
+    if (displayModeRef.current === "MC" && widgetRef.current) {
+      try {
+        widgetRef.current.activeChart?.()?.resetData?.();
+      } catch {}
+    }
+  }, [circulatingSupply]);
+
   // Helper function to transform OHLC values based on display mode (USD vs MC)
   // MC = USD price * circulating supply (fetched from /v1/supply, defaults to 1B)
   const transformOHLCValue = useCallback(
@@ -594,9 +621,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       if (!supportsMcMode || mode === "USD") {
         return value;
       }
-      return value * MARKET_CAP_MULTIPLIER;
+      return value * multiplierRef.current;
     },
-    [MARKET_CAP_MULTIPLIER],
+    [],
   );
 
   // Helper function to transform a bar object based on display mode
@@ -667,16 +694,16 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       return null;
     }
 
-    const result = maxHigh * MARKET_CAP_MULTIPLIER;
+    const result = maxHigh * multiplierRef.current;
     if (CHART_DEBUG) console.log("✅ [MAX_MC_COMPUTE] Final max MC (USD):", {
       maxHighPriceUSD: maxHigh,
-      MARKET_CAP_MULTIPLIER,
+      multiplier: multiplierRef.current,
       resultMaxMcUSD: result,
       formatted: `$${(result / 1_000_000).toFixed(2)}M`,
     });
 
     return result;
-  }, [MARKET_CAP_MULTIPLIER]);
+  }, []);
 
   // Price line management - always clears and redraws to ensure consistency
   const syncPriceLines = useCallback(
@@ -753,7 +780,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       const toAxisPrice = (usdPrice?: number | null): number | null => {
         if (usdPrice === null || usdPrice === undefined) return null;
         const result = axisIsMarketCap
-          ? usdPrice * MARKET_CAP_MULTIPLIER
+          ? usdPrice * multiplierRef.current
           : usdPrice;
         if (CHART_DEBUG) console.log("🔢 [TO_AXIS_PRICE] Conversion:", { input_USD: usdPrice, output_AxisPrice: result });
         return result;
@@ -763,7 +790,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       const exitPrice = toAxisPrice(avgExitUsd);
 
       const maxMcPriceInput = maxMarketCapUsd
-        ? maxMarketCapUsd / MARKET_CAP_MULTIPLIER
+        ? maxMarketCapUsd / multiplierRef.current
         : null;
       const maxMcPrice = toAxisPrice(maxMcPriceInput);
 
@@ -907,7 +934,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           if (!Number.isFinite(mcValue) || mcValue <= 0) continue;
 
           // MC → USD price per token → axis price
-          const orderPriceUsd = mcValue / MARKET_CAP_MULTIPLIER;
+          const orderPriceUsd = mcValue / multiplierRef.current;
           const orderAxisPrice = toAxisPrice(orderPriceUsd);
 
           const isBuy = order.type === "Buy";
@@ -976,7 +1003,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     const metrics = {
       lastPriceUsd,
       lastMarketCapUsd: supportsMcMode
-        ? lastPriceUsd * MARKET_CAP_MULTIPLIER
+        ? lastPriceUsd * multiplierRef.current
         : undefined,
       maxMarketCapUsd: supportsMcMode
         ? (maxMarketCapUsd ?? undefined)
@@ -1108,7 +1135,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           }
         }
 
-        const maxMcUsd = maxHigh > 0 ? maxHigh * MARKET_CAP_MULTIPLIER : null;
+        const maxMcUsd = maxHigh > 0 ? maxHigh * multiplierRef.current : null;
 
 
         maxMarketCapFromApiRef.current = maxMcUsd;
@@ -1635,7 +1662,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
         const isMC = displayModeRef.current === "MC";
         // targetMC is already in raw USD market cap; convert to axis coordinates
-        const axisPrice = isMC ? targetMC : targetMC / MARKET_CAP_MULTIPLIER;
+        const axisPrice = isMC ? targetMC : targetMC / multiplierRef.current;
         const labelText = `Limit Target: ${formatAxisLabel(axisPrice, isMC)}`;
 
         if (previewLineShapeIdRef.current) {
