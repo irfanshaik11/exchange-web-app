@@ -13,10 +13,14 @@ import { FaSearch, FaTimes, FaFilter } from "react-icons/fa";
 import { FaRocket, FaFire, FaCrown, FaGraduationCap } from "react-icons/fa";
 import InterstatePopout from "./InterstatePopout";
 import DiscoverFilterModal from "./DiscoverFilterModal";
-import { defaultPulseFilters, type PulseFilters } from "~/contexts/PulseFiltersContext";
+import {
+  defaultPulseFilters,
+  type PulseFilters,
+} from "~/contexts/PulseFiltersContext";
 import { hasActiveFilters as checkPulseActiveFilters } from "~/utils/discoverFilterUtils";
 import { LuChartNoAxesColumn, LuCopy } from "react-icons/lu";
 import { fetchTokenMetadata } from "~/utils/functions";
+import { fetchBatchSupplies, recomputeMarketCap } from "~/lib/tokenSupply";
 import { extractMetaImage } from "~/utils/images";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import FastImage from "./FastImage";
@@ -31,7 +35,13 @@ import { FaChartLine, FaXTwitter } from "react-icons/fa6";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import { BsLightningChargeFill, BsTwitterX } from "react-icons/bs";
 import { showEnhancedToast } from "~/utils/enhancedToast";
-import { getHistory, addToHistory, clearHistory, removeFromHistory, type SearchHistoryItem } from "~/utils/searchHistory";
+import {
+  getHistory,
+  addToHistory,
+  clearHistory,
+  removeFromHistory,
+  type SearchHistoryItem,
+} from "~/utils/searchHistory";
 import { useUser } from "./UserContext";
 import {
   confirmOptimisticMarker,
@@ -43,21 +53,33 @@ import { HiLightningBolt } from "react-icons/hi";
 import toast from "react-hot-toast";
 import { useQuickBuy } from "./QuickBuyContext";
 import { SOL_MINT_ADDRESS } from "~/utils/api";
-import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
-import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
+import {
+  executeSolanaMultiBuy,
+  buildSolanaWalletAllocations,
+} from "~/utils/solanaWalletAllocation";
+import {
+  broadcastTradeCompleted,
+  notifyTradePending,
+} from "~/utils/tradeEvents";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import {
+  validateSolanaBuy,
+  showTradeValidationError,
+} from "~/utils/preTradeValidation";
 import { checkAtaExists } from "~/utils/ataCheck";
 import { getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
-import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import {
+  listenForTradeEvents,
+  transformToastToError,
+} from "~/utils/createSolanaToastHandler";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 // TODO: SOCIAL LINKS NOT PRESENT FOR NOW
 // import { PiTelegramLogo } from "react-icons/pi";
 // import { TiDocumentText } from "react-icons/ti";
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 // Cache of mint → resolved direct image URL, populated by TokenListItem components.
 // Persists for the lifetime of this module (across modal open/close).
@@ -86,7 +108,12 @@ export interface Token {
   launch_time?: string;
 }
 
-export type SortOption = "smart" | "time" | "market_cap" | "volume_1h" | "liquidity";
+export type SortOption =
+  | "smart"
+  | "time"
+  | "market_cap"
+  | "volume_1h"
+  | "liquidity";
 
 export interface SearchFilters {
   isPumpSearch: boolean;
@@ -186,15 +213,22 @@ function normalizeAssetUrl(raw?: string | null): string | null {
  */
 function getMarketCapColor(mc: number): string {
   if (mc >= 100_000) return "#31e3ac"; // Green: 100k+
-  if (mc >= 30_000) return "#ddc13d";  // Yellow: 30k-100k
-  if (mc >= 20_000) return "#31e3ac";  // Green: 20k-30k
+  if (mc >= 30_000) return "#ddc13d"; // Yellow: 30k-100k
+  if (mc >= 20_000) return "#31e3ac"; // Green: 20k-30k
   return "#52c6ff"; // Blue: <20k
 }
 
 /**
  * Simple text component
  */
-function HighlightedText({ text, className = "" }: { text: string; query?: string; className?: string }) {
+function HighlightedText({
+  text,
+  className = "",
+}: {
+  text: string;
+  query?: string;
+  className?: string;
+}) {
   return <span className={className}>{text}</span>;
 }
 
@@ -212,9 +246,12 @@ function centerTruncate(text: string, maxLength: number = 20): string {
  */
 function isNewToken(createdAt: string | number | undefined): boolean {
   if (!createdAt) return false;
-  const created = typeof createdAt === 'number'
-    ? (createdAt < 10000000000 ? createdAt * 1000 : createdAt)
-    : new Date(createdAt).getTime();
+  const created =
+    typeof createdAt === "number"
+      ? createdAt < 10000000000
+        ? createdAt * 1000
+        : createdAt
+      : new Date(createdAt).getTime();
   const now = Date.now();
   const hoursDiff = (now - created) / (1000 * 60 * 60);
   return hoursDiff <= 24;
@@ -259,12 +296,21 @@ function shouldFillProtocolBadge(
   const mintAddress = (token.mint || "").toLowerCase();
 
   const isMeteora = launchpadProtocol.includes("meteora");
-  const isBonk = launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk");
-  const isBags = launchpadProtocol.includes("bags") || mintAddress.includes("bags");
-  const isMoonit = launchpadProtocol.includes("moonit") || launchpadProtocol.includes("moonshot") || launchpadProtocol.includes("moonshoot");
+  const isBonk =
+    launchpadProtocol.includes("bonk") ||
+    launchpadProtocol.includes("launchlab") ||
+    mintAddress.endsWith("bonk");
+  const isBags =
+    launchpadProtocol.includes("bags") || mintAddress.includes("bags");
+  const isMoonit =
+    launchpadProtocol.includes("moonit") ||
+    launchpadProtocol.includes("moonshot") ||
+    launchpadProtocol.includes("moonshoot");
 
   // Meteora only fills if mint doesn't contain "bags" (bags override)
-  return (isMeteora && !mintAddress.includes("bags")) || isBonk || isBags || isMoonit;
+  return (
+    (isMeteora && !mintAddress.includes("bags")) || isBonk || isBags || isMoonit
+  );
 }
 
 // Matches PulseTable's getProtocolColor function for consistency
@@ -306,7 +352,11 @@ function resolveProtocolColor(
   }
 
   // Pumpswap / Pump AMM - yellow (distinct from regular pump green)
-  if (launchpadProtocol.includes("pumpswap") || launchpadProtocol === "pump_amm" || launchpadProtocol === "pumpamm") {
+  if (
+    launchpadProtocol.includes("pumpswap") ||
+    launchpadProtocol === "pump_amm" ||
+    launchpadProtocol === "pumpamm"
+  ) {
     return "#eab308";
   }
 
@@ -340,7 +390,11 @@ function resolveProtocolColor(
   }
 
   // Bonk/LaunchLab - orange
-  if (launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk")) {
+  if (
+    launchpadProtocol.includes("bonk") ||
+    launchpadProtocol.includes("launchlab") ||
+    mintAddress.endsWith("bonk")
+  ) {
     return "#ff6b35";
   }
 
@@ -444,7 +498,11 @@ function resolveProtocolIcon(
   }
 
   // Bonk/LaunchLab detection: protocol includes "bonk" or "launchlab", OR mint ends in "bonk"
-  if (launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk")) {
+  if (
+    launchpadProtocol.includes("bonk") ||
+    launchpadProtocol.includes("launchlab") ||
+    mintAddress.endsWith("bonk")
+  ) {
     return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
   }
 
@@ -489,9 +547,10 @@ function resolveTwitterInfo(token: Partial<Token> & Record<string, any>): {
   return { url: null, handle: null };
 }
 
-function resolveSearchVolume(
-  token: Partial<Token> & Record<string, any>,
-): { volume: number; is24h: boolean } {
+function resolveSearchVolume(token: Partial<Token> & Record<string, any>): {
+  volume: number;
+  is24h: boolean;
+} {
   // Check for 1h volume first
   const buy1h = Number((token as any).total_buy_volume_1h) || 0;
   const sell1h = Number((token as any).total_sell_volume_1h) || 0;
@@ -556,7 +615,10 @@ interface SocialLinks {
   telegram?: string;
 }
 
-function extractSocialLinks(token: Partial<Token> & Record<string, any>, meta: any): SocialLinks {
+function extractSocialLinks(
+  token: Partial<Token> & Record<string, any>,
+  meta: any,
+): SocialLinks {
   const links: SocialLinks = {};
 
   // Try to get links from metadata first
@@ -579,9 +641,12 @@ function extractSocialLinks(token: Partial<Token> & Record<string, any>, meta: a
   }
 
   // Check direct fields on token as last resort
-  if (!links.twitter && (token as any).twitter) links.twitter = (token as any).twitter;
-  if (!links.website && (token as any).website) links.website = (token as any).website;
-  if (!links.telegram && (token as any).telegram) links.telegram = (token as any).telegram;
+  if (!links.twitter && (token as any).twitter)
+    links.twitter = (token as any).twitter;
+  if (!links.website && (token as any).website)
+    links.website = (token as any).website;
+  if (!links.telegram && (token as any).telegram)
+    links.telegram = (token as any).telegram;
 
   return links;
 }
@@ -612,17 +677,21 @@ const SearchModalContent = React.memo(function SearchModalContent({
   chain = "sol",
 }: SearchModalProps) {
   const router = useRouter();
-  const { user, solBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
+    useUser();
   const { solPrice } = useSolPrice();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   const [quickBuyAmount, setQuickBuyAmount] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('quickBuyAmount');
-      if (saved) { const p = parseFloat(saved); if (!isNaN(p) && p >= 0) return p.toString(); }
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("quickBuyAmount");
+      if (saved) {
+        const p = parseFloat(saved);
+        if (!isNaN(p) && p >= 0) return p.toString();
+      }
     }
-    return '0.05';
+    return "0.05";
   });
-  const [selectedPill, setSelectedPill] = useState('P1');
+  const [selectedPill, setSelectedPill] = useState("P1");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("smart");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -638,17 +707,19 @@ const SearchModalContent = React.memo(function SearchModalContent({
   // Two-tier state: `pulseFilters` is what's applied; `pendingPulseFilters`
   // is the working copy shown in the modal until the user clicks Apply All.
   const [pulseFilterModalOpen, setPulseFilterModalOpen] = useState(false);
-  const [pulseFilters, setPulseFilters] = useState<PulseFilters>(defaultPulseFilters);
-  const [pendingPulseFilters, setPendingPulseFilters] = useState<PulseFilters>(defaultPulseFilters);
+  const [pulseFilters, setPulseFilters] =
+    useState<PulseFilters>(defaultPulseFilters);
+  const [pendingPulseFilters, setPendingPulseFilters] =
+    useState<PulseFilters>(defaultPulseFilters);
   const pulseHasPendingChanges = useMemo(
     () => JSON.stringify(pulseFilters) !== JSON.stringify(pendingPulseFilters),
-    [pulseFilters, pendingPulseFilters]
+    [pulseFilters, pendingPulseFilters],
   );
   const handlePulseFilterChange = useCallback(
     (updater: (prev: PulseFilters) => PulseFilters) => {
       setPendingPulseFilters((prev) => updater(prev));
     },
-    []
+    [],
   );
   const handlePulseApply = useCallback(() => {
     setPulseFilters(pendingPulseFilters);
@@ -730,7 +801,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
     // === RECENCY SCORE (0-2000) ===
     // Newer tokens get a boost, with logarithmic decay
-    const createdAt = token.created_at ? new Date(token.created_at).getTime() : 0;
+    const createdAt = token.created_at
+      ? new Date(token.created_at).getTime()
+      : 0;
     const now = Date.now();
     const ageMs = now - createdAt;
     const ageHours = ageMs / (1000 * 60 * 60);
@@ -778,17 +851,29 @@ const SearchModalContent = React.memo(function SearchModalContent({
       volumeScore = Math.min(3000, Math.log10(effectiveVolume) * 500);
     }
 
-    return relevanceScore + recencyScore + liquidityBonus + marketCapScore + volumeScore;
+    return (
+      relevanceScore +
+      recencyScore +
+      liquidityBonus +
+      marketCapScore +
+      volumeScore
+    );
   };
 
   // Helper function to sort tokens on the frontend
-  const sortTokens = (tokens: Token[], sortBy: SortOption, searchQuery: string = ""): Token[] => {
+  const sortTokens = (
+    tokens: Token[],
+    sortBy: SortOption,
+    searchQuery: string = "",
+  ): Token[] => {
     const sortedTokens = [...tokens];
 
     switch (sortBy) {
       case "smart":
         return sortedTokens.sort(
-          (a, b) => calculateSmartScore(b, searchQuery) - calculateSmartScore(a, searchQuery),
+          (a, b) =>
+            calculateSmartScore(b, searchQuery) -
+            calculateSmartScore(a, searchQuery),
         );
       case "time":
         return sortedTokens.sort(
@@ -875,7 +960,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
       setSearchLoading(true);
       setHasSearched(true);
       try {
-        isDev && console.log("Searching:", { query: searchQuery.trim(), requestId: currentRequestId });
+        isDev &&
+          console.log("Searching:", {
+            query: searchQuery.trim(),
+            requestId: currentRequestId,
+          });
 
         // Use different endpoint based on chain
         const isMonad = chain === "monad";
@@ -904,11 +993,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
           ? searchData.data || []
           : searchData.tokens || [];
 
-        isDev && console.log("Found results:", {
-          query: searchQuery,
-          chain,
-          matchedTokens: filteredTokens.length,
-        });
+        isDev &&
+          console.log("Found results:", {
+            query: searchQuery,
+            chain,
+            matchedTokens: filteredTokens.length,
+          });
 
         // Convert search response to Token format
         const tokens: Token[] = filteredTokens.map((token: any) => {
@@ -971,7 +1061,13 @@ const SearchModalContent = React.memo(function SearchModalContent({
             total_buy_volume_1h: token.total_buy_volume_1h || 0,
             total_sell_volume_1h: token.total_sell_volume_1h || 0,
             volume_1h:
-              token.volume_1h || token.volume_1h_usd || token.volume_usd || token.volume_24h || token.volume24h || token.volume_24h_usd || 0,
+              token.volume_1h ||
+              token.volume_1h_usd ||
+              token.volume_usd ||
+              token.volume_24h ||
+              token.volume24h ||
+              token.volume_24h_usd ||
+              0,
             created_at: createdAt,
             bonding_curve_progress: token.bonding_pct
               ? `${token.bonding_pct}%`
@@ -988,19 +1084,77 @@ const SearchModalContent = React.memo(function SearchModalContent({
             // red border + protocol icon swap + countdown badge can render.
             is_mayhem_mode: !!token.is_mayhem_mode,
             launch_time: token.launch_time || token.created_at,
-          } as Token & { launchpad_protocol?: string; is_mayhem_mode?: boolean; launch_time?: string };
+          } as Token & {
+            launchpad_protocol?: string;
+            is_mayhem_mode?: boolean;
+            launch_time?: string;
+          };
         });
 
         // Only set results if this is still the latest request
         if (currentRequestId === searchRequestIdRef.current) {
           setSearchResults(tokens);
+
+          // Fire-and-forget mcap correction. The indexer hardcodes a 1B
+          // total supply when computing market_cap_usd, which silently
+          // breaks for migrated/custom-supply tokens (e.g. CHONKERS at
+          // mint 9Ys2hvQ7… shows $766K via search but real mcap is
+          // ~$151 because circulating is 197K, not 1B). The trade page
+          // already corrects via /v1/supply/{mint}; we use the batch
+          // sibling so a 100-row search costs one extra request.
+          //
+          // Why fire-and-forget rather than await: search renders are
+          // user-perceived latency. Showing the indexer's wrong mcap
+          // for ~300ms then snapping to the correct value is strictly
+          // better UX than blocking the whole modal. Race safety is
+          // identical to the search itself — we re-check
+          // currentRequestId before applying, so a stale supply
+          // response from a previous keystroke can't overwrite the
+          // current results. Until the indexer fix lands and stores
+          // real supply, this is the minimum-coupling fix path.
+          const mints = tokens
+            .map((t) => t.mint)
+            .filter((m): m is string => typeof m === "string" && m.length > 0);
+          if (mints.length > 0) {
+            fetchBatchSupplies(mints, controller.signal)
+              .then((supplies) => {
+                if (currentRequestId !== searchRequestIdRef.current) {
+                  return; // a newer search took over while we waited
+                }
+                if (supplies.size === 0) return; // RPC fully failed; keep fallback
+                setSearchResults((prev) =>
+                  prev.map((t) => {
+                    const supply = t.mint ? supplies.get(t.mint) : undefined;
+                    if (supply === undefined) return t;
+                    const corrected = recomputeMarketCap(
+                      (t as { usd_price?: number }).usd_price,
+                      supply,
+                      t.fully_diluted_value ?? 0,
+                    );
+                    if (corrected === t.fully_diluted_value) return t;
+                    return { ...t, fully_diluted_value: corrected };
+                  }),
+                );
+              })
+              .catch((err: unknown) => {
+                // AbortError is expected when the user keeps typing.
+                if (err instanceof DOMException && err.name === "AbortError")
+                  return;
+                isDev && console.error("Batch supply fetch failed:", err);
+              });
+          }
         } else {
-          isDev && console.log("Ignoring stale search results:", { requestId: currentRequestId, latestId: searchRequestIdRef.current });
+          isDev &&
+            console.log("Ignoring stale search results:", {
+              requestId: currentRequestId,
+              latestId: searchRequestIdRef.current,
+            });
         }
       } catch (error: any) {
         // Ignore abort errors (expected when user types quickly)
         if (error?.name === "AbortError") {
-          isDev && console.log("Search aborted:", { requestId: currentRequestId });
+          isDev &&
+            console.log("Search aborted:", { requestId: currentRequestId });
           return;
         }
         console.error("Search error:", error);
@@ -1021,273 +1175,348 @@ const SearchModalContent = React.memo(function SearchModalContent({
     [chain],
   );
 
-  const handleQuickBuy = useCallback(async (token: Token) => {
-    // Guard: Solana only
-    if (chain !== 'sol') {
-      showEnhancedToast("warning", "Quick buy is only available for Solana tokens", {
-        title: "Solana Only",
-      });
-      return;
-    }
-
-    if (!user?.bearerToken || !user?.id) {
-      showEnhancedToast("warning", "Please connect your wallet to trade", {
-        title: "Authentication Required",
-      });
-      return;
-    }
-
-    const buyAmount = parseFloat(quickBuyAmount);
-    if (isNaN(buyAmount) || buyAmount <= 0) {
-      showEnhancedToast("warning", "Please enter a valid SOL amount (minimum 0.001 SOL)", {
-        title: "Invalid Amount",
-      });
-      return;
-    }
-
-    const presetIndex = parseInt(selectedPill.replace('P', '')) - 1;
-    const preset = presets[presetIndex];
-    if (!preset) {
-      showEnhancedToast("error", "Quick buy preset not configured", {
-        title: "Configuration Error",
-      });
-      return;
-    }
-
-    const settings = preset.quickBuySettings;
-    const poolType = getPoolTypeFromToken(token as any);
-
-    // Pre-calculate wallet allocations
-    const { allocations, total } = buildSolanaWalletAllocations({
-      amount: buyAmount,
-      walletList: walletList || [],
-      walletBalances: walletBalances || {},
-      selectedWalletIds: selectedWalletIds?.sol || [],
-      priorityFee: settings.priority || 0.0001,
-      bribe: settings.bribe || 0,
-    });
-    const walletsWithBalance = allocations.length;
-    const isMultiWallet = walletsWithBalance > 1;
-
-    // Pre-validate before showing toast
-    const ataExists = await checkAtaExists(token.mint, (user as any)?.publicKey).catch(() => null);
-    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
-    if (!validation.valid) {
-      showTradeValidationError(validation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
-      return;
-    }
-
-    // Verify the pair address (CRITICAL - prevents stale pool routing)
-    let poolAddress = (token as any).migrated_pool_address || token.pair_address || "";
-    const tokenMint = token.mint || '';
-    if (tokenMint) {
-      isDev && console.log(`[SearchModal] Verifying pair address for quick buy: ${tokenMint}`);
-      const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
-      if (verifiedPairAddress) {
-        if (verifiedPairAddress !== poolAddress) {
-          isDev && console.log(`[SearchModal] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`);
-        }
-        poolAddress = verifiedPairAddress;
-      }
-    }
-
-    // Generate random timer cap (0.40-0.60s)
-    const timerCap = 0.3 + Math.random() * 0.2;
-    const uniqueToastId = `search-quickbuy-${Date.now()}-${Math.random()}`;
-    const startTime = Date.now();
-    let timerFinished = false;
-    let tradeErrored = false;
-
-    // Extract token image
-    const tokenImage = getResolvedTokenImage(token as any) || null;
-    const tokenName = token.symbol || token.name || "Token";
-
-    // Show animated toast with timer (matches PulseTable/WatchlistModal)
-    toast(
-      (t) => (
-        <div className="flex items-center gap-3">
-          {tokenImage && (
-            <img
-              src={tokenImage}
-              alt={tokenName}
-              className="h-6 w-6 flex-shrink-0 rounded-full"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          )}
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-sm text-neutral-200">
-              Buying {tokenName}
-            </span>
-            <span
-              id={`timer-${uniqueToastId}`}
-              className="flex-shrink-0 text-xs text-neutral-400"
-            >
-              (0.00s)
-            </span>
-            <span
-              id={`check-${uniqueToastId}`}
-              className="flex-shrink-0 text-green-400"
-              style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
-            >
-              ✓
-            </span>
-            <span
-              id={`link-${uniqueToastId}`}
-              className="flex-shrink-0"
-              style={{ display: "inline-flex" }}
-            >
-              <img
-                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
-                alt="Solana"
-                className="h-4 w-4 rounded-full opacity-70"
-                style={{ cursor: "default" }}
-              />
-            </span>
-          </div>
-        </div>
-      ),
-      {
-        id: uniqueToastId,
-        duration: Infinity,
-        style: {
-          background: "#1a1a1a",
-          border: "1px solid #333",
-          borderRadius: "8px",
-          padding: "12px",
-        },
-      },
-    );
-
-    // Start timer animation
-    let timerHandle: number | null = null;
-    const tick = () => {
-      const elapsed = (Date.now() - startTime) / 1000;
-      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
-      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
-      if (timerEl) {
-        timerEl.textContent = `(${displayTime}s)`;
-      }
-
-      if (!timerFinished && elapsed >= timerCap) {
-        timerFinished = true;
-        if (!tradeErrored) {
-          const checkEl = document.getElementById(`check-${uniqueToastId}`);
-          if (checkEl) {
-            checkEl.style.display = "block";
-          }
-          const linkEl = document.getElementById(`link-${uniqueToastId}`);
-          if (linkEl) {
-            if (isMultiWallet) {
-              linkEl.textContent = `${walletsWithBalance}/${total}`;
-              linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
-            }
-          }
-        }
-        timerHandle = null;
+  const handleQuickBuy = useCallback(
+    async (token: Token) => {
+      // Guard: Solana only
+      if (chain !== "sol") {
+        showEnhancedToast(
+          "warning",
+          "Quick buy is only available for Solana tokens",
+          {
+            title: "Solana Only",
+          },
+        );
         return;
       }
-      timerHandle = requestAnimationFrame(tick);
-    };
-    timerHandle = requestAnimationFrame(tick);
 
-    const cleanupTradeListener = listenForTradeEvents(tokenMint, uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+      if (!user?.bearerToken || !user?.id) {
+        showEnhancedToast("warning", "Please connect your wallet to trade", {
+          title: "Authentication Required",
+        });
+        return;
+      }
 
-    let __markId = "";
+      const buyAmount = parseFloat(quickBuyAmount);
+      if (isNaN(buyAmount) || buyAmount <= 0) {
+        showEnhancedToast(
+          "warning",
+          "Please enter a valid SOL amount (minimum 0.001 SOL)",
+          {
+            title: "Invalid Amount",
+          },
+        );
+        return;
+      }
 
-    try {
-      const baseMint = tokenMint;
-      const quoteMint = SOL_MINT_ADDRESS;
+      const presetIndex = parseInt(selectedPill.replace("P", "")) - 1;
+      const preset = presets[presetIndex];
+      if (!preset) {
+        showEnhancedToast("error", "Quick buy preset not configured", {
+          title: "Configuration Error",
+        });
+        return;
+      }
 
-      __markId = insertOptimisticMarker({
-        mint: baseMint,
-        walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
-        side: "buy",
-        amountSol: buyAmount,
-        priceUsd: (token as any).usd_price,
-      }).id;
+      const settings = preset.quickBuySettings;
+      const poolType = getPoolTypeFromToken(token as any);
 
-      notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
-      const multiResult = await executeSolanaMultiBuy({
-        poolAddress,
-        baseMint,
-        quoteMint,
-        amountSOL: buyAmount,
-        poolType,
-        originalPairAddress: token.pair_address,
-        slippage: settings.maxSlippage,
-        priorityFee: settings.priority,
-        bribe: settings.bribe,
-        mevMode: settings.mevMode,
-        autoFee: settings.autoFee,
-        maxFee: settings.maxFee,
-        rpc: settings.rpc,
-        tokenName: token.name,
-        tokenSymbol: token.symbol,
-        imageUrl: await resolveTokenImage(token as any) || undefined,
-        authToken: user.bearerToken,
+      // Pre-calculate wallet allocations
+      const { allocations, total } = buildSolanaWalletAllocations({
+        amount: buyAmount,
         walletList: walletList || [],
         walletBalances: walletBalances || {},
         selectedWalletIds: selectedWalletIds?.sol || [],
-        onTxHash: ({ txHash }) => {
-          if (txHash) {
+        priorityFee: settings.priority || 0.0001,
+        bribe: settings.bribe || 0,
+      });
+      const walletsWithBalance = allocations.length;
+      const isMultiWallet = walletsWithBalance > 1;
+
+      // Pre-validate before showing toast
+      const ataExists = await checkAtaExists(
+        token.mint,
+        (user as any)?.publicKey,
+      ).catch(() => null);
+      const validation = validateSolanaBuy(
+        buyAmount,
+        allocations,
+        walletBalances || {},
+        walletList || [],
+        selectedWalletIds?.sol || [],
+        settings.priority,
+        settings.bribe,
+        ataExists,
+      );
+      if (!validation.valid) {
+        showTradeValidationError(
+          validation.error,
+          getResolvedTokenImage(token as any),
+          token.symbol || token.name || "Token",
+        );
+        return;
+      }
+
+      // Verify the pair address (CRITICAL - prevents stale pool routing)
+      let poolAddress =
+        (token as any).migrated_pool_address || token.pair_address || "";
+      const tokenMint = token.mint || "";
+      if (tokenMint) {
+        isDev &&
+          console.log(
+            `[SearchModal] Verifying pair address for quick buy: ${tokenMint}`,
+          );
+        const verifiedPairAddress = await fetchVerifiedPairAddress(tokenMint);
+        if (verifiedPairAddress) {
+          if (verifiedPairAddress !== poolAddress) {
+            isDev &&
+              console.log(
+                `[SearchModal] Pair address mismatch! Local: ${poolAddress}, Verified: ${verifiedPairAddress}`,
+              );
+          }
+          poolAddress = verifiedPairAddress;
+        }
+      }
+
+      // Generate random timer cap (0.40-0.60s)
+      const timerCap = 0.3 + Math.random() * 0.2;
+      const uniqueToastId = `search-quickbuy-${Date.now()}-${Math.random()}`;
+      const startTime = Date.now();
+      let timerFinished = false;
+      let tradeErrored = false;
+
+      // Extract token image
+      const tokenImage = getResolvedTokenImage(token as any) || null;
+      const tokenName = token.symbol || token.name || "Token";
+
+      // Show animated toast with timer (matches PulseTable/WatchlistModal)
+      toast(
+        (t) => (
+          <div className="flex items-center gap-3">
+            {tokenImage && (
+              <img
+                src={tokenImage}
+                alt={tokenName}
+                className="h-6 w-6 flex-shrink-0 rounded-full"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            )}
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate text-sm text-neutral-200">
+                Buying {tokenName}
+              </span>
+              <span
+                id={`timer-${uniqueToastId}`}
+                className="flex-shrink-0 text-xs text-neutral-400"
+              >
+                (0.00s)
+              </span>
+              <span
+                id={`check-${uniqueToastId}`}
+                className="flex-shrink-0 text-green-400"
+                style={{
+                  display: timerFinished && !tradeErrored ? "inline" : "none",
+                }}
+              >
+                ✓
+              </span>
+              <span
+                id={`link-${uniqueToastId}`}
+                className="flex-shrink-0"
+                style={{ display: "inline-flex" }}
+              >
+                <img
+                  src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                  alt="Solana"
+                  className="h-4 w-4 rounded-full opacity-70"
+                  style={{ cursor: "default" }}
+                />
+              </span>
+            </div>
+          </div>
+        ),
+        {
+          id: uniqueToastId,
+          duration: Infinity,
+          style: {
+            background: "#1a1a1a",
+            border: "1px solid #333",
+            borderRadius: "8px",
+            padding: "12px",
+          },
+        },
+      );
+
+      // Start timer animation
+      let timerHandle: number | null = null;
+      const tick = () => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+        const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+        if (timerEl) {
+          timerEl.textContent = `(${displayTime}s)`;
+        }
+
+        if (!timerFinished && elapsed >= timerCap) {
+          timerFinished = true;
+          if (!tradeErrored) {
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = "block";
+            }
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
-              const explorerUrl = `https://solscan.io/tx/${txHash}`;
-              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-              linkEl.className = "";
+              if (isMultiWallet) {
+                linkEl.textContent = `${walletsWithBalance}/${total}`;
+                linkEl.className =
+                  "text-xs text-blue-400 font-medium flex-shrink-0";
+              }
             }
-            // Fire early so Portfolio refetches immediately when Solscan link appears
-            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
           }
-        },
-      });
-
-      // Get first tx hash for single wallet case
-      const firstTxHash =
-        multiResult?.results?.find(
-          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
-        )?.result?.hash ||
-        multiResult?.results?.find(
-          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
-        )?.result?.txid;
-
-      confirmOptimisticMarker(__markId, firstTxHash);
-
-      if (firstTxHash && !isMultiWallet) {
-        const linkEl = document.getElementById(`link-${uniqueToastId}`);
-        if (linkEl) {
-          const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
-          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-          linkEl.className = "";
+          timerHandle = null;
+          return;
         }
+        timerHandle = requestAnimationFrame(tick);
+      };
+      timerHandle = requestAnimationFrame(tick);
+
+      const cleanupTradeListener = listenForTradeEvents(
+        tokenMint,
+        uniqueToastId,
+        (v) => {
+          tradeErrored = v;
+        },
+        "solana",
+      );
+
+      let __markId = "";
+
+      try {
+        const baseMint = tokenMint;
+        const quoteMint = SOL_MINT_ADDRESS;
+
+        __markId = insertOptimisticMarker({
+          mint: baseMint,
+          walletAddress:
+            walletList?.find((w) => w.isPrimary)?.solanaAddress ??
+            walletList?.[0]?.solanaAddress,
+          side: "buy",
+          amountSol: buyAmount,
+          priceUsd: (token as any).usd_price,
+        }).id;
+
+        notifyTradePending({
+          tokenAddress: baseMint,
+          tradeType: "buy",
+          chain: "sol",
+        });
+        const multiResult = await executeSolanaMultiBuy({
+          poolAddress,
+          baseMint,
+          quoteMint,
+          amountSOL: buyAmount,
+          poolType,
+          originalPairAddress: token.pair_address,
+          slippage: settings.maxSlippage,
+          priorityFee: settings.priority,
+          bribe: settings.bribe,
+          mevMode: settings.mevMode,
+          autoFee: settings.autoFee,
+          maxFee: settings.maxFee,
+          rpc: settings.rpc,
+          tokenName: token.name,
+          tokenSymbol: token.symbol,
+          imageUrl: (await resolveTokenImage(token as any)) || undefined,
+          authToken: user.bearerToken,
+          walletList: walletList || [],
+          walletBalances: walletBalances || {},
+          selectedWalletIds: selectedWalletIds?.sol || [],
+          onTxHash: ({ txHash }) => {
+            if (txHash) {
+              const linkEl = document.getElementById(`link-${uniqueToastId}`);
+              if (linkEl) {
+                const explorerUrl = `https://solscan.io/tx/${txHash}`;
+                linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+                linkEl.className = "";
+              }
+              // Fire early so Portfolio refetches immediately when Solscan link appears
+              broadcastTradeCompleted({
+                tokenAddress: baseMint,
+                tradeType: "buy",
+                chain: "sol",
+                txHash,
+                tokenName: token.name,
+                tokenSymbol: token.symbol,
+                imageUrl: tokenImage,
+                solAmountSpent: buyAmount,
+              });
+            }
+          },
+        });
+
+        // Get first tx hash for single wallet case
+        const firstTxHash =
+          multiResult?.results?.find(
+            (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+          )?.result?.hash ||
+          multiResult?.results?.find(
+            (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+          )?.result?.txid;
+
+        confirmOptimisticMarker(__markId, firstTxHash);
+
+        if (firstTxHash && !isMultiWallet) {
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
+            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            linkEl.className = "";
+          }
+          if (timerHandle) {
+            cancelAnimationFrame(timerHandle);
+          }
+          setTimeout(() => toast.dismiss(uniqueToastId), 10000);
+        }
+
+        isDev && console.log("SearchModal Quick Buy successful");
+
+        // Dispatch event to refresh chart price lines
+        if (typeof window !== "undefined" && tokenMint) {
+          window.dispatchEvent(
+            new CustomEvent("solanaQuickTrade", {
+              detail: { tokenAddress: tokenMint },
+            }),
+          );
+        }
+        dispatchBalanceRefresh("sol");
+      } catch (error: any) {
+        rollbackOptimisticMarker(__markId);
+        tradeErrored = true;
+        cleanupTradeListener();
         if (timerHandle) {
           cancelAnimationFrame(timerHandle);
         }
-        setTimeout(() => toast.dismiss(uniqueToastId), 10000);
-      }
-
-      isDev && console.log("SearchModal Quick Buy successful");
-
-      // Dispatch event to refresh chart price lines
-      if (typeof window !== "undefined" && tokenMint) {
-        window.dispatchEvent(
-          new CustomEvent("solanaQuickTrade", {
-            detail: { tokenAddress: tokenMint },
-          }),
+        console.error("❌ SearchModal Quick Buy failed:", error);
+        transformToastToError(
+          uniqueToastId,
+          mapTradeErrorMessage(error),
+          tokenImage,
+          tokenName,
         );
       }
-      dispatchBalanceRefresh('sol');
-    } catch (error: any) {
-      rollbackOptimisticMarker(__markId);
-      tradeErrored = true;
-      cleanupTradeListener();
-      if (timerHandle) {
-        cancelAnimationFrame(timerHandle);
-      }
-      console.error("❌ SearchModal Quick Buy failed:", error);
-      transformToastToError(uniqueToastId, mapTradeErrorMessage(error), tokenImage, tokenName);
-    }
-  }, [chain, user, quickBuyAmount, selectedPill, presets, walletList, walletBalances, selectedWalletIds]);
+    },
+    [
+      chain,
+      user,
+      quickBuyAmount,
+      selectedPill,
+      presets,
+      walletList,
+      walletBalances,
+      selectedWalletIds,
+    ],
+  );
 
   const handleSelectToken = useCallback(
     async (token: Token) => {
@@ -1295,18 +1524,19 @@ const SearchModalContent = React.memo(function SearchModalContent({
       // Get the token address - for Monad use mint, for Solana prefer mint over pair_address
       // IMPORTANT: Use the same address for both URL path and _mint param for consistency
       const address = isMonad
-        ? (token.mint || (token as any).address)
-        : (token.mint || token.pair_address);
+        ? token.mint || (token as any).address
+        : token.mint || token.pair_address;
 
       // Debug: log navigation details
-      isDev && console.log("handleSelectToken:", {
-        symbol: token.symbol,
-        name: token.name,
-        address,
-        pair_address: token.pair_address,
-        mint: token.mint,
-        chain,
-      });
+      isDev &&
+        console.log("handleSelectToken:", {
+          symbol: token.symbol,
+          name: token.name,
+          address,
+          pair_address: token.pair_address,
+          mint: token.mint,
+          chain,
+        });
 
       // Preload immediately — covers all paths (recent searches, trending, keyboard selection)
       // Has built-in dedup via lastPreloadedMint
@@ -1318,17 +1548,20 @@ const SearchModalContent = React.memo(function SearchModalContent({
       } else {
         selectTradeUrl = `/trade/${address}`;
       }
-      preloadTradeChart({
-        mint: token.mint || address,
-        pairAddress: token.pair_address,
-        chain: isMonad ? 'monad' : 'sol',
-        name: token.name,
-        symbol: token.symbol,
-        priceUsd: (token as any).price_usd,
-        marketCapUsd: token.fully_diluted_value,
-        image: token.uri || token.logo || "",
-        launchpadProtocol: (token as any).launchpad_protocol,
-      }, { router, tradeUrl: selectTradeUrl });
+      preloadTradeChart(
+        {
+          mint: token.mint || address,
+          pairAddress: token.pair_address,
+          chain: isMonad ? "monad" : "sol",
+          name: token.name,
+          symbol: token.symbol,
+          priceUsd: (token as any).price_usd,
+          marketCapUsd: token.fully_diluted_value,
+          image: token.uri || token.logo || "",
+          launchpadProtocol: (token as any).launchpad_protocol,
+        },
+        { router, tradeUrl: selectTradeUrl },
+      );
 
       // Save to search history
       const historyItem: SearchHistoryItem = {
@@ -1353,10 +1586,14 @@ const SearchModalContent = React.memo(function SearchModalContent({
         created_at: token.created_at,
       };
       addToHistory(historyItem, user?.id);
-      isDev && console.log("Saved to search history:", { userId: user?.id, token: historyItem.symbol });
+      isDev &&
+        console.log("Saved to search history:", {
+          userId: user?.id,
+          token: historyItem.symbol,
+        });
       // Update local state so it appears immediately if modal reopens
-      setRecentSearches(prev => {
-        const filtered = prev.filter(t => t.mint !== token.mint);
+      setRecentSearches((prev) => {
+        const filtered = prev.filter((t) => t.mint !== token.mint);
         return [historyItem, ...filtered].slice(0, 10);
       });
 
@@ -1384,16 +1621,25 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
         if (isMonad && address) {
           const queryParams = new URLSearchParams();
-          if (token.name) queryParams.set('_name', token.name);
-          if (token.symbol) queryParams.set('_symbol', token.symbol);
-          if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
-          if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
-          queryParams.set('_mint', address);
-          if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-          if (token.created_at) queryParams.set('_created_at', token.created_at);
-          if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
-          if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
-          queryParams.set('chain', 'monad');
+          if (token.name) queryParams.set("_name", token.name);
+          if (token.symbol) queryParams.set("_symbol", token.symbol);
+          if (token.fully_diluted_value)
+            queryParams.set("_mcap", token.fully_diluted_value.toString());
+          if (token.uri || token.logo)
+            queryParams.set("_image", token.uri || token.logo || "");
+          queryParams.set("_mint", address);
+          if ((token as any).launchpad_protocol)
+            queryParams.set(
+              "_launchpad_protocol",
+              (token as any).launchpad_protocol,
+            );
+          if (token.created_at)
+            queryParams.set("_created_at", token.created_at);
+          if ((token as any).price_usd)
+            queryParams.set("_price", String((token as any).price_usd));
+          if (token.total_liquidity_usd)
+            queryParams.set("_liquidity", String(token.total_liquidity_usd));
+          queryParams.set("chain", "monad");
 
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
@@ -1410,16 +1656,25 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
         if (isMonad && address) {
           const queryParams = new URLSearchParams();
-          if (token.name) queryParams.set('_name', token.name);
-          if (token.symbol) queryParams.set('_symbol', token.symbol);
-          if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
-          if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
-          queryParams.set('_mint', address);
-          if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-          if (token.created_at) queryParams.set('_created_at', token.created_at);
-          if ((token as any).price_usd) queryParams.set('_price', String((token as any).price_usd));
-          if (token.total_liquidity_usd) queryParams.set('_liquidity', String(token.total_liquidity_usd));
-          queryParams.set('chain', 'monad');
+          if (token.name) queryParams.set("_name", token.name);
+          if (token.symbol) queryParams.set("_symbol", token.symbol);
+          if (token.fully_diluted_value)
+            queryParams.set("_mcap", token.fully_diluted_value.toString());
+          if (token.uri || token.logo)
+            queryParams.set("_image", token.uri || token.logo || "");
+          queryParams.set("_mint", address);
+          if ((token as any).launchpad_protocol)
+            queryParams.set(
+              "_launchpad_protocol",
+              (token as any).launchpad_protocol,
+            );
+          if (token.created_at)
+            queryParams.set("_created_at", token.created_at);
+          if ((token as any).price_usd)
+            queryParams.set("_price", String((token as any).price_usd));
+          if (token.total_liquidity_usd)
+            queryParams.set("_liquidity", String(token.total_liquidity_usd));
+          queryParams.set("chain", "monad");
 
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
@@ -1490,7 +1745,14 @@ const SearchModalContent = React.memo(function SearchModalContent({
         }
       }
     },
-    [onClose, searchTokens, query, displayTokens, selectedIndex, handleSelectToken],
+    [
+      onClose,
+      searchTokens,
+      query,
+      displayTokens,
+      selectedIndex,
+      handleSelectToken,
+    ],
   );
 
   // Reset selected index when search results change
@@ -1505,7 +1767,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
       setHasSearched(false);
       // Load search history for the current user
       const history = getHistory(user?.id);
-      isDev && console.log("Loaded search history:", { userId: user?.id, historyCount: history.length });
+      isDev &&
+        console.log("Loaded search history:", {
+          userId: user?.id,
+          historyCount: history.length,
+        });
       setRecentSearches(history);
       // Pre-fetch tokens when modal opens for instant search
       fetchTokens();
@@ -1549,33 +1815,33 @@ const SearchModalContent = React.memo(function SearchModalContent({
         className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-xl border border-white bg-[#18181A] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
         disableClickOutside={pulseFilterModalOpen}
       >
-      {/* Close Button - Mobile */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2 sm:hidden">
-        <div className="flex w-full items-center sm:w-auto">
-          <BlockchainSwitcher />
+        {/* Close Button - Mobile */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2 sm:hidden">
+          <div className="flex w-full items-center sm:w-auto">
+            <BlockchainSwitcher />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openPulseFilters}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
+              aria-label="Filters"
+              title="Filters"
+            >
+              <FaFilter size={12} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 text-xl text-neutral-400 transition-colors hover:text-white"
+              aria-label="Close"
+            >
+              <FaTimes />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openPulseFilters}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
-            aria-label="Filters"
-            title="Filters"
-          >
-            <FaFilter size={12} />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1 text-xl text-neutral-400 transition-colors hover:text-white"
-            aria-label="Close"
-          >
-            <FaTimes />
-          </button>
-        </div>
-      </div>
 
-      {/* Filter and Sort Controls */}
-      {/* <div className="flex items-center gap-2">
+        {/* Filter and Sort Controls */}
+        {/* <div className="flex items-center gap-2">
           {sortingOptions.map((option) => {
             const IconComponent = option.icon;
             const isActive =
@@ -1608,370 +1874,278 @@ const SearchModalContent = React.memo(function SearchModalContent({
             );
           })}
         </div> */}
-      <div className="flex flex-col items-start justify-between gap-2 px-3 pt-2 pb-2 sm:items-center sm:gap-3 sm:px-4 sm:pt-4 md:flex-row">
-        <div className="hidden w-full items-center sm:w-auto md:flex">
-          <BlockchainSwitcher />
-        </div>
+        <div className="flex flex-col items-start justify-between gap-2 px-3 pt-2 pb-2 sm:items-center sm:gap-3 sm:px-4 sm:pt-4 md:flex-row">
+          <div className="hidden w-full items-center sm:w-auto md:flex">
+            <BlockchainSwitcher />
+          </div>
 
-        <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
-          <span className="text-xs font-medium whitespace-nowrap text-[#9595B5] sm:text-sm">
-            Sort by:
-          </span>
+          <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
+            <span className="text-xs font-medium whitespace-nowrap text-[#9595B5] sm:text-sm">
+              Sort by:
+            </span>
 
-          <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
-            {sortByOptions.map((option) => {
-              const IconComponent = option.icon;
-              const isActive = sortBy === option.key;
+            <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
+              {sortByOptions.map((option) => {
+                const IconComponent = option.icon;
+                const isActive = sortBy === option.key;
 
-              const tooltipText =
-                option.key === "smart"
-                  ? "Smart sort (relevance + time + volume)"
-                  : option.key === "time"
-                    ? "Sort results by time"
-                    : option.key === "market_cap"
-                      ? "Sort results by Market Cap"
-                      : option.key === "volume_1h"
-                        ? "Sort results by 1h Volume"
-                        : "Sort results by Liquidity";
+                const tooltipText =
+                  option.key === "smart"
+                    ? "Smart sort (relevance + time + volume)"
+                    : option.key === "time"
+                      ? "Sort results by time"
+                      : option.key === "market_cap"
+                        ? "Sort results by Market Cap"
+                        : option.key === "volume_1h"
+                          ? "Sort results by 1h Volume"
+                          : "Sort results by Liquidity";
 
-              return (
-                <div
-                  key={option.key}
-                  className="group relative flex-1 sm:flex-initial"
-                >
-                  <button
-                    onClick={() => setSortBy(option.key)}
-                    className={`flex w-full cursor-pointer items-center justify-center rounded-md px-2 py-1.5 transition-all duration-200 sm:px-3 sm:py-1.5 ${
-                      isActive
-                        ? "bg-[#1a1a1a] text-white shadow-sm"
-                        : "text-[#666666] hover:bg-[#141414] hover:text-[#9595B5]"
-                    }`}
+                return (
+                  <div
+                    key={option.key}
+                    className="group relative flex-1 sm:flex-initial"
                   >
-                    <IconComponent className="size-3.5 sm:size-4" />
-                  </button>
+                    <button
+                      onClick={() => setSortBy(option.key)}
+                      className={`flex w-full cursor-pointer items-center justify-center rounded-md px-2 py-1.5 transition-all duration-200 sm:px-3 sm:py-1.5 ${
+                        isActive
+                          ? "bg-[#1a1a1a] text-white shadow-sm"
+                          : "text-[#666666] hover:bg-[#141414] hover:text-[#9595B5]"
+                      }`}
+                    >
+                      <IconComponent className="size-3.5 sm:size-4" />
+                    </button>
 
-                  {/* Tooltip */}
-                  <div className="pointer-events-none absolute top-[-20px] left-1/2 -translate-x-1/2 -translate-y-full rounded-md border border-[#2a2a2a] bg-[#18181A] px-2 py-1 text-[11px] whitespace-nowrap text-[#d1d1e9] opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-[-6px] group-hover:opacity-100">
-                    {tooltipText}
+                    {/* Tooltip */}
+                    <div className="pointer-events-none absolute top-[-20px] left-1/2 -translate-x-1/2 -translate-y-full rounded-md border border-[#2a2a2a] bg-[#18181A] px-2 py-1 text-[11px] whitespace-nowrap text-[#d1d1e9] opacity-0 shadow-lg transition-all duration-200 group-hover:translate-y-[-6px] group-hover:opacity-100">
+                      {tooltipText}
 
-                    {/* Tooltip arrow */}
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-x-4 border-t-4 border-x-transparent border-t-[#18181A]" />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Filter icon - sits inline with the Sort by pill so they align vertically */}
-          <button
-            type="button"
-            onClick={openPulseFilters}
-            className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
-            aria-label="Filters"
-            title="Filters"
-          >
-            <FaFilter size={12} />
-          </button>
-        </div>
-      </div>
-
-      {/* Search Input */}
-      <div className="relative px-3 py-2 sm:px-4 sm:py-3">
-        <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#18181A] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#18181A] sm:gap-3 sm:px-4 sm:py-3">
-          <FaSearch className="flex-shrink-0 text-base text-[#666666] sm:text-lg" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => handleQueryChange(e.target.value)}
-            onKeyDown={handleInputKeyDown}
-            placeholder="Search tokens..."
-            className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#666666] sm:text-base"
-          />
-          {query && (
-            <button
-              onClick={() => {
-                setQuery("");
-                setSearchResults([]);
-                setHasSearched(false);
-                inputRef.current?.focus();
-              }}
-              className="flex-shrink-0 p-1 text-[#666666] transition-colors duration-200 hover:text-white"
-              title="Clear search"
-            >
-              <svg
-                className="h-4 w-4 sm:h-5 sm:w-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          )}
-          <div className="hidden flex-shrink-0 items-center gap-1.5 sm:flex">
-            <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
-              /
-            </span>
-            <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
-              TAB
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Token List */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-2 sm:px-3 sm:pt-3 md:px-4">
-        {searchLoading && (
-          <div className="mb-2 sm:mb-3">
-            <span className="text-sm tracking-wider text-[#9595B5] sm:text-base">
-              Searching...
-            </span>
-          </div>
-        )}
-        {searchLoading && displayTokens.length === 0 ? (
-          <div className="flex flex-col gap-2">
-            {[...Array(5)].map((_, index) => (
-              <div
-                key={index}
-                className="relative flex min-h-[120px] animate-pulse flex-col items-start justify-between gap-3 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] px-3 py-3 sm:min-h-[96px] sm:flex-row sm:items-center sm:gap-6 sm:px-5 sm:py-4"
-              >
-                <div className="flex w-full max-w-full items-center gap-3 sm:max-w-72 sm:gap-4">
-                  {/* Logo skeleton */}
-                  <div className="relative flex flex-shrink-0 items-center justify-center">
-                    <div className="h-12 w-12 rounded-lg border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16"></div>
-                    <div className="absolute -right-0.5 -bottom-0.5 h-4 w-4 rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-5 sm:w-5"></div>
-                  </div>
-                  {/* Text skeleton */}
-                  <div className="max-w-[380px] min-w-0 flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="h-4 w-16 rounded bg-[#1a1a1a] sm:h-5 sm:w-20"></div>
-                      <div className="h-3 w-24 rounded bg-[#1a1a1a] sm:h-4 sm:w-32"></div>
-                      <div className="ml-1 h-3 w-3 rounded bg-[#1a1a1a]"></div>
-                      <div className="h-3 w-3 rounded bg-[#1a1a1a]"></div>
+                      {/* Tooltip arrow */}
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-x-4 border-t-4 border-x-transparent border-t-[#18181A]" />
                     </div>
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="h-4 w-10 rounded-md bg-[#1a1a1a] sm:h-5 sm:w-12"></div>
-                      <div className="flex items-center gap-2 sm:gap-2.5">
-                        {[...Array(5)].map((_, i) => (
-                          <div
-                            key={i}
-                            className="h-3 w-3 rounded bg-[#1a1a1a] sm:h-3.5 sm:w-3.5"
-                          ></div>
-                        ))}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Filter icon - sits inline with the Sort by pill so they align vertically */}
+            <button
+              type="button"
+              onClick={openPulseFilters}
+              className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
+              aria-label="Filters"
+              title="Filters"
+            >
+              <FaFilter size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative px-3 py-2 sm:px-4 sm:py-3">
+          <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#18181A] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#18181A] sm:gap-3 sm:px-4 sm:py-3">
+            <FaSearch className="flex-shrink-0 text-base text-[#666666] sm:text-lg" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Search tokens..."
+              className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#666666] sm:text-base"
+            />
+            {query && (
+              <button
+                onClick={() => {
+                  setQuery("");
+                  setSearchResults([]);
+                  setHasSearched(false);
+                  inputRef.current?.focus();
+                }}
+                className="flex-shrink-0 p-1 text-[#666666] transition-colors duration-200 hover:text-white"
+                title="Clear search"
+              >
+                <svg
+                  className="h-4 w-4 sm:h-5 sm:w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+            <div className="hidden flex-shrink-0 items-center gap-1.5 sm:flex">
+              <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
+                /
+              </span>
+              <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
+                TAB
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Token List */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-2 sm:px-3 sm:pt-3 md:px-4">
+          {searchLoading && (
+            <div className="mb-2 sm:mb-3">
+              <span className="text-sm tracking-wider text-[#9595B5] sm:text-base">
+                Searching...
+              </span>
+            </div>
+          )}
+          {searchLoading && displayTokens.length === 0 ? (
+            <div className="flex flex-col gap-2">
+              {[...Array(5)].map((_, index) => (
+                <div
+                  key={index}
+                  className="relative flex min-h-[120px] animate-pulse flex-col items-start justify-between gap-3 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] px-3 py-3 sm:min-h-[96px] sm:flex-row sm:items-center sm:gap-6 sm:px-5 sm:py-4"
+                >
+                  <div className="flex w-full max-w-full items-center gap-3 sm:max-w-72 sm:gap-4">
+                    {/* Logo skeleton */}
+                    <div className="relative flex flex-shrink-0 items-center justify-center">
+                      <div className="h-12 w-12 rounded-lg border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16"></div>
+                      <div className="absolute -right-0.5 -bottom-0.5 h-4 w-4 rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-5 sm:w-5"></div>
+                    </div>
+                    {/* Text skeleton */}
+                    <div className="max-w-[380px] min-w-0 flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-16 rounded bg-[#1a1a1a] sm:h-5 sm:w-20"></div>
+                        <div className="h-3 w-24 rounded bg-[#1a1a1a] sm:h-4 sm:w-32"></div>
+                        <div className="ml-1 h-3 w-3 rounded bg-[#1a1a1a]"></div>
+                        <div className="h-3 w-3 rounded bg-[#1a1a1a]"></div>
+                      </div>
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="h-4 w-10 rounded-md bg-[#1a1a1a] sm:h-5 sm:w-12"></div>
+                        <div className="flex items-center gap-2 sm:gap-2.5">
+                          {[...Array(5)].map((_, i) => (
+                            <div
+                              key={i}
+                              className="h-3 w-3 rounded bg-[#1a1a1a] sm:h-3.5 sm:w-3.5"
+                            ></div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
+                  {/* Stats skeleton */}
+                  <div className="flex h-full w-full items-center justify-between gap-3 whitespace-nowrap sm:w-auto sm:justify-start sm:gap-5">
+                    <div className="h-4 w-12 rounded bg-[#1a1a1a] sm:h-5 sm:w-16"></div>
+                    <div className="h-4 w-12 rounded bg-[#1a1a1a] sm:h-5 sm:w-16"></div>
+                    <div className="h-4 w-12 rounded bg-[#1a1a1a] sm:h-5 sm:w-16"></div>
+                  </div>
+                  {/* Button skeleton */}
+                  <div className="h-8 w-full rounded-lg bg-[#1a1a1a] sm:w-16"></div>
                 </div>
-                {/* Stats skeleton */}
-                <div className="flex h-full w-full items-center justify-between gap-3 whitespace-nowrap sm:w-auto sm:justify-start sm:gap-5">
-                  <div className="h-4 w-12 rounded bg-[#1a1a1a] sm:h-5 sm:w-16"></div>
-                  <div className="h-4 w-12 rounded bg-[#1a1a1a] sm:h-5 sm:w-16"></div>
-                  <div className="h-4 w-12 rounded bg-[#1a1a1a] sm:h-5 sm:w-16"></div>
-                </div>
-                {/* Button skeleton */}
-                <div className="h-8 w-full rounded-lg bg-[#1a1a1a] sm:w-16"></div>
-              </div>
-            ))}
-          </div>
-        ) : displayTokens.length === 0 ? (
-          <div className="flex flex-col gap-4">
-            {/* Recent Searches Section - Show when not searching and has history */}
-            {!hasSearched && recentSearches.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-sm font-medium text-[#9595B5]">
-                    Recent Searches
-                  </span>
-                  <button
-                    onClick={() => {
-                      clearHistory(user?.id);
-                      setRecentSearches([]);
-                    }}
-                    className="text-xs text-neutral-500 transition-colors hover:text-[#7FFFC9]"
-                  >
-                    Clear All
-                  </button>
-                </div>
-                <ul className="flex flex-col overflow-y-auto">
-                  {recentSearches.map((item) => {
-                    const mcRaw = item.fully_diluted_value || item.total_fully_diluted_valuation || 0;
-                    const mc = formatMarketCap(mcRaw);
-                    const mcColor = getMarketCapColor(mcRaw);
-                    const liq = formatSmartNumber(item.total_liquidity_usd || 0);
-                    const normalizedLogo = normalizeAssetUrl(item.resolvedImageUrl || item.logo || item.uri || null);
-                    const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.symbol || item.name || "T")}&background=0f1012&color=E6E7EA&size=56`;
+              ))}
+            </div>
+          ) : displayTokens.length === 0 ? (
+            <div className="flex flex-col gap-4">
+              {/* Recent Searches Section - Show when not searching and has history */}
+              {!hasSearched && recentSearches.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-sm font-medium text-[#9595B5]">
+                      Recent Searches
+                    </span>
+                    <button
+                      onClick={() => {
+                        clearHistory(user?.id);
+                        setRecentSearches([]);
+                      }}
+                      className="text-xs text-neutral-500 transition-colors hover:text-[#7FFFC9]"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <ul className="flex flex-col overflow-y-auto">
+                    {recentSearches.map((item) => {
+                      const mcRaw =
+                        item.fully_diluted_value ||
+                        item.total_fully_diluted_valuation ||
+                        0;
+                      const mc = formatMarketCap(mcRaw);
+                      const mcColor = getMarketCapColor(mcRaw);
+                      const liq = formatSmartNumber(
+                        item.total_liquidity_usd || 0,
+                      );
+                      const normalizedLogo = normalizeAssetUrl(
+                        item.resolvedImageUrl || item.logo || item.uri || null,
+                      );
+                      const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.symbol || item.name || "T")}&background=0f1012&color=E6E7EA&size=56`;
 
-                    // Get protocol color and icon for the history item
-                    const historyToken = {
-                      mint: item.mint,
-                      launchpad_protocol: item.launchpad_protocol,
-                    } as any;
-                    const itemProtocolColor = resolveProtocolColor(historyToken, item.chain);
-                    const itemProtocolIcon = resolveProtocolIcon(historyToken, item.chain);
-                    const itemFillProtocolBadge = shouldFillProtocolBadge(historyToken);
+                      // Get protocol color and icon for the history item
+                      const historyToken = {
+                        mint: item.mint,
+                        launchpad_protocol: item.launchpad_protocol,
+                      } as any;
+                      const itemProtocolColor = resolveProtocolColor(
+                        historyToken,
+                        item.chain,
+                      );
+                      const itemProtocolIcon = resolveProtocolIcon(
+                        historyToken,
+                        item.chain,
+                      );
+                      const itemFillProtocolBadge =
+                        shouldFillProtocolBadge(historyToken);
 
-                    return (
-                      <li
-                        key={item.mint}
-                        onMouseEnter={() => {
-                          if (!item.mint) return;
-                          // Build tradeUrl matching handleSelectToken navigation
-                          const isMonadItem = item.chain === 'monad';
-                          const itemAddr = isMonadItem ? item.mint : (item.mint || item.pair_address);
-                          let historyTradeUrl: string;
-                          if (isMonadItem) {
-                            historyTradeUrl = `/trade/monad/${itemAddr}`;
-                          } else {
-                            historyTradeUrl = `/trade/${itemAddr}`;
-                          }
-                          preloadTradeChart(
-                            {
-                              mint: item.mint,
-                              pairAddress: item.pair_address,
-                              chain: isMonadItem ? 'monad' : 'sol',
-                              name: item.name || '',
-                              symbol: item.symbol || '',
-                              marketCapUsd: item.fully_diluted_value || item.total_fully_diluted_valuation,
-                              image: item.uri || item.logo || '',
-                              launchpadProtocol: item.launchpad_protocol,
-                            },
-                            { router, tradeUrl: historyTradeUrl }
-                          );
-                        }}
-                        onClick={() => {
-                          // Convert history item to Token format for handleSelectToken
-                          const token: Token = {
-                            id: 0,
-                            mint: item.mint,
-                            name: item.name || "",
-                            symbol: item.symbol || "",
-                            logo: item.logo || null,
-                            fully_diluted_value: item.fully_diluted_value || item.total_fully_diluted_valuation || 0,
-                            total_liquidity_usd: item.total_liquidity_usd || 0,
-                            total_buy_volume_1h: item.total_buy_volume_24h || 0,
-                            total_sell_volume_1h: item.total_sell_volume_24h || 0,
-                            created_at: "",
-                            bonding_curve_progress: "0%",
-                            amm: "",
-                            uri: item.uri || item.logo || "",
-                            pair_address: item.pair_address || item.mint,
-                            launchpad_protocol: item.launchpad_protocol,
-                          } as Token & { launchpad_protocol?: string };
-                          handleSelectToken(token);
-                        }}
-                        className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#18181A] px-3 py-2.5 transition-all duration-200 hover:z-30 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
-                      >
-                        {/* Token Logo with Protocol Border */}
-                        <div
-                          className="relative flex flex-shrink-0 items-center justify-center"
-                          style={{ overflow: "visible" }}
-                        >
-                          <div
-                            className="relative rounded-lg transition-all duration-200 group-hover:scale-105"
-                            style={{
-                              border: `2px solid ${(item as any).is_mayhem_mode ? "#c83c51" : itemProtocolColor}`,
-                              padding: 2,
-                              backgroundColor: "#06070b",
-                              boxShadow: `0 0 8px ${(item as any).is_mayhem_mode ? "#c83c5120" : `${itemProtocolColor}20`}`,
-                            }}
-                          >
-                            <div className="relative h-12 w-12 overflow-hidden rounded-md sm:h-14 sm:w-14">
-                              <FastImage
-                                src={normalizedLogo ?? undefined}
-                                fallbackSrc={fallbackAvatar}
-                                alt={item.name || item.symbol || ""}
-                                width={56}
-                                height={56}
-                                className="h-full w-full object-cover"
-                                symbol={item.symbol}
-                                name={item.name}
-                                showBubble={false}
-                              />
-                            </div>
-                          </div>
-                          {/* Protocol Pill */}
-                          <div
-                            className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 transform items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110"
-                            style={{
-                              width: 20,
-                              height: 20,
-                              backgroundColor: "#000000",
-                              border: `1px solid ${(item as any).is_mayhem_mode ? "#c83c51" : itemProtocolColor}`,
-                              boxShadow: `0 0 4px ${(item as any).is_mayhem_mode ? "#c83c5160" : `${itemProtocolColor}60`}`,
-                            }}
-                          >
-                            {(item as any).is_mayhem_mode ? (
-                              <img
-                                src="/Mayhem.webp"
-                                alt="Mayhem Mode"
-                                className="h-3/4 w-3/4 rounded-full object-contain"
-                              />
-                            ) : (
-                            <img
-                              src={itemProtocolIcon}
-                              alt="Protocol logo"
-                              className={`${itemFillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
-                              style={{
-                                filter:
-                                  itemProtocolColor === "#eab308"
-                                    ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
-                                    : "none",
-                              }}
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = "none";
-                              }}
-                            />
-                            )}
-                          </div>
-                        </div>
-                        {/* Token Info */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
-                              {item.symbol}
-                            </span>
-                            <span className="min-w-0 truncate text-xs text-neutral-500">
-                              {item.name}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-[#9595B5]">
-                            <span>
-                              MC: <span className="font-medium" style={{ color: mcColor }}>${mc}</span>
-                            </span>
-                            <span>
-                              L: <span className="font-medium text-white">${liq}</span>
-                            </span>
-                            {(item as any).is_mayhem_mode && (
-                              <TokenCountdown24h
-                                startedAt={
-                                  (item as any).launch_time ||
-                                  (item as any).created_at
-                                }
-                              />
-                            )}
-                          </div>
-                        </div>
-                        {/* Quick Action */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                      return (
+                        <li
+                          key={item.mint}
+                          onMouseEnter={() => {
+                            if (!item.mint) return;
+                            // Build tradeUrl matching handleSelectToken navigation
+                            const isMonadItem = item.chain === "monad";
+                            const itemAddr = isMonadItem
+                              ? item.mint
+                              : item.mint || item.pair_address;
+                            let historyTradeUrl: string;
+                            if (isMonadItem) {
+                              historyTradeUrl = `/trade/monad/${itemAddr}`;
+                            } else {
+                              historyTradeUrl = `/trade/${itemAddr}`;
+                            }
+                            preloadTradeChart(
+                              {
+                                mint: item.mint,
+                                pairAddress: item.pair_address,
+                                chain: isMonadItem ? "monad" : "sol",
+                                name: item.name || "",
+                                symbol: item.symbol || "",
+                                marketCapUsd:
+                                  item.fully_diluted_value ||
+                                  item.total_fully_diluted_valuation,
+                                image: item.uri || item.logo || "",
+                                launchpadProtocol: item.launchpad_protocol,
+                              },
+                              { router, tradeUrl: historyTradeUrl },
+                            );
+                          }}
+                          onClick={() => {
+                            // Convert history item to Token format for handleSelectToken
                             const token: Token = {
                               id: 0,
                               mint: item.mint,
                               name: item.name || "",
                               symbol: item.symbol || "",
                               logo: item.logo || null,
-                              fully_diluted_value: item.fully_diluted_value || item.total_fully_diluted_valuation || 0,
-                              total_liquidity_usd: item.total_liquidity_usd || 0,
-                              total_buy_volume_1h: item.total_buy_volume_24h || 0,
-                              total_sell_volume_1h: item.total_sell_volume_24h || 0,
+                              fully_diluted_value:
+                                item.fully_diluted_value ||
+                                item.total_fully_diluted_valuation ||
+                                0,
+                              total_liquidity_usd:
+                                item.total_liquidity_usd || 0,
+                              total_buy_volume_1h:
+                                item.total_buy_volume_24h || 0,
+                              total_sell_volume_1h:
+                                item.total_sell_volume_24h || 0,
                               created_at: "",
                               bonding_curve_progress: "0%",
                               amm: "",
@@ -1981,156 +2155,298 @@ const SearchModalContent = React.memo(function SearchModalContent({
                             } as Token & { launchpad_protocol?: string };
                             handleSelectToken(token);
                           }}
-                          className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                          className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#18181A] px-3 py-2.5 transition-all duration-200 hover:z-30 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
                         >
-                          <BsLightningChargeFill className="h-3 w-3" />
-                          Trade
-                        </button>
-                        {/* Remove from history */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeFromHistory(item.mint, user?.id);
-                            setRecentSearches((prev) => prev.filter((t) => t.mint !== item.mint));
-                          }}
-                          className="flex flex-shrink-0 items-center justify-center rounded-lg p-1.5 text-neutral-500 transition-all hover:bg-[#2a2a2a] hover:text-white sm:p-2"
-                          title="Remove from history"
-                        >
-                          <FaTimes className="h-3 w-3" />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-
-            {/* Empty State or No Results */}
-            {hasSearched ? (
-              <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
-                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
-                  <svg
-                    className="h-6 w-6 text-[#666666] sm:h-8 sm:w-8"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+                          {/* Token Logo with Protocol Border */}
+                          <div
+                            className="relative flex flex-shrink-0 items-center justify-center"
+                            style={{ overflow: "visible" }}
+                          >
+                            <div
+                              className="relative rounded-lg transition-all duration-200 group-hover:scale-105"
+                              style={{
+                                border: `2px solid ${(item as any).is_mayhem_mode ? "#c83c51" : itemProtocolColor}`,
+                                padding: 2,
+                                backgroundColor: "#06070b",
+                                boxShadow: `0 0 8px ${(item as any).is_mayhem_mode ? "#c83c5120" : `${itemProtocolColor}20`}`,
+                              }}
+                            >
+                              <div className="relative h-12 w-12 overflow-hidden rounded-md sm:h-14 sm:w-14">
+                                <FastImage
+                                  src={normalizedLogo ?? undefined}
+                                  fallbackSrc={fallbackAvatar}
+                                  alt={item.name || item.symbol || ""}
+                                  width={56}
+                                  height={56}
+                                  className="h-full w-full object-cover"
+                                  symbol={item.symbol}
+                                  name={item.name}
+                                  showBubble={false}
+                                />
+                              </div>
+                            </div>
+                            {/* Protocol Pill */}
+                            <div
+                              className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 transform items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110"
+                              style={{
+                                width: 20,
+                                height: 20,
+                                backgroundColor: "#000000",
+                                border: `1px solid ${(item as any).is_mayhem_mode ? "#c83c51" : itemProtocolColor}`,
+                                boxShadow: `0 0 4px ${(item as any).is_mayhem_mode ? "#c83c5160" : `${itemProtocolColor}60`}`,
+                              }}
+                            >
+                              {(item as any).is_mayhem_mode ? (
+                                <img
+                                  src="/Mayhem.webp"
+                                  alt="Mayhem Mode"
+                                  className="h-3/4 w-3/4 rounded-full object-contain"
+                                />
+                              ) : (
+                                <img
+                                  src={itemProtocolIcon}
+                                  alt="Protocol logo"
+                                  className={`${itemFillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                                  style={{
+                                    filter:
+                                      itemProtocolColor === "#eab308"
+                                        ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                                        : "none",
+                                  }}
+                                  onError={(e) => {
+                                    (
+                                      e.target as HTMLImageElement
+                                    ).style.display = "none";
+                                  }}
+                                />
+                              )}
+                            </div>
+                          </div>
+                          {/* Token Info */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
+                                {item.symbol}
+                              </span>
+                              <span className="min-w-0 truncate text-xs text-neutral-500">
+                                {item.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-[#9595B5]">
+                              <span>
+                                MC:{" "}
+                                <span
+                                  className="font-medium"
+                                  style={{ color: mcColor }}
+                                >
+                                  ${mc}
+                                </span>
+                              </span>
+                              <span>
+                                L:{" "}
+                                <span className="font-medium text-white">
+                                  ${liq}
+                                </span>
+                              </span>
+                              {(item as any).is_mayhem_mode && (
+                                <TokenCountdown24h
+                                  startedAt={
+                                    (item as any).launch_time ||
+                                    (item as any).created_at
+                                  }
+                                />
+                              )}
+                            </div>
+                          </div>
+                          {/* Quick Action */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const token: Token = {
+                                id: 0,
+                                mint: item.mint,
+                                name: item.name || "",
+                                symbol: item.symbol || "",
+                                logo: item.logo || null,
+                                fully_diluted_value:
+                                  item.fully_diluted_value ||
+                                  item.total_fully_diluted_valuation ||
+                                  0,
+                                total_liquidity_usd:
+                                  item.total_liquidity_usd || 0,
+                                total_buy_volume_1h:
+                                  item.total_buy_volume_24h || 0,
+                                total_sell_volume_1h:
+                                  item.total_sell_volume_24h || 0,
+                                created_at: "",
+                                bonding_curve_progress: "0%",
+                                amm: "",
+                                uri: item.uri || item.logo || "",
+                                pair_address: item.pair_address || item.mint,
+                                launchpad_protocol: item.launchpad_protocol,
+                              } as Token & { launchpad_protocol?: string };
+                              handleSelectToken(token);
+                            }}
+                            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                          >
+                            <BsLightningChargeFill className="h-3 w-3" />
+                            Trade
+                          </button>
+                          {/* Remove from history */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeFromHistory(item.mint, user?.id);
+                              setRecentSearches((prev) =>
+                                prev.filter((t) => t.mint !== item.mint),
+                              );
+                            }}
+                            className="flex flex-shrink-0 items-center justify-center rounded-lg p-1.5 text-neutral-500 transition-all hover:bg-[#2a2a2a] hover:text-white sm:p-2"
+                            title="Remove from history"
+                          >
+                            <FaTimes className="h-3 w-3" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-                <div className="space-y-2 text-center">
-                  <h3 className="text-base font-semibold text-white sm:text-lg">
-                    No tokens found
-                  </h3>
-                  <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
-                    We couldn't find any tokens matching "
-                    <span className="font-medium text-[#7FFFC9]">{query}</span>
-                    ". Try searching with a different name, symbol, or check the
-                    spelling.
-                  </p>
-                  <div className="px-2 pt-2 text-xs text-neutral-500">
-                    <p>
-                      💡 Tip: Search by token name, ticker symbol, or contract
-                      address
+              )}
+
+              {/* Empty State or No Results */}
+              {hasSearched ? (
+                <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
+                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
+                    <svg
+                      className="h-6 w-6 text-[#666666] sm:h-8 sm:w-8"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="space-y-2 text-center">
+                    <h3 className="text-base font-semibold text-white sm:text-lg">
+                      No tokens found
+                    </h3>
+                    <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                      We couldn't find any tokens matching "
+                      <span className="font-medium text-[#7FFFC9]">
+                        {query}
+                      </span>
+                      ". Try searching with a different name, symbol, or check
+                      the spelling.
                     </p>
+                    <div className="px-2 pt-2 text-xs text-neutral-500">
+                      <p>
+                        💡 Tip: Search by token name, ticker symbol, or contract
+                        address
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : !recentSearches.length ? (
-              <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
-                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
-                  <FaSearch className="h-6 w-6 text-[#7FFFC9] sm:h-8 sm:w-8" />
-                </div>
-                <div className="space-y-2 text-center">
-                  <h3 className="text-base font-semibold text-white sm:text-lg">
-                    Start searching
-                  </h3>
-                  <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
-                    Type at least 2 characters to search for tokens by name,
-                    symbol, or contract address.
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-2 text-xs">
-                    <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                      pepe
-                    </span>
-                    <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                      sol
-                    </span>
-                    <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                      pump
-                    </span>
-                    <span className="text-neutral-500">
-                      or contract address
-                    </span>
+              ) : !recentSearches.length ? (
+                <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
+                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
+                    <FaSearch className="h-6 w-6 text-[#7FFFC9] sm:h-8 sm:w-8" />
+                  </div>
+                  <div className="space-y-2 text-center">
+                    <h3 className="text-base font-semibold text-white sm:text-lg">
+                      Start searching
+                    </h3>
+                    <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                      Type at least 2 characters to search for tokens by name,
+                      symbol, or contract address.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-2 text-xs">
+                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                        pepe
+                      </span>
+                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                        sol
+                      </span>
+                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                        pump
+                      </span>
+                      <span className="text-neutral-500">
+                        or contract address
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <>
-            {/* Column headers (desktop only — mobile rows render with inline labels) */}
-            <div
-              className="hidden w-full items-center justify-between gap-4 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[#666666] sm:flex sm:px-4 md:gap-6 md:px-5"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-            >
-              <div className="w-full max-w-72 min-w-0 flex-1">Token</div>
-              <div className="flex flex-shrink-0 items-center gap-3 sm:text-[11px] md:gap-5">
-                <span className="w-20 text-center">MCap</span>
-                <span className="w-20 text-center">Vol</span>
-                <span className="w-20 text-center">Liq</span>
-              </div>
-              <span className="flex-shrink-0 text-center" style={{ width: "76px" }}>Quick Buy</span>
+              ) : null}
             </div>
-          <ul className="flex h-full list-none flex-col gap-2 overflow-y-auto pb-2">
-            {displayTokens.map((token, index) => {
-              const mcRaw = token.fully_diluted_value || 0;
-              const mc = formatMarketCap(mcRaw);
-              const { volume, is24h } = resolveSearchVolume(token);
-              const vol = formatSmartNumber(volume * solPrice);
-              const liq = formatSmartNumber(token.total_liquidity_usd || 0);
+          ) : (
+            <>
+              {/* Column headers (desktop only — mobile rows render with inline labels) */}
+              <div
+                className="hidden w-full items-center justify-between gap-4 px-3 py-2 text-[11px] font-medium tracking-wide text-[#666666] uppercase sm:flex sm:px-4 md:gap-6 md:px-5"
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+              >
+                <div className="w-full max-w-72 min-w-0 flex-1">Token</div>
+                <div className="flex flex-shrink-0 items-center gap-3 sm:text-[11px] md:gap-5">
+                  <span className="w-20 text-center">MCap</span>
+                  <span className="w-20 text-center">Vol</span>
+                  <span className="w-20 text-center">Liq</span>
+                </div>
+                <span
+                  className="flex-shrink-0 text-center"
+                  style={{ width: "76px" }}
+                >
+                  Quick Buy
+                </span>
+              </div>
+              <ul className="flex h-full list-none flex-col gap-2 overflow-y-auto pb-2">
+                {displayTokens.map((token, index) => {
+                  const mcRaw = token.fully_diluted_value || 0;
+                  const mc = formatMarketCap(mcRaw);
+                  const { volume, is24h } = resolveSearchVolume(token);
+                  const vol = formatSmartNumber(volume * solPrice);
+                  const liq = formatSmartNumber(token.total_liquidity_usd || 0);
 
-              return (
-                <TokenListItem
-                  key={`${token.pair_address || ''}-${token.mint || ''}-${token.symbol || ''}`}
-                  token={token}
-                  mc={mc}
-                  mcRaw={mcRaw}
-                  vol={vol}
-                  volIs24h={is24h}
-                  liq={liq}
-                  onSelect={handleSelectToken}
-                  onQuickBuy={handleQuickBuy}
-                  quickBuyAmount={quickBuyAmount}
-                  chain={chain}
-                  searchQuery={query}
-                  index={index}
-                  isSelected={index === selectedIndex}
-                />
-              );
-            })}
-          </ul>
-          </>
-        )}
-      </div>
-    </InterstatePopout>
+                  return (
+                    <TokenListItem
+                      key={`${token.pair_address || ""}-${token.mint || ""}-${token.symbol || ""}`}
+                      token={token}
+                      mc={mc}
+                      mcRaw={mcRaw}
+                      vol={vol}
+                      volIs24h={is24h}
+                      liq={liq}
+                      onSelect={handleSelectToken}
+                      onQuickBuy={handleQuickBuy}
+                      quickBuyAmount={quickBuyAmount}
+                      chain={chain}
+                      searchQuery={query}
+                      index={index}
+                      isSelected={index === selectedIndex}
+                    />
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      </InterstatePopout>
 
-    {/* Reuse the same filters UI as the pulse / discover pages */}
-    <DiscoverFilterModal
-      isOpen={pulseFilterModalOpen}
-      onClose={() => setPulseFilterModalOpen(false)}
-      pendingFilters={pendingPulseFilters}
-      hasPendingChanges={pulseHasPendingChanges}
-      onPendingFilterChange={handlePulseFilterChange}
-      onApply={handlePulseApply}
-      onReset={handlePulseReset}
-    />
+      {/* Reuse the same filters UI as the pulse / discover pages */}
+      <DiscoverFilterModal
+        isOpen={pulseFilterModalOpen}
+        onClose={() => setPulseFilterModalOpen(false)}
+        pendingFilters={pendingPulseFilters}
+        hasPendingChanges={pulseHasPendingChanges}
+        onPendingFilterChange={handlePulseFilterChange}
+        onApply={handlePulseApply}
+        onReset={handlePulseReset}
+      />
     </>
   );
 });
@@ -2222,7 +2538,11 @@ const TokenListItem = React.memo(
 
     // Search menu state (like PulseTable)
     const [showSearchMenu, setShowSearchMenu] = useState(false);
-    const [searchMenuPosition, setSearchMenuPosition] = useState({ left: 0, top: 0, openAbove: false });
+    const [searchMenuPosition, setSearchMenuPosition] = useState({
+      left: 0,
+      top: 0,
+      openAbove: false,
+    });
     const searchButtonRef = useRef<HTMLButtonElement>(null);
     const searchMenuRef = useRef<HTMLDivElement>(null);
     const isOverSearchMenu = useRef(false);
@@ -2235,7 +2555,10 @@ const TokenListItem = React.memo(
 
     // Fetch metadata from URI for social links (like PulseTable)
     const meta = useTokenMetadata(token.uri);
-    const socialLinks = useMemo(() => extractSocialLinks(token, meta), [token, meta]);
+    const socialLinks = useMemo(
+      () => extractSocialLinks(token, meta),
+      [token, meta],
+    );
 
     useEffect(() => {
       const checkMobile = () => {
@@ -2264,7 +2587,10 @@ const TokenListItem = React.memo(
       const rawUri = token.uri || token.logo;
 
       // Skip if we already resolved for this token
-      if (resolvedImageRef.current && resolvedForMintRef.current === token.mint) {
+      if (
+        resolvedImageRef.current &&
+        resolvedForMintRef.current === token.mint
+      ) {
         return;
       }
 
@@ -2333,14 +2659,16 @@ const TokenListItem = React.memo(
       if (socialLinks.twitter) {
         const twitterValue = socialLinks.twitter;
         // Extract handle from URL if needed
-        const handleMatch = twitterValue.match(/(?:twitter\.com|x\.com)\/(@?\w+)/i);
+        const handleMatch = twitterValue.match(
+          /(?:twitter\.com|x\.com)\/(@?\w+)/i,
+        );
         if (handleMatch) {
-          const handle = handleMatch[1]?.replace(/^@/, '');
+          const handle = handleMatch[1]?.replace(/^@/, "");
           return { url: `https://twitter.com/${handle}`, handle };
         }
         // If it looks like a handle (starts with @ or is just a word)
-        if (twitterValue.startsWith('@') || /^\w+$/.test(twitterValue)) {
-          const handle = twitterValue.replace(/^@/, '');
+        if (twitterValue.startsWith("@") || /^\w+$/.test(twitterValue)) {
+          const handle = twitterValue.replace(/^@/, "");
           return { url: `https://twitter.com/${handle}`, handle };
         }
         // Otherwise use as-is
@@ -2579,8 +2907,10 @@ const TokenListItem = React.memo(
           onMouseEnter={() => {
             if (!token.mint) return;
             // Build tradeUrl matching handleSelectToken navigation
-            const isMonadResult = chain === 'monad';
-            const resultAddr = isMonadResult ? token.mint : (token.mint || token.pair_address);
+            const isMonadResult = chain === "monad";
+            const resultAddr = isMonadResult
+              ? token.mint
+              : token.mint || token.pair_address;
             let resultTradeUrl: string;
             if (isMonadResult) {
               resultTradeUrl = `/trade/monad/${resultAddr}`;
@@ -2591,14 +2921,14 @@ const TokenListItem = React.memo(
               {
                 mint: token.mint,
                 pairAddress: token.pair_address,
-                chain: isMonadResult ? 'monad' : 'sol',
+                chain: isMonadResult ? "monad" : "sol",
                 name: token.name,
                 symbol: token.symbol,
                 marketCapUsd: token.fully_diluted_value,
                 image: token.uri || token.logo || "",
                 createdAt: token.created_at,
               },
-              { router: searchRouter, tradeUrl: resultTradeUrl }
+              { router: searchRouter, tradeUrl: resultTradeUrl },
             );
           }}
           onClick={(e) => {
@@ -2652,7 +2982,9 @@ const TokenListItem = React.memo(
                   <div
                     className="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#18181A] bg-[#18181A] transition-transform duration-200 group-hover:scale-110"
                     style={{
-                      borderColor: (token as any).is_mayhem_mode ? "#c83c51" : protocolColor,
+                      borderColor: (token as any).is_mayhem_mode
+                        ? "#c83c51"
+                        : protocolColor,
                       boxShadow: `0 0 6px ${(token as any).is_mayhem_mode ? "#c83c5150" : `${protocolColor}50`}`,
                     }}
                   >
@@ -2663,20 +2995,20 @@ const TokenListItem = React.memo(
                         className="h-3/4 w-3/4 rounded-full object-contain"
                       />
                     ) : (
-                    <img
-                      src={tokenIcon}
-                      alt="Protocol logo"
-                      className={`${fillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
-                      style={{
-                        filter:
-                          protocolColor === "#eab308"
-                            ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
-                            : "none",
-                      }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
+                      <img
+                        src={tokenIcon}
+                        alt="Protocol logo"
+                        className={`${fillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                        style={{
+                          filter:
+                            protocolColor === "#eab308"
+                              ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                              : "none",
+                        }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
                     )}
                   </div>
                 </div>
@@ -2719,7 +3051,9 @@ const TokenListItem = React.memo(
                 title={onQuickBuy ? "Quick buy token" : "Select token"}
               >
                 <BsLightningChargeFill className="h-3.5 w-3.5" />
-                {quickBuyAmount && parseFloat(quickBuyAmount) > 0 ? `Buy ${quickBuyAmount}` : 'Buy'}
+                {quickBuyAmount && parseFloat(quickBuyAmount) > 0
+                  ? `Buy ${quickBuyAmount}`
+                  : "Buy"}
               </button>
             </div>
             {/* Second Row: Age, Social Icons */}
@@ -2730,8 +3064,7 @@ const TokenListItem = React.memo(
               {(token as any).is_mayhem_mode && (
                 <TokenCountdown24h
                   startedAt={
-                    (token as any).launch_time ||
-                    (token as any).created_at
+                    (token as any).launch_time || (token as any).created_at
                   }
                 />
               )}
@@ -2749,7 +3082,7 @@ const TokenListItem = React.memo(
                   <button
                     ref={searchButtonRef}
                     type="button"
-                    className="relative z-20 p-0.5 transition-all duration-200 hover:text-white hover:bg-white/10 rounded"
+                    className="relative z-20 rounded p-0.5 transition-all duration-200 hover:bg-white/10 hover:text-white"
                     style={{ pointerEvents: "auto" }}
                     title="Search options"
                     onMouseEnter={handleSearchMouseEnter}
@@ -2765,55 +3098,84 @@ const TokenListItem = React.memo(
                   {showSearchMenu && (
                     <div
                       ref={searchMenuRef}
-                      className="absolute left-0 top-full mt-2 min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1 z-[999999]"
+                      className="absolute top-full left-0 z-[999999] mt-2 min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1"
                       style={{ boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)" }}
                       onMouseEnter={handleSearchMenuMouseEnter}
                       onMouseLeave={handleSearchMenuMouseLeave}
                     >
                       <button
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                         onClick={(e) => {
                           e.stopPropagation();
-                          window.open(`https://twitter.com/search?q=${encodeURIComponent(token.mint)}`, "_blank");
+                          window.open(
+                            `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`,
+                            "_blank",
+                          );
                           setShowSearchMenu(false);
                         }}
                       >
-                        <FaXTwitter size={14} className="text-neutral-400" />
-                        X Search for Address
+                        <FaXTwitter size={14} className="text-neutral-400" />X
+                        Search for Address
                       </button>
                       <button
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                         onClick={(e) => {
                           e.stopPropagation();
-                          window.open(`https://twitter.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name}`.trim())}`, "_blank");
+                          window.open(
+                            `https://twitter.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name}`.trim())}`,
+                            "_blank",
+                          );
                           setShowSearchMenu(false);
                         }}
                       >
-                        <FaXTwitter size={14} className="text-neutral-400" />
-                        X Search for Name
+                        <FaXTwitter size={14} className="text-neutral-400" />X
+                        Search for Name
                       </button>
                       <div className="my-1 border-t border-[#2a2b33]" />
                       <button
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                         onClick={(e) => {
                           e.stopPropagation();
-                          window.open(`https://www.google.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name} crypto`.trim())}`, "_blank");
+                          window.open(
+                            `https://www.google.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name} crypto`.trim())}`,
+                            "_blank",
+                          );
                           setShowSearchMenu(false);
                         }}
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <path
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                            fill="#4285F4"
+                          />
+                          <path
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                            fill="#34A853"
+                          />
+                          <path
+                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                            fill="#FBBC05"
+                          />
+                          <path
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                            fill="#EA4335"
+                          />
                         </svg>
                         Google Search for Name
                       </button>
                       <button
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                         onClick={(e) => {
                           e.stopPropagation();
-                          window.open(`https://dexscreener.com/solana/${token.mint}`, "_blank");
+                          window.open(
+                            `https://dexscreener.com/solana/${token.mint}`,
+                            "_blank",
+                          );
                           setShowSearchMenu(false);
                         }}
                       >
@@ -2840,10 +3202,14 @@ const TokenListItem = React.memo(
             <div className="flex items-center gap-4 pt-2 text-xs text-[#9595B5]">
               <div>
                 <span className="text-[#666666]">MC: </span>
-                <span className="font-bold" style={{ color: mcColor }}>${mc}</span>
+                <span className="font-bold" style={{ color: mcColor }}>
+                  ${mc}
+                </span>
               </div>
               <div>
-                <span className="text-[#666666]">{volIs24h ? "V(24h): " : "V: "}</span>
+                <span className="text-[#666666]">
+                  {volIs24h ? "V(24h): " : "V: "}
+                </span>
                 <span className="font-bold text-white">${vol}</span>
               </div>
               <div>
@@ -2893,7 +3259,9 @@ const TokenListItem = React.memo(
                 <div
                   className="pointer-events-none absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#18181A] bg-[#18181A] transition-transform duration-200 group-hover:scale-110"
                   style={{
-                    borderColor: (token as any).is_mayhem_mode ? "#c83c51" : protocolColor,
+                    borderColor: (token as any).is_mayhem_mode
+                      ? "#c83c51"
+                      : protocolColor,
                     boxShadow: `0 0 6px ${(token as any).is_mayhem_mode ? "#c83c5150" : `${protocolColor}50`}`,
                   }}
                 >
@@ -2904,20 +3272,20 @@ const TokenListItem = React.memo(
                       className="h-3/4 w-3/4 rounded-full object-contain"
                     />
                   ) : (
-                  <img
-                    src={tokenIcon}
-                    alt="Protocol logo"
-                    className={`${fillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
-                    style={{
-                      filter:
-                        protocolColor === "#eab308"
-                          ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
-                          : "none",
-                    }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
-                  />
+                    <img
+                      src={tokenIcon}
+                      alt="Protocol logo"
+                      className={`${fillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                      style={{
+                        filter:
+                          protocolColor === "#eab308"
+                            ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                            : "none",
+                      }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
                   )}
                 </div>
               </div>
@@ -2955,8 +3323,7 @@ const TokenListItem = React.memo(
                   {(token as any).is_mayhem_mode && (
                     <TokenCountdown24h
                       startedAt={
-                        (token as any).launch_time ||
-                        (token as any).created_at
+                        (token as any).launch_time || (token as any).created_at
                       }
                     />
                   )}
@@ -3203,7 +3570,7 @@ const TokenListItem = React.memo(
                     <div className="relative">
                       <button
                         type="button"
-                        className="relative z-20 p-0.5 transition-all duration-200 hover:text-white hover:bg-white/10 rounded"
+                        className="relative z-20 rounded p-0.5 transition-all duration-200 hover:bg-white/10 hover:text-white"
                         style={{ pointerEvents: "auto" }}
                         title="Search options"
                         onMouseEnter={handleSearchMouseEnter}
@@ -3219,55 +3586,90 @@ const TokenListItem = React.memo(
                       {showSearchMenu && (
                         <div
                           ref={searchMenuRef}
-                          className="absolute left-0 top-full mt-2 min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1 z-[999999]"
+                          className="absolute top-full left-0 z-[999999] mt-2 min-w-[220px] rounded-lg border border-[#2a2b33] bg-[#16171C] py-1"
                           style={{ boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)" }}
                           onMouseEnter={handleSearchMenuMouseEnter}
                           onMouseLeave={handleSearchMenuMouseLeave}
                         >
                           <button
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(`https://twitter.com/search?q=${encodeURIComponent(token.mint)}`, "_blank");
+                              window.open(
+                                `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`,
+                                "_blank",
+                              );
                               setShowSearchMenu(false);
                             }}
                           >
-                            <FaXTwitter size={14} className="text-neutral-400" />
+                            <FaXTwitter
+                              size={14}
+                              className="text-neutral-400"
+                            />
                             X Search for Address
                           </button>
                           <button
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(`https://twitter.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name}`.trim())}`, "_blank");
+                              window.open(
+                                `https://twitter.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name}`.trim())}`,
+                                "_blank",
+                              );
                               setShowSearchMenu(false);
                             }}
                           >
-                            <FaXTwitter size={14} className="text-neutral-400" />
+                            <FaXTwitter
+                              size={14}
+                              className="text-neutral-400"
+                            />
                             X Search for Name
                           </button>
                           <div className="my-1 border-t border-[#2a2b33]" />
                           <button
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(`https://www.google.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name} crypto`.trim())}`, "_blank");
+                              window.open(
+                                `https://www.google.com/search?q=${encodeURIComponent(`${token.symbol} ${token.name} crypto`.trim())}`,
+                                "_blank",
+                              );
                               setShowSearchMenu(false);
                             }}
                           >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                            >
+                              <path
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                fill="#4285F4"
+                              />
+                              <path
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                fill="#34A853"
+                              />
+                              <path
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                fill="#FBBC05"
+                              />
+                              <path
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                fill="#EA4335"
+                              />
                             </svg>
                             Google Search for Name
                           </button>
                           <button
-                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 transition-colors"
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(`https://dexscreener.com/solana/${token.mint}`, "_blank");
+                              window.open(
+                                `https://dexscreener.com/solana/${token.mint}`,
+                                "_blank",
+                              );
                               setShowSearchMenu(false);
                             }}
                           >
@@ -3284,9 +3686,18 @@ const TokenListItem = React.memo(
 
             {/* MCap / Vol / Liq values - labels live in the column header above */}
             <div className="flex h-full flex-shrink-0 items-center gap-3 text-xs whitespace-nowrap text-[#9595B5] sm:text-sm md:gap-5">
-              <span className="w-20 text-center font-bold" style={{ color: mcColor }}>${mc}</span>
-              <span className="w-20 text-center font-bold text-white">${vol}</span>
-              <span className="w-20 text-center font-bold text-white">${liq}</span>
+              <span
+                className="w-20 text-center font-bold"
+                style={{ color: mcColor }}
+              >
+                ${mc}
+              </span>
+              <span className="w-20 text-center font-bold text-white">
+                ${vol}
+              </span>
+              <span className="w-20 text-center font-bold text-white">
+                ${liq}
+              </span>
             </div>
 
             <button
@@ -3301,11 +3712,12 @@ const TokenListItem = React.memo(
               title={onQuickBuy ? "Quick buy token" : "Select token"}
             >
               <BsLightningChargeFill className="h-3 w-3" />
-              {quickBuyAmount && parseFloat(quickBuyAmount) > 0 ? `Buy ${quickBuyAmount}` : 'Buy'}
+              {quickBuyAmount && parseFloat(quickBuyAmount) > 0
+                ? `Buy ${quickBuyAmount}`
+                : "Buy"}
             </button>
           </div>
         </li>
-
       </>
     );
   },
