@@ -16,6 +16,7 @@ import {
   getWalletTradeHistory,
   fetchBatchBalances,
   toggleWalletNotifications,
+  getWalletsLastActive,
   type WatchWallet,
 } from "~/utils/walletTracking";
 import toast from "react-hot-toast";
@@ -29,6 +30,48 @@ import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { FiBell } from 'react-icons/fi';
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+const LAST_ACTIVE_CACHE_KEY = "trackers:lastActiveMap";
+const LAST_ACTIVE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const WALLET_BALANCES_CACHE_KEY = "trackers:walletBalances";
+const WALLET_BALANCES_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+
+function readLocalCache<T>(key: string, ttl: number): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > ttl) { localStorage.removeItem(key); return null; }
+    return data as T;
+  } catch { return null; }
+}
+
+function writeLocalCache(key: string, data: unknown) {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+}
+
+const BLOCKVISION_API_KEY = process.env.NEXT_PUBLIC_BLOCKVISION_API_KEY;
+
+const ensureMs = (ts: unknown): number | null => {
+  if (typeof ts !== "number" || !Number.isFinite(ts) || ts <= 0) return null;
+  return ts < 1_000_000_000_000 ? ts * 1000 : ts;
+};
+
+const fetchWithTimeout = async (
+  url: string,
+  init: RequestInit,
+  timeoutMs = 10_000,
+) => {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+};
 
 const HISTORY_LIMIT = 100;
 // Use 7 days window to ensure backfilled transactions are included
@@ -93,6 +136,7 @@ interface WalletTrackerContextValue {
   clearNotifications: () => void;
   isLoadingHistory: boolean;
   walletBalances: Record<string, number>;
+  lastActiveMap: Record<string, number | null | undefined>;
 }
 
 const WalletTrackerContext = createContext<
@@ -203,7 +247,12 @@ export function WalletTrackerProvider({
   const TOKEN_METADATA_MAX = 500;
   const SHOWN_TOAST_TXS_MAX = 500;
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
+    () => readLocalCache<Record<string, number>>(WALLET_BALANCES_CACHE_KEY, WALLET_BALANCES_CACHE_TTL) ?? {}
+  );
+  const [lastActiveMap, setLastActiveMap] = useState<Record<string, number | null | undefined>>(
+    () => readLocalCache<Record<string, number | null | undefined>>(LAST_ACTIVE_CACHE_KEY, LAST_ACTIVE_CACHE_TTL) ?? {}
+  );
 
   const watchedWalletsRef = useRef<WatchWallet[]>([]);
   const subscribedWalletsRef = useRef<string[]>([]);
@@ -925,9 +974,11 @@ export function WalletTrackerProvider({
     doFetch();
   }, [user?.id, watchedWallets]);
 
-  // Reset fetched addresses when user changes
+  // Reset fetched addresses and cached balances when user changes
   useEffect(() => {
     fetchedAddressesRef.current = new Set();
+    setWalletBalances({});
+    try { localStorage.removeItem(WALLET_BALANCES_CACHE_KEY); } catch {}
   }, [user?.id]);
 
   // Safety net: re-fetch batch every 3 minutes ONLY if WebSocket is disconnected
@@ -1046,6 +1097,127 @@ export function WalletTrackerProvider({
     }
   }, []);
 
+  // Fetch last-active timestamps for all tracked wallets as soon as they're known.
+  // Runs in the global context so data is ready before the user navigates to /trackers.
+  const lastActiveFetchedKeyRef = useRef<string>("");
+  const hadWalletsForLastActiveRef = useRef(false);
+  useEffect(() => {
+    if (watchedWallets.length === 0) {
+      if (hadWalletsForLastActiveRef.current) {
+        setLastActiveMap({});
+        lastActiveFetchedKeyRef.current = "";
+        try { localStorage.removeItem(LAST_ACTIVE_CACHE_KEY); } catch {}
+      }
+      return;
+    }
+    hadWalletsForLastActiveRef.current = true;
+
+    const key = watchedWallets.map((w) => w.address).sort().join(",");
+    if (key === lastActiveFetchedKeyRef.current) return;
+    lastActiveFetchedKeyRef.current = key;
+
+    const currentWallets = [...watchedWallets];
+
+    const fetchLastActive = async () => {
+      try {
+        const monadWallets = currentWallets
+          .filter((w) => w.chain === "monad")
+          .map((w) => w.address);
+        const solWallets = currentWallets
+          .filter((w) => w.chain !== "monad")
+          .map((w) => w.address);
+
+        isDev && console.log("[lastActive] fetching timestamps:", {
+          monad: monadWallets.length,
+          sol: solWallets.length,
+        });
+
+        const map: Record<string, number | null> = {};
+
+        if (monadWallets.length > 0) {
+          if (!BLOCKVISION_API_KEY) {
+            monadWallets.forEach((addr) => (map[addr] = null));
+          } else {
+            const monadSettled = await Promise.allSettled(
+              monadWallets.map(async (address) => {
+                const url = `https://api.blockvision.org/v2/monad/account/transactions?address=${encodeURIComponent(address)}&limit=20&ascendingOrder=false`;
+                const resp = await fetchWithTimeout(url, {
+                  method: "GET",
+                  headers: { accept: "application/json", "x-api-key": BLOCKVISION_API_KEY! },
+                }, 10_000);
+                let payload: any = null;
+                try { payload = await resp.json(); } catch {}
+                if (!resp.ok) throw new Error((payload?.message || payload?.error) || `HTTP ${resp.status}`);
+                return { address, lastActive: ensureMs(payload?.result?.data?.[0]?.timestamp) };
+              }),
+            );
+
+            const allFailed = monadSettled.every((r) => r.status === "rejected");
+            const likelyCors = monadSettled.every((r) => {
+              if (r.status !== "rejected") return false;
+              const msg = r.reason?.message || String(r.reason);
+              return /failed to fetch/i.test(msg) || /networkerror/i.test(msg);
+            });
+
+            if (allFailed && likelyCors) {
+              try {
+                const proxyResp = await fetch("/api/blockvision/monad/last-active", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ wallets: monadWallets, limit: 20 }),
+                });
+                const proxyPayload = await proxyResp.json().catch(() => null);
+                if (proxyResp.ok && proxyPayload?.ok === true && Array.isArray(proxyPayload?.data)) {
+                  for (const item of proxyPayload.data) {
+                    if (!item?.wallet) continue;
+                    map[item.wallet] = typeof item.lastActive === "number" ? item.lastActive : null;
+                  }
+                }
+              } catch {}
+            } else {
+              monadSettled.forEach((res, idx) => {
+                const address = monadWallets[idx];
+                map[address] = res.status === "fulfilled" ? res.value.lastActive : null;
+              });
+            }
+            monadWallets.forEach((addr) => { if (!(addr in map)) map[addr] = null; });
+          }
+        }
+
+        if (solWallets.length > 0) {
+          try {
+            const solResults = await getWalletsLastActive(solWallets, "sol");
+            for (const result of solResults) { map[result.wallet] = result.lastActive; }
+            solWallets.forEach((addr) => { if (!(addr in map)) map[addr] = null; });
+          } catch {
+            solWallets.forEach((addr) => (map[addr] = null));
+          }
+        }
+
+        setLastActiveMap((prev) => ({ ...prev, ...map }));
+      } catch (error) {
+        console.error("[lastActive] Failed to fetch timestamps:", error);
+        const errorMap: Record<string, number | null> = {};
+        currentWallets.forEach((w) => { errorMap[w.address] = null; });
+        setLastActiveMap((prev) => ({ ...prev, ...errorMap }));
+      }
+    };
+
+    fetchLastActive();
+  }, [watchedWallets]);
+
+  // Persist lastActiveMap to localStorage (survives new tabs/sessions, 5-min TTL)
+  useEffect(() => {
+    if (Object.keys(lastActiveMap).length === 0) return;
+    writeLocalCache(LAST_ACTIVE_CACHE_KEY, lastActiveMap);
+  }, [lastActiveMap]);
+
+  // Persist walletBalances to localStorage (survives new tabs/sessions, 3-min TTL)
+  useEffect(() => {
+    if (Object.keys(walletBalances).length === 0) return;
+    writeLocalCache(WALLET_BALANCES_CACHE_KEY, walletBalances);
+  }, [walletBalances]);
+
   const value = useMemo<WalletTrackerContextValue>(() => ({
     wsConnected,
     latestTrades,
@@ -1054,7 +1226,8 @@ export function WalletTrackerProvider({
     clearNotifications,
     isLoadingHistory,
     walletBalances,
-  }), [wsConnected, latestTrades, watchedWallets, refreshWatchedWallets, clearNotifications, isLoadingHistory, walletBalances]);
+    lastActiveMap,
+  }), [wsConnected, latestTrades, watchedWallets, refreshWatchedWallets, clearNotifications, isLoadingHistory, walletBalances, lastActiveMap]);
 
   return (
     <WalletTrackerContext.Provider value={value}>

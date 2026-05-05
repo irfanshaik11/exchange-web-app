@@ -369,7 +369,7 @@ export default function WalletRow({
 
   const formatLastActive = (timestamp: number | null | undefined) => {
     if (timestamp === undefined) {
-      return "Loading...";
+      return "—";
     }
     if (timestamp === null) {
       return "No activity yet";
@@ -465,12 +465,8 @@ export default function WalletRow({
                   {balance.toFixed(4)}
                 </span>
               </span>
-            ) : watchedWallet ? (
-              <span className="text-[9px] text-yellow-400 sm:text-xs">
-                Loading...
-              </span>
             ) : (
-              <span className="text-[9px] text-neutral-500 sm:text-xs">-</span>
+              <span className="text-[9px] text-neutral-500 sm:text-xs">—</span>
             )}
           </span>
           <span className="hidden w-28 text-[9px] text-neutral-300 sm:inline sm:text-xs">

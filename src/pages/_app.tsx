@@ -44,6 +44,7 @@ import { showEnhancedToast } from '../utils/enhancedToast';
 import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '~/utils/referralStorage';
 import PagePreloader from '../components/PagePreloader';
 import { PulseBackgroundLoader } from '../components/PulseBackgroundLoader';
+import { TrendingBackgroundLoader } from '../components/TrendingBackgroundLoader';
 import { SolanaPositionWebSocketProvider } from '../contexts/SolanaPositionWebSocketContext';
 import { ArenaWebSocketProvider } from '../contexts/ArenaWebSocketContext';
 import { listenForConfirmationUpdates } from '../utils/tradeToast';
@@ -888,6 +889,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                                       <HyperliquidProvider>
                                         <PagePreloader />
                                         <PulseBackgroundLoader />
+                                        <TrendingBackgroundLoader />
                                         <ErrorBoundary>
                                           <Component {...pageProps} />
                                         </ErrorBoundary>

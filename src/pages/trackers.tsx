@@ -17,7 +17,6 @@ import {
   removeTrackedWallet,
   getTrackedWallets,
   getWalletHistory,
-  getWalletsLastActive,
   toggleWalletNotifications,
   type WatchWallet,
   type WalletEvent,
@@ -233,27 +232,6 @@ const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 
-const BLOCKVISION_API_KEY = process.env.NEXT_PUBLIC_BLOCKVISION_API_KEY;
-
-const ensureMs = (ts: unknown): number | null => {
-  if (typeof ts !== "number" || !Number.isFinite(ts) || ts <= 0) return null;
-  // Blockvision returns ms, but be defensive in case it ever returns seconds.
-  return ts < 1_000_000_000_000 ? ts * 1000 : ts;
-};
-
-const fetchWithTimeout = async (
-  url: string,
-  init: RequestInit,
-  timeoutMs = 10_000,
-) => {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
-};
 
 export default function TrackersPage() {
   const router = useRouter();
@@ -266,6 +244,7 @@ export default function TrackersPage() {
     refreshWatchedWallets,
     isLoadingHistory,
     walletBalances: contextWalletBalances,
+    lastActiveMap,
   } = useWalletTracker();
   const [activeTab, setActiveTab] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
@@ -296,14 +275,13 @@ export default function TrackersPage() {
   >({});
   const [trackedWalletBalances, setTrackedWalletBalances] = useState<
     Record<string, number>
-  >({});
-  const [lastActiveMap, setLastActiveMap] = useState<
-    Record<string, number | null | undefined>
   >(() => {
     if (typeof window === "undefined") return {};
     try {
-      const raw = sessionStorage.getItem("trackers:lastActiveMap");
-      return raw ? JSON.parse(raw) : {};
+      const raw = localStorage.getItem("trackers:walletBalances");
+      if (!raw) return {};
+      const { data, ts } = JSON.parse(raw);
+      return Date.now() - ts < 3 * 60 * 1000 ? data : {};
     } catch { return {}; }
   });
   // Get chain from router query first, then localStorage, then default to solana
@@ -623,9 +601,6 @@ export default function TrackersPage() {
         if (parsedCache.wallets && parsedCache.watchedWallets) {
           setWallets(parsedCache.wallets);
           setWatchedWallets(parsedCache.watchedWallets);
-          if (parsedCache.balances) {
-            setTrackedWalletBalances(parsedCache.balances);
-          }
         }
       } catch (error) {
         console.error("Failed to hydrate wallets from cache:", error);
@@ -769,7 +744,6 @@ export default function TrackersPage() {
         const cacheData = {
           wallets: frontendWallets,
           watchedWallets: allWallets,
-          balances: {},
           timestamp: Date.now(),
         };
         try {
@@ -803,215 +777,6 @@ export default function TrackersPage() {
       setTrackedWalletBalances((prev) => ({ ...prev, ...contextWalletBalances }));
     }
   }, [contextWalletBalances]);
-  // Track which addresses we last fetched last-active for to avoid re-fetching
-  // on every watchedWallets reference change (context sync creates new arrays)
-  const lastActiveFetchedKeyRef = useRef<string>("");
-  const hadWalletsRef = useRef(false);
-  useEffect(() => {
-    if (watchedWallets.length === 0) {
-      // Only clear cache if we previously had wallets (user removed them all).
-      // Skip clearing when watchedWallets is [] because context hasn't loaded yet —
-      // this preserves the sessionStorage cache so we don't flash "Loading..." on return.
-      if (hadWalletsRef.current) {
-        setLastActiveMap({});
-        lastActiveFetchedKeyRef.current = "";
-        try { sessionStorage.removeItem("trackers:lastActiveMap"); } catch {}
-      }
-      return;
-    }
-    hadWalletsRef.current = true;
-
-    // Only re-fetch if the actual addresses changed, not just the array reference
-    const key = watchedWallets.map((w) => w.address).sort().join(",");
-    if (key === lastActiveFetchedKeyRef.current) return;
-    lastActiveFetchedKeyRef.current = key;
-
-    // Snapshot the wallets for this closure
-    const currentWallets = [...watchedWallets];
-
-    const fetchLastActive = async () => {
-      try {
-        // Group wallets by chain
-        const monadWallets = currentWallets
-          .filter((w) => w.chain === "monad")
-          .map((w) => w.address);
-        const solWallets = currentWallets
-          .filter((w) => w.chain !== "monad")
-          .map((w) => w.address);
-
-        isDev && console.log("[trackers:lastActive] fetching timestamps:", {
-          monad: monadWallets.length,
-          sol: solWallets.length,
-        });
-
-        const map: Record<string, number | null> = {};
-
-        // Fetch Monad wallets using Blockvision API
-        if (monadWallets.length > 0) {
-          if (!BLOCKVISION_API_KEY) {
-            console.warn(
-              "[trackers:lastActive] BLOCKVISION_API_KEY not set, skipping Monad wallets",
-            );
-            monadWallets.forEach((addr) => (map[addr] = null));
-          } else {
-            const monadSettled = await Promise.allSettled(
-              monadWallets.map(async (address) => {
-                const url = `https://api.blockvision.org/v2/monad/account/transactions?address=${encodeURIComponent(
-                  address,
-                )}&limit=20&ascendingOrder=false`;
-
-                const resp = await fetchWithTimeout(
-                  url,
-                  {
-                    method: "GET",
-                    headers: {
-                      accept: "application/json",
-                      "x-api-key": BLOCKVISION_API_KEY,
-                    },
-                  },
-                  10_000,
-                );
-
-                const text = await resp.text();
-                let payload: any = null;
-                try {
-                  payload = JSON.parse(text);
-                } catch {
-                  payload = null;
-                }
-
-                if (!resp.ok) {
-                  const msg =
-                    (payload && (payload.message || payload.error)) ||
-                    `HTTP ${resp.status} ${resp.statusText}`;
-                  throw new Error(msg);
-                }
-
-                const newestRaw = payload?.result?.data?.[0]?.timestamp;
-                const newest = ensureMs(newestRaw);
-
-                return { address, lastActive: newest };
-              }),
-            );
-
-            // Check if all failed due to CORS, fallback to proxy
-            const allFailed = monadSettled.every(
-              (r) => r.status === "rejected",
-            );
-            const likelyCors = monadSettled.every((r) => {
-              if (r.status !== "rejected") return false;
-              const msg = r.reason?.message || String(r.reason);
-              return /failed to fetch/i.test(msg) || /networkerror/i.test(msg);
-            });
-
-            if (allFailed && likelyCors) {
-              console.warn(
-                "[trackers:lastActive] direct Blockvision fetch failed (likely CORS). Falling back to proxy",
-              );
-              try {
-                const proxyResp = await fetch(
-                  "/api/blockvision/monad/last-active",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ wallets: monadWallets, limit: 20 }),
-                  },
-                );
-                const proxyPayload = await proxyResp.json().catch(() => null);
-                if (
-                  proxyResp.ok &&
-                  proxyPayload?.ok === true &&
-                  Array.isArray(proxyPayload?.data)
-                ) {
-                  for (const item of proxyPayload.data) {
-                    if (!item?.wallet) continue;
-                    map[item.wallet] =
-                      typeof item.lastActive === "number"
-                        ? item.lastActive
-                        : null;
-                  }
-                }
-              } catch (proxyError) {
-                console.error(
-                  "[trackers:lastActive] Proxy fallback failed:",
-                  proxyError,
-                );
-              }
-            } else {
-              monadSettled.forEach((res, idx) => {
-                const address = monadWallets[idx];
-                if (res.status === "fulfilled") {
-                  map[address] = res.value.lastActive;
-                } else {
-                  map[address] = null;
-                  console.warn(
-                    "[trackers:lastActive] Monad wallet fetch failed",
-                    {
-                      address,
-                      error: res.reason?.message || String(res.reason),
-                    },
-                  );
-                }
-              });
-            }
-
-            // Set null for any Monad wallets not in map
-            monadWallets.forEach((addr) => {
-              if (!(addr in map)) map[addr] = null;
-            });
-          }
-        }
-
-        // Fetch Solana wallets using backend API (static import, not dynamic)
-        if (solWallets.length > 0) {
-          try {
-            const solResults = await getWalletsLastActive(solWallets, "sol");
-            isDev && console.log("[trackers:lastActive] sol API returned", solResults.length, "results");
-
-            for (const result of solResults) {
-              map[result.wallet] = result.lastActive;
-            }
-
-            // Set null for any Solana wallets not in results
-            solWallets.forEach((addr) => {
-              if (!(addr in map)) map[addr] = null;
-            });
-          } catch (error) {
-            console.error(
-              "[trackers:lastActive] Failed to fetch Solana last active:",
-              error,
-            );
-            solWallets.forEach((addr) => (map[addr] = null));
-          }
-        }
-
-        // Always apply results via merge — never discard completed fetches.
-        // Merge ensures data from concurrent fetches accumulates instead of being lost.
-        isDev && console.log("[trackers:lastActive] applying results:", Object.keys(map).length, "wallets");
-        setLastActiveMap((prev) => ({ ...prev, ...map }));
-      } catch (error) {
-        console.error("Failed to fetch last active timestamps:", error);
-        // Initialize with null values on error (merge so we don't erase good data)
-        const errorMap: Record<string, number | null> = {};
-        currentWallets.forEach((wallet) => {
-          errorMap[wallet.address] = null;
-        });
-        setLastActiveMap((prev) => ({ ...prev, ...errorMap }));
-      }
-    };
-
-    fetchLastActive();
-  }, [watchedWallets]);
-
-  // Persist lastActiveMap to sessionStorage so navigating away and back shows cached values
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (Object.keys(lastActiveMap).length === 0) return;
-    try {
-      sessionStorage.setItem("trackers:lastActiveMap", JSON.stringify(lastActiveMap));
-    } catch {}
-  }, [lastActiveMap]);
-
   // Fetch token metadata for live trades using API routes (like trade page does)
   // This provides the most complete data: image, protocol, market cap
   useEffect(() => {
