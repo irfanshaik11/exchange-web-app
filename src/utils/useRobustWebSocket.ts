@@ -65,14 +65,17 @@ export function useRobustWebSocket(opts: RobustWebSocketOptions): RobustWebSocke
   const { url, enabled = true, pingIntervalMs = 15_000, pongTimeoutMs = 8_000, logTag = "WS" } = opts;
 
   // Stash callbacks in refs so connection effect doesn't depend on their identity.
+  // Sync the ref *during render*, not in a useEffect — useEffect fires after paint,
+  // which means there's a one-render window where the ref points to the previous
+  // callback. If a WS message arrives in that window (e.g., right after a wallet
+  // switch causes handleMessage to be recreated with the new address), it fires
+  // the stale callback closing over the previous wallet. Direct ref assignment
+  // during render is the standard "latest-ref" pattern and has no behavioral
+  // downside — refs don't trigger re-renders.
   const onMessageRef = useRef(opts.onMessage);
   const onReconnectRef = useRef(opts.onReconnect);
-  useEffect(() => {
-    onMessageRef.current = opts.onMessage;
-  }, [opts.onMessage]);
-  useEffect(() => {
-    onReconnectRef.current = opts.onReconnect;
-  }, [opts.onReconnect]);
+  onMessageRef.current = opts.onMessage;
+  onReconnectRef.current = opts.onReconnect;
 
   const [state, setState] = useState<RobustWebSocketState>({
     readyState: WebSocket.CLOSED,
