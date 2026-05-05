@@ -1084,10 +1084,16 @@ const SearchModalContent = React.memo(function SearchModalContent({
             // red border + protocol icon swap + countdown badge can render.
             is_mayhem_mode: !!token.is_mayhem_mode,
             launch_time: token.launch_time || token.created_at,
+            // Carry usd_price through the mapped Token so the post-search
+            // supply correction (fetchBatchSupplies → recomputeMarketCap)
+            // can compute mcap = price × supply. Without this the field
+            // is undefined at runtime and the correction silently no-ops.
+            usd_price: token.usd_price ?? token.price_usd ?? 0,
           } as Token & {
             launchpad_protocol?: string;
             is_mayhem_mode?: boolean;
             launch_time?: string;
+            usd_price?: number;
           };
         });
 
@@ -1126,8 +1132,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                   prev.map((t) => {
                     const supply = t.mint ? supplies.get(t.mint) : undefined;
                     if (supply === undefined) return t;
+                    const priceUsd = (t as { usd_price?: number }).usd_price;
                     const corrected = recomputeMarketCap(
-                      (t as { usd_price?: number }).usd_price,
+                      priceUsd,
                       supply,
                       t.fully_diluted_value ?? 0,
                     );
