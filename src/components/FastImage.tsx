@@ -95,8 +95,8 @@ function isImageTracked(url: string): boolean {
  * Helper to compute imageUrl from a source URL
  * Used for synchronous initialization
  */
-function computeImageUrl(src: string | null): string | null {
-  return computeHashImageUrl(src);
+function computeImageUrl(src: string | null, width?: number): string | null {
+  return computeHashImageUrl(src, width);
 }
 
 interface FastImageProps {
@@ -147,14 +147,18 @@ function FastImageInner({
   // we'd briefly show the previous token's URL until an effect catches up.
   // Scoping by source prevents a stale resolved URL from a previous metadata
   // candidate leaking through when the candidate changes.
-  const [asyncResolved, setAsyncResolved] = useState<{ src: string; url: string } | null>(null);
+  const [asyncResolved, setAsyncResolved] = useState<{
+    src: string;
+    url: string;
+  } | null>(null);
 
   const resolvedSrc: string | null = (() => {
     if (!inputSrc) return null;
     if (!isMetadataUrl(inputSrc)) return inputSrc;
     const cached = getCachedMetadataImage(inputSrc);
     if (cached) return cached;
-    if (asyncResolved && asyncResolved.src === inputSrc) return asyncResolved.url;
+    if (asyncResolved && asyncResolved.src === inputSrc)
+      return asyncResolved.url;
     return inputSrc;
   })();
 
@@ -166,7 +170,8 @@ function FastImageInner({
     if (typeof next === "function") {
       const prev = asyncResolved?.url ?? null;
       const nextVal = next(prev);
-      if (nextVal && inputSrc) setAsyncResolved({ src: inputSrc, url: nextVal });
+      if (nextVal && inputSrc)
+        setAsyncResolved({ src: inputSrc, url: nextVal });
       else setAsyncResolved(null);
     } else if (next && inputSrc) {
       setAsyncResolved({ src: inputSrc, url: next });
@@ -183,7 +188,7 @@ function FastImageInner({
   // This prevents "disappear" bugs where imageLoaded=true but bitmap was evicted.
   const [imageLoaded, setImageLoaded] = useState(() => {
     const initialSrc = resolvedSrc; // Already resolved (sync cache hit or direct URL)
-    const initialUrl = computeImageUrl(initialSrc);
+    const initialUrl = computeImageUrl(initialSrc, width);
     if (!initialUrl) return false;
 
     // Check the module-level retained Image cache FIRST, regardless of
@@ -303,8 +308,10 @@ function FastImageInner({
     };
   }, [inputSrc]);
 
-  // Build final image URL
-  const imageUrl = computeImageUrl(resolvedSrc);
+  // Build final image URL.
+  // `width` is passed so the proxy serves a resized WebP at that pixel size —
+  // a 60px slot gets a ~3-6 KB WebP instead of a 400 KB source PNG.
+  const imageUrl = computeImageUrl(resolvedSrc, width);
 
   // Cache-bust URL for retries (keeps canonical imageUrl for tracking)
   const finalImageUrl =
