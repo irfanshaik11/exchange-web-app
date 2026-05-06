@@ -342,9 +342,16 @@ function FastImageInner({
     currentUrlRef.current = imageUrl;
 
     // Check retained image cache first (covers prewarm path — see useState
-    // initializer above for full explanation)
+    // initializer above for full explanation).
+    //
+    // Important: also call trackLoadedImage so subsequent renders of this URL
+    // hit the isImageTracked() fast-path below instead of re-running the
+    // retained-cache lookup. Without this sync, virtualized list re-pointing
+    // at a known URL falls through to the `setImageLoaded(false)` else-branch
+    // for one render frame, producing a visible per-row flicker.
     const retained = getRetainedImage(imageUrl);
     if (retained && retained.complete && retained.naturalHeight > 0) {
+      trackLoadedImage(imageUrl);
       setImageLoaded(true);
       setImageError(false);
       return;
