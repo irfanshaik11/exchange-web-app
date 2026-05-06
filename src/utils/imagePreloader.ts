@@ -37,7 +37,16 @@ export function isImageRetained(url: string): boolean {
 }
 
 export function getRetainedImage(url: string): HTMLImageElement | undefined {
-  return imageObjectCache.get(url);
+  const img = imageObjectCache.get(url);
+  if (img !== undefined) {
+    // LRU touch on read: promote to end of iteration order so an actively
+    // displayed image isn't evicted by a burst of new-token preloads. Without
+    // this, hot rows can lose their retained Image() and re-enter the slow
+    // probe path on next render → flicker.
+    imageObjectCache.delete(url);
+    imageObjectCache.set(url, img);
+  }
+  return img;
 }
 
 /**
