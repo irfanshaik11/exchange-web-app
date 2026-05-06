@@ -346,6 +346,11 @@ function FastImageInner({
     if (!imageUrl) {
       setImageLoaded(false);
       setImageError(false);
+      // Parent intentionally cleared src → drop the double-buffer so the
+      // letter placeholder shows immediately. Without this, a stale previous
+      // avatar would persist as background, which callers expect to be
+      // cleared when they pass a falsy src.
+      setLastDisplayedUrl(null);
       return;
     }
 
