@@ -624,47 +624,52 @@ export default function LoginModal({
       open={open}
       onClose={handleClose}
       align="center"
-      className={`relative max-h-[90vh] w-[440px] max-w-[94vw] overflow-y-auto rounded-2xl border border-white/[0.06] bg-[#060608] p-6 pt-10 text-zinc-100 shadow-[0_0_80px_rgba(0,0,0,0.8),0_0_120px_rgba(24,196,140,0.04)] ${wiggle ? "wiggle" : ""}`}
+      className={`relative w-[480px] max-w-[94vw] overflow-hidden rounded-xl bg-[#111214] p-8 pt-14 text-zinc-100 shadow-[0_0_100px_rgba(0,0,0,0.9)] ${wiggle ? "wiggle" : ""}`}
       disableClickOutside={forceLogin}
       zIndex={99999}
-      overlayClassName="bg-black/80 backdrop-blur-sm"
+      overlayClassName="bg-black/85 backdrop-blur-sm"
     >
-      {/* Subtle glow accents */}
-      <div className="pointer-events-none absolute -top-32 -left-32 h-64 w-64 rounded-full bg-emerald-500/[0.03] blur-[100px]" />
-      <div className="pointer-events-none absolute -right-20 -bottom-20 h-48 w-48 rounded-full bg-emerald-500/[0.02] blur-[80px]" />
+      {/* Corner bracket decorations */}
+      <div className="pointer-events-none absolute top-4 left-4 h-8 w-8 border-l-2 border-t-2 border-zinc-700/50" />
+      <div className="pointer-events-none absolute top-4 right-4 h-8 w-8 border-r-2 border-t-2 border-zinc-700/50" />
+      <div className="pointer-events-none absolute bottom-4 left-4 h-8 w-8 border-l-2 border-b-2 border-zinc-700/50" />
+      <div className="pointer-events-none absolute bottom-4 right-4 h-8 w-8 border-r-2 border-b-2 border-zinc-700/50" />
       
       {/* Close button */}
       <button
-        className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.02] text-sm text-zinc-500 transition-all hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-zinc-300"
+        className="absolute top-6 right-6 flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-500 transition-all hover:bg-zinc-700/80 hover:text-zinc-300"
         onClick={handleClose}
         type="button"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 1L13 13M1 13L13 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M1 1L13 13M1 13L13 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
         </svg>
       </button>
 
       {/* Username Setup Step */}
       {loginStep === "username" ? (
         <div className="py-2">
-          <div className="mb-8 text-center">
-            <p className="text-[10px] font-medium tracking-[0.25em] text-emerald-400/80 uppercase">
+          <div className="mb-6 text-center">
+            <p className="text-xs font-medium tracking-[0.35em] text-emerald-500 uppercase">
               Welcome to Interstate
             </p>
-            <h2 className="mt-3 text-xl font-medium tracking-tight text-white">
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
               Choose Your Username
             </h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-zinc-500">
+            <p className="mt-2 text-[14px] text-zinc-500">
               Pick a unique username for your profile
             </p>
           </div>
+          
+          {/* Divider line below heading */}
+          <div className="mb-6 h-px w-full bg-zinc-800" />
 
           <div className="mb-6">
-            <label className="mb-2 block text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+            <label className="mb-3 block text-[14px] text-zinc-500">
               Username
             </label>
             <div className="relative">
-              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-zinc-600">
+              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-zinc-500">
                 @
               </span>
               <input
@@ -673,12 +678,12 @@ export default function LoginModal({
                 onChange={(e) => handleNewUsernameChange(e.target.value)}
                 placeholder="your_username"
                 maxLength={20}
-                className={`w-full rounded-lg border bg-white/[0.02] py-3 pr-12 pl-9 text-sm text-white placeholder-zinc-600 transition-all focus:outline-none ${
+                className={`w-full rounded-xl bg-zinc-800 py-4 pr-12 pl-10 text-[15px] text-white placeholder-zinc-600 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${
                   usernameValidation.error
-                    ? "border-red-500/40 focus:border-red-500/60"
+                    ? "ring-2 ring-red-500/50"
                     : usernameValidation.isAvailable
-                      ? "border-emerald-500/40 focus:border-emerald-500/60"
-                      : "border-white/[0.06] focus:border-emerald-500/40"
+                      ? "ring-2 ring-emerald-500/50"
+                      : ""
                 }`}
               />
               <div className="absolute top-1/2 right-4 -translate-y-1/2">
@@ -693,28 +698,28 @@ export default function LoginModal({
             </div>
 
             {usernameValidation.error && (
-              <p className="mt-2 text-[11px] text-red-400">
+              <p className="mt-3 text-[13px] text-red-400">
                 {usernameValidation.error}
               </p>
             )}
             {usernameValidation.isAvailable && !usernameChecking && (
-              <p className="mt-2 text-[11px] text-emerald-400">
+              <p className="mt-3 text-[13px] text-emerald-400">
                 Username is available
               </p>
             )}
 
-            <p className="mt-3 text-[11px] leading-relaxed text-zinc-600">
+            <p className="mt-3 text-[13px] text-zinc-600">
               3-20 characters. Letters, numbers, and underscores only.
             </p>
           </div>
 
           {/* Referral link preview */}
           {newUsername && usernameValidation.isValid && (
-            <div className="mb-6 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
-              <p className="mb-1.5 text-[10px] font-medium tracking-wide text-emerald-400/80 uppercase">
+            <div className="mb-6 rounded-xl bg-zinc-800/50 p-4">
+              <p className="mb-2 text-[13px] text-zinc-500">
                 Your referral link
               </p>
-              <p className="font-mono text-xs break-all text-zinc-300">
+              <p className="font-mono text-[14px] break-all text-zinc-300">
                 interstate.trade?ref=
                 <span className="text-emerald-400">{newUsername.toLowerCase().substring(0, 10)}</span>
               </p>
@@ -728,7 +733,7 @@ export default function LoginModal({
                 window.dispatchEvent(new CustomEvent("login-modal-can-close"));
                 onClose();
               }}
-              className="flex-1 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-zinc-400 transition-all hover:border-white/[0.1] hover:bg-white/[0.04] hover:text-zinc-300"
+              className="flex-1 rounded-xl bg-zinc-800 px-4 py-3.5 text-[15px] font-medium text-zinc-400 transition-all hover:bg-zinc-700 hover:text-zinc-300"
             >
               Skip for now
             </button>
@@ -741,13 +746,13 @@ export default function LoginModal({
                 usernameChecking ||
                 usernameSubmitting
               }
-              className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex-1 rounded-xl px-4 py-3.5 text-[15px] font-medium transition-all ${
                 usernameValidation.isValid &&
                 usernameValidation.isAvailable &&
                 !usernameChecking &&
                 !usernameSubmitting
-                  ? "bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-400"
-                  : "cursor-not-allowed bg-white/[0.04] text-zinc-600"
+                  ? "bg-emerald-500 text-white hover:bg-emerald-400"
+                  : "cursor-not-allowed bg-zinc-800 text-zinc-600"
               }`}
             >
               {usernameSubmitting ? (
@@ -765,13 +770,16 @@ export default function LoginModal({
         <>
           {/* Auth Step */}
           <div className="mb-6 text-center">
-            <p className="text-[10px] font-medium tracking-[0.25em] text-emerald-400/80 uppercase">
+            <p className="text-xs font-medium tracking-[0.35em] text-emerald-500 uppercase">
               Secure Access
             </p>
-            <h2 className="mt-3 text-xl font-medium tracking-tight text-white">
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
               Sign in to Interstate
             </h2>
           </div>
+          
+          {/* Divider line below heading */}
+          <div className="mb-6 h-px w-full bg-zinc-800" />
           {error && (
             <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-3 py-2.5 text-[12px] text-red-300">
               {error}
@@ -907,33 +915,25 @@ export default function LoginModal({
               )}
             </>
           )}
-          {/* Divider */}
-          <div className="relative my-5">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/[0.06]"></div>
-            </div>
-          </div>
-          
-          <div className="flex flex-col items-center gap-3">
+          {/* Google/Preparing login button */}
+          <div className="flex flex-col items-center">
             {googleClientId ? (
               <GoogleOAuthProvider clientId={googleClientId}>
-                <div
-                  className={`flex flex-col items-center ${AUTH_BUTTON_WIDTH_CLASS}`}
-                >
+                <div className="w-full">
                   {authState === AuthState.Authenticated ? (
-                    <div className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-center text-[13px] text-zinc-400">
+                    <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-400">
                       Finishing sign-in…
                     </div>
                   ) : clientState !== ClientState.Ready ? (
-                    <div className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-center text-[13px] text-zinc-500">
-                      Preparing login…
+                    <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-400">
+                      Preparing login...
                     </div>
                   ) : !googleNonce ? (
-                    <div className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-center text-[13px] text-zinc-500">
-                      {googleLoading ? "Finishing sign-in…" : "Preparing…"}
+                    <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-400">
+                      {googleLoading ? "Finishing sign-in…" : "Preparing login..."}
                     </div>
                   ) : googleLoading ? (
-                    <div className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-center text-[13px] text-zinc-400">
+                    <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-400">
                       Signing in with Google…
                     </div>
                   ) : (
@@ -944,7 +944,7 @@ export default function LoginModal({
                         onError={handleGoogleError}
                         useOneTap={false}
                         theme="filled_black"
-                        shape="rectangular"
+                        shape="pill"
                         text="continue_with"
                         size="large"
                         width="400"
@@ -954,49 +954,49 @@ export default function LoginModal({
                 </div>
               </GoogleOAuthProvider>
             ) : (
-              <div className={`w-full rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-center text-[13px] text-zinc-600 ${AUTH_BUTTON_WIDTH_CLASS}`}>
+              <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-500">
                 Google login not configured
               </div>
             )}
           </div>
 
           {(walletError || discoveryWalletError) && (
-            <div className="mt-4 text-center text-[12px] text-red-400">
+            <div className="mt-4 text-center text-[13px] text-red-400">
               {walletError || discoveryWalletError}
             </div>
           )}
 
           {/* Wallet list */}
           {allWallets.length > 0 && (
-            <div className={`mt-5 ${AUTH_BUTTON_WIDTH_CLASS}`}>
-              <div className="mb-3 text-[10px] font-medium tracking-[0.2em] text-zinc-600 uppercase">
-                Or continue with wallet
+            <div className="mt-6 w-full">
+              <div className="mb-4 text-[14px] text-zinc-500">
+                Sign in with wallet
               </div>
-              <div className="max-h-[32vh] space-y-2 overflow-y-auto">
+              <div className="space-y-3">
                 {allWallets.map((w) => (
                   <button
                     key={w.id}
                     type="button"
-                    className={`group flex w-full items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 transition-all hover:border-white/[0.1] hover:bg-white/[0.04] ${activeWalletId === w.id ? "cursor-wait border-emerald-500/30 bg-emerald-500/[0.04]" : ""} ${activeWalletId && activeWalletId !== w.id ? "pointer-events-none opacity-30" : ""}`}
+                    className={`group flex w-full items-center gap-4 rounded-xl bg-zinc-800/80 p-4 transition-all hover:bg-zinc-700/80 ${activeWalletId === w.id ? "cursor-wait bg-zinc-700/80" : ""} ${activeWalletId && activeWalletId !== w.id ? "pointer-events-none opacity-40" : ""}`}
                     onClick={() => {
                       setGoogleLoading(false);
                       handleWalletLogin(w);
                     }}
                     disabled={!!activeWalletId}
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-700/50">
                       <img
                         src={w.icon}
                         alt=""
-                        className="h-5 w-5 shrink-0"
+                        className="h-6 w-6 shrink-0"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = "none";
                         }}
                       />
                     </div>
-                    <span className="text-[13px] font-medium text-zinc-300 transition-colors group-hover:text-white">{w.name}</span>
+                    <span className="text-[15px] font-medium text-white">{w.name}</span>
                     {activeWalletId === w.id && (
-                      <span className="ml-auto text-[11px] font-medium text-emerald-400">
+                      <span className="ml-auto text-[13px] font-medium text-emerald-400">
                         Connecting...
                       </span>
                     )}
