@@ -16,8 +16,8 @@ import {
   GoogleLogin,
   type CredentialResponse,
 } from "@react-oauth/google";
-import { sha256 } from "@noble/hashes/sha256";
-import { bytesToHex } from "@noble/hashes/utils";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { useUserLimit } from "./UserLimitContext";
 import { ApiError } from "../utils/api";
 import { isBotUsername } from "../utils/botUsernames";
@@ -375,7 +375,7 @@ export default function LoginModal({
           throw new Error("Failed to create API keypair for Google login.");
         }
         pubKeyRef.current = pubKey;
-        setGoogleNonce(bytesToHex(sha256(pubKey)));
+        setGoogleNonce(bytesToHex(sha256(new TextEncoder().encode(pubKey))));
       } catch (err: any) {
         console.error("Failed to prepare Google login", err);
         setError(err?.message || "Unable to prepare Google login.");
