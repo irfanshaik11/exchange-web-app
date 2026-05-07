@@ -3821,122 +3821,115 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
   }, [displayed]);
 
   const innerContent = (
-          <div className={`relative overflow-hidden rounded-2xl border border-white/[0.06] flex flex-col ${variant === 'popup' ? 'h-full min-h-[400px] bg-white/[0.03] backdrop-blur-xl' : 'h-[calc(100vh-80px)]'}`}>
-            {/* Background image inside the container */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          <div className={`relative overflow-hidden rounded-xl border border-white/[0.06] flex flex-col ${variant === 'popup' ? 'h-full min-h-[400px] bg-[#030304]/95 backdrop-blur-2xl' : 'h-[calc(100vh-80px)]'}`}>
+            {/* JTX-style corner brackets */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+              {/* Top-left bracket */}
+              <div className="absolute left-2 top-2 h-6 w-6 border-l border-t border-white/[0.12]" />
+              {/* Top-right bracket */}
+              <div className="absolute right-2 top-2 h-6 w-6 border-r border-t border-white/[0.12]" />
+              {/* Bottom-left bracket */}
+              <div className="absolute bottom-2 left-2 h-6 w-6 border-b border-l border-white/[0.12]" />
+              {/* Bottom-right bracket */}
+              <div className="absolute bottom-2 right-2 h-6 w-6 border-b border-r border-white/[0.12]" />
+            </div>
+            
+            {/* Subtle ambient glow effect */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
               <div
-                className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-                style={{ backgroundImage: 'url(/ranks/Background2.png)' }}
-              />
-              <div className="absolute inset-0 bg-black/30" />
-              <div
-                className="absolute inset-0"
+                className="absolute -top-[40%] left-1/2 h-[60vh] w-[120%] -translate-x-1/2"
                 style={{
-                  background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)'
+                  background: 'radial-gradient(ellipse at center, rgba(24, 196, 140, 0.03) 0%, transparent 70%)'
                 }}
               />
-              <div
-                className="absolute inset-x-0 top-1/4 bottom-0"
-                style={{
-                  background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)'
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+              {/* Subtle side vignette */}
+              <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
+              {/* Subtle top-to-bottom gradient */}
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
             </div>
 
-        {/* Tab Navigation - in popup variant use Trenches-style bordered pill container */}
-        <div className={`relative z-10 mt-3 mb-4 flex flex-shrink-0 gap-3 px-4 sm:mt-4 sm:px-6 lg:gap-6 lg:px-8 ${variant === 'popup' ? 'flex-col' : 'flex-row items-center justify-between'}`}>
-          {/* Tabs Section - Scrollable on mobile (horizontal only; vertical scroll is clamped) */}
-          <div className="scrollbar-hide -mx-4 flex min-w-0 flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden px-4 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-4 lg:px-0">
+        {/* Tab Navigation - JTX/Axiom-inspired design */}
+        <div className={`relative z-10 mt-4 mb-5 flex flex-shrink-0 gap-4 px-5 sm:mt-5 sm:px-7 lg:gap-8 lg:px-10 ${variant === 'popup' ? 'flex-col' : 'flex-row items-center justify-between'}`}>
+          {/* Tabs Section - Premium trading platform style */}
+          <div className="scrollbar-hide -mx-5 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden px-5 sm:-mx-7 sm:gap-1.5 sm:px-7 lg:mx-0 lg:gap-2 lg:px-0">
+            {/* Tab buttons with glowing underline effect */}
             <button
-              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`group relative px-3 py-2 text-[0.9375rem] whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] font-medium tracking-tight ${activeTab === "trending" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
               onClick={() => { setActiveTab("trending"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
             >
-              Trending
+              <span className="relative z-10">Trending</span>
+              {/* Glowing underline */}
+              <span className={`absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 transition-all duration-300 ${activeTab === "trending" ? "w-full bg-gradient-to-r from-transparent via-[#18c48c] to-transparent opacity-100" : "w-0 opacity-0"}`} />
+              {/* Glow effect behind active tab */}
+              <span className={`absolute inset-0 -z-10 rounded-lg transition-opacity duration-300 ${activeTab === "trending" ? "bg-[#18c48c]/[0.06] opacity-100" : "opacity-0"}`} />
             </button>
-            {/* <button
-              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "trending2" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
-              onClick={() => { setActiveTab("trending2"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
-            >
-              Trending 2
-            </button> */}
+            
             <button
-              className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`group relative px-3 py-2 text-[0.9375rem] whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] font-medium tracking-tight ${activeTab === "newPairs" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
               onClick={() => { setActiveTab("newPairs"); setShowDiscoverFilter(false); setSortKey("timestamp"); setSortDirection("desc"); }}
             >
-              New Pairs
+              <span className="relative z-10">New Pairs</span>
+              <span className={`absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 transition-all duration-300 ${activeTab === "newPairs" ? "w-full bg-gradient-to-r from-transparent via-[#18c48c] to-transparent opacity-100" : "w-0 opacity-0"}`} />
+              <span className={`absolute inset-0 -z-10 rounded-lg transition-opacity duration-300 ${activeTab === "newPairs" ? "bg-[#18c48c]/[0.06] opacity-100" : "opacity-0"}`} />
             </button>
+            
             {/* Hide xStocks, surge, and live tabs when Monad is selected */}
             {currentChain !== "monad" && (
               <>
-                {/* xStocks tab temporarily disabled
                 <button
-                  className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-                  onClick={() => setActiveTab("xStocks")}
-                >
-                  xStocks
-                </button>
-                */}
-                {/* <button
-                  className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-                  onClick={() => setActiveTab("surge")}
-                >
-                  Surge
-                </button> */}
-                <button
-                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "gainers" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  className={`group relative px-3 py-2 text-[0.9375rem] whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] font-medium tracking-tight ${activeTab === "gainers" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
                   onClick={() => { setActiveTab("gainers"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
-                  Gainers
+                  <span className="relative z-10">Gainers</span>
+                  <span className={`absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 transition-all duration-300 ${activeTab === "gainers" ? "w-full bg-gradient-to-r from-transparent via-[#22c55e] to-transparent opacity-100" : "w-0 opacity-0"}`} />
+                  <span className={`absolute inset-0 -z-10 rounded-lg transition-opacity duration-300 ${activeTab === "gainers" ? "bg-[#22c55e]/[0.06] opacity-100" : "opacity-0"}`} />
                 </button>
+                
                 <button
-                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "top" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  className={`group relative px-3 py-2 text-[0.9375rem] whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] font-medium tracking-tight ${activeTab === "top" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
                   onClick={() => { setActiveTab("top"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
-                  Top
+                  <span className="relative z-10">Top</span>
+                  <span className={`absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 transition-all duration-300 ${activeTab === "top" ? "w-full bg-gradient-to-r from-transparent via-[#f59e0b] to-transparent opacity-100" : "w-0 opacity-0"}`} />
+                  <span className={`absolute inset-0 -z-10 rounded-lg transition-opacity duration-300 ${activeTab === "top" ? "bg-[#f59e0b]/[0.06] opacity-100" : "opacity-0"}`} />
                 </button>
+                
                 <button
-                  className={`text-[0.9625rem] whitespace-nowrap transition-colors sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+                  className={`group relative px-3 py-2 text-[0.9375rem] whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] font-medium tracking-tight ${activeTab === "live" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
                   onClick={() => { setActiveTab("live"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
-                  Pump Live
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    Pump Live
+                    {/* Live pulse indicator */}
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ef4444] opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-[#ef4444]" />
+                    </span>
+                  </span>
+                  <span className={`absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 transition-all duration-300 ${activeTab === "live" ? "w-full bg-gradient-to-r from-transparent via-[#ef4444] to-transparent opacity-100" : "w-0 opacity-0"}`} />
+                  <span className={`absolute inset-0 -z-10 rounded-lg transition-opacity duration-300 ${activeTab === "live" ? "bg-[#ef4444]/[0.06] opacity-100" : "opacity-0"}`} />
                 </button>
               </>
             )}
-            {/* <button
-              className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-              onClick={() => setActiveTab("dex")}
-            >
-              DEX Screener
-            </button> */}
           </div>
 
-          {/* Right controls - In popup take full width and wrap to next line(s); otherwise row on desktop */}
-          <div className={`flex items-center gap-2 sm:gap-3 lg:gap-4 ${variant === 'popup' ? 'w-full flex-wrap' : 'flex-nowrap flex-shrink-0'}`}>
-            {/* Connection status - commented out per user request */}
-            {/* <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
-              <span className="text-xs text-neutral-400">
-                {isConnected ? 'Live' : 'Disconnected'}
-              </span>
-            </div> */}
-
-            {/* Timeframes - show for trending (Solana only), hide for live, newPairs, xStocks, surge */}
+          {/* Right controls - JTX-inspired minimal design */}
+          <div className={`flex items-center gap-2 sm:gap-2.5 lg:gap-3 ${variant === 'popup' ? 'w-full flex-wrap' : 'flex-nowrap flex-shrink-0'}`}>
+            {/* Timeframes - sleek pill design */}
             {activeTab !== "live" &&
               activeTab !== "newPairs" &&
               activeTab !== "xStocks" &&
               activeTab !== "surge" &&
               // Show timeframes for Solana trending with WebSocket support
               (!isTrendingDataTab || currentChain === "sol") && (
-                <div className={`relative h-7 min-w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
+                <div className={`relative h-8 min-w-[110px] items-center justify-center gap-0.5 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 backdrop-blur-xl px-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
                   {/* For trending-style tabs, only show 5m, 1h, 6h (WebSocket supported timeframes) */}
                   {((isTrendingDataTab ? ["5m", "1h", "6h"] : ["5m", "1h", "6h", "24h"]) as Timeframe[]).map(
                     (tf: Timeframe) => (
                       <button
-                          className={`flex h-5 cursor-pointer items-center justify-center rounded px-1 text-sm font-medium leading-none whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
+                        key={tf}
+                        className={`relative flex h-6 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[#18c48c]/15 text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.15)]" : "text-[#71717a] hover:text-[#a1a1aa]"}`}
                         onClick={() => handleTimeframeClick(tf)}
-                        onMouseEnter={variant !== 'popup' ? (e) => { if (selectedTimeframe !== tf) e.currentTarget.style.color = "#f0f5f5"; } : undefined}
-                        onMouseLeave={variant !== 'popup' ? (e) => { if (selectedTimeframe !== tf) e.currentTarget.style.color = ""; } : undefined}
                       >
                         {tf}
                       </button>
@@ -3945,18 +3938,17 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                 </div>
               )}
 
-            {/* Discover filter button (new PulseTable-style filters) */}
+            {/* Discover filter button - JTX minimal icon style */}
             {activeTab !== "live" && (
               <button
-                className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all"
-                style={{ color: showDiscoverFilter ? "#526fff" : "#9CA3AF" }}
+                className={`relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition-all duration-200 ${showDiscoverFilter ? "border-[#18c48c]/30 bg-[#18c48c]/10 text-[#18c48c]" : "border-white/[0.06] bg-[#0c0e12]/80 text-[#71717a] hover:border-white/[0.1] hover:text-[#a1a1aa]"}`}
                 onClick={() => showDiscoverFilter ? setShowDiscoverFilter(false) : openDiscoverFilter()}
               >
                 <BsSliders2 size={14} />
                 {discoverFilterCount > 0 && (
                   <span
-                    className="absolute -top-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full font-bold"
-                    style={{ backgroundColor: "#31e3ac", color: "#000", fontSize: "8px" }}
+                    className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold shadow-[0_0_8px_rgba(24,196,140,0.4)]"
+                    style={{ backgroundColor: "#18c48c", color: "#030304" }}
                   >
                     {discoverFilterCount}
                   </span>
@@ -4050,9 +4042,9 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
               </div>
             )}
 
-            {/* Thunder Icon and Amount Entry */}
-            <div className={`min-w-[70px] w-[85px] items-center justify-center gap-1 rounded-lg border backdrop-blur-xl p-1 ${variant === 'popup' ? 'flex border-white/[0.06] bg-white/[0.03]' : 'hidden sm:flex h-7 rounded-md border-white/[0.08] bg-white/[0.05] px-1.5 py-1'}`}>
-              <HiLightningBolt size={14} className="text-[#31e3ac]" />
+            {/* Thunder Icon and Amount Entry - JTX style */}
+            <div className={`min-w-[75px] w-[90px] items-center justify-center gap-1.5 rounded-lg border backdrop-blur-xl ${variant === 'popup' ? 'flex border-white/[0.06] bg-[#0c0e12]/80 p-1.5' : 'hidden sm:flex h-8 border-white/[0.06] bg-[#0c0e12]/80 px-2'}`}>
+              <HiLightningBolt size={14} className="text-[#18c48c] drop-shadow-[0_0_4px_rgba(24,196,140,0.5)]" />
               <input
                 type="text"
                 value={quickBuyAmount}
@@ -4088,12 +4080,13 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                     e.preventDefault();
                   }
                 }}
-                className="w-12 border-none bg-transparent text-center text-sm font-medium text-[#f0f5f5] outline-none"
+                className="w-12 border-none bg-transparent text-center text-sm font-medium tabular-nums text-[#f4f4f5] outline-none placeholder:text-[#52525b]"
+                placeholder="0.00"
               />
             </div>
 
-            {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
-            <div className={`relative h-7 min-w-[80px] w-[100px] items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl px-1.5 py-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
+            {/* P1 P2 P3 Boxes - JTX premium preset style */}
+            <div className={`relative h-8 min-w-[90px] w-[105px] items-center justify-center gap-0.5 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 backdrop-blur-xl px-1 ${variant === 'popup' ? 'flex' : 'hidden sm:flex'}`}>
               {["P1", "P2", "P3"].map((pill) => {
                 const presetIndex = parseInt(pill.replace("P", "")) - 1;
                 const preset = presets[presetIndex];
@@ -4105,19 +4098,17 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                     className="relative flex items-center justify-center"
                   >
                     <button
-                      className={`flex h-5 cursor-pointer items-center justify-center rounded px-1 text-sm font-medium leading-none transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-transparent"}`}
+                      className={`flex h-6 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-medium tracking-wide transition-all duration-200 ${selectedPill === pill ? "bg-[#18c48c]/15 text-[#18c48c] shadow-[0_0_10px_rgba(24,196,140,0.2)]" : "text-[#71717a] hover:text-[#a1a1aa]"}`}
                       onClick={() => {
                         setSelectedPill(pill);
                         setActivePreset(presetIndex);
                       }}
                       onMouseEnter={(e) => {
-                        if (variant !== 'popup' && selectedPill !== pill) e.currentTarget.style.color = "#f0f5f5";
                         setShowPillTooltip(pill);
                         const rect = e.currentTarget.getBoundingClientRect();
                         setPillTooltipAnchor({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
                       }}
                       onMouseLeave={(e) => {
-                        if (variant !== 'popup' && selectedPill !== pill) e.currentTarget.style.color = "";
                         setShowPillTooltip(null);
                         setPillTooltipAnchor(null);
                       }}
@@ -4131,7 +4122,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           </div>
         </div>
 
-        {/* Pill settings tooltip — portaled so it appears on top of overflow/stacking contexts */}
+        {/* Pill settings tooltip — JTX-style with corner brackets */}
         {typeof document !== 'undefined' &&
           showPillTooltip &&
           pillTooltipAnchor &&
@@ -4139,31 +4130,36 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
             const presetIndex = parseInt(showPillTooltip.replace('P', ''), 10) - 1;
             const settings = presets[presetIndex]?.quickBuySettings;
             if (!settings) return null;
-            const top = pillTooltipAnchor.top + pillTooltipAnchor.height + 4;
+            const top = pillTooltipAnchor.top + pillTooltipAnchor.height + 6;
             const left = pillTooltipAnchor.left;
             return createPortal(
               <div
-                className="fixed z-[999999] w-28 rounded-lg border border-white/[0.08] bg-black/90 backdrop-blur-xl shadow-xl"
+                className="fixed z-[999999] w-32 rounded-lg border border-white/[0.08] bg-[#0c0e12]/95 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.6),0_0_1px_rgba(255,255,255,0.1)]"
                 style={{ top, left }}
               >
-                <div className="space-y-1.5 p-2">
-                  <div className="flex items-center gap-1.5">
-                    <FaRunning size={10} className="stroke-2 opacity-80" />
-                    <span className="text-xs font-light text-gray-300">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                {/* Mini corner brackets */}
+                <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                  <div className="absolute left-1 top-1 h-2 w-2 border-l border-t border-white/[0.15]" />
+                  <div className="absolute right-1 top-1 h-2 w-2 border-r border-t border-white/[0.15]" />
+                  <div className="absolute bottom-1 left-1 h-2 w-2 border-b border-l border-white/[0.15]" />
+                  <div className="absolute bottom-1 right-1 h-2 w-2 border-b border-r border-white/[0.15]" />
+                </div>
+                <div className="space-y-1.5 p-2.5">
+                  <div className="flex items-center gap-2">
+                    <FaRunning size={10} className="text-[#a1a1aa]" />
+                    <span className="text-xs font-medium tabular-nums text-[#f4f4f5]">{(settings.maxSlippage * 100).toFixed(0)}%</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <FaGasPump size={10} className="stroke-2 text-[#FCD34D] opacity-90" />
-                    <span className="text-xs font-light text-yellow-400">{settings.priority}</span>
-                    <span className="text-xs font-light text-[#d11f3a]">⚠</span>
+                  <div className="flex items-center gap-2">
+                    <FaGasPump size={10} className="text-[#f59e0b]" />
+                    <span className="text-xs font-medium tabular-nums text-[#f59e0b]">{settings.priority}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <FaCoins size={10} className="stroke-2 text-[#FCD34D] opacity-90" />
-                    <span className="text-xs font-light text-yellow-400">{settings.bribe}</span>
-                    <span className="text-xs font-light text-[#d11f3a]">⚠</span>
+                  <div className="flex items-center gap-2">
+                    <FaCoins size={10} className="text-[#f59e0b]" />
+                    <span className="text-xs font-medium tabular-nums text-[#f59e0b]">{settings.bribe}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <FaBan size={10} className="stroke-2 opacity-90" />
-                    <span className="text-xs font-light text-gray-300">
+                  <div className="flex items-center gap-2">
+                    <FaBan size={10} className="text-[#a1a1aa]" />
+                    <span className="text-xs font-medium text-[#f4f4f5]">
                       {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
                     </span>
                   </div>
