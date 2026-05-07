@@ -646,7 +646,7 @@ export default function WalletTrackerContent() {
         <div className="flex min-w-0 flex-1 justify-start">
           <input
             type="text"
-            placeholder="Search by address"
+            placeholder="Search by name or address"
             className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-3 py-1 text-[10px] text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none sm:px-4 sm:text-xs"
             disabled={activeTab === 1}
             value={searchTerm}
