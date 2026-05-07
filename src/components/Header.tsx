@@ -106,15 +106,38 @@ const _stableEnrichedWatchlist: Token[] = [];
 
 /* ---- style palette ---- */
 const AX = {
-  bg: "#050608",
-  surface: "#0d1015",
-  surface2: "#12141a",
+  // Deep void backgrounds with subtle blue undertone
+  bg: "#030304",
+  bgDeep: "#050608",
+  surface: "#08090c",
+  surface2: "#0c0e12",
+  surfaceHover: "#10131a",
+  card: "#141720",
+  
+  // Borders with subtle glow potential
   border: "rgba(255,255,255,0.06)",
-  text: "#9ca3af",
-  muted: "#6b7280",
+  borderHover: "rgba(255,255,255,0.10)",
+  borderStrong: "rgba(255,255,255,0.14)",
+  borderGlow: "rgba(24, 196, 140, 0.25)",
+  
+  // Text hierarchy
+  text: "#f4f4f5",
+  textSecondary: "#a1a1aa",
+  textMuted: "#71717a",
+  textDim: "#52525b",
+  
+  // Accent colors - Emerald/Mint
   mint: "#18c48c",
-  mintHover: "#12a877",
-  sell: "#FF4D7F",
+  mintBright: "#22d99a",
+  mintHover: "#14a877",
+  mintGlow: "rgba(24, 196, 140, 0.15)",
+  mintGlowStrong: "rgba(24, 196, 140, 0.25)",
+  
+  // Status colors
+  success: "#22c55e",
+  danger: "#ef4444",
+  sell: "#ef4444",
+  warning: "#f59e0b",
 };
 
 // Platform updates data
@@ -1910,47 +1933,61 @@ export default function Header({
   return (
     <>
       <header
-        className={`${isSticky ? "sticky top-0 z-[9999]" : "relative z-[9999]"} w-full max-w-[100vw] overflow-x-hidden bg-[#050608] backdrop-blur-sm`}
+        className={`${isSticky ? "sticky top-0 z-[9999]" : "relative z-[9999]"} w-full max-w-[100vw] overflow-x-hidden`}
+        style={{
+          background: `linear-gradient(180deg, ${AX.bg} 0%, ${AX.bgDeep} 100%)`,
+          borderBottom: `1px solid ${AX.border}`,
+          backdropFilter: "blur(12px)",
+        }}
       >
         <div
           className="flex max-w-full flex-nowrap items-center justify-between gap-1 px-2 py-2 md:px-4"
-          style={{ backgroundColor: "#050608" }}
+          style={{ backgroundColor: "transparent" }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2 md:gap-3">
             {/* Hamburger button */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-md border transition-all duration-200 md:hidden"
+              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg border transition-all duration-200 md:hidden"
               style={{
                 borderColor: AX.border,
-                color: AX.text,
-                backgroundColor: "rgba(13, 16, 21, 0.8)",
+                color: AX.textSecondary,
+                backgroundColor: AX.surface,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor =
-                  "rgba(255, 255, 255, 0.06)";
+                e.currentTarget.style.backgroundColor = AX.surfaceHover;
+                e.currentTarget.style.borderColor = AX.borderHover;
+                e.currentTarget.style.color = AX.text;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(13, 16, 21, 0.8)";
+                e.currentTarget.style.backgroundColor = AX.surface;
+                e.currentTarget.style.borderColor = AX.border;
+                e.currentTarget.style.color = AX.textSecondary;
               }}
               aria-label="Open menu"
             >
-              <FaBars size={20} />
+              <FaBars size={18} />
             </button>
 
             <Link
               href={chainAwareHref("/pulse")}
-              className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center gap-1 tracking-tight select-none sm:min-h-0 sm:min-w-0 sm:justify-start"
+              className="group flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center gap-1.5 tracking-tight select-none transition-all duration-200 sm:min-h-0 sm:min-w-0 sm:justify-start"
               style={{ color: AX.text }}
               title="Go to Trenches"
             >
               <img
                 src="/interstate/logo.png"
                 alt="Interstate logo"
-                className="h-5 w-5 flex-shrink-0 object-contain sm:h-5 sm:w-auto"
+                className="h-5 w-5 flex-shrink-0 object-contain transition-all duration-200 group-hover:drop-shadow-[0_0_8px_rgba(24,196,140,0.4)] sm:h-5 sm:w-auto"
               />
-              <h3 className="!font-orbitron hidden min-[380px]:block">
+              <h3 
+                className="!font-orbitron hidden min-[380px]:block text-sm font-semibold tracking-wider uppercase transition-colors duration-200 group-hover:text-[#18c48c]"
+                style={{ 
+                  color: AX.text,
+                  textShadow: "0 0 20px rgba(24, 196, 140, 0.1)",
+                }}
+              >
                 interstate
               </h3>
             </Link>
@@ -1999,24 +2036,28 @@ export default function Header({
                     <Link
                       key={link.name}
                       href={chainAwareHref(link.href)}
-                      className={`flex min-h-[44px] flex-shrink-0 items-center rounded-md px-2.5 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3 sm:py-1 sm:text-sm`}
+                      className={`relative flex min-h-[44px] flex-shrink-0 items-center px-3 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
                       style={{
-                        color: isActive ? "#18c48c" : "#ffffff",
-                        backgroundColor: "transparent",
+                        color: isActive ? AX.mint : AX.textSecondary,
+                        backgroundColor: isActive ? AX.mintGlow : "transparent",
+                        borderRadius: "6px",
                         position: "relative",
                         zIndex: 1001,
                         pointerEvents: "auto",
                         cursor: "pointer",
-                        transition: "all 150ms ease-out",
+                        transition: "all 150ms cubic-bezier(0.16, 1, 0.3, 1)",
+                        textShadow: isActive ? `0 0 20px ${AX.mintGlow}` : "none",
                       }}
                       onMouseEnter={(e) => {
                         if (!isActive) {
-                          e.currentTarget.style.color = "#18c48c";
+                          e.currentTarget.style.color = AX.text;
+                          e.currentTarget.style.backgroundColor = AX.surfaceHover;
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!isActive) {
-                          e.currentTarget.style.color = "#ffffff";
+                          e.currentTarget.style.color = AX.textSecondary;
+                          e.currentTarget.style.backgroundColor = "transparent";
                         }
                       }}
                     >
@@ -2297,26 +2338,35 @@ export default function Header({
                 {/* Search button (desktop) - squarish pill; collapses to icon-only below lg */}
                 <button
                   onClick={() => openSearch()}
-                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-md border px-2 transition-all duration-200 ease-out md:flex lg:px-3"
+                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-lg border px-2.5 transition-all duration-200 ease-out md:flex lg:px-3"
                   style={{
-                    backgroundColor: "rgba(13, 16, 21, 0.8)",
+                    backgroundColor: AX.surface,
                     borderColor: AX.border,
-                    color: AX.muted,
+                    color: AX.textMuted,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(255, 255, 255, 0.06)";
+                    e.currentTarget.style.backgroundColor = AX.surfaceHover;
+                    e.currentTarget.style.borderColor = AX.borderHover;
+                    e.currentTarget.style.color = AX.textSecondary;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(13, 16, 21, 0.8)";
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.color = AX.textMuted;
                   }}
                 >
-                  <FaSearch size={11} />
-                  <span className="hidden text-xs whitespace-nowrap text-neutral-500 lg:inline">
+                  <FaSearch size={12} />
+                  <span className="hidden text-xs whitespace-nowrap lg:inline" style={{ color: AX.textMuted }}>
                     Search
                   </span>
-                  <span className="ml-2 hidden rounded border border-neutral-700/60 bg-neutral-800/60 px-1.5 py-0.5 text-[10px] leading-none text-neutral-400 lg:inline-block">
+                  <span 
+                    className="ml-1.5 hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none lg:inline-block"
+                    style={{
+                      backgroundColor: AX.surface2,
+                      color: AX.textMuted,
+                      border: `1px solid ${AX.border}`,
+                    }}
+                  >
                     /
                   </span>
                 </button>
@@ -2353,19 +2403,21 @@ export default function Header({
             <div ref={notificationsRef} className="relative flex-shrink-0">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 cursor-pointer items-center justify-center rounded-md border transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0"
+                className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0"
                 style={{
-                  color: AX.muted,
+                  color: AX.textMuted,
                   borderColor: AX.border,
-                  backgroundColor: "rgba(13, 16, 21, 0.8)",
+                  backgroundColor: AX.surface,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(255, 255, 255, 0.06)";
+                  e.currentTarget.style.backgroundColor = AX.surfaceHover;
+                  e.currentTarget.style.borderColor = AX.borderHover;
+                  e.currentTarget.style.color = AX.textSecondary;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(13, 16, 21, 0.8)";
+                  e.currentTarget.style.backgroundColor = AX.surface;
+                  e.currentTarget.style.borderColor = AX.border;
+                  e.currentTarget.style.color = AX.textMuted;
                 }}
                 title="Notifications"
               >
@@ -2387,15 +2439,15 @@ export default function Header({
                 {/* Combined Balance + Username Button */}
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="group/account flex h-10 min-h-[44px] cursor-pointer flex-row items-center justify-center gap-1.5 rounded-md border px-2 transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:gap-2 sm:px-2.5"
+                  className="group/account flex h-10 min-h-[44px] cursor-pointer flex-row items-center justify-center gap-1.5 rounded-lg border px-2.5 transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:gap-2 sm:px-3"
                   style={{
                     borderColor: AX.border,
                     color: AX.text,
-                    backgroundColor: "rgba(13, 16, 21, 0.8)",
+                    backgroundColor: AX.surface,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(255, 255, 255, 0.06)";
+                    e.currentTarget.style.backgroundColor = AX.surfaceHover;
+                    e.currentTarget.style.borderColor = AX.borderHover;
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor =
@@ -2721,10 +2773,10 @@ export default function Header({
                                 e.currentTarget.style.backgroundColor =
                                   "#7038d4";
                               }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor =
-                                  "#8247E5";
-                              }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                  }}
                             >
                               <HiOutlineQrcode className="h-4 w-4" />
                               Deposit

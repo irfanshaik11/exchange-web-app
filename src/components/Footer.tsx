@@ -198,17 +198,36 @@ export const SolanaIcon = ({ size = 16 }: { size?: number }) => (
 
 /* ---- style palette ---- */
 const AX = {
-  bg: "#0a0b0d",
-  surface: "#141518",
-  surface2: "#111214",
-  border: "#1e2028",
-  text: "#d1d5db",
-  muted: "#6b7280",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-  green: "#31e3ac",
+  // Deep void backgrounds
+  bg: "#030304",
+  bgDeep: "#050608",
+  surface: "#08090c",
+  surface2: "#0c0e12",
+  surfaceHover: "#10131a",
+  card: "#141720",
+  
+  // Borders
+  border: "rgba(255,255,255,0.06)",
+  borderHover: "rgba(255,255,255,0.10)",
+  borderStrong: "rgba(255,255,255,0.14)",
+  
+  // Text hierarchy
+  text: "#f4f4f5",
+  textSecondary: "#a1a1aa",
+  textMuted: "#71717a",
+  textDim: "#52525b",
+  muted: "#71717a",
+  
+  // Accent colors - Emerald/Mint
+  mint: "#18c48c",
+  mintBright: "#22d99a",
+  mintHover: "#14a877",
+  mintGlow: "rgba(24, 196, 140, 0.15)",
+  
+  // Status colors
+  green: "#22c55e",
   red: "#ef4444",
+  sell: "#ef4444",
   purple: "#8b5cf6",
   teal: "#14b8a6",
 };
