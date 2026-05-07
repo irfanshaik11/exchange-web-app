@@ -113,6 +113,18 @@ interface FastImageProps {
   bubbleSrc?: string;
   /** Fired when all auto-retries are exhausted. Parent can swap to a fallback src. */
   onLoadFailed?: () => void;
+  /**
+   * Stable identifier for the entity this image belongs to (e.g. token mint,
+   * wallet address, user id). Enables the double-buffer to distinguish:
+   *   - same entity, different src   → keep previous image painted while next
+   *     loads (eliminates the cloudflare-ipfs 404 → URI fallback flicker)
+   *   - different entity (row recycled by a virtualized list) → drop the
+   *     previous image immediately so the new entity's row doesn't briefly
+   *     paint the previous entity's avatar.
+   * If omitted, the double-buffer is disabled — safer default for callers
+   * that don't opt in (no risk of cross-entity image bleed).
+   */
+  stableId?: string;
 }
 
 /**
@@ -137,6 +149,7 @@ function FastImageInner({
   showBubble = true,
   bubbleSrc,
   onLoadFailed,
+  stableId,
 }: FastImageProps) {
   const inputSrc = src || fallbackSrc;
 
@@ -233,6 +246,21 @@ function FastImageInner({
   // shared globalLoadedImages map means the previous URL stays the
   // background even if it was loaded by THIS row only.
   const [lastDisplayedUrl, setLastDisplayedUrl] = useState<string | null>(null);
+
+  // Tracks the stableId we currently consider "the entity this slot belongs
+  // to." Paired with `lastDisplayedUrl` and updated during render (not in an
+  // effect) so an entity change resets the buffer in the SAME render the new
+  // stableId arrives — eliminating the one-frame window where the previous
+  // entity's image could paint in the new entity's slot before an effect
+  // commits the clear. React's recommended pattern for adjusting state when
+  // a prop changes; see https://react.dev/learn/you-might-not-need-an-effect
+  const [trackedStableId, setTrackedStableId] = useState<string | undefined>(
+    undefined,
+  );
+  if (stableId !== trackedStableId) {
+    setLastDisplayedUrl(null);
+    setTrackedStableId(stableId);
+  }
 
   // Ref for the <img> element (used by visibilitychange handler)
   const imgRef = useRef<HTMLImageElement>(null);
@@ -343,6 +371,10 @@ function FastImageInner({
       autoRetryTimerRef.current = null;
     }
 
+    // Note: entity-change buffer clearing happens in render-phase (see
+    // trackedStableId block above). The same-entity src swap (e.g. cloudflare
+    // 404 → URI fallback) keeps the buffer for the no-flicker transition.
+
     if (!imageUrl) {
       setImageLoaded(false);
       setImageError(false);
@@ -386,7 +418,7 @@ function FastImageInner({
       setImageLoaded(false);
       setImageError(false);
     }
-  }, [imageUrl]);
+  }, [imageUrl, stableId]);
 
   // Retry failed / evicted images when the tab becomes visible again
   useEffect(() => {
@@ -430,13 +462,13 @@ function FastImageInner({
     autoRetryCountRef.current = 0;
     setImageLoaded(true);
     setImageError(false);
-    // Lock in the just-loaded URL as the visible-background fallback for the
-    // next src transition. Prevents letter-flash flicker when the next src
-    // change happens (e.g. parent swaps to URI fallback after a 404).
-    if (finalImageUrl) {
-      setLastDisplayedUrl(finalImageUrl);
-    }
+    // Lock in the canonical URL (not the cache-busted finalImageUrl with
+    // ?_r=N suffix) as the visible-background fallback for the next src
+    // transition. Storing the canonical URL means the browser can serve it
+    // straight from the HTTP cache when it gets painted as the background,
+    // instead of treating the cache-busted variant as a separate resource.
     if (currentUrlRef.current) {
+      setLastDisplayedUrl(currentUrlRef.current);
       trackLoadedImage(currentUrlRef.current);
       // Retain an Image object so the decoded bitmap survives component unmount
       if (!isImageRetained(currentUrlRef.current)) {
@@ -476,6 +508,11 @@ function FastImageInner({
     } else {
       setImageError(true);
       setImageLoaded(false);
+      // Permanent failure (auto-retries exhausted): drop the double-buffer so
+      // the user sees the letter placeholder instead of a stuck-forever stale
+      // image with no error signal. The same-entity src swap still uses the
+      // buffer (transient state); only terminal failure clears it.
+      setLastDisplayedUrl(null);
     }
   };
 
@@ -508,9 +545,7 @@ function FastImageInner({
   //   3. Plain gradient (only when there's nothing to show)
   const showCurrent =
     (imageLoaded || isKnownUrl) && finalImageUrl && !imageError;
-  const backgroundUrl = showCurrent
-    ? finalImageUrl
-    : lastDisplayedUrl;
+  const backgroundUrl = showCurrent ? finalImageUrl : lastDisplayedUrl;
   return (
     <div
       className={`relative ${className} overflow-hidden`}
@@ -518,9 +553,12 @@ function FastImageInner({
         width,
         height,
         borderRadius: "inherit",
-        // For cached/known images: CSS background-image resolves from SW/HTTP/memory cache,
-        // painting the image behind the letter (no gradient flash on F5 or SPA nav).
-        // isKnownUrl covers post-refresh when bitmap isn't decoded yet but URL is in cache.
+        // backgroundUrl resolves to: (1) finalImageUrl when this URL is loaded
+        // or known-cached, (2) lastDisplayedUrl when retained for a same-entity
+        // src transition, or (3) null. The CSS url() resolves from SW/HTTP/memory
+        // cache so cached images paint behind the letter without a gradient flash
+        // on F5/SPA nav. The same trick covers the same-entity src swap so the
+        // previous successful image stays painted while the next one loads.
         background: backgroundUrl
           ? `url("${backgroundUrl}") center/cover no-repeat, linear-gradient(to bottom right, #1f2937, #000000)`
           : "linear-gradient(to bottom right, #1f2937, #000000)",
@@ -591,6 +629,7 @@ export default memo(FastImageInner, (prevProps, nextProps) => {
     prevProps.showBubble === nextProps.showBubble &&
     prevProps.bubbleSrc === nextProps.bubbleSrc &&
     prevProps.priority === nextProps.priority &&
-    prevProps.onLoadFailed === nextProps.onLoadFailed
+    prevProps.onLoadFailed === nextProps.onLoadFailed &&
+    prevProps.stableId === nextProps.stableId
   );
 });
