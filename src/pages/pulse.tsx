@@ -1236,17 +1236,21 @@ export default function PulsePage() {
   const { preloadImages } = useImagePreloader();
 
   useEffect(() => {
-    if (newPairsToShow && newPairsToShow.length > 0) {
-      const imageSources = newPairsToShow
-        .slice(0, 20)
-        .map((token: any) => extractTokenImage(token))
-        .filter(Boolean);
+    const allTokens = [
+      ...((newPairsToShow as any[]) || []),
+      ...((finalStretchToShow as any[]) || []),
+      ...((migratedToShow as any[]) || []),
+    ];
+    if (allTokens.length === 0) return;
 
-      if (imageSources.length > 0) {
-        preloadImages(imageSources, { priority: true, timeout: 2000 });
-      }
+    const imageSources = allTokens
+      .map((token: any) => extractTokenImage(token))
+      .filter(Boolean);
+
+    if (imageSources.length > 0) {
+      preloadImages(imageSources, { priority: true, timeout: 2000 });
     }
-  }, [newPairsToShow, preloadImages]);
+  }, [newPairsToShow, finalStretchToShow, migratedToShow, preloadImages]);
 
   // Sync rolling trade cache with visible pulse tokens (debounced to prevent excessive requests)
   // CRITICAL: Only sync cache for Solana route - Monad tokens use different service
