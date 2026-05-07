@@ -1,4 +1,4 @@
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 import Link from "next/link";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
@@ -55,7 +55,10 @@ import {
   getResolvedTokenImage,
 } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
-import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
+import {
+  broadcastTradeCompleted,
+  notifyTradePending,
+} from "~/utils/tradeEvents";
 import {
   executeSolanaMultiBuy,
   buildSolanaWalletAllocations,
@@ -368,19 +371,26 @@ export default function Header({
   const isDiscover = router.pathname === "/";
   // Track if we should show Polygon prediction balance
   // On /predictions pages: always. On /portfolio: only when the Predictions tab is active.
-  const [portfolioPredictionsActive, setPortfolioPredictionsActive] = useState(false);
+  const [portfolioPredictionsActive, setPortfolioPredictionsActive] =
+    useState(false);
   useEffect(() => {
     const handleSectionChange = (e: Event) => {
       const section = (e as CustomEvent).detail?.section;
-      setPortfolioPredictionsActive(section === 'predictions');
+      setPortfolioPredictionsActive(section === "predictions");
     };
-    window.addEventListener('portfolio-section-change', handleSectionChange);
+    window.addEventListener("portfolio-section-change", handleSectionChange);
     // Reset when navigating away from portfolio
-    if (router.pathname !== '/portfolio') setPortfolioPredictionsActive(false);
-    return () => window.removeEventListener('portfolio-section-change', handleSectionChange);
+    if (router.pathname !== "/portfolio") setPortfolioPredictionsActive(false);
+    return () =>
+      window.removeEventListener(
+        "portfolio-section-change",
+        handleSectionChange,
+      );
   }, [router.pathname]);
 
-  const isPredictionsPage = router.pathname.startsWith("/predictions") || (router.pathname === "/portfolio" && portfolioPredictionsActive);
+  const isPredictionsPage =
+    router.pathname.startsWith("/predictions") ||
+    (router.pathname === "/portfolio" && portfolioPredictionsActive);
   const {
     user,
     loading: userLoading,
@@ -477,34 +487,61 @@ export default function Header({
     typeof token?.mint === "string" && token.mint.startsWith("0x");
 
   // Helper function to enrich a token with cached pulse data
-  const enrichTokenWithCachedData = useCallback((token: Token): Token => {
-    const tokenAddress = token.pair_address || (token as any).mint || '';
-    if (!tokenAddress || cachedPulseTokens.length === 0) return token;
+  const enrichTokenWithCachedData = useCallback(
+    (token: Token): Token => {
+      const tokenAddress = token.pair_address || (token as any).mint || "";
+      if (!tokenAddress || cachedPulseTokens.length === 0) return token;
 
-    // Check if price is missing or 0
-    const currentPrice = (token as any).price_usd || (token as any).usd_price || (token as any).price || 0;
-    if (currentPrice > 0) return token; // Already has price, no need to enrich
+      // Check if price is missing or 0
+      const currentPrice =
+        (token as any).price_usd ||
+        (token as any).usd_price ||
+        (token as any).price ||
+        0;
+      if (currentPrice > 0) return token; // Already has price, no need to enrich
 
-    // Find matching token in cached pulse tokens
-    const cachedToken = cachedPulseTokens.find(t => {
-      const cachedAddr = t.pair_address || (t as any).mint || '';
-      return cachedAddr === tokenAddress ||
-             (cachedAddr && tokenAddress && cachedAddr.toLowerCase() === tokenAddress.toLowerCase());
-    });
+      // Find matching token in cached pulse tokens
+      const cachedToken = cachedPulseTokens.find((t) => {
+        const cachedAddr = t.pair_address || (t as any).mint || "";
+        return (
+          cachedAddr === tokenAddress ||
+          (cachedAddr &&
+            tokenAddress &&
+            cachedAddr.toLowerCase() === tokenAddress.toLowerCase())
+        );
+      });
 
-    if (cachedToken) {
-      // Only enrich price/change from cache — never overwrite MC or other live fields
-      return {
-        ...token,
-        price_usd: (token as any).price_usd || (cachedToken as any).price_usd || (cachedToken as any).usd_price || 0,
-        usd_price: (token as any).usd_price || (cachedToken as any).usd_price || (cachedToken as any).price_usd || 0,
-        price_percent_change_1h: (token as any).price_percent_change_1h ?? (cachedToken as any).price_percent_change_1h ?? (cachedToken as any).price_change_1h ?? 0,
-        price_change_1h: (token as any).price_change_1h ?? (cachedToken as any).price_change_1h ?? (cachedToken as any).price_percent_change_1h ?? 0,
-      } as Token;
-    }
+      if (cachedToken) {
+        // Only enrich price/change from cache — never overwrite MC or other live fields
+        return {
+          ...token,
+          price_usd:
+            (token as any).price_usd ||
+            (cachedToken as any).price_usd ||
+            (cachedToken as any).usd_price ||
+            0,
+          usd_price:
+            (token as any).usd_price ||
+            (cachedToken as any).usd_price ||
+            (cachedToken as any).price_usd ||
+            0,
+          price_percent_change_1h:
+            (token as any).price_percent_change_1h ??
+            (cachedToken as any).price_percent_change_1h ??
+            (cachedToken as any).price_change_1h ??
+            0,
+          price_change_1h:
+            (token as any).price_change_1h ??
+            (cachedToken as any).price_change_1h ??
+            (cachedToken as any).price_percent_change_1h ??
+            0,
+        } as Token;
+      }
 
-    return token;
-  }, [cachedPulseTokens]);
+      return token;
+    },
+    [cachedPulseTokens],
+  );
 
   // Track which tokens we've already tried to refresh to avoid duplicate API calls
   const refreshedTokensRef = useRef<Set<string>>(new Set());
@@ -785,7 +822,9 @@ export default function Header({
           setPolygonBalance(response.data);
           // Broadcast balance data so predictions page components can use it instantly
           // instead of waiting for their own separate API call
-          window.dispatchEvent(new CustomEvent('polygon-balance-data', { detail: response.data }));
+          window.dispatchEvent(
+            new CustomEvent("polygon-balance-data", { detail: response.data }),
+          );
         }
       } catch (err) {
         console.error("[Header] Error fetching Polygon balance:", err);
@@ -801,7 +840,7 @@ export default function Header({
 
     // Listen for custom event to refresh balance (e.g., after a trade)
     const handleBalanceRefresh = () => {
-      isDev && console.log('[Header] Received polygon-balance-refresh event');
+      isDev && console.log("[Header] Received polygon-balance-refresh event");
       fetchPolygonBalance();
     };
     window.addEventListener("polygon-balance-refresh", handleBalanceRefresh);
@@ -1020,9 +1059,12 @@ export default function Header({
     // On first user click, request clipboard-read permission so auto-polling works afterward
     const handleFirstClick = () => {
       if (navigator.clipboard?.readText) {
-        navigator.clipboard.readText().then(text => {
-          if (text) processClipboardValue(text);
-        }).catch(() => {});
+        navigator.clipboard
+          .readText()
+          .then((text) => {
+            if (text) processClipboardValue(text);
+          })
+          .catch(() => {});
       }
       document.removeEventListener("click", handleFirstClick);
     };
@@ -1064,36 +1106,52 @@ export default function Header({
   const handlePasteCA = async () => {
     if (clipboardToken) {
       // Detect if Monad (0x) or Solana address
-      const isMonadAddress = clipboardToken.address.startsWith('0x') || clipboardToken.address.startsWith('0X');
+      const isMonadAddress =
+        clipboardToken.address.startsWith("0x") ||
+        clipboardToken.address.startsWith("0X");
       const td = clipboardToken.tokenData;
 
       // Preload chart data (OHLC, WS, image, route) before navigation
       if (td) {
-        preloadTradeChart({
-          mint: (td as any)?.mint || clipboardToken.address,
-          pairAddress: td.pair_address,
-          chain: isMonadAddress ? 'monad' : 'sol',
-          name: td.name,
-          symbol: td.symbol,
-          marketCapUsd: td.market_cap_usd,
-          image: clipboardToken.imageUrl || extractTokenImage(td as any) || '',
-          launchpadProtocol: (td as any)?.launchpad_protocol,
-        }, { router });
+        preloadTradeChart(
+          {
+            mint: (td as any)?.mint || clipboardToken.address,
+            pairAddress: td.pair_address,
+            chain: isMonadAddress ? "monad" : "sol",
+            name: td.name,
+            symbol: td.symbol,
+            marketCapUsd: td.market_cap_usd,
+            image:
+              clipboardToken.imageUrl || extractTokenImage(td as any) || "",
+            launchpadProtocol: (td as any)?.launchpad_protocol,
+          },
+          { router },
+        );
       }
 
       if (isMonadAddress) {
         const queryParams = new URLSearchParams();
-        if (td?.name) queryParams.set('_name', td.name);
-        if (td?.symbol) queryParams.set('_symbol', td.symbol);
-        if (td?.market_cap_usd) queryParams.set('_mcap', String(td.market_cap_usd));
-        if (clipboardToken.imageUrl) queryParams.set('_image', clipboardToken.imageUrl);
-        queryParams.set('_mint', clipboardToken.address);
-        if ((td as any)?.launchpad_protocol) queryParams.set('_launchpad_protocol', (td as any).launchpad_protocol);
-        if (td?.total_liquidity_usd) queryParams.set('_liquidity', String(td.total_liquidity_usd));
-        queryParams.set('chain', 'monad');
-        router.push(`/trade/monad/${clipboardToken.address}?${queryParams.toString()}`);
+        if (td?.name) queryParams.set("_name", td.name);
+        if (td?.symbol) queryParams.set("_symbol", td.symbol);
+        if (td?.market_cap_usd)
+          queryParams.set("_mcap", String(td.market_cap_usd));
+        if (clipboardToken.imageUrl)
+          queryParams.set("_image", clipboardToken.imageUrl);
+        queryParams.set("_mint", clipboardToken.address);
+        if ((td as any)?.launchpad_protocol)
+          queryParams.set(
+            "_launchpad_protocol",
+            (td as any).launchpad_protocol,
+          );
+        if (td?.total_liquidity_usd)
+          queryParams.set("_liquidity", String(td.total_liquidity_usd));
+        queryParams.set("chain", "monad");
+        router.push(
+          `/trade/monad/${clipboardToken.address}?${queryParams.toString()}`,
+        );
       } else {
-        const pathAddress = (td as any)?.mint || td?.pair_address || clipboardToken.address;
+        const pathAddress =
+          (td as any)?.mint || td?.pair_address || clipboardToken.address;
         router.push(`/trade/${pathAddress}`);
       }
     } else {
@@ -1149,7 +1207,14 @@ export default function Header({
 
   // Handler for watchlist ticker quick buy
   const handleWatchlistQuickBuy = async (token: Token) => {
-    isDev && console.log("Clipboard/Watchlist Quick Buy:", token.symbol, (token as any).mint, "amount:", quickBuyAmount);
+    isDev &&
+      console.log(
+        "Clipboard/Watchlist Quick Buy:",
+        token.symbol,
+        (token as any).mint,
+        "amount:",
+        quickBuyAmount,
+      );
     // Validation checks with user feedback
     if (!user?.bearerToken || !user?.id) {
       toast.error("Please log in to trade", {
@@ -1207,7 +1272,7 @@ export default function Header({
       const toastId = toast.loading("Placing trade...", { duration: Infinity });
 
       try {
-        notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
+        notifyTradePending({ tokenAddress, tradeType: "buy", chain: "monad" });
         const { results, totalConsidered } = await executeMonadMultiBuy({
           tokenAddress,
           amountMON: quickBuyAmount,
@@ -1455,13 +1520,19 @@ export default function Header({
 
       __markId = insertOptimisticMarker({
         mint: baseMint,
-        walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+        walletAddress:
+          walletList?.find((w) => w.isPrimary)?.solanaAddress ??
+          walletList?.[0]?.solanaAddress,
         side: "buy",
         amountSol: quickBuyAmount,
         priceUsd: token.usd_price,
       }).id;
 
-      notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
+      notifyTradePending({
+        tokenAddress: baseMint,
+        tradeType: "buy",
+        chain: "sol",
+      });
       const multiResult = await executeSolanaMultiBuy({
         poolAddress,
         baseMint,
@@ -1495,7 +1566,16 @@ export default function Header({
               linkEl.className = "";
             }
             // Fire early so Portfolio refetches immediately when Solscan link appears
-            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: quickBuyAmount });
+            broadcastTradeCompleted({
+              tokenAddress: baseMint,
+              tradeType: "buy",
+              chain: "sol",
+              txHash,
+              tokenName: token.name,
+              tokenSymbol: token.symbol,
+              imageUrl: tokenImage,
+              solAmountSpent: quickBuyAmount,
+            });
           }
         },
       });
@@ -1837,7 +1917,7 @@ export default function Header({
           style={{ backgroundColor: "#050608" }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2 md:gap-3">
-						{/* Hamburger button */}
+            {/* Hamburger button */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
@@ -2334,7 +2414,9 @@ export default function Header({
                         : `url(/ranks/degen-1.png)`,
                     }}
                     role="img"
-                    aria-label={creditsSummary ? creditsSummary.rankDisplay : 'Degen I'}
+                    aria-label={
+                      creditsSummary ? creditsSummary.rankDisplay : "Degen I"
+                    }
                   />
                   <div className="flex items-center gap-1.5 text-left">
                     {/* v2.0: Arena credits inline — renders only once data is loaded.
@@ -2352,8 +2434,10 @@ export default function Header({
                               // 100k–999k: integer k (125k).  >=1M: two decimals M (1.53M).
                               const n = creditsSummary.seasonCredits;
                               if (n < 1000) return n.toLocaleString();
-                              if (n < 100_000) return `${Math.floor(n / 100) / 10}k`;
-                              if (n < 1_000_000) return `${Math.floor(n / 1000)}k`;
+                              if (n < 100_000)
+                                return `${Math.floor(n / 100) / 10}k`;
+                              if (n < 1_000_000)
+                                return `${Math.floor(n / 1000)}k`;
                               return `${Math.floor(n / 10_000) / 100}M`;
                             })()}
                           </span>
@@ -2450,13 +2534,19 @@ export default function Header({
                                     alt="USDC.e"
                                     className="h-4 w-4 rounded-full"
                                   />
-                                  <span className="text-white font-medium">
-                                    ${formatBalance(polygonBalance?.usdcBridged ?? 0, 2)}
+                                  <span className="font-medium text-white">
+                                    $
+                                    {formatBalance(
+                                      polygonBalance?.usdcBridged ?? 0,
+                                      2,
+                                    )}
                                   </span>
                                   <span>USDC.e</span>
                                   <span
-                                    className="ml-auto cursor-help text-[10px] px-1 py-0.5 rounded"
-                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+                                    className="ml-auto cursor-help rounded px-1 py-0.5 text-[10px]"
+                                    style={{
+                                      backgroundColor: "rgba(255,255,255,0.06)",
+                                    }}
                                     title="Used for Polymarket trades"
                                   >
                                     Polymarket
@@ -2468,13 +2558,19 @@ export default function Header({
                                     alt="USDC"
                                     className="h-4 w-4 rounded-full"
                                   />
-                                  <span className="text-white font-medium">
-                                    ${formatBalance(polygonBalance?.usdcNative ?? 0, 2)}
+                                  <span className="font-medium text-white">
+                                    $
+                                    {formatBalance(
+                                      polygonBalance?.usdcNative ?? 0,
+                                      2,
+                                    )}
                                   </span>
                                   <span>USDC</span>
                                   <span
-                                    className="ml-auto cursor-help text-[10px] px-1 py-0.5 rounded"
-                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
+                                    className="ml-auto cursor-help rounded px-1 py-0.5 text-[10px]"
+                                    style={{
+                                      backgroundColor: "rgba(255,255,255,0.06)",
+                                    }}
                                     title="Used for AI Markets (Talarion) trades"
                                   >
                                     AI Markets
@@ -3063,115 +3159,165 @@ export default function Header({
             )}
             END COMMENTED OUT: "All" dropdown */}
 
-            {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
-            {isHydrated && enrichedWatchlist.length > 0 && (
-            <div
-              className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-hide pl-1 pr-3"
-              style={{
-                minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
-                scrollbarWidth: 'none', // Firefox
-                msOverflowStyle: 'none', // IE/Edge
-              }}
-            >
-            {enrichedWatchlist.map((token, index) => {
-              const tokenKey = token.pair_address || (token as any).mint || token.symbol;
-              const tokenAddress = (token as any).mint || token.pair_address || '';
-              const actualMint = (token as any).mint || token.pair_address || '';
-              // Use helper function to get correctly mapped price and price change
-              const { price, priceChange } = getWatchlistTokenPriceAndChange(token);
-              const marketCap =
-                (token as any).market_cap_usd ??
-                (token as any).marketCapUSD ??
-                (token as any).fully_diluted_value ??
-                0;
-
-              const rawImg = extractTokenImage(token as any);
-              
-              return (
+              {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
+              {isHydrated && enrichedWatchlist.length > 0 && (
                 <div
-                  key={tokenKey}
-                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 px-2.5 py-1 rounded-lg hover:bg-white/[0.07]"
-                  onMouseEnter={() => {
-                    // Prefetch OHLC + route + metadata + trades on hover
-                    const isMonadToken = actualMint.startsWith('0x') || actualMint.startsWith('0X');
-                    // Build tradeUrl matching the onClick navigation exactly
-                    const hoverQueryParams = new URLSearchParams();
-                    if (token.name) hoverQueryParams.set('_name', token.name);
-                    if (token.symbol) hoverQueryParams.set('_symbol', token.symbol);
-                    if (price > 0) hoverQueryParams.set('_price', price.toString());
-                    if (token.market_cap_usd || (token as any).fully_diluted_value) {
-                      hoverQueryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
-                    }
-                    const hoverTradeUrl = isMonadToken
-                      ? `/trade/monad/${tokenAddress}`
-                      : `/trade/${tokenAddress}`;
-                    preloadTradeChart(
-                      {
-                        mint: actualMint,
-                        pairAddress: token.pair_address || (token as any).mint,
-                        chain: isMonadToken ? 'monad' : 'sol',
-                        name: token.name,
-                        symbol: token.symbol,
-                        priceUsd: price,
-                        marketCapUsd: token.market_cap_usd || (token as any).fully_diluted_value,
-                        image: rawImg || '',
-                        launchpadProtocol: (token as any).launchpad_protocol,
-                      },
-                      { router, tradeUrl: hoverTradeUrl }
-                    );
-                  }}
-                  onClick={() => {
-                    if (tokenAddress) {
-                      // Check if it's a Monad token (starts with 0x)
-                      const isMonadToken = actualMint.startsWith('0x') || actualMint.startsWith('0X');
-
-                      if (isMonadToken) {
-                        // Build Monad trade URL with query parameters
-                        const queryParams = new URLSearchParams();
-                        if (token.name) queryParams.set('_name', token.name);
-                        if (token.symbol) queryParams.set('_symbol', token.symbol);
-                        if (price > 0) queryParams.set('_price', price.toString());
-                        if (token.market_cap_usd || (token as any).fully_diluted_value) {
-                          queryParams.set('_mcap', ((token.market_cap_usd || (token as any).fully_diluted_value || 0)).toString());
-                        }
-                        const imageUrl = extractTokenImage(token as any) || '';
-                        if (imageUrl) queryParams.set('_image', imageUrl);
-                        queryParams.set('_mint', tokenAddress);
-                        if ((token as any).launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-                        queryParams.set('chain', 'monad');
-
-                        const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
-                        router.push(url);
-                      } else {
-                        // For Solana tokens, include chain=sol query parameter
-                        router.push(`/trade/${tokenAddress}`);
-                      }
-                    }
+                  className="scrollbar-hide flex flex-1 items-center gap-3 overflow-x-auto pr-3 pl-1"
+                  style={{
+                    minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
+                    scrollbarWidth: "none", // Firefox
+                    msOverflowStyle: "none", // IE/Edge
                   }}
                 >
-                  {/* Token Image */}
-                  <FastImage
-                    src={rawImg ?? undefined}
-                    alt={token.symbol || ''}
-                    width={16}
-                    height={16}
-                    className="rounded-full ring-1 ring-white/10"
-                    symbol={token.symbol}
-                    name={token.name}
-                    showBubble={false}
-                  />
-                  
-                  {/* Token Symbol */}
-                  <span className="text-xs font-semibold" style={{ color: '#d1d5db' }}>
-                    {token.symbol}
-                  </span>
+                  {enrichedWatchlist.map((token, index) => {
+                    const tokenKey =
+                      token.pair_address || (token as any).mint || token.symbol;
+                    const tokenAddress =
+                      (token as any).mint || token.pair_address || "";
+                    const actualMint =
+                      (token as any).mint || token.pair_address || "";
+                    // Use helper function to get correctly mapped price and price change
+                    const { price, priceChange } =
+                      getWatchlistTokenPriceAndChange(token);
+                    const marketCap =
+                      (token as any).market_cap_usd ??
+                      (token as any).marketCapUSD ??
+                      (token as any).fully_diluted_value ??
+                      0;
 
-                  {/* Market Cap */}
-                  <span className="text-xs font-medium" style={{ color: '#a3e635' }}>
-                    ${formatMarketCap(marketCap)}
-                  </span>
+                    const rawImg = extractTokenImage(token as any);
 
-                  {/* COMMENTED OUT: Quick Buy + Unstar buttons — may re-enable later
+                    return (
+                      <div
+                        key={tokenKey}
+                        className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all duration-200 hover:bg-white/[0.07]"
+                        onMouseEnter={() => {
+                          // Prefetch OHLC + route + metadata + trades on hover
+                          const isMonadToken =
+                            actualMint.startsWith("0x") ||
+                            actualMint.startsWith("0X");
+                          // Build tradeUrl matching the onClick navigation exactly
+                          const hoverQueryParams = new URLSearchParams();
+                          if (token.name)
+                            hoverQueryParams.set("_name", token.name);
+                          if (token.symbol)
+                            hoverQueryParams.set("_symbol", token.symbol);
+                          if (price > 0)
+                            hoverQueryParams.set("_price", price.toString());
+                          if (
+                            token.market_cap_usd ||
+                            (token as any).fully_diluted_value
+                          ) {
+                            hoverQueryParams.set(
+                              "_mcap",
+                              (
+                                token.market_cap_usd ||
+                                (token as any).fully_diluted_value ||
+                                0
+                              ).toString(),
+                            );
+                          }
+                          const hoverTradeUrl = isMonadToken
+                            ? `/trade/monad/${tokenAddress}`
+                            : `/trade/${tokenAddress}`;
+                          preloadTradeChart(
+                            {
+                              mint: actualMint,
+                              pairAddress:
+                                token.pair_address || (token as any).mint,
+                              chain: isMonadToken ? "monad" : "sol",
+                              name: token.name,
+                              symbol: token.symbol,
+                              priceUsd: price,
+                              marketCapUsd:
+                                token.market_cap_usd ||
+                                (token as any).fully_diluted_value,
+                              image: rawImg || "",
+                              launchpadProtocol: (token as any)
+                                .launchpad_protocol,
+                            },
+                            { router, tradeUrl: hoverTradeUrl },
+                          );
+                        }}
+                        onClick={() => {
+                          if (tokenAddress) {
+                            // Check if it's a Monad token (starts with 0x)
+                            const isMonadToken =
+                              actualMint.startsWith("0x") ||
+                              actualMint.startsWith("0X");
+
+                            if (isMonadToken) {
+                              // Build Monad trade URL with query parameters
+                              const queryParams = new URLSearchParams();
+                              if (token.name)
+                                queryParams.set("_name", token.name);
+                              if (token.symbol)
+                                queryParams.set("_symbol", token.symbol);
+                              if (price > 0)
+                                queryParams.set("_price", price.toString());
+                              if (
+                                token.market_cap_usd ||
+                                (token as any).fully_diluted_value
+                              ) {
+                                queryParams.set(
+                                  "_mcap",
+                                  (
+                                    token.market_cap_usd ||
+                                    (token as any).fully_diluted_value ||
+                                    0
+                                  ).toString(),
+                                );
+                              }
+                              const imageUrl =
+                                extractTokenImage(token as any) || "";
+                              if (imageUrl) queryParams.set("_image", imageUrl);
+                              queryParams.set("_mint", tokenAddress);
+                              if ((token as any).launchpad_protocol)
+                                queryParams.set(
+                                  "_launchpad_protocol",
+                                  (token as any).launchpad_protocol,
+                                );
+                              queryParams.set("chain", "monad");
+
+                              const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
+                              router.push(url);
+                            } else {
+                              // For Solana tokens, include chain=sol query parameter
+                              router.push(`/trade/${tokenAddress}`);
+                            }
+                          }
+                        }}
+                      >
+                        {/* Token Image */}
+                        <FastImage
+                          src={rawImg ?? undefined}
+                          alt={token.symbol || ""}
+                          width={16}
+                          height={16}
+                          className="rounded-full ring-1 ring-white/10"
+                          symbol={token.symbol}
+                          name={token.name}
+                          showBubble={false}
+                          stableId={tokenAddress || undefined}
+                        />
+
+                        {/* Token Symbol */}
+                        <span
+                          className="text-xs font-semibold"
+                          style={{ color: "#d1d5db" }}
+                        >
+                          {token.symbol}
+                        </span>
+
+                        {/* Market Cap */}
+                        <span
+                          className="text-xs font-medium"
+                          style={{ color: "#a3e635" }}
+                        >
+                          ${formatMarketCap(marketCap)}
+                        </span>
+
+                        {/* COMMENTED OUT: Quick Buy + Unstar buttons — may re-enable later
                   {isHovered && (
                     <>
                       <button

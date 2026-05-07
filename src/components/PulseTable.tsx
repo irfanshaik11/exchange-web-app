@@ -2228,6 +2228,7 @@ function TokenImage({
                 priority={priority}
                 showBubble={false}
                 onLoadFailed={handleDirectImageFailed}
+                stableId={token.mint || token.pair_address || undefined}
               />
               {/* Dark dim overlay on hover */}
               <div
@@ -2565,6 +2566,7 @@ function TokenImage({
                   height={225}
                   className="h-full w-full object-cover"
                   priority={priority}
+                  stableId={token.mint || token.pair_address || undefined}
                 />
               </div>
               {/* Migration progress tooltip - only for New Pairs */}
