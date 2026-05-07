@@ -49,6 +49,7 @@ import { useQueryNewPairs, useQueryLaunchpadData } from '../hooks/useQueryTokens
 import { usePulseFromQueryCache } from '~/hooks/usePulseFromQueryCache';
 import { useDiscoverFilters } from '~/hooks/useDiscoverFilters';
 import DiscoverFilterModal from '~/components/DiscoverFilterModal';
+import { useImagePreloader } from '~/hooks/useImagePreloader';
 import { applyDiscoverFilters, mapProtocolToBackend, tokenMatchesProtocolFilter } from '~/utils/discoverFilterUtils';
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
@@ -3634,6 +3635,25 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
       })),
     [processedXStocks]
   );
+
+  // Preload images for all tab data eagerly
+  const { preloadImages } = useImagePreloader();
+  useEffect(() => {
+    const allTabTokens = [
+      ...((allTokens as any[]) || []),
+      ...((dexScreenerTokens as any[]) || []),
+      ...((processedNewPairs as any[]) || []),
+      ...((processedXStocks as any[]) || []),
+      ...((pumpPortalTokens as any[]) || []),
+    ];
+    if (allTabTokens.length === 0) return;
+    const imageSources = allTabTokens
+      .map((token: any) => extractTokenImage(token))
+      .filter(Boolean);
+    if (imageSources.length > 0) {
+      preloadImages(imageSources, { priority: true, timeout: 2000 });
+    }
+  }, [allTokens, dexScreenerTokens, processedNewPairs, processedXStocks, pumpPortalTokens, preloadImages]);
 
   const renderPrimaryTable = () => {
     if (displayed.length > 0) {

@@ -37,6 +37,8 @@ import useDevTokensByWallet from "../hooks/useDevTokensByWallet";
 import { IoIosCloseCircleOutline } from "react-icons/io";
 import { getProtocolBranding } from "~/utils/protocolBranding";
 import Image from "next/image";
+import { useImagePreloader } from "~/hooks/useImagePreloader";
+import { extractTokenImage } from "~/utils/images";
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -1028,6 +1030,18 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // Use void to explicitly mark promise as intentionally not awaited
     void updateActivity();
   }, [wallet?.address, openPositionTransactions, historyLoading]); // Removed tab dependency - update when data changes
+
+  // Preload token images from activity rows as soon as data arrives
+  const { preloadImages } = useImagePreloader();
+  useEffect(() => {
+    if (!activityData || activityData.length === 0) return;
+    const imageSources = activityData
+      .map((trade: any) => extractTokenImage(trade))
+      .filter(Boolean);
+    if (imageSources.length > 0) {
+      preloadImages(imageSources, { priority: true, timeout: 2000 });
+    }
+  }, [activityData, preloadImages]);
 
   useEffect(() => {
     if (!wallet.address) return;

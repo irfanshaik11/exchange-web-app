@@ -33,6 +33,8 @@ import ExportWalletModal from "../components/ExportWalletModal";
 import RealizedPnlChart, { type PnlChartDataPoint } from "~/components/charts/RealizedPnlChart";
 
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
+import { useImagePreloader } from "~/hooks/useImagePreloader";
+import { extractTokenImage } from "~/utils/images";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
@@ -927,6 +929,18 @@ export default function PortfolioPage() {
     const activityPollId = setInterval(loadTradeActivity, pollMs);
     return () => clearInterval(activityPollId);
   }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter, wsConnected]);
+
+  // Preload token images from activity rows as soon as data arrives
+  const { preloadImages } = useImagePreloader();
+  useEffect(() => {
+    if (!tradeActivity || tradeActivity.length === 0) return;
+    const imageSources = tradeActivity
+      .map((trade: any) => extractTokenImage(trade))
+      .filter(Boolean);
+    if (imageSources.length > 0) {
+      preloadImages(imageSources, { priority: true, timeout: 2000 });
+    }
+  }, [tradeActivity, preloadImages]);
 
   // Listen for trade-completed events and consume pending refreshes on mount
   useEffect(() => {
