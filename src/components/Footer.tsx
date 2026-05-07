@@ -496,10 +496,11 @@ export default function Footer() {
 
   return (
     <footer
-      className="fixed z-[100] bottom-0 left-1 right-1 sm:left-1.5 sm:right-1.5 rounded-lg"
+      className="fixed z-[100] bottom-0 left-1 right-1 sm:left-1.5 sm:right-1.5 rounded-lg border"
       style={{
         backgroundColor: AX.bg,
-        borderColor: "rgba(255, 255, 255, 0.06)",
+        borderColor: AX.border,
+        boxShadow: "0 -4px 20px rgba(0, 0, 0, 0.4)",
       }}
     >
       <div className="flex h-6 items-center justify-between overflow-x-auto px-2 sm:px-2">
@@ -507,18 +508,18 @@ export default function Footer() {
         <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
           {/* Preset Button - Show for all chains now (Monad shows only gas and slippage) */}
           <button
-            className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-all duration-200 ease-out sm:gap-2 sm:text-xs"
+            className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-all duration-200 ease-out sm:gap-2 sm:text-xs"
             style={{
-              backgroundColor: "rgba(112, 224, 176, 0.12)",
+              backgroundColor: AX.mintGlow,
               color: AX.mint,
               cursor: "pointer",
             }}
             onClick={() => setShowPresetModal(true)}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "rgba(112, 224, 176, 0.2)";
+              e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.2)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "rgba(112, 224, 176, 0.12)";
+              e.currentTarget.style.backgroundColor = AX.mintGlow;
             }}
           >
             <FaBars size={11} className="sm:h-3 sm:w-3" />

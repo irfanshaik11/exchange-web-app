@@ -2958,7 +2958,7 @@ export default function PortfolioPage() {
       <Head>
         <title>Portfolio | Interstate Memeboard</title>
       </Head>
-      <div className="flex min-h-screen flex-col bg-[#050608] text-[#E6E7EA]">
+      <div className="flex min-h-screen flex-col bg-[#030304] text-zinc-100">
         <div className="relative z-[10000]"><Header /></div>
         <DockedPanelMarginWrapper>
         <div className="p-1 sm:p-1.5">

@@ -1481,7 +1481,7 @@ export default function PulsePage() {
         <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
-      <div className="flex h-screen flex-col overflow-hidden bg-[#050608] text-neutral-100">
+      <div className="flex h-screen flex-col overflow-hidden bg-[#030304] text-zinc-100">
         <div className="relative z-[10000]"><Header /></div>
         <div className="flex-1 min-h-0 p-1 pb-7 sm:p-1.5 sm:pb-7">
           <DockedPanelMarginWrapper>

@@ -51,26 +51,50 @@ import { copyToClipboard } from "~/utils/clipboard";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-/* ---- Enhanced Axiom AI Palette ---- */
+/* ---- JTX-style Dark Palette ---- */
 const AX = {
-  bg: "#0f1012",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#E6E7EA",
-  muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-  aiBlue: "#22C55E",
-  aiBlueHover: "#16A34A",
-  aiGreen: "#22C55E",
-  aiGreenHover: "#16A34A",
-  aiCyan: "#06B6D4",
-  aiCyanHover: "#0891B2",
-  glowBlue: "rgba(34, 197, 94, 0.3)",
-  glowGreen: "rgba(34, 197, 94, 0.3)",
-  glowCyan: "rgba(6, 182, 212, 0.3)",
+  // Deep void backgrounds
+  bg: "#030304",
+  bgDeep: "#050608",
+  surface: "#08090c",
+  surface2: "#0c0e12",
+  surfaceHover: "#10131a",
+  card: "#141720",
+  
+  // Borders
+  border: "rgba(255,255,255,0.06)",
+  borderHover: "rgba(255,255,255,0.10)",
+  borderStrong: "rgba(255,255,255,0.14)",
+  
+  // Text hierarchy
+  text: "#f4f4f5",
+  textSecondary: "#a1a1aa",
+  muted: "#71717a",
+  textDim: "#52525b",
+  
+  // Accent colors - Emerald/Mint
+  mint: "#18c48c",
+  mintBright: "#22d99a",
+  mintHover: "#14a877",
+  mintGlow: "rgba(24, 196, 140, 0.15)",
+  mintGlowStrong: "rgba(24, 196, 140, 0.25)",
+  
+  // Status colors
+  success: "#22c55e",
+  sell: "#ef4444",
+  danger: "#ef4444",
+  warning: "#f59e0b",
+  
+  // Legacy compatibility
+  aiBlue: "#18c48c",
+  aiBlueHover: "#14a877",
+  aiGreen: "#22c55e",
+  aiGreenHover: "#16a34a",
+  aiCyan: "#06b6d4",
+  aiCyanHover: "#0891b2",
+  glowBlue: "rgba(24, 196, 140, 0.2)",
+  glowGreen: "rgba(34, 197, 94, 0.2)",
+  glowCyan: "rgba(6, 182, 212, 0.2)",
 };
 
 // Types

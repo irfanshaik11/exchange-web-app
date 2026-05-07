@@ -4370,7 +4370,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           href="/placeholder/fallback-avatar.jpg"
         />
       </Head>
-      <div className="relative min-h-screen bg-[#050608] text-[#E6E7EA]">
+      <div className="relative min-h-screen bg-[#030304] text-zinc-100">
         <div className="relative z-[10000]">
           <Header
             search={search}

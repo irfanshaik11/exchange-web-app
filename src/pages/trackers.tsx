@@ -1619,7 +1619,7 @@ export default function TrackersPage() {
         <title>Trackers | Interstate Memeboard</title>
       </Head>
       <div>
-        <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
+        <div className="flex min-h-screen flex-col bg-[#030304] text-zinc-100">
           {/* Header stays outside the rounded container */}
           <div className="relative z-[10000]">
             <Header isSticky={false} />
