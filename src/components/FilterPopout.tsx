@@ -168,30 +168,63 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({
 
       {/* Content */}
       <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-        {/* Protocols Section - Axiom style */}
+        {/* Protocols Section - Axiom style with colored borders */}
         <div className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[#71717a]">Protocols</h3>
           <div className="flex flex-wrap gap-2">
-            {AmmList.map((amm) => (
-              <button
-                key={amm.id}
-                onClick={() => handleAmmToggle(amm.id)}
-                className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200 ${
-                  filters.amms.includes(amm.id)
-                    ? `bg-[rgba(24,196,140,0.15)] border border-[#18c48c] text-[#18c48c]`
-                    : `bg-[#080a0d] border border-[#1a1c22] text-[#71717a] hover:border-[#2a2d36] hover:text-[#a1a1aa]`
-                }`}
-              >
-                <Image
-                  src={amm.image}
-                  alt={amm.displayName}
-                  width={16}
-                  height={16}
-                  className="rounded-full flex-shrink-0"
-                />
-                <span>{amm.displayName}</span>
-              </button>
-            ))}
+            {AmmList.map((amm) => {
+              const isSelected = filters.amms.includes(amm.id);
+              // Each protocol gets its own accent color
+              const protocolColors: Record<string, string> = {
+                pump: '#31e3ac',
+                'pump-amm': '#22c993',
+                bonk: '#ff6b35',
+                moonit: '#fbbf24',
+                boop: '#3b82f6',
+                'launch-lab': '#3b82f6',
+                raydium: '#6b7280',
+                'meteora-amm': '#92400e',
+                'meteora-amm-v2': '#a16207',
+                bags: '#31e3ac',
+              };
+              const color = protocolColors[amm.id] || '#18c48c';
+              
+              return (
+                <button
+                  key={amm.id}
+                  onClick={() => handleAmmToggle(amm.id)}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition-all duration-200"
+                  style={{
+                    backgroundColor: isSelected ? `${color}15` : 'transparent',
+                    border: `1.5px solid ${isSelected ? color : '#1a1c22'}`,
+                    color: isSelected ? color : '#71717a',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = `${color}60`;
+                      e.currentTarget.style.color = color;
+                      e.currentTarget.style.backgroundColor = `${color}08`;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = '#1a1c22';
+                      e.currentTarget.style.color = '#71717a';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  <Image
+                    src={amm.image}
+                    alt={amm.displayName}
+                    width={16}
+                    height={16}
+                    className="rounded-full flex-shrink-0"
+                  />
+                  <span>{amm.displayName}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 

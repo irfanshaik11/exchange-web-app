@@ -203,24 +203,24 @@ export default function DiscoverFilterModal({
                 return (
                   <button
                     key={protocol.name}
-                    className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap transition-all duration-200 rounded-lg"
+                    className="flex cursor-pointer items-center gap-1.5 px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-200 rounded-full"
                     style={{
-                      backgroundColor: selected ? `${protocol.color}20` : AX.surfaceAlt,
-                      border: `1px solid ${selected ? protocol.color : AX.border}`,
+                      backgroundColor: selected ? `${protocol.color}15` : 'transparent',
+                      border: `1.5px solid ${selected ? protocol.color : AX.border}`,
                       color: selected ? protocol.color : AX.textMuted,
                     }}
                     onMouseEnter={(e) => {
                       if (!selected) {
-                        e.currentTarget.style.borderColor = AX.borderHover;
-                        e.currentTarget.style.color = AX.text;
-                        e.currentTarget.style.backgroundColor = `${AX.surfaceAlt}`;
+                        e.currentTarget.style.borderColor = `${protocol.color}60`;
+                        e.currentTarget.style.color = protocol.color;
+                        e.currentTarget.style.backgroundColor = `${protocol.color}08`;
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!selected) {
                         e.currentTarget.style.borderColor = AX.border;
                         e.currentTarget.style.color = AX.textMuted;
-                        e.currentTarget.style.backgroundColor = AX.surfaceAlt;
+                        e.currentTarget.style.backgroundColor = 'transparent';
                       }
                     }}
                     onClick={() => {
@@ -235,8 +235,8 @@ export default function DiscoverFilterModal({
                       });
                     }}
                   >
-                    <span className="text-sm" style={{ color: 'inherit' }}>{protocol.icon}</span>
-                    <span className="truncate font-semibold" style={{ color: 'inherit' }}>{protocol.name}</span>
+                    <span className="text-sm">{protocol.icon}</span>
+                    <span className="truncate">{protocol.name}</span>
                   </button>
                 );
               })}
@@ -252,22 +252,24 @@ export default function DiscoverFilterModal({
                 return (
                   <button
                     key={token.name}
-                    className="flex cursor-pointer items-center gap-2 px-3 py-2 text-xs font-semibold transition-all duration-200 rounded-lg"
+                    className="flex cursor-pointer items-center gap-2 px-3.5 py-2 text-xs font-semibold transition-all duration-200 rounded-full"
                     style={{
-                      backgroundColor: selected ? `${token.color}20` : AX.surfaceAlt,
-                      border: `1px solid ${selected ? token.color : AX.border}`,
+                      backgroundColor: selected ? `${token.color}15` : 'transparent',
+                      border: `1.5px solid ${selected ? token.color : AX.border}`,
                       color: selected ? token.color : AX.textMuted,
                     }}
                     onMouseEnter={(e) => {
                       if (!selected) {
-                        e.currentTarget.style.borderColor = AX.borderHover;
-                        e.currentTarget.style.color = AX.text;
+                        e.currentTarget.style.borderColor = `${token.color}60`;
+                        e.currentTarget.style.color = token.color;
+                        e.currentTarget.style.backgroundColor = `${token.color}08`;
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!selected) {
                         e.currentTarget.style.borderColor = AX.border;
                         e.currentTarget.style.color = AX.textMuted;
+                        e.currentTarget.style.backgroundColor = 'transparent';
                       }
                     }}
                     onClick={() => {
@@ -279,7 +281,7 @@ export default function DiscoverFilterModal({
                       }));
                     }}
                   >
-                    <span className="text-sm" style={{ color: 'inherit' }}>{token.icon}</span>
+                    <span className="text-sm">{token.icon}</span>
                     <span>{token.name}</span>
                   </button>
                 );
