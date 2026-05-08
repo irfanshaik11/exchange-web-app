@@ -635,16 +635,7 @@ export default function LoginModal({
       <div className="pointer-events-none absolute bottom-4 left-4 h-8 w-8 border-l-2 border-b-2 border-zinc-700/50" />
       <div className="pointer-events-none absolute bottom-4 right-4 h-8 w-8 border-r-2 border-b-2 border-zinc-700/50" />
       
-      {/* Close button */}
-      <button
-        className="absolute top-6 right-6 flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-500 transition-all hover:bg-zinc-700/80 hover:text-zinc-300"
-        onClick={handleClose}
-        type="button"
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 1L13 13M1 13L13 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-        </svg>
-      </button>
+
 
       {/* Username Setup Step */}
       {loginStep === "username" ? (
