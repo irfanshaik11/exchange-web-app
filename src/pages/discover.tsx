@@ -588,9 +588,27 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
     enabled: currentChain === 'sol' && isTrendingDataTab,
   });
 
-  // DexScreener trending (Trending 2 tab)
-  const { tokens: dexScreenerTokens, loading: dsLoading, isConnected: dsConnected, error: dsError } =
-    useDexScreenerTrending(currentChain === 'sol' && activeTab === 'trending2');
+  // DexScreener trending (DEX Screener tab — internal key 'trending2' for back-compat).
+  const {
+    tokens: dexScreenerTokens,
+    tokensByTimeframe: dsTokensByTimeframe,
+    loading: dsLoading,
+    isConnected: dsConnected,
+    error: dsError,
+  } = useDexScreenerTrending(currentChain === 'sol' && activeTab === 'trending2');
+
+  // Map FE timeframe pill ("5m" | "1h" | "6h" | "24h") to backend TF key.
+  // Today all four backend lists are identical (BE chromedp scraper falling
+  // back to legacy boost API); when BE returns real per-TF rankings the UI
+  // already differentiates without further FE changes.
+  const dexScreenerTimeframeTokens = useMemo(() => {
+    const tfKey =
+      selectedTimeframe === '5m' ? 'M5' :
+      selectedTimeframe === '1h' ? 'H1' :
+      selectedTimeframe === '6h' ? 'H6' : 'H24';
+    const list = dsTokensByTimeframe?.[tfKey];
+    return list && list.length > 0 ? list : dexScreenerTokens;
+  }, [dsTokensByTimeframe, dexScreenerTokens, selectedTimeframe]);
 
   // Merge data sources: WebSocket for Solana trending, fallback for everything else
   const allTokens = useMemo(() => {
@@ -3895,6 +3913,15 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                 </button>
                 
                 <button
+                  className={`group relative px-3 py-2 text-[0.9375rem] whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] font-medium tracking-tight ${activeTab === "trending2" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
+                  onClick={() => { setActiveTab("trending2"); setShowDiscoverFilter(false); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
+                >
+                  <span className="relative z-10">DEX Screener</span>
+                  <span className={`absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 transition-all duration-300 ${activeTab === "trending2" ? "w-full bg-gradient-to-r from-transparent via-[#0ea5e9] to-transparent opacity-100" : "w-0 opacity-0"}`} />
+                  <span className={`absolute inset-0 -z-10 rounded-lg transition-opacity duration-300 ${activeTab === "trending2" ? "bg-[#0ea5e9]/[0.06] opacity-100" : "opacity-0"}`} />
+                </button>
+
+                <button
                   className={`group relative px-3 py-2 text-[0.9375rem] whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] font-medium tracking-tight ${activeTab === "live" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
                   onClick={() => { setActiveTab("live"); if (sortKey === "timestamp") { setSortKey("score"); setSortDirection("desc"); } }}
                 >
@@ -4260,8 +4287,8 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
           )}
 
           {activeTab === 'trending2' && (
-            <section aria-label="DexScreener Trending" className="pb-16">
-              {dsLoading && dexScreenerTokens.length === 0 ? (
+            <section aria-label="DEX Screener" className="pb-16">
+              {dsLoading && dexScreenerTimeframeTokens.length === 0 ? (
                 <div className="space-y-4">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="h-12 w-full animate-pulse rounded bg-white/[0.04]" />
@@ -4271,7 +4298,7 @@ export function DiscoverPageContent({ variant = 'standalone' }: DiscoverPageCont
                 <div className="py-10 text-center text-[#f26681]">{dsError}</div>
               ) : (
                 <InterstateTable
-                  rows={dexScreenerTokens.map((token, i) => ({ token: token as unknown as Token, i }))}
+                  rows={dexScreenerTimeframeTokens.map((token, i) => ({ token: token as unknown as Token, i }))}
                   onQuickBuy={handleQuickBuy}
                   sortKey={sortKey}
                   sortDirection={sortDirection}

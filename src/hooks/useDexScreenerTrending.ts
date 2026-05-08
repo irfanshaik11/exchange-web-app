@@ -108,16 +108,38 @@ function normalizeDexScreenerToken(raw: any): NormalizedTrendingToken {
   };
 }
 
+// Server-side timeframe keys (matches WS payload). Distinct from the FE
+// `Timeframe` union ("5m" | "1h" | ...) used by the Discover UI.
+type TfKey = 'M5' | 'H1' | 'H6' | 'H24';
+const TF_KEYS: TfKey[] = ['M5', 'H1', 'H6', 'H24'];
+const isTfKey = (x: unknown): x is TfKey =>
+  typeof x === 'string' && (TF_KEYS as readonly string[]).includes(x);
+
+export type DexScreenerTokensByTimeframe = Record<TfKey, NormalizedTrendingToken[]>;
+
 interface DexScreenerTrendingState {
   tokens: NormalizedTrendingToken[];
+  // Per-timeframe lists. Today the backend returns identical data in all four
+  // (chromedp scraper falling back to legacy boost/profile API), so each entry
+  // here is the same list; once BE returns real per-TF rankings, the hook
+  // surfaces them without any FE change.
+  tokensByTimeframe: DexScreenerTokensByTimeframe;
   loading: boolean;
   error: string | null;
   isConnected: boolean;
 }
 
+const emptyTokensByTimeframe = (): DexScreenerTokensByTimeframe => ({
+  M5: [],
+  H1: [],
+  H6: [],
+  H24: [],
+});
+
 // Singleton WebSocket connection (shared across all component mounts)
 let globalWs: WebSocket | null = null;
 let globalTokenMap: Map<string, NormalizedTrendingToken> = new Map();
+let globalTokensByTF: DexScreenerTokensByTimeframe = emptyTokensByTimeframe();
 let globalListeners = new Set<() => void>();
 let globalReconnectTimeout: NodeJS.Timeout | null = null;
 let globalReconnectAttempt = 0;
@@ -129,7 +151,11 @@ function notifyListeners() {
   globalListeners.forEach((fn) => fn());
 }
 
-// Phase 1: Fetch initial data via REST (fast, from Redis)
+// Phase 1: Fetch initial data via REST (fast, from Redis).
+// REST returns the legacy flat array. We mirror it into all 4 TF buckets so
+// the UI has data immediately; the WS snapshot will replace these with real
+// per-TF lists on connect (or keep mirroring them while BE returns identical
+// data per timeframe).
 async function fetchRestSnapshot() {
   if (globalRestFetched && globalTokenMap.size > 0) return; // Already have data
   try {
@@ -140,11 +166,19 @@ async function fetchRestSnapshot() {
     const data = await resp.json();
     if (Array.isArray(data) && data.length > 0) {
       globalTokenMap.clear();
+      const flat: NormalizedTrendingToken[] = [];
       data.forEach((token: any) => {
+        if (!token || !token.mint) return;
         if (BLACKLISTED_TOKENS.has(token.mint)) return;
-        globalTokenMap.set(token.mint, normalizeDexScreenerToken(token));
+        const norm = normalizeDexScreenerToken(token);
+        flat.push(norm);
+        globalTokenMap.set(token.mint, norm);
       });
-      isDev && console.log(`[DexScreenerWS] REST loaded ${globalTokenMap.size} tokens`);
+      // Each TF bucket gets its own array; sharing one reference across
+      // buckets would let a per-TF delta mutation bleed into every other TF
+      // when BE returns real per-TF rankings.
+      globalTokensByTF = { M5: [...flat], H1: [...flat], H6: [...flat], H24: [...flat] };
+      isDev && console.log(`[DexScreenerWS] REST loaded ${globalTokenMap.size} tokens (mirrored to all 4 TFs)`);
       saveDexScreenerCache(Array.from(globalTokenMap.values()));
       globalRestFetched = true;
       notifyListeners();
@@ -191,67 +225,149 @@ function connectDexScreenerWS() {
         const message = JSON.parse(event.data);
 
         if (message.type === 'snapshot') {
+          // Server may send either:
+          //   (a) flat array (legacy)
+          //   (b) { M5, H1, H6, H24 } object (current shape — broadcaster.go)
+          // Without the object branch, the snapshot is silently dropped and
+          // the hook only ever populates from REST + delta updates.
           const data = message.data;
-          if (Array.isArray(data)) {
-            globalTokenMap.clear();
-            data.forEach((token: any) => {
+          globalTokenMap.clear();
+          globalTokensByTF = emptyTokensByTimeframe();
+
+          const ingestArray = (arr: any[], tf: TfKey | null) => {
+            const list: NormalizedTrendingToken[] = [];
+            arr.forEach((token: any) => {
+              if (!token || !token.mint) return;
               if (BLACKLISTED_TOKENS.has(token.mint)) return;
-              globalTokenMap.set(token.mint, normalizeDexScreenerToken(token));
+              const norm = normalizeDexScreenerToken(token);
+              list.push(norm);
+              // Latest write wins for the flat map; per-TF arrays preserve
+              // backend ordering for that timeframe.
+              globalTokenMap.set(token.mint, norm);
             });
-            isDev && console.log(`[DexScreenerWS] Loaded ${globalTokenMap.size} tokens from WS snapshot`);
-            saveDexScreenerCache(Array.from(globalTokenMap.values()));
+            if (tf) globalTokensByTF[tf] = list;
+          };
+
+          if (Array.isArray(data)) {
+            ingestArray(data, null);
+            // Mirror the flat list into every TF bucket so the UI has data
+            // before BE returns real per-TF rankings. Each bucket gets its
+            // own array so per-TF deltas don't bleed across timeframes.
+            const flat = Array.from(globalTokenMap.values());
+            TF_KEYS.forEach((k) => { globalTokensByTF[k] = [...flat]; });
+          } else if (data && typeof data === 'object') {
+            TF_KEYS.forEach((k) => {
+              const arr = (data as Record<string, unknown>)[k];
+              if (Array.isArray(arr)) ingestArray(arr, k);
+            });
           }
+
+          isDev && console.log(
+            `[DexScreenerWS] Snapshot: ${globalTokenMap.size} unique mints` +
+            ` (M5:${globalTokensByTF.M5.length}` +
+            ` H1:${globalTokensByTF.H1.length}` +
+            ` H6:${globalTokensByTF.H6.length}` +
+            ` H24:${globalTokensByTF.H24.length})`,
+          );
+          saveDexScreenerCache(Array.from(globalTokenMap.values()));
           notifyListeners();
         } else if (message.type === 'update') {
           const delta = message.data;
+          // `topic` identifies which TF this delta applies to (broadcaster.go
+          // emits one update message per TF every 5s). When absent, we apply
+          // to the flat map only.
+          const topic: TfKey | null = isTfKey(message.topic) ? message.topic : null;
           let hasChanges = false;
+
+          // Immutable bucket updates. We replace the bucket array with a new
+          // reference rather than mutating in place so downstream `useMemo`
+          // hooks (e.g. `dexScreenerTimeframeTokens` in discover.tsx) that
+          // depend on `tokensByTimeframe` actually recompute. In-place
+          // splice/push would leave the React state object reference unchanged.
+          const replaceBucketAdd = (norm: NormalizedTrendingToken) => {
+            if (!topic) return;
+            const list = globalTokensByTF[topic];
+            const idx = list.findIndex((t) => t.mint === norm.mint);
+            globalTokensByTF[topic] = idx >= 0
+              ? list.map((t, i) => (i === idx ? norm : t))
+              : [...list, norm];
+          };
+          const replaceBucketRemove = (mint: string) => {
+            if (!topic) return;
+            const list = globalTokensByTF[topic];
+            if (list.some((t) => t.mint === mint)) {
+              globalTokensByTF[topic] = list.filter((t) => t.mint !== mint);
+            }
+          };
+          const replaceBucketUpdate = (mint: string, updated: NormalizedTrendingToken) => {
+            const replaceIn = (k: TfKey) => {
+              const list = globalTokensByTF[k];
+              const idx = list.findIndex((t) => t.mint === mint);
+              if (idx >= 0) {
+                globalTokensByTF[k] = list.map((t, i) => (i === idx ? updated : t));
+              }
+            };
+            if (!topic) {
+              // Untyped delta — update wherever the mint exists so flat-mirror
+              // buckets stay consistent.
+              TF_KEYS.forEach(replaceIn);
+              return;
+            }
+            replaceIn(topic);
+          };
 
           if (Array.isArray(delta?.added)) {
             delta.added.forEach((token: any) => {
+              if (!token || !token.mint) return;
               if (BLACKLISTED_TOKENS.has(token.mint)) return;
-              globalTokenMap.set(token.mint, normalizeDexScreenerToken(token));
+              const norm = normalizeDexScreenerToken(token);
+              globalTokenMap.set(token.mint, norm);
+              replaceBucketAdd(norm);
               hasChanges = true;
             });
           }
 
           if (Array.isArray(delta?.removed)) {
             delta.removed.forEach((mint: string) => {
+              if (!mint) return;
               globalTokenMap.delete(mint);
+              replaceBucketRemove(mint);
               hasChanges = true;
             });
           }
 
           if (Array.isArray(delta?.updated)) {
             delta.updated.forEach((update: any) => {
-              const mint = update.mint;
+              const mint = update?.mint;
               if (!mint) return;
               if (BLACKLISTED_TOKENS.has(mint)) return;
               const existing = globalTokenMap.get(mint);
-              if (existing) {
-                globalTokenMap.set(mint, {
-                  ...existing,
-                  price_usd: update.price_usd ?? existing.price_usd,
-                  priceUsd: update.price_usd ?? existing.priceUsd,
-                  fully_diluted_value: update.fdv ?? update.market_cap_usd ?? existing.fully_diluted_value,
-                  marketCapUsd: update.market_cap_usd ?? existing.marketCapUsd,
-                  total_liquidity_usd: update.liquidity_usd ?? existing.total_liquidity_usd,
-                  liquidityUsd: update.liquidity_usd ?? existing.liquidityUsd,
-                  volume_5m: update.volume_5m ?? existing.volume_5m,
-                  volume_1h: update.volume_1h ?? existing.volume_1h,
-                  volume_6h: update.volume_6h ?? existing.volume_6h,
-                  volume_24h: update.volume_24h ?? existing.volume_24h,
-                  rank: update.rank ?? existing.rank,
-                  total_buys_5m: update.total_buys_5m ?? existing.total_buys_5m,
-                  total_sells_5m: update.total_sells_5m ?? existing.total_sells_5m,
-                  total_buys_1h: update.total_buys_1h ?? existing.total_buys_1h,
-                  total_sells_1h: update.total_sells_1h ?? existing.total_sells_1h,
-                  total_buys_6h: update.total_buys_6h ?? existing.total_buys_6h,
-                  total_sells_6h: update.total_sells_6h ?? existing.total_sells_6h,
-                  total_buys_24h: update.total_buys_24h ?? existing.total_buys_24h,
-                  total_sells_24h: update.total_sells_24h ?? existing.total_sells_24h,
-                });
-                hasChanges = true;
-              }
+              if (!existing) return;
+              const merged: NormalizedTrendingToken = {
+                ...existing,
+                price_usd: update.price_usd ?? existing.price_usd,
+                priceUsd: update.price_usd ?? existing.priceUsd,
+                fully_diluted_value: update.fdv ?? update.market_cap_usd ?? existing.fully_diluted_value,
+                marketCapUsd: update.market_cap_usd ?? existing.marketCapUsd,
+                total_liquidity_usd: update.liquidity_usd ?? existing.total_liquidity_usd,
+                liquidityUsd: update.liquidity_usd ?? existing.liquidityUsd,
+                volume_5m: update.volume_5m ?? existing.volume_5m,
+                volume_1h: update.volume_1h ?? existing.volume_1h,
+                volume_6h: update.volume_6h ?? existing.volume_6h,
+                volume_24h: update.volume_24h ?? existing.volume_24h,
+                rank: update.rank ?? existing.rank,
+                total_buys_5m: update.total_buys_5m ?? existing.total_buys_5m,
+                total_sells_5m: update.total_sells_5m ?? existing.total_sells_5m,
+                total_buys_1h: update.total_buys_1h ?? existing.total_buys_1h,
+                total_sells_1h: update.total_sells_1h ?? existing.total_sells_1h,
+                total_buys_6h: update.total_buys_6h ?? existing.total_buys_6h,
+                total_sells_6h: update.total_sells_6h ?? existing.total_sells_6h,
+                total_buys_24h: update.total_buys_24h ?? existing.total_buys_24h,
+                total_sells_24h: update.total_sells_24h ?? existing.total_sells_24h,
+              };
+              globalTokenMap.set(mint, merged);
+              replaceBucketUpdate(mint, merged);
+              hasChanges = true;
             });
           }
 
@@ -307,6 +423,9 @@ function disconnectDexScreenerWS() {
   globalIsConnecting = false;
   globalIsConnected = false;
   globalReconnectAttempt = 0;
+  // Allow REST to refetch on next reconnect; otherwise empty TF buckets can
+  // persist if the WS snapshot is delayed after a reconnect cycle.
+  globalRestFetched = false;
 }
 
 /**
@@ -319,15 +438,36 @@ export function useDexScreenerTrending(enabled: boolean = true) {
     // Check if global map already has data
     const existing = Array.from(globalTokenMap.values());
     if (existing.length > 0) {
-      return { tokens: existing, loading: false, error: null, isConnected: globalIsConnected };
+      return {
+        tokens: existing,
+        tokensByTimeframe: globalTokensByTF,
+        loading: false,
+        error: null,
+        isConnected: globalIsConnected,
+      };
     }
     // Try localStorage cache
     const cached = loadDexScreenerCache();
     if (cached && cached.length > 0) {
       cached.forEach((t) => globalTokenMap.set(t.mint, t));
-      return { tokens: cached, loading: false, error: null, isConnected: false };
+      // Mirror cached flat list into TF buckets so UI has data on cold start.
+      // Spread into independent arrays — see fetchRestSnapshot for rationale.
+      globalTokensByTF = { M5: [...cached], H1: [...cached], H6: [...cached], H24: [...cached] };
+      return {
+        tokens: cached,
+        tokensByTimeframe: globalTokensByTF,
+        loading: false,
+        error: null,
+        isConnected: false,
+      };
     }
-    return { tokens: [], loading: true, error: null, isConnected: false };
+    return {
+      tokens: [],
+      tokensByTimeframe: emptyTokensByTimeframe(),
+      loading: true,
+      error: null,
+      isConnected: false,
+    };
   });
 
   const mountedRef = useRef(true);
@@ -341,6 +481,10 @@ export function useDexScreenerTrending(enabled: boolean = true) {
     });
     setState({
       tokens,
+      // Shallow clone ensures consumers that depend on `tokensByTimeframe`
+      // reference equality (e.g. useMemo in discover.tsx) see a new object
+      // on every notify, even if no bucket array reference changed.
+      tokensByTimeframe: { ...globalTokensByTF },
       loading: globalIsConnecting && tokens.length === 0,
       error: null,
       isConnected: globalIsConnected,
