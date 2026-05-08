@@ -385,6 +385,16 @@ function handleMessage(channel, data) {
         handleTokenInfoUpdate(data.data || data);
         break;
 
+      // holder_count_update: live transitions (wallet enters/leaves holder set).
+      // Backend throttles to 500ms last-value-wins per mint; count is authoritative.
+      // Across our 7 VMs the count can be non-monotonic — treat each event as latest
+      // state, never diff/average. Routed through handleTokenInfoUpdate so the
+      // existing token-delta merge + holder_count fallback path applies as-is.
+      case "holder_count_update":
+      case "holderCountUpdate":
+        handleTokenInfoUpdate(data.data || data);
+        break;
+
       case "pong":
         // Heartbeat pong received — clear the timeout to prevent reconnect
         if (heartbeatTimeouts[channel]) {
