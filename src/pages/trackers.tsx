@@ -2097,22 +2097,22 @@ export default function TrackersPage() {
                         ) : telegramTab === 0 ? (
                           loadingTelegramChannels ? (
                             <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                              <div className="mb-2 flex gap-1.5">
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
+                              <div className="mb-3 flex gap-1.5">
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:150ms]" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:300ms]" />
                               </div>
-                              <span className="text-xs text-neutral-500">
+                              <span className="text-xs text-[#71717a]">
                                 Loading channels...
                               </span>
                             </div>
                           ) : telegramChannels.length === 0 ? (
                             <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                              <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
-                              <span className="text-sm font-medium text-neutral-300">
+                              <FiMessageCircle className="mb-4 h-10 w-10 text-[#52525b]" />
+                              <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
                                 No channels tracked
                               </span>
-                              <span className="mt-1 text-xs text-neutral-500">
+                              <span className="mt-1.5 text-xs text-[#71717a]">
                                 Add Telegram channels to catch alpha
                               </span>
                             </div>
@@ -2120,14 +2120,14 @@ export default function TrackersPage() {
                             <div className="scrollbar-hide flex-1 overflow-auto">
                               <table className="w-full min-w-[280px] text-[10px] sm:min-w-[320px] sm:text-xs">
                                 <thead>
-                                  <tr className="border-b border-white/[0.04]">
-                                    <th className="px-2 py-2 text-left font-medium text-neutral-500">
+                                  <tr className="border-b border-white/[0.06]">
+                                    <th className="px-2 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-[#52525b] sm:text-xs">
                                       Channel
                                     </th>
-                                    <th className="px-2 py-2 text-left font-medium text-neutral-500">
+                                    <th className="px-2 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-[#52525b] sm:text-xs">
                                       Added
                                     </th>
-                                    <th className="px-2 py-2 text-right font-medium text-neutral-500">
+                                    <th className="px-2 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-[#52525b] sm:text-xs">
                                       Actions
                                     </th>
                                   </tr>
@@ -2148,27 +2148,27 @@ export default function TrackersPage() {
                         ) : telegramTab === 1 ? (
                           loadingTelegramFeed ? (
                             <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                              <div className="mb-2 flex gap-1.5">
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
+                              <div className="mb-3 flex gap-1.5">
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:150ms]" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:300ms]" />
                               </div>
-                              <span className="text-xs text-neutral-500">
+                              <span className="text-xs text-[#71717a]">
                                 Loading messages...
                               </span>
                             </div>
                           ) : telegramFeed.length === 0 ? (
                             <div className="flex flex-1 flex-col items-center justify-center py-8 text-center px-4">
-                              <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
-                              <span className="text-sm font-medium text-neutral-300">
+                              <FiMessageCircle className="mb-4 h-10 w-10 text-[#52525b]" />
+                              <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
                                 No messages yet
                               </span>
-                              <span className="mt-1 text-xs text-neutral-500">
+                              <span className="mt-1.5 text-xs text-[#71717a]">
                                 {telegramFeedHint || "Add channels and ensure Telegram client is configured on the server."}
                               </span>
                               <button
                                 type="button"
-                                className="mt-4 rounded-lg border border-white/[0.1] bg-white/[0.05] px-4 py-2 text-xs font-medium text-neutral-200 hover:bg-white/[0.08]"
+                                className="mt-5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-xs font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5]"
                                 onClick={() => loadTelegramFeed()}
                               >
                                 Retry
@@ -2182,13 +2182,18 @@ export default function TrackersPage() {
                                   href={`https://t.me/${msg.channelUsername}/${msg.id}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="block rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left transition-colors hover:bg-white/[0.05] hover:border-white/[0.1]"
+                                  className="relative block rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-3.5 text-left backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-[#080a0d]/80"
                                 >
-                                  <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
-                                    <span className="text-xs font-semibold text-[#0088cc] sm:text-sm">
+                                  {/* Mini corner brackets on message cards */}
+                                  <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                                    <div className="absolute left-1 top-1 h-2 w-2 border-l border-t border-white/[0.08]" />
+                                    <div className="absolute right-1 top-1 h-2 w-2 border-r border-t border-white/[0.08]" />
+                                  </div>
+                                  <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
+                                    <span className="text-xs font-semibold text-[#18c48c] sm:text-sm">
                                       @{msg.channelUsername}
                                     </span>
-                                    <span className="text-[10px] text-neutral-500 shrink-0">
+                                    <span className="text-[10px] tabular-nums text-[#52525b] shrink-0">
                                       {msg.date
                                         ? new Date(msg.date * 1000).toLocaleString(undefined, {
                                             month: "short",
@@ -2199,7 +2204,7 @@ export default function TrackersPage() {
                                         : ""}
                                     </span>
                                   </div>
-                                  <div className="text-xs text-neutral-200 sm:text-sm leading-relaxed">
+                                  <div className="text-xs text-[#a1a1aa] sm:text-sm leading-relaxed">
                                     <TelegramMessageBody
                                       text={msg.text}
                                       entities={msg.entities}
@@ -2211,7 +2216,7 @@ export default function TrackersPage() {
                           )
                         ) : (
                           <>
-                            <div className="my-2 flex items-center gap-2 border-b border-white/[0.04] pb-2">
+                            <div className="my-2.5 flex items-center gap-2 border-b border-white/[0.06] pb-2.5">
                               <input
                                 type="text"
                                 placeholder="@ Search channel"
@@ -2219,7 +2224,7 @@ export default function TrackersPage() {
                                 onChange={(e) =>
                                   setApprovedChannelsSearch(e.target.value)
                                 }
-                                className="max-w-[180px] flex-1 rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/50 focus:outline-none sm:text-xs"
+                                className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm placeholder:text-[#52525b] transition-all duration-200 focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
                               />
                             </div>
                             <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -2252,17 +2257,17 @@ export default function TrackersPage() {
                                   return (
                                     <div
                                       key={channel}
-                                      className="flex items-center justify-between gap-2 border-b border-white/[0.04] py-1.5 text-[10px] sm:text-xs"
+                                      className="flex items-center justify-between gap-2 border-b border-white/[0.06] py-2 text-[10px] sm:text-xs"
                                     >
                                       <div className="flex items-center min-w-0">
-                                        <span className="w-8 shrink-0 text-neutral-500">
+                                        <span className="w-8 shrink-0 tabular-nums text-[#52525b]">
                                           {idx + 1}
                                         </span>
                                         <a
                                           href={`https://t.me/${username}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="min-w-0 truncate text-neutral-200 hover:underline"
+                                          className="min-w-0 truncate text-[#a1a1aa] transition-colors hover:text-[#f4f4f5] hover:underline"
                                         >
                                           @{username}
                                         </a>
@@ -2281,7 +2286,7 @@ export default function TrackersPage() {
                                           }
                                         }}
                                         disabled={isTracked || isAdding}
-                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-neutral-400 transition-colors hover:border-[#7FFFC9]/50 hover:bg-[#7FFFC9]/10 hover:text-[#7FFFC9] disabled:opacity-50 disabled:hover:border-white/[0.08] disabled:hover:bg-white/[0.04] disabled:hover:text-neutral-400"
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] transition-all duration-200 hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#080a0d]/60 disabled:hover:text-[#71717a]"
                                         title={
                                           isTracked
                                             ? "Already tracked"
@@ -2292,7 +2297,7 @@ export default function TrackersPage() {
                                         {isAdding ? (
                                           <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
                                         ) : (
-                                          <FiPlus className="h-3.5 w-3.5 text-white" />
+                                          <FiPlus className="h-3.5 w-3.5" />
                                         )}
                                       </button>
                                     </div>
