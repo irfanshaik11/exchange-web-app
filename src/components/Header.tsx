@@ -2038,7 +2038,7 @@ export default function Header({
                       href={chainAwareHref(link.href)}
                       className={`relative flex min-h-[44px] flex-shrink-0 items-center px-3 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
                       style={{
-                        color: isActive ? AX.mint : AX.textSecondary,
+                        color: isActive ? AX.mint : AX.text,
                         backgroundColor: isActive ? AX.mintGlow : "transparent",
                         borderRadius: "6px",
                         position: "relative",
@@ -2056,7 +2056,7 @@ export default function Header({
                       }}
                       onMouseLeave={(e) => {
                         if (!isActive) {
-                          e.currentTarget.style.color = AX.textSecondary;
+                          e.currentTarget.style.color = AX.text;
                           e.currentTarget.style.backgroundColor = "transparent";
                         }
                       }}
@@ -3476,7 +3476,7 @@ export default function Header({
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex items-center rounded-none px-4 py-3 text-base font-medium transition-colors"
                     style={{
-                      color: isActive ? "#18c48c" : "#e5e7eb",
+                      color: isActive ? AX.mint : AX.text,
                       backgroundColor: isActive
                         ? "rgba(24, 196, 140, 0.1)"
                         : "transparent",
