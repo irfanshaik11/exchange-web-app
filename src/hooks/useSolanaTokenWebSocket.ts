@@ -177,7 +177,7 @@ export interface SolanaTokenVolume {
 
 // WebSocket message types
 interface WebSocketMessage {
-  type: 'snapshot' | 'trade_update' | 'holder_update' | 'top_trader_update' | 'dev_token_update' | 'token_update' | 'price_update' | 'pong';
+  type: 'snapshot' | 'trade_update' | 'holder_update' | 'holder_count_update' | 'top_trader_update' | 'dev_token_update' | 'token_update' | 'price_update' | 'pong';
   data: {
     trades: SolanaTokenTrade[] | null;
     holders: SolanaTokenHolder[] | null;
@@ -811,6 +811,23 @@ export function useSolanaTokenWebSocket(
             //   });
             // }
             } // end else (mint matched)
+          } else if (message.type === 'holder_count_update') {
+            // Real-time holder count update. Backend throttles to 500ms last-value-wins per mint.
+            // Count is authoritative — across VMs it can be non-monotonic (e.g. 412→408→425);
+            // backend treats this as expected partial-view noise. We just overwrite, no diffing.
+            const data = (message.data as any) || {};
+            const updateMint: string | undefined = data.token_mint || data.mint;
+            const newCount = Number(data.holder_count);
+
+            if (updateMint && updateMint === mintAddress && Number.isFinite(newCount)) {
+              setTokenInfo((prev) => (prev ? { ...prev, holder_count: newCount } : prev));
+              // total_holders is what TradeHeader reads first; keep it aligned to avoid widget flicker
+              setHolderSummary((prev) => (prev ? { ...prev, total_holders: newCount } : prev));
+            } else if (isDev && updateMint && updateMint !== mintAddress) {
+              console.warn('[useSolanaTokenWebSocket] holder_count_update mint mismatch, ignoring', {
+                expected: mintAddress, got: updateMint,
+              });
+            }
           }
           // Ignore pong messages
         } catch (err) {

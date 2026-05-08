@@ -683,6 +683,14 @@ function handleFallbackMessage(channel: 'new' | 'final_stretch' | 'migrated', da
       handleTokenInfoUpdate(data.data || data);
       break;
 
+    // holder_count_update: live wallet-set transitions, throttled 500ms last-value-wins
+    // per mint. Authoritative count (may be non-monotonic across VMs — by design).
+    // Same handler as token_info_update: merges holder_count by mint, kol_count untouched.
+    case 'holder_count_update':
+    case 'holderCountUpdate':
+      handleTokenInfoUpdate(data.data || data);
+      break;
+
     default:
       // Try to infer from channel if no explicit type
       if (data.mint || data.address || data.mint_address) {

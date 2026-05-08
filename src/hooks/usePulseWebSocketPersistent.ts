@@ -23,8 +23,8 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 export interface TokenInfoUpdate {
   mint_address: string;
-  holder_count: number;
-  kol_count: number;
+  holder_count?: number;
+  kol_count?: number;
 }
 
 interface UsePulseWebSocketPersistentOptions {
@@ -397,6 +397,12 @@ export function usePulseWebSocketPersistent(
               }
             } else if (message.type === 'token_info_update' && message.data) {
               tokenInfoUpdatesBatch.push(message.data);
+            } else if (message.type === 'holder_count_update' && message.data) {
+              // Live wallet-set transitions, throttled 500ms last-value-wins per mint.
+              // Authoritative count (may be non-monotonic across VMs — by design).
+              // Reuse the token-info batch; applier and callback below now preserve kol_count
+              // via ?? fallbacks, so a holder-only payload won't clobber existing kol_count.
+              tokenInfoUpdatesBatch.push(message.data);
             }
           } catch {
             // Skip parse errors
@@ -505,19 +511,21 @@ export function usePulseWebSocketPersistent(
         if (tokenInfoUpdatesBatch.length > 0) {
           // Skip internal state update if skipInternalState is true (prevents re-renders)
           if (!skipInternalStateRef.current) {
-            // Build a map of all token info updates
-            const tokenInfoMap = new Map<string, { holder_count: number; kol_count: number }>();
+            // Build a map of all token info updates. Last-write-wins per mint within the batch.
+            // holder_count_update events are holder-only (no kol_count) and we coalesce them with
+            // any token_info_update entries for the same mint by keeping each field as it last appeared.
+            const tokenInfoMap = new Map<string, { holder_count?: number; kol_count?: number }>();
             for (const data of tokenInfoUpdatesBatch) {
               const mintAddress = data.mint_address || data.mint || data.address;
-              if (mintAddress) {
-                tokenInfoMap.set(mintAddress, {
-                  holder_count: data.holder_count,
-                  kol_count: data.kol_count,
-                });
-              }
+              if (!mintAddress) continue;
+              const prev = tokenInfoMap.get(mintAddress);
+              tokenInfoMap.set(mintAddress, {
+                holder_count: data.holder_count ?? prev?.holder_count,
+                kol_count: data.kol_count ?? prev?.kol_count,
+              });
             }
 
-            // Single setState call per array
+            // Single setState call per array — preserve existing fields when an update omits them
             const applyAllTokenInfoUpdates = (tokens: PulseToken[]): PulseToken[] => {
               if (tokens.length === 0 || tokenInfoMap.size === 0) return tokens;
               let hasChanges = false;
@@ -525,7 +533,11 @@ export function usePulseWebSocketPersistent(
                 const update = tokenInfoMap.get(token.mint);
                 if (!update) return token;
                 hasChanges = true;
-                return { ...token, holder_count: update.holder_count, kol_count: update.kol_count };
+                return {
+                  ...token,
+                  holder_count: update.holder_count ?? token.holder_count,
+                  kol_count: update.kol_count ?? token.kol_count,
+                };
               });
               return hasChanges ? updated : tokens;
             };
@@ -535,16 +547,16 @@ export function usePulseWebSocketPersistent(
             setMigratedTokens(applyAllTokenInfoUpdates);
           }
 
-          // Fire callbacks for each update (always, regardless of skipInternalState)
+          // Fire callbacks for each update (always, regardless of skipInternalState).
+          // Only include fields that were actually present in the payload — passing `undefined`
+          // for kol_count on a holder_count_update would clobber downstream consumers' state.
           for (const data of tokenInfoUpdatesBatch) {
             const mintAddress = data.mint_address || data.mint || data.address;
-            if (mintAddress) {
-              onTokenInfoUpdateRef.current?.({
-                mint_address: mintAddress,
-                holder_count: data.holder_count,
-                kol_count: data.kol_count,
-              });
-            }
+            if (!mintAddress) continue;
+            const update: TokenInfoUpdate = { mint_address: mintAddress };
+            if (data.holder_count !== undefined) update.holder_count = data.holder_count;
+            if (data.kol_count !== undefined) update.kol_count = data.kol_count;
+            onTokenInfoUpdateRef.current?.(update);
           }
         }
       };
