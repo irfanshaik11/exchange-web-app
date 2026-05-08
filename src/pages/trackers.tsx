@@ -1628,36 +1628,46 @@ export default function TrackersPage() {
           {/* Outer padding wrapper - collapses when a popup is docked */}
           <DockedPanelMarginWrapper>
           <div className="p-1 sm:p-1.5">
-            {/* Rounded container with background */}
-            <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
-              {/* Background image inside the container */}
-              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+            {/* Rounded container with JTX-style design */}
+            <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-xl border border-white/[0.06] bg-[#030304]/95">
+              {/* JTX-style corner brackets */}
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+                {/* Top-left bracket */}
+                <div className="absolute left-2 top-2 h-6 w-6 border-l border-t border-white/[0.12]" />
+                {/* Top-right bracket */}
+                <div className="absolute right-2 top-2 h-6 w-6 border-r border-t border-white/[0.12]" />
+                {/* Bottom-left bracket */}
+                <div className="absolute bottom-2 left-2 h-6 w-6 border-b border-l border-white/[0.12]" />
+                {/* Bottom-right bracket */}
+                <div className="absolute bottom-2 right-2 h-6 w-6 border-b border-r border-white/[0.12]" />
+              </div>
+              
+              {/* Subtle ambient glow effect */}
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
                 <div
-                  className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-                  style={{ backgroundImage: "url(/ranks/Background2.png)" }}
-                />
-                <div className="absolute inset-0 bg-black/30" />
-                <div
-                  className="absolute inset-0"
+                  className="absolute -top-[40%] left-1/2 h-[60vh] w-[120%] -translate-x-1/2"
                   style={{
-                    background:
-                      "linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)",
+                    background: 'radial-gradient(ellipse at center, rgba(24, 196, 140, 0.03) 0%, transparent 70%)'
                   }}
                 />
-                <div
-                  className="absolute inset-x-0 top-1/4 bottom-0"
-                  style={{
-                    background:
-                      "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)",
-                  }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+                {/* Subtle side vignette */}
+                <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
+                {/* Subtle top-to-bottom gradient */}
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
               </div>
 
-              <div className="relative z-10 mt-4 mb-2 flex flex-col gap-4 px-4 sm:my-6 sm:mb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
-                {/* Tabs Section - Scrollable on mobile */}
-                <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
-                  <h1 className="text-xl font-medium text-white">Trackers</h1>
+              <div className="relative z-10 mt-5 mb-3 flex flex-col gap-4 px-5 sm:my-7 sm:mb-5 sm:px-7 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:px-10">
+                {/* Header Section - JTX premium style */}
+                <div className="scrollbar-hide -mx-5 flex items-center gap-4 overflow-x-auto px-5 pb-2 sm:-mx-7 sm:gap-5 sm:px-7 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
+                  <h1 className="text-xl font-semibold tracking-tight text-[#f4f4f5] sm:text-2xl">Trackers</h1>
+                  {/* Connection status indicator */}
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-3 py-1.5 backdrop-blur-xl">
+                    <span className="relative flex h-2 w-2">
+                      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${wsConnected ? 'bg-[#18c48c]' : 'bg-[#ef4444]'}`} />
+                      <span className={`relative inline-flex h-2 w-2 rounded-full ${wsConnected ? 'bg-[#18c48c]' : 'bg-[#ef4444]'}`} />
+                    </span>
+                    <span className="text-xs font-medium text-[#71717a]">{wsConnected ? 'Live' : 'Offline'}</span>
+                  </div>
                 </div>
               </div>
               <div className="relative z-10 mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-6">
@@ -1666,55 +1676,75 @@ export default function TrackersPage() {
                   className={`flex min-h-0 flex-1 flex-col gap-2 ${!isMobile ? "flex-row" : ""}`}
                 >
                   {isMobile && (
-                    <div className="flex w-full rounded-xl border border-white/[0.06] bg-[#0f1014] p-1 text-[10px] font-medium text-neutral-400 shadow-lg sm:p-1.5 sm:text-xs">
+                    <div className="flex w-full rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-1 text-[10px] font-medium text-[#52525b] backdrop-blur-xl sm:p-1.5 sm:text-xs">
                       <button
-                        className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                        className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
                           mobileMainTab === "wallets"
-                            ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
-                            : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
+                            ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
+                            : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                         }`}
                         onClick={() => setMobileMainTab("wallets")}
                       >
                         Wallet Tracker
+                        {mobileMainTab === "wallets" && (
+                          <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                        )}
                       </button>
                       <button
-                        className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                        className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
                           mobileMainTab === "telegram"
-                            ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
-                            : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
+                            ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
+                            : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                         }`}
                         onClick={() => setMobileMainTab("telegram")}
                       >
                         Telegram
+                        {mobileMainTab === "telegram" && (
+                          <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                        )}
                       </button>
                     </div>
                   )}
 
-                  {/* LEFT: WALLET SECTION */}
+                  {/* LEFT: WALLET SECTION - JTX premium card style */}
                   {showWalletSection && (
                     <div
-                      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 pb-4 backdrop-blur-xl sm:px-5"
+                      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 pb-4 backdrop-blur-xl sm:px-5"
                       style={{
                         boxShadow:
-                          "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                          "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
                         maxHeight: isMobile
                           ? "calc(100vh - 200px)"
                           : "calc(100vh - 240px)",
                       }}
                     >
-                      {/* If user is not logged in, show GMGN-style empty state */}
+                      {/* Card corner brackets */}
+                      <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                        <div className="absolute left-1.5 top-1.5 h-3 w-3 border-l border-t border-white/[0.1]" />
+                        <div className="absolute right-1.5 top-1.5 h-3 w-3 border-r border-t border-white/[0.1]" />
+                        <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b border-l border-white/[0.1]" />
+                        <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.1]" />
+                      </div>
+                      {/* If user is not logged in, show JTX-style empty state */}
                       {!user ? (
                         <div className="flex flex-1 items-center justify-center">
-                          <div className="flex flex-col items-center text-center">
-                            <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
-                            <p className="text-sm font-medium text-neutral-300">
+                          <div className="relative flex flex-col items-center rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-8 text-center backdrop-blur-sm">
+                            {/* Mini corner brackets */}
+                            <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                              <div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.1]" />
+                              <div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.1]" />
+                              <div className="absolute bottom-1.5 left-1.5 h-2.5 w-2.5 border-b border-l border-white/[0.1]" />
+                              <div className="absolute bottom-1.5 right-1.5 h-2.5 w-2.5 border-b border-r border-white/[0.1]" />
+                            </div>
+                            <FiLock className="mb-4 h-10 w-10 text-[#52525b]" />
+                            <p className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
                               Log in to start tracking
                             </p>
-                            <p className="mt-1 text-xs text-neutral-500">
+                            <p className="mt-1.5 text-xs text-[#71717a]">
                               Monitor wallets and catch trades in real-time
                             </p>
                             <button
-                              className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
+                              className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#18c48c] px-6 py-2.5 text-xs font-semibold text-[#030304] shadow-[0_0_16px_rgba(24,196,140,0.3)] transition-all duration-200 hover:brightness-110"
                               onClick={() => {
                                 const event = new CustomEvent(
                                   "open-login-modal",
@@ -1728,44 +1758,47 @@ export default function TrackersPage() {
                         </div>
                       ) : (
                         <>
-                          {/* HEADER BAR – three zones like reference screenshot */}
-                          <div className="flex justify-between gap-3 border-b border-white/[0.04] py-3 sm:items-center sm:gap-4 sm:py-4">
+                          {/* HEADER BAR – JTX premium style */}
+                          <div className="flex justify-between gap-3 border-b border-white/[0.06] py-3.5 sm:items-center sm:gap-4 sm:py-4">
                             {/* Left: tabs + wallet count */}
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                               {TABS.map((tab, i) => (
                                 <button
                                   key={tab}
-                                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
+                                  className={`group relative cursor-pointer rounded-md px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-4 sm:py-2 sm:text-xs ${
                                     activeTab === i
-                                      ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                                      : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
+                                      ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
+                                      : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                                   }`}
                                   onClick={() => setActiveTab(i)}
                                 >
-                                  {tab}
+                                  <span className="relative z-10">{tab}</span>
+                                  {activeTab === i && (
+                                    <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                                  )}
                                 </button>
                               ))}
-                              <div className="flex items-center rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1 text-[10px] text-neutral-300 sm:px-3.5 sm:py-1.5 sm:text-[11px]">
-                                <span className="font-semibold text-[#7FFFC9]">
+                              <div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1 text-[10px] backdrop-blur-sm sm:px-3 sm:py-1.5 sm:text-[11px]">
+                                <span className="font-bold tabular-nums text-[#18c48c]">
                                   {wallets.length}
                                 </span>
-                                <span className="ml-1 hidden text-neutral-500 sm:ml-1.5 sm:inline">
+                                <span className="ml-1 hidden text-[#52525b] sm:ml-1.5 sm:inline">
                                   / {MAX_WALLETS} wallet
                                   {wallets.length === 1 ? "" : "s"}
                                 </span>
-                                <span className="ml-1 text-neutral-500 sm:ml-1.5 sm:hidden">
+                                <span className="ml-1 text-[#52525b] sm:ml-1.5 sm:hidden">
                                   / {MAX_WALLETS}
                                 </span>
                               </div>
                             </div>
 
-                            {/* Middle: search bar (center, max width) */}
+                            {/* Right: action buttons - JTX style */}
                             <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
                               {activeTab === 0 && (
                                 <>
                                   {selectedChain === "sol" && (
                                     <button
-                                      className="cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.06] px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.12] hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:py-2 sm:text-xs"
+                                      className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
                                       onClick={handleAddDefault150Wallets}
                                       disabled={isAtWalletLimit || isAddingDefaultWallets}
                                       title="Add 150 default wallets for Solana"
@@ -1776,12 +1809,7 @@ export default function TrackersPage() {
                                     </button>
                                   )}
                                   <button
-                                    className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
-                                    style={{
-                                      backgroundColor: "#7FFFC9",
-                                      color: "#000000",
-                                      border: "none",
-                                    }}
+                                    className="cursor-pointer rounded-md bg-[#18c48c] px-4 py-1.5 text-[9px] font-semibold whitespace-nowrap text-[#030304] shadow-[0_0_12px_rgba(24,196,140,0.25)] transition-all duration-200 hover:brightness-110 sm:px-5 sm:py-2 sm:text-xs"
                                     onClick={handleOpenAddWalletModal}
                                   >
                                     Add Wallet
@@ -1791,16 +1819,16 @@ export default function TrackersPage() {
                             </div>
                           </div>
 
-                          {/* Search bar and action toolbar - below header, only for Wallet Manager tab */}
+                          {/* Search bar and action toolbar - JTX premium style */}
                           {activeTab === 0 && (
-                            <div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
+                            <div className="border-b border-white/[0.06] px-1 py-3.5 sm:px-2 sm:py-4">
                               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                                {/* Search input */}
+                                {/* Search input - JTX style */}
                                 <div className="min-w-[200px] flex-1">
                                   <input
                                     type="text"
                                     placeholder="Search by address"
-                                    className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                    className="w-full rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#080a0d]/80 focus:shadow-[0_0_12px_rgba(24,196,140,0.1)] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                     disabled={false}
                                     value={searchTerm}
                                     onChange={(e) =>
@@ -1809,24 +1837,24 @@ export default function TrackersPage() {
                                   />
                                 </div>
 
-                                {/* Right: actions (Import / Export / icons / Add Wallet) */}
-                                <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                                {/* Right: actions - JTX minimal style */}
+                                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                                   {activeTab === 0 && (
                                     <>
                                       <button
-                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 py-2.5 sm:text-[10px]"
+                                        className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
                                         onClick={() => setShowImportModal(true)}
                                       >
                                         Import
                                       </button>
                                       <div className="relative">
                                         {showExportSuccessTooltip && (
-                                          <div className="absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 rounded-md bg-neutral-800 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-white shadow-lg">
+                                          <div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#0c0e12]/95 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-[#18c48c] shadow-[0_4px_16px_rgba(0,0,0,0.5)]">
                                             Export Successful
                                           </div>
                                         )}
                                         <button
-                                          className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 py-2.5 sm:text-[10px]"
+                                          className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
                                           onClick={handleExportAddresses}
                                         >
                                           Export
@@ -1841,12 +1869,12 @@ export default function TrackersPage() {
                                         <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
                                       <button
-                                        className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 sm:h-9 sm:w-9 ${
+                                        className={`flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-200 sm:h-9 sm:w-9 ${
                                           isTogglingAllNotifications
-                                            ? "cursor-not-allowed border-white/[0.06] bg-white/[0.03] opacity-50"
+                                            ? "cursor-not-allowed border-white/[0.06] bg-[#080a0d]/60 opacity-40"
                                             : allNotificationsEnabled
-                                              ? "cursor-pointer border-pink-500/50 bg-pink-500/20 hover:bg-pink-500/30"
-                                              : "cursor-pointer border-white/[0.06] bg-white/[0.03] hover:border-white/[0.1] hover:bg-white/[0.07]"
+                                              ? "cursor-pointer border-[#ef4444]/40 bg-[#ef4444]/15 text-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.2)] hover:bg-[#ef4444]/25"
+                                              : "cursor-pointer border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#a1a1aa]"
                                         }`}
                                         type="button"
                                         onClick={handleToggleAllNotifications}
@@ -1983,26 +2011,26 @@ export default function TrackersPage() {
                     </div>
                   )}
 
-                  {/* RESIZE HANDLE — between wallet and Telegram panels on desktop */}
+                  {/* RESIZE HANDLE — JTX style */}
                   {showTelegramSection && !isMobile && (
                     <div
-                      className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
+                      className="group relative hidden h-full min-h-[530px] w-1.5 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#18c48c]/5 lg:flex"
                       onMouseDown={() => setIsResizing(true)}
                     >
-                      <div className="absolute h-16 w-1 rounded-full bg-neutral-400 transition-colors group-hover:bg-[#7FFFC9]" />
+                      <div className="absolute h-20 w-0.5 rounded-full bg-[#52525b] transition-colors group-hover:bg-[#18c48c] group-hover:shadow-[0_0_6px_rgba(24,196,140,0.4)]" />
                     </div>
                   )}
 
-                  {/* RIGHT: TELEGRAM CHANNELS SECTION */}
+                  {/* RIGHT: TELEGRAM CHANNELS SECTION - JTX premium card */}
                   {showTelegramSection && (
                     <div
-                      className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
+                      className="relative flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 backdrop-blur-xl sm:px-5"
 											aria-label="Telegram Tracker"
                       style={
                         isMobile
                           ? {
                               boxShadow:
-                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                                "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
                               maxHeight: "calc(100vh - 200px)",
                             }
                           : {
@@ -2011,26 +2039,36 @@ export default function TrackersPage() {
                               maxWidth: "600px",
                               maxHeight: "calc(100vh - 240px)",
                               boxShadow:
-                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                                "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
                             }
                       }
 										>
-											<h2 className="border-b border-white/[0.04] pt-3 pb-2 text-sm font-semibold text-white sm:pt-4 sm:pb-3 sm:text-base">
+                      {/* Card corner brackets */}
+                      <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                        <div className="absolute left-1.5 top-1.5 h-3 w-3 border-l border-t border-white/[0.1]" />
+                        <div className="absolute right-1.5 top-1.5 h-3 w-3 border-r border-t border-white/[0.1]" />
+                        <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b border-l border-white/[0.1]" />
+                        <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.1]" />
+                      </div>
+											<h2 className="border-b border-white/[0.06] pt-3.5 pb-2.5 text-sm font-semibold tracking-tight text-[#f4f4f5] sm:pt-4 sm:pb-3 sm:text-base">
                         Telegram Tracker
                       </h2>
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-2 pb-2 sm:gap-3 sm:pt-3 sm:pb-3">
-                        <div className="flex gap-1.5 sm:gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pt-2.5 pb-2.5 sm:gap-3 sm:pt-3 sm:pb-3">
+                        <div className="flex gap-1 sm:gap-1.5">
                           {TELEGRAM_TABS.map((label, i) => (
                             <button
                               key={label}
-                              className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all sm:px-3 sm:py-2 sm:text-xs ${
+                              className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-3 sm:py-2 sm:text-xs ${
                                 telegramTab === i
-                                  ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                                  : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
+                                  ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
+                                  : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                               }`}
                               onClick={() => setTelegramTab(i as 0 | 1 | 2)}
                             >
-                              {label}
+                              <span className="relative z-10">{label}</span>
+                              {telegramTab === i && (
+                                <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                              )}
                             </button>
                           ))}
 												</div>
@@ -2039,7 +2077,7 @@ export default function TrackersPage() {
                             type="button"
                             onClick={handleRestoreTelegramDefaults}
                             disabled={restoringTelegramDefaults}
-                            className="cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-medium text-neutral-300 transition-all hover:bg-white/[0.07] hover:text-white disabled:opacity-50 sm:px-3 sm:py-2 sm:text-xs"
+                            className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] disabled:opacity-40 sm:px-3 sm:py-2 sm:text-xs"
                           >
                             {restoringTelegramDefaults ? "Adding…" : "Restore to default"}
                           </button>
@@ -2048,11 +2086,11 @@ export default function TrackersPage() {
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {!user ? (
                           <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                            <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
-                            <span className="text-sm font-medium text-neutral-300">
+                            <FiLock className="mb-4 h-10 w-10 text-[#52525b]" />
+                            <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
                               Log in to track channels
                             </span>
-                            <span className="mt-1 text-xs text-neutral-500">
+                            <span className="mt-1.5 text-xs text-[#71717a]">
                               Add Telegram channels to your watchlist
                             </span>
                           </div>
