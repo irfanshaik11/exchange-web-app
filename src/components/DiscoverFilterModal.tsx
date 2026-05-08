@@ -5,14 +5,20 @@ import { FaTimes } from 'react-icons/fa';
 import { BiRefresh } from 'react-icons/bi';
 import type { PulseFilters } from '~/contexts/PulseFiltersContext';
 
-// ── Color constants (matching PulseTable AX) ──
+// ── Color constants (Axiom-style dark theme) ──
 const AX = {
-  surface: '#16171C',
-  border: '#24252C',
-  text: '#f0f5f5',
-  muted: '#9CA3AF',
-  aiBlue: '#526fff',
-  glowBlue: 'rgba(82, 111, 255, 0.3)',
+  surface: '#0c0e12',
+  surfaceAlt: '#080a0d',
+  border: '#1a1c22',
+  borderHover: '#2a2d36',
+  text: '#f4f4f5',
+  textMuted: '#71717a',
+  textDim: '#52525b',
+  accent: '#18c48c',
+  accentGlow: 'rgba(24, 196, 140, 0.25)',
+  accentDim: 'rgba(24, 196, 140, 0.1)',
+  purple: '#7c3aed',
+  purpleGlow: 'rgba(124, 58, 237, 0.25)',
 };
 
 // ── Protocol data ──
@@ -37,20 +43,21 @@ const quoteTokens = [
   { name: 'USD1', icon: <span className="flex h-4 w-4 items-center justify-center rounded-full bg-yellow-500 text-xs font-bold text-black">1</span>, color: '#fbbf24' },
 ];
 
-// ── Shared input style (matching PulseTable) ──
+// ── Shared input style (Axiom-style) ──
 const inputStyle: React.CSSProperties = {
-  backgroundColor: AX.surface,
+  backgroundColor: AX.surfaceAlt,
   borderColor: AX.border,
   color: AX.text,
   WebkitAppearance: 'none',
   MozAppearance: 'textfield' as any,
   outline: 'none',
   boxShadow: 'none',
+  borderRadius: '8px',
 };
 const onInputFocus = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
   e.target.style.outline = 'none';
-  e.target.style.boxShadow = 'none';
-  e.target.style.borderColor = AX.border;
+  e.target.style.boxShadow = `0 0 0 2px ${AX.accentDim}`;
+  e.target.style.borderColor = AX.accent;
 };
 
 interface DiscoverFilterModalProps {
@@ -78,28 +85,30 @@ function MinMaxRow({
   onChange: (updater: (prev: PulseFilters) => PulseFilters) => void;
 }) {
   return (
-    <div>
-      <label className="mb-2 block text-sm font-medium" style={{ color: AX.text }}>
+    <div className="space-y-2">
+      <label className="block text-xs font-semibold uppercase tracking-wider" style={{ color: AX.textMuted }}>
         {label}
       </label>
-      <div className="flex gap-1">
+      <div className="flex gap-2">
         <input
           type="number"
           placeholder="Min"
           value={pendingFilters[minKey] as string}
           onChange={(e) => onChange((prev) => ({ ...prev, [minKey]: e.target.value }))}
-          className="flex-1 rounded border px-3 py-2 text-sm"
+          className="flex-1 rounded-lg border px-3 py-2.5 text-sm transition-all duration-200"
           style={inputStyle}
           onFocus={onInputFocus}
+          onBlur={(e) => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = AX.border; }}
         />
         <input
           type="number"
           placeholder="Max"
           value={pendingFilters[maxKey] as string}
           onChange={(e) => onChange((prev) => ({ ...prev, [maxKey]: e.target.value }))}
-          className="flex-1 rounded border px-3 py-2 text-sm"
+          className="flex-1 rounded-lg border px-3 py-2.5 text-sm transition-all duration-200"
           style={inputStyle}
           onFocus={onInputFocus}
+          onBlur={(e) => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = AX.border; }}
         />
       </div>
     </div>
@@ -123,49 +132,66 @@ export default function DiscoverFilterModal({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0"
-        style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)', zIndex: 10000000 }}
+        className="fixed inset-0 backdrop-blur-sm"
+        style={{ backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 10000000 }}
         onClick={onClose}
       />
 
-      {/* Modal */}
+      {/* Modal - Axiom style */}
       <div
-        className="filter-modal fixed top-1/2 left-1/2 max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-hidden rounded-lg border shadow-xl flex flex-col"
+        className="filter-modal fixed top-1/2 left-1/2 max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-hidden rounded-xl border shadow-2xl flex flex-col"
         style={{
           backgroundColor: AX.surface,
           borderColor: AX.border,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+          boxShadow: `0 25px 80px rgba(0, 0, 0, 0.6), 0 0 1px ${AX.accent}20`,
           zIndex: 10000001,
         }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b p-4" style={{ borderColor: AX.border }}>
-          <h3 className="text-lg" style={{ color: AX.text, fontWeight: '300', letterSpacing: '0.5px' }}>
+        {/* Header - Axiom style */}
+        <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: AX.border, backgroundColor: AX.surfaceAlt }}>
+          <h3 className="text-base font-semibold" style={{ color: AX.text, letterSpacing: '0.02em' }}>
             Filters
           </h3>
-          <button onClick={onClose} className="cursor-pointer rounded p-1 transition-colors hover:bg-gray-700">
-            <FaTimes size={16} className="font-normal" />
-          </button>
-        </div>
-
-        {/* Reset bar */}
-        <div className="flex items-center justify-end border-b p-1" style={{ borderColor: AX.border }}>
-          <button className="mr-2 cursor-pointer rounded p-1 transition-colors hover:bg-gray-700" onClick={onReset}>
-            <BiRefresh className="h-4 w-4" style={{ color: AX.text }} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              className="cursor-pointer rounded-lg p-2 transition-all duration-200 hover:bg-white/[0.05]" 
+              onClick={onReset}
+              title="Reset filters"
+            >
+              <BiRefresh className="h-4 w-4" style={{ color: AX.textMuted }} />
+            </button>
+            <button 
+              onClick={onClose} 
+              className="cursor-pointer rounded-lg p-2 transition-all duration-200 hover:bg-white/[0.05]"
+            >
+              <FaTimes size={14} style={{ color: AX.textMuted }} />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable body */}
-        <div className="max-h-[500px] overflow-y-auto p-4" style={{ backgroundColor: AX.surface }}>
-          {/* ── Protocols ── */}
-          <div className="mb-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h4 className="text-sm font-medium" style={{ color: AX.text }}>Protocols</h4>
+        <div className="max-h-[500px] overflow-y-auto p-5" style={{ backgroundColor: AX.surface }}>
+          {/* ── Protocols - Axiom style ── */}
+          <div className="mb-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: AX.textMuted }}>Protocols</h4>
               <button
-                className="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all duration-300 ease-out"
-                style={{ backgroundColor: AX.aiBlue, color: '#000000', borderRadius: '20px' }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = AX.aiBlue; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'scale(1)'; }}
+                className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200"
+                style={{ 
+                  backgroundColor: AX.accentDim, 
+                  color: AX.accent, 
+                  border: `1px solid ${AX.accent}40`,
+                }}
+                onMouseEnter={(e) => { 
+                  e.currentTarget.style.backgroundColor = AX.accent; 
+                  e.currentTarget.style.color = '#030304';
+                  e.currentTarget.style.boxShadow = `0 0 12px ${AX.accentGlow}`; 
+                }}
+                onMouseLeave={(e) => { 
+                  e.currentTarget.style.backgroundColor = AX.accentDim; 
+                  e.currentTarget.style.color = AX.accent;
+                  e.currentTarget.style.boxShadow = 'none'; 
+                }}
                 onClick={() => onPendingFilterChange((prev) => ({ ...prev, protocols: ['All'] }))}
               >
                 Select All
@@ -177,34 +203,24 @@ export default function DiscoverFilterModal({
                 return (
                   <button
                     key={protocol.name}
-                    className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out"
+                    className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-xs font-medium whitespace-nowrap transition-all duration-200 rounded-lg"
                     style={{
-                      backgroundColor: selected ? protocol.color : 'transparent',
-                      borderColor: selected ? protocol.color : 'transparent',
-                      border: selected ? '2px solid' : 'none',
-                      color: selected ? '#000000' : AX.text,
-                      borderRadius: '20px',
-                      boxShadow: selected ? `0 0 12px ${protocol.color}40, 0 0 24px ${protocol.color}20` : 'none',
-                      transform: selected ? 'scale(1.02)' : 'scale(1)',
+                      backgroundColor: selected ? `${protocol.color}20` : AX.surfaceAlt,
+                      border: `1px solid ${selected ? protocol.color : AX.border}`,
+                      color: selected ? protocol.color : AX.textMuted,
                     }}
                     onMouseEnter={(e) => {
                       if (!selected) {
-                        e.currentTarget.style.backgroundColor = protocol.color + '10';
-                        e.currentTarget.style.borderColor = protocol.color;
-                        e.currentTarget.style.border = '1px solid';
-                        e.currentTarget.style.color = protocol.color;
-                        e.currentTarget.style.boxShadow = `0 0 8px ${protocol.color}30`;
-                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.borderColor = AX.borderHover;
+                        e.currentTarget.style.color = AX.text;
+                        e.currentTarget.style.backgroundColor = `${AX.surfaceAlt}`;
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!selected) {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.borderColor = 'transparent';
-                        e.currentTarget.style.border = 'none';
-                        e.currentTarget.style.color = AX.text;
-                        e.currentTarget.style.boxShadow = 'none';
-                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.borderColor = AX.border;
+                        e.currentTarget.style.color = AX.textMuted;
+                        e.currentTarget.style.backgroundColor = AX.surfaceAlt;
                       }
                     }}
                     onClick={() => {
@@ -227,43 +243,31 @@ export default function DiscoverFilterModal({
             </div>
           </div>
 
-          {/* ── Quote Tokens ── */}
-          <div className="mb-4">
-            <h4 className="mb-2 text-sm font-medium" style={{ color: AX.text }}>Quote Tokens</h4>
-            <div className="flex gap-3">
+          {/* ── Quote Tokens - Axiom style ── */}
+          <div className="mb-5">
+            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: AX.textMuted }}>Quote Tokens</h4>
+            <div className="flex gap-2">
               {quoteTokens.map((token) => {
                 const selected = pendingFilters.quoteTokens.includes(token.name);
                 return (
                   <button
                     key={token.name}
-                    className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
+                    className="flex cursor-pointer items-center gap-2 px-3 py-2 text-xs font-semibold transition-all duration-200 rounded-lg"
                     style={{
-                      backgroundColor: selected ? token.color : 'transparent',
-                      borderColor: selected ? token.color : 'transparent',
-                      border: selected ? '2px solid' : 'none',
-                      color: selected ? '#000000' : AX.text,
-                      borderRadius: '20px',
-                      boxShadow: selected ? `0 0 12px ${token.color}40, 0 0 24px ${token.color}20` : 'none',
-                      transform: selected ? 'scale(1.02)' : 'scale(1)',
+                      backgroundColor: selected ? `${token.color}20` : AX.surfaceAlt,
+                      border: `1px solid ${selected ? token.color : AX.border}`,
+                      color: selected ? token.color : AX.textMuted,
                     }}
                     onMouseEnter={(e) => {
                       if (!selected) {
-                        e.currentTarget.style.backgroundColor = token.color + '10';
-                        e.currentTarget.style.borderColor = token.color;
-                        e.currentTarget.style.border = '1px solid';
-                        e.currentTarget.style.color = token.color;
-                        e.currentTarget.style.boxShadow = `0 0 8px ${token.color}30`;
-                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.borderColor = AX.borderHover;
+                        e.currentTarget.style.color = AX.text;
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!selected) {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.borderColor = 'transparent';
-                        e.currentTarget.style.border = 'none';
-                        e.currentTarget.style.color = AX.text;
-                        e.currentTarget.style.boxShadow = 'none';
-                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.borderColor = AX.border;
+                        e.currentTarget.style.color = AX.textMuted;
                       }
                     }}
                     onClick={() => {
@@ -275,47 +279,64 @@ export default function DiscoverFilterModal({
                       }));
                     }}
                   >
-                    <span className="text-base" style={{ color: 'inherit' }}>{token.icon}</span>
-                    <span className="font-bold">{token.name}</span>
+                    <span className="text-sm" style={{ color: 'inherit' }}>{token.icon}</span>
+                    <span>{token.name}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* ── Keywords ── */}
-          <div className="mb-6">
-            <h4 className="mb-2 text-sm font-medium" style={{ color: AX.text }}>Search Keywords</h4>
-            <input
-              type="text"
-              placeholder="keyword1, keyword2..."
-              value={pendingFilters.searchKeywords}
-              onChange={(e) => onPendingFilterChange((prev) => ({ ...prev, searchKeywords: e.target.value }))}
-              className="w-full rounded border px-3 py-2 text-sm"
-              style={inputStyle}
-              onFocus={onInputFocus}
-            />
-            <h4 className="mt-3 mb-2 text-sm font-medium" style={{ color: AX.text }}>Exclude Keywords</h4>
-            <input
-              type="text"
-              placeholder="keyword1, keyword2..."
-              value={pendingFilters.excludeKeywords}
-              onChange={(e) => onPendingFilterChange((prev) => ({ ...prev, excludeKeywords: e.target.value }))}
-              className="w-full rounded border px-3 py-2 text-sm"
-              style={inputStyle}
-              onFocus={onInputFocus}
-            />
+          {/* ── Keywords - Axiom style ── */}
+          <div className="mb-6 grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: AX.textMuted }}>Search Keywords</h4>
+              <input
+                type="text"
+                placeholder="keyword1, keyword2..."
+                value={pendingFilters.searchKeywords}
+                onChange={(e) => onPendingFilterChange((prev) => ({ ...prev, searchKeywords: e.target.value }))}
+                className="w-full rounded-lg border px-3.5 py-2.5 text-sm transition-all duration-200"
+                style={inputStyle}
+                onFocus={onInputFocus}
+                onBlur={(e) => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = AX.border; }}
+              />
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: AX.textMuted }}>Exclude Keywords</h4>
+              <input
+                type="text"
+                placeholder="keyword1, keyword2..."
+                value={pendingFilters.excludeKeywords}
+                onChange={(e) => onPendingFilterChange((prev) => ({ ...prev, excludeKeywords: e.target.value }))}
+                className="w-full rounded-lg border px-3.5 py-2.5 text-sm transition-all duration-200"
+                style={inputStyle}
+                onFocus={onInputFocus}
+                onBlur={(e) => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = AX.border; }}
+              />
+            </div>
           </div>
 
-          {/* ── Category Tabs ── */}
-          <div className="mb-4 flex border-b" style={{ borderColor: AX.border }}>
+          {/* ── Category Tabs - Axiom style ── */}
+          <div className="mb-5 flex gap-1 p-1 rounded-lg" style={{ backgroundColor: AX.surfaceAlt, border: `1px solid ${AX.border}` }}>
             {['Audit', '$ Metrics'].map((tab) => (
               <button
                 key={tab}
-                className={`cursor-pointer px-3 py-2 text-sm font-medium transition-colors ${activeCategoryTab === tab ? 'border-b-2' : ''}`}
+                className={`cursor-pointer px-4 py-2 text-xs font-semibold transition-all duration-200 rounded-md flex-1 ${activeCategoryTab === tab ? '' : ''}`}
                 style={{
-                  color: activeCategoryTab === tab ? AX.aiBlue : AX.muted,
-                  borderBottomColor: activeCategoryTab === tab ? AX.aiBlue : 'transparent',
+                  color: activeCategoryTab === tab ? AX.text : AX.textDim,
+                  backgroundColor: activeCategoryTab === tab ? `${AX.accent}15` : 'transparent',
+                  border: activeCategoryTab === tab ? `1px solid ${AX.accent}40` : '1px solid transparent',
+                }}
+                onMouseEnter={(e) => {
+                  if (activeCategoryTab !== tab) {
+                    e.currentTarget.style.color = AX.textMuted;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeCategoryTab !== tab) {
+                    e.currentTarget.style.color = AX.textDim;
+                  }
                 }}
                 onClick={() => setActiveCategoryTab(tab)}
               >
@@ -324,32 +345,33 @@ export default function DiscoverFilterModal({
             ))}
           </div>
 
-          {/* ── Category Content ── */}
+          {/* ── Category Content - Axiom style ── */}
           {activeCategoryTab === 'Audit' && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <MinMaxRow label="Holders" minKey="holdersMin" maxKey="holdersMax" pendingFilters={pendingFilters} onChange={onPendingFilterChange} />
               <MinMaxRow label="Dev Migrations" minKey="devMigrationsMin" maxKey="devMigrationsMax" pendingFilters={pendingFilters} onChange={onPendingFilterChange} />
               <MinMaxRow label="Dev Pairs Created" minKey="devPairsCreatedMin" maxKey="devPairsCreatedMax" pendingFilters={pendingFilters} onChange={onPendingFilterChange} />
               <MinMaxRow label="KOL Count" minKey="kolCountMin" maxKey="kolCountMax" pendingFilters={pendingFilters} onChange={onPendingFilterChange} />
 
               {/* Age — special: has unit selector */}
-              <div>
-                <label className="mb-2 block text-sm font-medium" style={{ color: AX.text }}>Age</label>
-                <div className="flex gap-1">
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider" style={{ color: AX.textMuted }}>Age</label>
+                <div className="flex gap-2">
                   <input
                     type="number"
                     placeholder="Min"
                     value={pendingFilters.minAge}
                     onChange={(e) => onPendingFilterChange((prev) => ({ ...prev, minAge: e.target.value }))}
-                    className="flex-1 rounded border px-3 py-2 text-sm"
+                    className="flex-1 rounded-lg border px-3 py-2.5 text-sm transition-all duration-200"
                     style={inputStyle}
                     onFocus={onInputFocus}
+                    onBlur={(e) => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = AX.border; }}
                   />
                   <select
                     value={pendingFilters.ageUnit}
                     onChange={(e) => onPendingFilterChange((prev) => ({ ...prev, ageUnit: e.target.value }))}
-                    className="rounded border px-2 py-2 text-sm"
-                    style={inputStyle}
+                    className="rounded-lg border px-3 py-2.5 text-sm transition-all duration-200"
+                    style={{ ...inputStyle, minWidth: '70px' }}
                     onFocus={onInputFocus as any}
                   >
                     <option value="m">min</option>
@@ -361,9 +383,10 @@ export default function DiscoverFilterModal({
                     placeholder="Max"
                     value={pendingFilters.maxAge}
                     onChange={(e) => onPendingFilterChange((prev) => ({ ...prev, maxAge: e.target.value }))}
-                    className="flex-1 rounded border px-3 py-2 text-sm"
+                    className="flex-1 rounded-lg border px-3 py-2.5 text-sm transition-all duration-200"
                     style={inputStyle}
                     onFocus={onInputFocus}
+                    onBlur={(e) => { e.target.style.boxShadow = 'none'; e.target.style.borderColor = AX.border; }}
                   />
                 </div>
               </div>
@@ -371,7 +394,7 @@ export default function DiscoverFilterModal({
           )}
 
           {activeCategoryTab === '$ Metrics' && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <MinMaxRow label="Liquidity ($)" minKey="minLiquidity" maxKey="maxLiquidity" pendingFilters={pendingFilters} onChange={onPendingFilterChange} />
               <MinMaxRow label="Market Cap ($)" minKey="minMarketCap" maxKey="maxMarketCap" pendingFilters={pendingFilters} onChange={onPendingFilterChange} />
               <MinMaxRow label="Volume ($)" minKey="minVolume" maxKey="maxVolume" pendingFilters={pendingFilters} onChange={onPendingFilterChange} />
@@ -383,31 +406,53 @@ export default function DiscoverFilterModal({
           )}
         </div>
 
-        {/* ── Footer ── */}
-        <div className="flex items-center justify-end border-t p-4" style={{ borderColor: AX.border }}>
-          <button
-            onClick={onReset}
-            className="mr-2 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
-            style={{ backgroundColor: AX.surface, color: AX.muted, border: `1px solid ${AX.border}` }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = AX.border; e.currentTarget.style.color = AX.text; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = AX.surface; e.currentTarget.style.color = AX.muted; }}
-          >
-            Reset
-          </button>
-          <button
-            className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
-            style={{
-              backgroundColor: hasPendingChanges ? AX.aiBlue : AX.surface,
-              color: hasPendingChanges ? '#000000' : AX.muted,
-              opacity: hasPendingChanges ? 1 : 0.5,
-            }}
-            disabled={!hasPendingChanges}
-            onMouseEnter={(e) => { if (hasPendingChanges) { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`; } }}
-            onMouseLeave={(e) => { if (hasPendingChanges) { e.currentTarget.style.backgroundColor = AX.aiBlue; e.currentTarget.style.boxShadow = 'none'; } }}
-            onClick={onApply}
-          >
-            Apply All
-          </button>
+        {/* ── Footer - Axiom style ── */}
+        <div className="flex items-center justify-between border-t px-5 py-4" style={{ borderColor: AX.border, backgroundColor: AX.surfaceAlt }}>
+          <div className="flex gap-2">
+            <button
+              className="cursor-pointer rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-200"
+              style={{ backgroundColor: AX.surfaceAlt, color: AX.textMuted, border: `1px solid ${AX.border}` }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = AX.borderHover; e.currentTarget.style.color = AX.text; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = AX.border; e.currentTarget.style.color = AX.textMuted; }}
+            >
+              Import
+            </button>
+            <button
+              className="cursor-pointer rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-200"
+              style={{ backgroundColor: AX.surfaceAlt, color: AX.textMuted, border: `1px solid ${AX.border}` }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = AX.borderHover; e.currentTarget.style.color = AX.text; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = AX.border; e.currentTarget.style.color = AX.textMuted; }}
+            >
+              Export
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onReset}
+              className="cursor-pointer rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-200"
+              style={{ backgroundColor: AX.surfaceAlt, color: AX.textMuted, border: `1px solid ${AX.border}` }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = AX.borderHover; e.currentTarget.style.color = AX.text; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = AX.border; e.currentTarget.style.color = AX.textMuted; }}
+            >
+              Reset
+            </button>
+            <button
+              className="cursor-pointer rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200"
+              style={{
+                backgroundColor: hasPendingChanges ? AX.accent : AX.surfaceAlt,
+                color: hasPendingChanges ? '#030304' : AX.textDim,
+                border: hasPendingChanges ? `1px solid ${AX.accent}` : `1px solid ${AX.border}`,
+                boxShadow: hasPendingChanges ? `0 0 16px ${AX.accentGlow}` : 'none',
+                opacity: hasPendingChanges ? 1 : 0.6,
+              }}
+              disabled={!hasPendingChanges}
+              onMouseEnter={(e) => { if (hasPendingChanges) { e.currentTarget.style.filter = 'brightness(1.1)'; } }}
+              onMouseLeave={(e) => { if (hasPendingChanges) { e.currentTarget.style.filter = 'brightness(1)'; } }}
+              onClick={onApply}
+            >
+              Apply All
+            </button>
+          </div>
         </div>
       </div>
     </>,
