@@ -60,31 +60,31 @@ const AX = {
   surface2: "#0c0e12",
   surfaceHover: "#10131a",
   card: "#141720",
-  
+
   // Borders
   border: "rgba(255,255,255,0.06)",
   borderHover: "rgba(255,255,255,0.10)",
   borderStrong: "rgba(255,255,255,0.14)",
-  
+
   // Text hierarchy
   text: "#f4f4f5",
   textSecondary: "#a1a1aa",
   muted: "#71717a",
   textDim: "#52525b",
-  
+
   // Accent colors - Emerald/Mint
   mint: "#18c48c",
   mintBright: "#22d99a",
   mintHover: "#14a877",
   mintGlow: "rgba(24, 196, 140, 0.15)",
   mintGlowStrong: "rgba(24, 196, 140, 0.25)",
-  
+
   // Status colors
   success: "#22c55e",
   sell: "#ef4444",
   danger: "#ef4444",
   warning: "#f59e0b",
-  
+
   // Legacy compatibility
   aiBlue: "#18c48c",
   aiBlueHover: "#14a877",
@@ -683,10 +683,13 @@ const TableHeader: React.FC<{
       >
         {headers.map((header, idx) => {
           let label = header.label;
-          // For trending, the sparkline column tracks the user-selected
-          // timeframe — surface that in the header so the chart and label
-          // stay in sync (5M / 1H / 6H / 24H).
-          if (isTrending && header.label === "24h") {
+          // For trending and dexscreener, the sparkline column tracks the
+          // user-selected timeframe — surface that in the header so the chart
+          // and label stay in sync (5M / 1H / 6H / 24H).
+          if (
+            (isTrending || tableType === "dexscreener") &&
+            header.label === "24h"
+          ) {
             label = (selectedTimeframe || "24h").toUpperCase();
           }
           // Hide 24h sparkline column for newPairs only. DexScreener shows
@@ -2247,6 +2250,25 @@ const sparklineCache = new Map<
 >();
 const SPARKLINE_CACHE_TTL_MS = 5 * 60 * 1000;
 
+// When OHLCV data is missing for a token (common for newly-trending pump.fun
+// mints not yet indexed by token-service), synthesize a 5-point trajectory
+// from the per-timeframe percent-change fields the upstream payload already
+// carries. Points oldest → newest: 24h, 6h, 1h, 5m, now. Returns null when
+// the token doesn't have these fields populated or every change is zero.
+function synthesizeSparklineFromPriceChanges(token: Token): number[] | null {
+  const t = token as any;
+  const c5m = Number(t.price_percent_change_5m);
+  const c1h = Number(t.price_percent_change_1h);
+  const c6h = Number(t.price_percent_change_6h);
+  const c24h = Number(t.price_percent_change_24h);
+  if (![c5m, c1h, c6h, c24h].every(Number.isFinite)) return null;
+  if (!c5m && !c1h && !c6h && !c24h) return null;
+  // Derive each historic price from now's price by reversing the % change.
+  // priceNow / (1 + chg/100) = priceThen. Normalise priceNow = 1.
+  const ratio = (chg: number) => 1 / (1 + chg / 100);
+  return [ratio(c24h), ratio(c6h), ratio(c1h), ratio(c5m), 1];
+}
+
 const MiniSparkline: React.FC<{
   token: Token;
   width?: number;
@@ -2382,14 +2404,18 @@ const MiniSparkline: React.FC<{
     );
   }
 
-  // Need at least 5 data points for a meaningful chart
-  // Otherwise show a simple direction indicator
-  if (priceData.length < 5) {
-    const hasData = priceData.length >= 2;
-    const change = hasData
-      ? ((priceData[priceData.length - 1] - priceData[0]) / priceData[0]) * 100
-      : existingPriceChange;
-    const isUp = change >= 0;
+  // Prefer real OHLCV; otherwise synthesize a 5-point curve from the
+  // per-TF percent changes already on the token. Only fall back to the
+  // direction-indicator curve when neither source has data.
+  const synthetic =
+    priceData.length < 5 ? synthesizeSparklineFromPriceChanges(token) : null;
+  const effectiveData: number[] =
+    priceData.length >= 5 ? priceData : (synthetic ?? []);
+  const effectiveChange =
+    priceData.length >= 5 ? priceChange : existingPriceChange;
+
+  if (effectiveData.length < 5) {
+    const isUp = effectiveChange >= 0;
     const color = isUp ? "#85d99f" : "#f26681";
 
     return (
@@ -2433,7 +2459,7 @@ const MiniSparkline: React.FC<{
     return downsampled;
   };
 
-  const smoothedData = processData(priceData);
+  const smoothedData = processData(effectiveData);
 
   // Calculate bounds
   const minPrice = Math.min(...smoothedData);
@@ -2469,7 +2495,7 @@ const MiniSparkline: React.FC<{
     ` L ${coords[coords.length - 1].x},${padding + chartHeight}` +
     ` L ${coords[0].x},${padding + chartHeight} Z`;
 
-  const isPositive = priceChange >= 0;
+  const isPositive = effectiveChange >= 0;
   const strokeColor = isPositive ? "#85d99f" : "#f26681";
   const gradientId = `sparkline-gradient-${mintAddress?.slice(0, 8)}-${selectedTimeframe}`;
 
