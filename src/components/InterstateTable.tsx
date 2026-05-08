@@ -2258,11 +2258,10 @@ const SPARKLINE_CACHE_TTL_MS = 5 * 60 * 1000;
 // carries. Points oldest → newest: 24h, 6h, 1h, 5m, now. Returns null when
 // the token doesn't have these fields populated or every change is zero.
 function synthesizeSparklineFromPriceChanges(token: Token): number[] | null {
-  const t = token as any;
-  const c5m = Number(t.price_percent_change_5m);
-  const c1h = Number(t.price_percent_change_1h);
-  const c6h = Number(t.price_percent_change_6h);
-  const c24h = Number(t.price_percent_change_24h);
+  const c5m = Number(token.price_percent_change_5m);
+  const c1h = Number(token.price_percent_change_1h);
+  const c6h = Number(token.price_percent_change_6h);
+  const c24h = Number(token.price_percent_change_24h);
   if (![c5m, c1h, c6h, c24h].every(Number.isFinite)) return null;
   if (!c5m && !c1h && !c6h && !c24h) return null;
   // Derive each historic price from now's price by reversing the % change.
@@ -2294,9 +2293,28 @@ const MiniSparkline: React.FC<{
     (token as any).priceChange24h ||
     0;
 
-  // Fetch chart data immediately on mount and whenever timeframe changes
+  // Fetch chart data immediately on mount and whenever timeframe changes.
+  // Effect cleanup signals cancellation: a stale fetch resolving after the
+  // user clicked a different timeframe pill must NOT overwrite the new
+  // pill's priceData. Without this guard, a slow Geckoterminal response
+  // for "5m" can land seconds later and replace the user's now-displayed
+  // "1h" curve, giving them mismatched sparkline shape + color.
   useEffect(() => {
     if (!mintAddress) return;
+
+    const controller = new AbortController();
+    const { signal } = controller;
+    const isCancelled = () => signal.aborted;
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, ms);
+        const onAbort = () => {
+          clearTimeout(t);
+          reject(new DOMException("aborted", "AbortError"));
+        };
+        if (signal.aborted) return onAbort();
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
 
     // Cache check (TTL'd so the curve refreshes a few minutes after the user
     // first opens the tab and we don't show stale lines forever).
@@ -2305,7 +2323,7 @@ const MiniSparkline: React.FC<{
       setPriceData(cached.data);
       setPriceChange(cached.priceChange);
       setLoading(false);
-      return;
+      return () => controller.abort();
     }
     setLoading(true);
 
@@ -2328,41 +2346,47 @@ const MiniSparkline: React.FC<{
         const fromSec = now - tfConfig.windowSec;
         const primary = await fetch(
           `/api/token-service/ohlc?mint=${mintAddress}&interval=${tfConfig.interval}&from=${fromSec}&to=${now}`,
+          { signal },
         );
         if (primary.ok) closes = extractCloses(await primary.json());
       } catch {
-        /* fall through to fallback */
+        if (isCancelled()) return;
+        /* otherwise fall through to fallback */
       }
+
+      if (isCancelled()) return;
 
       // Phase 2 — DEX-side fallback: Geckoterminal returns real OHLCV per
       // pool keyed on pair_address. Used when our indexer hasn't ingested
       // the token yet (most DexScreener-trending pump.fun mints). The proxy
       // dedupes concurrent requests + retries 429s server-side; FE jitter
-      // additionally spreads the initial render burst across ~1.5s so we
+      // additionally spreads the initial render burst across ~800ms so we
       // stay under Geckoterminal's 30/min/IP limit on a cold tab.
-      const pairAddress = (token as any).pair_address;
+      const pairAddress = token.pair_address;
       const fetchFallback = async () => {
         const r = await fetch(
           `/api/dex-ohlc-fallback?pair_address=${encodeURIComponent(pairAddress)}&timeframe=${encodeURIComponent(selectedTimeframe)}`,
+          { signal },
         );
         return r.ok ? extractCloses(await r.json()) : [];
       };
 
       if (closes.length < 5 && pairAddress) {
         try {
-          await new Promise((r) => setTimeout(r, Math.random() * 1500));
+          await sleep(Math.random() * 800);
+          if (isCancelled()) return;
           closes = await fetchFallback();
-          // One delayed retry — server-side retry is independent of ours,
-          // and a row that lost the rate-limit race on first attempt may
-          // win after the burst clears.
-          if (closes.length < 5) {
-            await new Promise((r) => setTimeout(r, 2000 + Math.random() * 1500));
-            closes = await fetchFallback();
-          }
-        } catch {
-          /* fall through to synth curve */
+          // Server-side retry already handles the 429 case; a single FE
+          // attempt is enough. The architect review flagged the second FE
+          // retry as wasted (proxy caches negative results, retry would
+          // hit the cached failure anyway).
+        } catch (err) {
+          if (isCancelled()) return;
+          /* otherwise fall through to synth curve */
         }
       }
+
+      if (isCancelled()) return;
 
       try {
         if (closes.length > 0) {
@@ -2378,26 +2402,40 @@ const MiniSparkline: React.FC<{
           setPriceData(closes);
           setPriceChange(change);
         } else {
+          // Cache the empty result with a short TTL so subsequent re-renders
+          // don't re-fire the whole fetch chain. Re-render churn from WS
+          // updates would otherwise hammer the proxy + Geckoterminal.
+          sparklineCache.set(cacheKey, {
+            data: [],
+            priceChange: existingPriceChange,
+            ts: Date.now() - SPARKLINE_CACHE_TTL_MS + 60_000, // ~60s effective TTL
+          });
           setPriceData([]);
         }
       } catch (err) {
-        console.debug(
-          "[Sparkline] Failed to fetch for",
-          mintAddress,
-          selectedTimeframe,
-        );
+        if (!isCancelled()) {
+          console.debug(
+            "[Sparkline] Failed to fetch for",
+            mintAddress,
+            selectedTimeframe,
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled()) setLoading(false);
       }
     };
 
     fetchSparkline();
+
+    return () => controller.abort();
   }, [
     cacheKey,
     mintAddress,
     selectedTimeframe,
     tfConfig.interval,
     tfConfig.windowSec,
+    token.pair_address,
+    existingPriceChange,
   ]);
 
   // Generate a simple placeholder line based on existing price change data

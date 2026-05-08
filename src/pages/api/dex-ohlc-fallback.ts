@@ -1,5 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
+// TEMPORARY: Geckoterminal proxy that fills the OHLCV gap for
+// DexScreener-trending tokens our token-service indexer doesn't yet cover
+// (mostly newly-trending pump.fun mints). Remove once the BE chromedp
+// scraper fix lands and token-service OHLCV covers these mints — at that
+// point this whole file becomes dead code (MiniSparkline's primary fetch
+// will succeed and the fallback never fires). Tracking gating ticket
+// alongside the dexscreener_trending.go chromedp + Dockerfile chromium
+// install fix.
+
 // FE timeframe → Geckoterminal OHLCV endpoint shape. Density tuned to
 // match Trending's TIMEFRAME_CONFIG (~60-96 candle closes per sparkline)
 // so the resulting polyline reads as a real chart, not a smooth curve.
@@ -44,6 +53,32 @@ interface GeckoOhlcvResponse {
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<CacheEntry["payload"]>>();
 
+// Per-IP rate limit — proxy fans out to Geckoterminal's free tier
+// (30 req/min/IP at the upstream). Without a client-side ceiling an
+// anonymous flood with distinct pair addresses would burn through the
+// upstream budget. Sliding-window counter, 60s window, 60 req/IP/min.
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 60;
+const ipHits = new Map<string, number[]>();
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const bucket = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (bucket.length >= RATE_LIMIT_MAX) {
+    ipHits.set(ip, bucket);
+    return true;
+  }
+  bucket.push(now);
+  ipHits.set(ip, bucket);
+  // Evict cold IPs every ~50 calls so the map doesn't grow unbounded
+  if (ipHits.size > 500 && Math.random() < 0.02) {
+    for (const [k, v] of ipHits) {
+      if (v.every((t) => now - t >= RATE_LIMIT_WINDOW_MS)) ipHits.delete(k);
+    }
+  }
+  return false;
+}
+
 async function fetchUpstream(
   pair: string,
   tf: (typeof TIMEFRAME_TO_GT)[string],
@@ -82,7 +117,11 @@ async function fetchUpstream(
 
     // Geckoterminal payload row: [unix_ts, open, high, low, close, volume]
     // Newest-first; reverse so MiniSparkline's chronological render works.
+    // Filter short rows defensively — typed as number[][] but if upstream
+    // ever returns a malformed row, indexed access would yield undefined
+    // and propagate NaN into the sparkline.
     const items: OhlcvItem[] = rows
+      .filter((row) => Array.isArray(row) && row.length >= 6)
       .map((row) => ({
         unix_time: row[0],
         o: row[1],
@@ -105,6 +144,18 @@ export default async function handler(
 ) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // Per-IP rate limit before any work — anonymous flood with distinct
+  // pair addresses would otherwise burn through Geckoterminal's free tier.
+  // Trusts the first IP in X-Forwarded-For (Vercel sets it correctly),
+  // falls back to socket address.
+  const xff = req.headers["x-forwarded-for"];
+  const xffStr = Array.isArray(xff) ? xff[0] : xff;
+  const ip = (xffStr ?? "").split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  if (rateLimited(ip)) {
+    res.setHeader("Retry-After", "60");
+    return res.status(429).json({ error: "rate limited" });
   }
 
   const pair = String(req.query.pair_address || "");
