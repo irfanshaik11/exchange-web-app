@@ -3730,10 +3730,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== F. Amount ===== */}
       <div className="px-3 pt-2">
-        <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B]">
-          <div className="flex items-center justify-between gap-3 px-3 py-0.5">
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
+        <div className="mx-auto w-full max-w-xl relative rounded-xl overflow-hidden" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
+          <div className="flex items-center justify-between gap-3 px-3 py-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                 {isSniperMode ? "Sniper Amount" : "Amount"}
               </span>
               <input
@@ -3741,9 +3741,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 inputMode="decimal"
                 pattern="[0-9]*[.,]?[0-9]*"
                 className="h-6 w-20 bg-transparent border-none text-left pl-2
-                           text-[12px] font-normal text-[#E6E7EA] tabular-nums
-                           placeholder:text-[#9CA3AF] focus:outline-none"
-                style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                           text-[13px] font-medium tabular-nums
+                           placeholder:opacity-50 focus:outline-none"
+                style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', color: AX.text }}
                 placeholder="0.00"
                 value={isSniperMode ? sniperAmount : amount}
                 onChange={(e) => {
@@ -3784,7 +3784,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
             <div className="flex items-center justify-center w-5 h-5">
               {mode === "sell" ? (
-                <span className="text-[14px] font-semibold text-[#E6E7EA]">%</span>
+                <span className="text-[14px] font-semibold" style={{ color: AX.text }}>%</span>
               ) : (
                 <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
                   <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
@@ -3818,7 +3818,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             const showSubtext = isSellWithPosition || isBuyWithPrice;
             const presetRowHeight = showSubtext ? "h-9" : "h-7";
             return (
-          <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
+          <div className="overflow-hidden" style={{ borderTop: `1px solid ${AX.border}` }}>
             <div className="grid grid-cols-5">
               {amountPresets.map((opt, i) => {
                 const currentValue = editingPresets ? (presetDrafts[i] || "") : String(opt);
@@ -3830,12 +3830,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     : null;
                 if (editingPresets) {
                   return (
-                    <div key={i} className={`${presetRowHeight} border-r border-[#000] last:border-r-0 min-w-0`}>
+                    <div key={i} className={`${presetRowHeight} min-w-0`} style={{ borderRight: i < 4 ? `1px solid ${AX.border}` : 'none' }}>
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="h-full w-full bg-[#101114] text-center text-[12px] font-semibold text-[#E6E7EA]
-                                   outline-none focus:bg-[#1E1F26]"
+                        className="h-full w-full text-center text-[12px] font-semibold outline-none"
+                        style={{ backgroundColor: AX.surface, color: AX.text }}
                         value={presetDrafts[i] ?? ""}
                         onChange={(e) => {
                           const v = e.target.value.replace(/,/g, ".");
@@ -3858,11 +3858,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     key={i}
                     type="button"
                     className={cx(
-                      `${presetRowHeight} border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums`,
-                      active
-                        ? "bg-[#2A2B33] text-[#E6E7EA]"
-                        : "bg-[#101114] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                      `${presetRowHeight} text-[12px] font-semibold tabular-nums transition-colors duration-150`
                     )}
+                    style={{
+                      borderRight: i < 4 ? `1px solid ${AX.border}` : 'none',
+                      backgroundColor: active ? `${AX.mint}15` : AX.surface,
+                      color: active ? AX.mint : AX.text,
+                    }}
                     onClick={() => {
                       if (isSniperMode) {
                         setSniperAmount(String(opt));
@@ -3888,7 +3890,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingPresets(true)}
-                  className={`${presetRowHeight} bg-[#101114] hover:bg-[#1E1F26] text-[#E6E7EA]`}
+                  className={`${presetRowHeight} transition-colors duration-150`}
+                  style={{ backgroundColor: AX.surface, color: AX.muted }}
                   title="Edit preset values"
                 >
                   <LuPencil className="mx-auto h-4 w-4" />
@@ -3897,7 +3900,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={commitPresetDrafts}
-                  className={`${presetRowHeight} bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#25282B]`}
+                  className={`${presetRowHeight} transition-colors duration-150`}
+                  style={{ backgroundColor: `${AX.mint}15`, color: AX.mint }}
                   title="Done"
                 >
                   <LuCheck className="mx-auto h-4 w-4" />
@@ -3915,18 +3919,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         <div className="px-3 pt-2 space-y-3">
           {/* Market cap input */}
           <div className=" pt-2 pb-3">
-            <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B] mb-3">
+            <div className="mx-auto w-full max-w-xl relative rounded-xl mb-3" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">MKT CAP</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>MKT CAP</span>
                   <input
                     type="text"
                     inputMode="decimal"
                     pattern="[0-9]*[.,]?[0-9]*"
                     className="h-8 w-20 bg-transparent border-none text-left pl-2
-                               text-[12px] font-normal text-[#E6E7EA] tabular-nums
-                               placeholder:text-[#9CA3AF] focus:outline-none"
-                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                               text-[13px] font-medium tabular-nums
+                               placeholder:opacity-50 focus:outline-none"
+                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', color: AX.text }}
                     placeholder="0"
                     value={targetMC}
                     onChange={(e) => {
@@ -3944,7 +3948,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     }}
                   />
                 </div>
-                <span className="text-[11px] font-normal text-[#9CA3AF]">$</span>
+                <span className="text-[11px] font-normal" style={{ color: AX.muted }}>$</span>
               </div>
             </div>
 
@@ -3954,15 +3958,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               <div className="flex-1">
                 <div className="relative h-4 flex items-center">
                   {/* Base track */}
-                  <div className="absolute top-1/2 left-0 w-full h-0.5 bg-[#2A2B33] rounded-lg"></div>
+                  <div className="absolute top-1/2 left-0 w-full h-1 rounded-full" style={{ backgroundColor: AX.border }}></div>
                   
                   {/* Markings */}
                   <div className="absolute top-1/2 left-0 w-full h-0.5 flex justify-between items-center pointer-events-none">
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1.5 bg-[#E6E7EA] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
+                    <div className="w-px h-1 -mt-0.5" style={{ backgroundColor: AX.muted }}></div>
+                    <div className="w-px h-1 -mt-0.5" style={{ backgroundColor: AX.muted }}></div>
+                    <div className="w-px h-1.5 -mt-0.5" style={{ backgroundColor: AX.text }}></div>
+                    <div className="w-px h-1 -mt-0.5" style={{ backgroundColor: AX.muted }}></div>
+                    <div className="w-px h-1 -mt-0.5" style={{ backgroundColor: AX.muted }}></div>
                   </div>
                   
                   <input
@@ -4315,13 +4319,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[10px] font-semibold">
+            <span className="text-[10px] font-semibold" style={{ color: AX.mint }}>
               ${positionData ? formatCompactNumber(positionData.boughtUsdValue) : '0'}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+          <span className="text-[9px] uppercase tracking-wide" style={{ color: AX.muted }}>Sold</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
@@ -4344,13 +4348,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#FF4D7F] text-[10px] font-semibold">
+            <span className="text-[10px] font-semibold" style={{ color: AX.sell }}>
               ${positionData ? formatCompactNumber(positionData.soldUsdValue) : '0'}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+          <span className="text-[9px] uppercase tracking-wide" style={{ color: AX.muted }}>Holding</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
@@ -4373,7 +4377,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#E6E7EA] text-[10px] font-semibold">
+            <span className="text-[10px] font-semibold" style={{ color: AX.text }}>
               ${positionData ? formatCompactNumber(positionData.remainingUsdValue) : '0'}
             </span>
           </div>
@@ -4397,9 +4401,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               : 'PnL: realized (from closed sells). Click to switch to unrealized.'
           }
           onClick={() => setPnlMode((m) => (m === 'unrealized' ? 'realized' : 'unrealized'))}
-          className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33] hover:bg-[#1E1F26] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#70E0B0] transition-colors cursor-pointer"
+          className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg transition-colors cursor-pointer"
+          style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
         >
-          <span className="flex items-center gap-1 text-[9px] text-[#9CA3AF] uppercase tracking-wide">
+          <span className="flex items-center gap-1 text-[9px] uppercase tracking-wide" style={{ color: AX.muted }}>
             {pnlMode === 'unrealized' ? 'UPnL' : 'PnL'}
             <LuArrowLeftRight size={9} aria-hidden="true" />
           </span>
