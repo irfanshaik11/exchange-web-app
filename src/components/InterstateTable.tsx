@@ -1133,8 +1133,7 @@ const TokenInfo: React.FC<{
 }) => {
   // DexScreener uses the same stacked layout as Trending (symbol on top,
   // name on its own line, action icons inline) — visually closer to axiom.
-  const isTrending =
-    tableType === "trending" || tableType === "dexscreener";
+  const isTrending = tableType === "trending" || tableType === "dexscreener";
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
@@ -2311,31 +2310,57 @@ const MiniSparkline: React.FC<{
     setLoading(true);
 
     const fetchSparkline = async () => {
+      const extractCloses = (result: any): number[] => {
+        if (!result?.success || !Array.isArray(result?.data?.items)) return [];
+        return result.data.items
+          .map((item: any) => Number(item.c))
+          .filter((n: number) => Number.isFinite(n) && n > 0);
+      };
+
+      let closes: number[] = [];
       try {
-        const now = Math.floor(Date.now() / 1000);
-        const fromSec = now - tfConfig.windowSec;
+        // Phase 1 — primary: token-service OHLCV (rich for tokens our
+        // indexer covers; empty for newly-trending pump.fun mints).
         // Send `interval` only (no `timeframe`) — the API handler would
         // otherwise prefer `timeframe` and fall through to 5m for any value
         // not in its INTERVAL_MAP.
-        const response = await fetch(
+        const now = Math.floor(Date.now() / 1000);
+        const fromSec = now - tfConfig.windowSec;
+        const primary = await fetch(
           `/api/token-service/ohlc?mint=${mintAddress}&interval=${tfConfig.interval}&from=${fromSec}&to=${now}`,
         );
-        if (!response.ok) throw new Error("Failed to fetch");
+        if (primary.ok) closes = extractCloses(await primary.json());
+      } catch {
+        /* fall through to fallback */
+      }
 
-        const result = await response.json();
-        if (result.success && result.data?.items?.length > 0) {
-          const closes = result.data.items.map((item: any) => item.c);
+      // Phase 2 — DEX-side fallback: Geckoterminal returns real OHLCV per
+      // pool keyed on pair_address. Used when our indexer hasn't ingested
+      // the token yet (most DexScreener-trending pump.fun mints). Edge-cached
+      // 30s server-side so 110 concurrent rows don't burst the rate limit.
+      const pairAddress = (token as any).pair_address;
+      if (closes.length < 5 && pairAddress) {
+        try {
+          const fb = await fetch(
+            `/api/dex-ohlc-fallback?pair_address=${encodeURIComponent(pairAddress)}&timeframe=${encodeURIComponent(selectedTimeframe)}`,
+          );
+          if (fb.ok) closes = extractCloses(await fb.json());
+        } catch {
+          /* fall through to synth curve */
+        }
+      }
+
+      try {
+        if (closes.length > 0) {
           const firstPrice = closes[0] || 0;
           const lastPrice = closes[closes.length - 1] || 0;
           const change =
             firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
-
           sparklineCache.set(cacheKey, {
             data: closes,
             priceChange: change,
             ts: Date.now(),
           });
-
           setPriceData(closes);
           setPriceChange(change);
         } else {
