@@ -2336,15 +2336,29 @@ const MiniSparkline: React.FC<{
 
       // Phase 2 — DEX-side fallback: Geckoterminal returns real OHLCV per
       // pool keyed on pair_address. Used when our indexer hasn't ingested
-      // the token yet (most DexScreener-trending pump.fun mints). Edge-cached
-      // 30s server-side so 110 concurrent rows don't burst the rate limit.
+      // the token yet (most DexScreener-trending pump.fun mints). The proxy
+      // dedupes concurrent requests + retries 429s server-side; FE jitter
+      // additionally spreads the initial render burst across ~1.5s so we
+      // stay under Geckoterminal's 30/min/IP limit on a cold tab.
       const pairAddress = (token as any).pair_address;
+      const fetchFallback = async () => {
+        const r = await fetch(
+          `/api/dex-ohlc-fallback?pair_address=${encodeURIComponent(pairAddress)}&timeframe=${encodeURIComponent(selectedTimeframe)}`,
+        );
+        return r.ok ? extractCloses(await r.json()) : [];
+      };
+
       if (closes.length < 5 && pairAddress) {
         try {
-          const fb = await fetch(
-            `/api/dex-ohlc-fallback?pair_address=${encodeURIComponent(pairAddress)}&timeframe=${encodeURIComponent(selectedTimeframe)}`,
-          );
-          if (fb.ok) closes = extractCloses(await fb.json());
+          await new Promise((r) => setTimeout(r, Math.random() * 1500));
+          closes = await fetchFallback();
+          // One delayed retry — server-side retry is independent of ours,
+          // and a row that lost the rate-limit race on first attempt may
+          // win after the burst clears.
+          if (closes.length < 5) {
+            await new Promise((r) => setTimeout(r, 2000 + Math.random() * 1500));
+            closes = await fetchFallback();
+          }
         } catch {
           /* fall through to synth curve */
         }
