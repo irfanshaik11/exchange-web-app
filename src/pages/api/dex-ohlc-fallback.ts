@@ -1,16 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-// FE timeframe → Geckoterminal OHLCV endpoint shape. Aggregates picked so
-// each sparkline gets ~24-30 candles spanning the displayed window —
-// dense enough for spike detail, light enough to render fast.
+// FE timeframe → Geckoterminal OHLCV endpoint shape. Density tuned to
+// match Trending's TIMEFRAME_CONFIG (~60-96 candle closes per sparkline)
+// so the resulting polyline reads as a real chart, not a smooth curve.
+// Reference: Trending uses 1m×60 (1h), 5m×72 (6h), 30m×48 (24h). We can't
+// match the 1s candles Trending uses for 5m (Geckoterminal min resolution
+// is 1m), so we widen the 5m window to give 60 1-min candles instead of 5.
 const TIMEFRAME_TO_GT: Record<
   string,
   { period: "minute" | "hour" | "day"; aggregate: number; limit: number }
 > = {
-  "5m": { period: "minute", aggregate: 1, limit: 30 },
-  "1h": { period: "minute", aggregate: 5, limit: 24 },
-  "6h": { period: "minute", aggregate: 15, limit: 24 },
-  "24h": { period: "hour", aggregate: 1, limit: 24 },
+  "5m": { period: "minute", aggregate: 1, limit: 60 }, // 60 × 1m = 1h context
+  "1h": { period: "minute", aggregate: 1, limit: 60 }, // 60 × 1m = 1h
+  "6h": { period: "minute", aggregate: 5, limit: 72 }, // 72 × 5m = 6h
+  "24h": { period: "minute", aggregate: 15, limit: 96 }, // 96 × 15m = 24h
 };
 
 const GT_BASE = "https://api.geckoterminal.com/api/v2/networks/solana/pools";
@@ -39,10 +42,7 @@ interface GeckoOhlcvResponse {
 // while the serverless function stays warm; cold starts get a fresh map
 // (Geckoterminal handles a single cold-start request fine).
 const cache = new Map<string, CacheEntry>();
-const inFlight = new Map<
-  string,
-  Promise<CacheEntry["payload"]>
->();
+const inFlight = new Map<string, Promise<CacheEntry["payload"]>>();
 
 async function fetchUpstream(
   pair: string,
