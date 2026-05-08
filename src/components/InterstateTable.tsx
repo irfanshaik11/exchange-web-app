@@ -689,11 +689,10 @@ const TableHeader: React.FC<{
           if (isTrending && header.label === "24h") {
             label = (selectedTimeframe || "24h").toUpperCase();
           }
-          // Hide 24h sparkline column for newPairs and dexscreener tabs
-          if (
-            header.label === "24h" &&
-            (tableType === "newPairs" || tableType === "dexscreener")
-          ) {
+          // Hide 24h sparkline column for newPairs only. DexScreener shows
+          // the chart (axiom-style) — sparkline tracks selectedTimeframe via
+          // the same MiniSparkline as Trending uses.
+          if (header.label === "24h" && tableType === "newPairs") {
             return null;
           }
           // Hide Token Info / Holders column for newPairs and dexscreener
@@ -707,10 +706,8 @@ const TableHeader: React.FC<{
           if (header.label === "Volume" && tableType === "newPairs") {
             return null;
           }
-          // Show TXNS column for newPairs and trending tabs (hidden for dexscreener)
-          if (header.label === "TXNS" && tableType === "dexscreener") {
-            return null;
-          }
+          // TXNS column is now shown on every table type. DexScreener tokens
+          // carry total_buys_<tf> / total_sells_<tf> from the upstream payload.
           const hideOnNarrow =
             header.label === "Token Info" || header.label === "Holders";
 
@@ -2861,9 +2858,9 @@ const TableRow: React.FC<{
           />
         </td>
 
-        {/* Sparkline column — for trending it follows the user-selected
+        {/* Sparkline column — trending and dexscreener follow the user-selected
             timeframe (5m/1h/6h/24h); other tabs keep legacy 24h behaviour. */}
-        {tableType !== "newPairs" && tableType !== "dexscreener" && (
+        {tableType !== "newPairs" && (
           <td
             className={`${isTrending ? "w-28" : "w-32"} px-2 py-2.5 align-middle`}
           >
@@ -2872,7 +2869,11 @@ const TableRow: React.FC<{
                 token={token}
                 width={isTrending ? 100 : 120}
                 height={32}
-                selectedTimeframe={isTrending ? selectedTimeframe : "24h"}
+                selectedTimeframe={
+                  isTrending || tableType === "dexscreener"
+                    ? selectedTimeframe
+                    : "24h"
+                }
               />
             </div>
           </td>
@@ -2956,21 +2957,20 @@ const TableRow: React.FC<{
           </td>
         )}
 
-        {tableType !== "dexscreener" && (
-          // TXNS data is centered (matches the centered header) for the
-          // compact buys/sells variant. New Pairs uses the default variant
-          // which is right-aligned single-number transaction count.
-          <td
-            className={`${isTrending ? "w-32" : "w-24"} px-4 py-2.5 align-middle ${tableType === "newPairs" ? "text-right" : "text-center"}`}
-          >
-            <TxnsCell
-              token={token}
-              selectedTimeframe={selectedTimeframe}
-              isDiscoverPage={isDiscoverPage}
-              variant={tableType === "newPairs" ? "default" : "compact"}
-            />
-          </td>
-        )}
+        {/* TXNS data is centered (matches the centered header) for the
+            compact buys/sells variant. New Pairs uses the default variant
+            which is right-aligned single-number transaction count.
+            DexScreener uses the same compact variant as Trending. */}
+        <td
+          className={`${isTrending ? "w-32" : "w-24"} px-4 py-2.5 align-middle ${tableType === "newPairs" ? "text-right" : "text-center"}`}
+        >
+          <TxnsCell
+            token={token}
+            selectedTimeframe={selectedTimeframe}
+            isDiscoverPage={isDiscoverPage}
+            variant={tableType === "newPairs" ? "default" : "compact"}
+          />
+        </td>
 
         {/* Gas Fees column - commented out per user request
       <td className="w-28 px-4 py-2.5 align-middle text-right">
