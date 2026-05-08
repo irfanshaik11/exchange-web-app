@@ -1131,7 +1131,10 @@ const TokenInfo: React.FC<{
   chain = "sol",
   tableType = "trending",
 }) => {
-  const isTrending = tableType === "trending";
+  // DexScreener uses the same stacked layout as Trending (symbol on top,
+  // name on its own line, action icons inline) — visually closer to axiom.
+  const isTrending =
+    tableType === "trending" || tableType === "dexscreener";
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
@@ -2476,8 +2479,8 @@ const MiniSparkline: React.FC<{
     y: padding + chartHeight - ((price - minPrice) / priceRange) * chartHeight,
   }));
 
-  // Sharp polyline preserves spike shape — Axiom-style. Bezier smoothing was
-  // rounding off real price moves traders need to see.
+  // Real OHLCV: sharp polyline preserves spike shape — Axiom-style. Bezier
+  // smoothing rounds off real price moves traders need to see.
   const createPolyline = (pts: { x: number; y: number }[]): string => {
     if (pts.length < 2) return "";
     let path = `M ${pts[0].x},${pts[0].y}`;
@@ -2487,7 +2490,34 @@ const MiniSparkline: React.FC<{
     return path;
   };
 
-  const linePath = createPolyline(coords);
+  // Synthesized data (only 5 anchor points from per-TF percent changes):
+  // Catmull-Rom-to-cubic-bezier interpolation makes the curve read as an
+  // organic chart instead of a polygon. We don't fabricate intermediate
+  // values — the curve still passes through every anchor — but the smooth
+  // tangents fill in plausible micro-shape between the macro datapoints.
+  const createSmoothPath = (pts: { x: number; y: number }[]): string => {
+    if (pts.length < 2) return "";
+    if (pts.length === 2)
+      return `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y}`;
+    let path = `M ${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] ?? pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] ?? p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+    }
+    return path;
+  };
+
+  const isSynthetic = priceData.length < 5 && synthetic !== null;
+  const linePath = isSynthetic
+    ? createSmoothPath(coords)
+    : createPolyline(coords);
 
   // Create closed path for gradient fill
   const fillPath =
