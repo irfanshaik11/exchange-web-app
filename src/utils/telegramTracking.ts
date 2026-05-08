@@ -155,15 +155,19 @@ export interface TelegramFeedResponse {
 /**
  * Get latest messages from all tracked Telegram channels (requires auth).
  * Backend requires Telegram MTProto client to be configured.
+ *
+ * Pass `force` to bypass the backend's Redis cache (e.g. manual refresh button).
  */
 export async function getTelegramChannelFeed(
   authToken: string,
   limit: number = 10,
+  force: boolean = false,
 ): Promise<TelegramFeedResponse> {
   const params = new URLSearchParams({
     limit: String(Math.max(1, Math.min(limit, 20))),
     _: String(Date.now()),
   });
+  if (force) params.set("force", "1");
   const url = `${WALLET_TRACKER_API_URL}/api/telegram/feed?${params.toString()}`;
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${authToken}` },

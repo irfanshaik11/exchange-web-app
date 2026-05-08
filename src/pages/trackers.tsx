@@ -1429,13 +1429,13 @@ export default function TrackersPage() {
     }
   };
 
-  const loadTelegramFeed = async () => {
+  const loadTelegramFeed = async (force: boolean = false) => {
     if (!user?.bearerToken) return;
     setLoadingTelegramFeed(true);
     setTelegramFeedHint(null);
     try {
       const feedLimit = wallets.length > 6 ? 5 : 10;
-      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, feedLimit);
+      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, feedLimit, force);
       setTelegramFeed(messages);
       setTelegramFeedHint(hint ?? null);
     } catch (error) {
@@ -2169,7 +2169,7 @@ export default function TrackersPage() {
                               <button
                                 type="button"
                                 className="mt-5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-xs font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5]"
-                                onClick={() => loadTelegramFeed()}
+                                onClick={() => loadTelegramFeed(true)}
                               >
                                 Retry
                               </button>
