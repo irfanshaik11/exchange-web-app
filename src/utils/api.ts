@@ -305,6 +305,12 @@ export const walletLogin = (
     body: { chain, address, signature, message, ...(walletName && { walletName }), ...(referralCode && { referralCode }) },
   });
 
+export type ReferralStatus =
+  | { applied: true }
+  | { applied: false; reason: 'code_not_found'; message: string }
+  | { applied: false; reason: 'self_referral'; message: string }
+  | { applied: false; reason: 'already_existing_user'; message: string };
+
 export const turnkeyLogin = (
   params: {
     turnkeySessionToken: string;
@@ -320,7 +326,7 @@ export const turnkeyLogin = (
     let lastError: unknown;
     for (const endpoint of endpoints) {
       try {
-        return await apiFetch<{ token: string }>(endpoint, {
+        return await apiFetch<{ token: string; referralStatus?: ReferralStatus }>(endpoint, {
           method: "POST",
           body: params,
         });
