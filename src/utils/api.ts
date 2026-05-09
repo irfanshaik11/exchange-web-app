@@ -305,10 +305,17 @@ export const walletLogin = (
     body: { chain, address, signature, message, ...(walletName && { walletName }), ...(referralCode && { referralCode }) },
   });
 
+/**
+ * Wire shape of `referralStatus` returned by the backend.
+ *
+ * The backend strips `reason` from the response body for `code_not_found` and
+ * `self_referral` (anti-enumeration). It is preserved for `already_existing_user`
+ * since that case is not abuse-sensitive. The frontend only needs `applied` and
+ * `message` to render the toast.
+ */
 export type ReferralStatus =
   | { applied: true }
-  | { applied: false; reason: 'code_not_found'; message: string }
-  | { applied: false; reason: 'self_referral'; message: string }
+  | { applied: false; message: string }
   | { applied: false; reason: 'already_existing_user'; message: string };
 
 export const turnkeyLogin = (

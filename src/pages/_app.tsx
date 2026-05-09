@@ -381,11 +381,10 @@ function TurnkeySessionBridge() {
             clearStoredReferralCodeHint();
 
             // Surface backend rejection of referral attribution (no-op if field absent).
+            // Login itself succeeded, so the surface is informational, not a warning.
             const referralStatus = data?.referralStatus;
             if (referralStatus && referralStatus.applied === false && referralStatus.message) {
-              showEnhancedToast('warning', referralStatus.message, {
-                id: 'referral-attribution-toast',
-              });
+              showEnhancedToast('info', referralStatus.message);
             }
 
             pendingRefreshRef.current = true;
