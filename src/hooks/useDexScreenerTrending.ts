@@ -145,13 +145,23 @@ function normalizeDexScreenerToken(raw: any): NormalizedTrendingToken {
     // `price_percent_change_<tf>` keys, so map both. Without this, the sparkline
     // fallback (when OHLCV is missing) defaults to "up/green" because 0 >= 0,
     // which is misleading for tokens that actually went sideways or down.
-    price_percent_change_5m: raw.price_change_5m ?? raw.price_percent_change_5m ?? 0,
-    price_percent_change_1h: raw.price_change_1h ?? raw.price_percent_change_1h ?? 0,
-    price_percent_change_6h: raw.price_change_6h ?? raw.price_percent_change_6h ?? 0,
-    price_percent_change_24h: raw.price_change_24h ?? raw.price_percent_change_24h ?? 0,
+    price_percent_change_5m:
+      raw.price_change_5m ?? raw.price_percent_change_5m ?? 0,
+    price_percent_change_1h:
+      raw.price_change_1h ?? raw.price_percent_change_1h ?? 0,
+    price_percent_change_6h:
+      raw.price_change_6h ?? raw.price_percent_change_6h ?? 0,
+    price_percent_change_24h:
+      raw.price_change_24h ?? raw.price_percent_change_24h ?? 0,
     launchpad_protocol: protocol,
     protocol: protocol,
     pair_address: raw.pair_address || "",
+    // DexScreener trending rarely (in practice never — mature breakouts
+    // are past the 24h Mayhem window) carries this flag, but the chip is
+    // also hidden on that tab so the field is here purely for type
+    // consistency with the trending normaliser. Strict `=== true` keeps
+    // hostile payload values (e.g. truthy strings) from flipping it.
+    is_mayhem_mode: raw.is_mayhem_mode === true || raw.isMayhemMode === true,
   };
 }
 
