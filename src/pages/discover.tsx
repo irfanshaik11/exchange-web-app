@@ -309,31 +309,12 @@ export function DiscoverPageContent({
   // Snapshots the outgoing tab's window+sort so users get back to where they
   // left off, then restores the incoming tab's last state.
   //
-  // Flicker control: the displayed list depends on multiple inputs that
-  // settle in stages across renders (activeTab → filter bucket →
-  // applyDiscoverFiltersFn ref → memoized sort), and the trending WebSocket
-  // pushes `wsTokens` updates urgently between those stages — each one
-  // commits a half-applied list (e.g. new sortKey but old filter bucket).
-  // Trying to freeze a snapshot races React's render queue; trying to use
-  // useTransition lets the WebSocket urgent updates interrupt the
-  // transition. Both approaches fight React internals and lose.
-  //
-  // The reliable fix is purely visual: fade the table to low opacity for
-  // a short window after a tab switch (250ms). The intermediate frames
-  // still exist in the DOM, but they're visually muted behind the fade —
-  // the user perceives a clean fade-out/fade-in, not a content flash.
-  const TAB_SWITCH_FADE_MS = 250;
-  const [tabSwitchAt, setTabSwitchAt] = useState(0);
-  const isTabSwitching =
-    tabSwitchAt > 0 && Date.now() - tabSwitchAt < TAB_SWITCH_FADE_MS;
-  useEffect(() => {
-    if (tabSwitchAt === 0) return;
-    const remaining = TAB_SWITCH_FADE_MS - (Date.now() - tabSwitchAt);
-    if (remaining <= 0) return;
-    const id = setTimeout(() => setTabSwitchAt(0), remaining + 16);
-    return () => clearTimeout(id);
-  }, [tabSwitchAt]);
-
+  // The flicker that previously appeared on Top/Gainers tab switches was
+  // caused by `useTrendingWebSocket` exposing `tokens` via setState-in-
+  // useEffect, which lagged one render behind `selectedTimeframe`. That
+  // hook now derives `tokens` synchronously via useMemo, so the new
+  // timeframe's slice is available in the SAME render as the click batch.
+  // No fade or freeze workaround is needed.
   const switchToDataTab = (next: "trending" | "top" | "gainers") => {
     if (next === activeTab) return;
     if (
@@ -348,7 +329,6 @@ export function DiscoverPageContent({
       };
     }
     const incoming = tabUiStateRef.current[next];
-    setTabSwitchAt(Date.now());
     setShowDiscoverFilter(false);
     setSelectedTimeframe(incoming.tf);
     setSortKey(incoming.sk);
@@ -4302,7 +4282,6 @@ export function DiscoverPageContent({
     volumeEnrichedNewPairs,
   ]);
 
-
   // Persist token-image cache to sessionStorage whenever the displayed slate
   // changes — that's when new images may have been resolved into the cache.
   useEffect(() => {
@@ -4683,21 +4662,11 @@ export function DiscoverPageContent({
   ]);
 
   const renderPrimaryTable = () => {
-    // The `isTabSwitching` opacity fade hides any intermediate frames the
-    // displayed memo paints between tab-switch click and full settlement
-    // (filter bucket, sort key, and WebSocket-driven re-renders all settle
-    // in stages). The user perceives a smooth fade-out → fade-in instead
-    // of a content flash.
-    const fadeStyle = {
-      opacity: isTabSwitching ? 0.15 : 1,
-      transition: "opacity 180ms ease-out",
-    } as const;
     if (displayed.length > 0) {
       return (
         <section
           aria-label="Trending"
           className={isTrendingDataTab ? "pb-16" : ""}
-          style={fadeStyle}
         >
           <InterstateTable
             rows={displayed.map((token, i) => ({
@@ -4729,7 +4698,6 @@ export function DiscoverPageContent({
         <section
           aria-label="Trending"
           className={isTrendingDataTab ? "pb-16" : ""}
-          style={fadeStyle}
         >
           <InterstateTable
             rows={allTokens.map((token, i) => ({
