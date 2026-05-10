@@ -201,7 +201,7 @@ export function DiscoverPageContent({
   >(() => {
     if (typeof window !== "undefined") {
       try {
-        const saved = localStorage.getItem("discover_tab_v3");
+        const saved = localStorage.getItem("discover_tab_v4");
         if (
           saved &&
           [
@@ -249,7 +249,7 @@ export function DiscoverPageContent({
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
-        localStorage.setItem("discover_tab_v3", activeTab);
+        localStorage.setItem("discover_tab_v4", activeTab);
       } catch {
         // Ignore localStorage errors
       }
@@ -270,7 +270,20 @@ export function DiscoverPageContent({
   // Gainers and Top tabs render the same trending data as the Trending tab
   const isTrendingDataTab =
     activeTab === "trending" || activeTab === "gainers" || activeTab === "top";
-  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
+  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>(() => {
+    // Match the saved tab's per-tab default so the first snapshot taken by
+    // switchToDataTab captures the correct timeframe (Top → 24h, Gainers →
+    // 1h). Without this, reloading on Top would snapshot a "1h" timeframe
+    // for Top, overwriting its 24h default the next time the user returns.
+    if (typeof window !== "undefined") {
+      try {
+        const savedTab = localStorage.getItem("discover_tab_v4");
+        if (savedTab === "top") return "24h";
+        if (savedTab === "gainers") return "1h";
+      } catch {}
+    }
+    return "1h";
+  });
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
@@ -291,6 +304,30 @@ export function DiscoverPageContent({
     setShowFilterModal: setShowDiscoverFilter,
     openFilterModal: openDiscoverFilter,
   } = useDiscoverFilters(activeTab);
+
+  // Tab switcher for the trending-data tabs (Trending / Top / Gainers).
+  // Snapshots the outgoing tab's window+sort so users get back to where they
+  // left off, then restores the incoming tab's last state.
+  const switchToDataTab = (next: "trending" | "top" | "gainers") => {
+    if (
+      activeTab === "trending" ||
+      activeTab === "top" ||
+      activeTab === "gainers"
+    ) {
+      tabUiStateRef.current[activeTab] = {
+        tf: selectedTimeframe,
+        sk: sortKey,
+        sd: sortDirection,
+      };
+    }
+    const incoming = tabUiStateRef.current[next];
+    setSelectedTimeframe(incoming.tf);
+    setSortKey(incoming.sk);
+    setSortDirection(incoming.sd);
+    setActiveTab(next);
+    setShowDiscoverFilter(false);
+  };
+
   const { newTokens: wsNewTokens, connected: wsNewConnected } =
     usePulseFromQueryCache({ channel: "new" });
 
@@ -364,7 +401,7 @@ export function DiscoverPageContent({
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
-  const [sortKey, setSortKey] = useState<
+  type SortKey =
     | "market_cap_total"
     | "liquidity"
     | "volume"
@@ -374,16 +411,42 @@ export function DiscoverPageContent({
     | "fully_diluted_value"
     | "score"
     | "timestamp"
-  >(() => {
+    // Sort by price % change for the currently selected timeframe. Used by
+    // the Gainers tab as its default sort.
+    | "priceChange";
+
+  const [sortKey, setSortKey] = useState<SortKey>(() => {
     if (typeof window !== "undefined") {
       try {
-        const savedTab = localStorage.getItem("discover_tab_v3");
+        const savedTab = localStorage.getItem("discover_tab_v4");
         if (savedTab === "newPairs") return "timestamp";
+        if (savedTab === "top") return "volume";
+        if (savedTab === "gainers") return "priceChange";
       } catch {}
     }
     return "score";
   });
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  // Per-tab remembered UI state for the trending-data tabs (Trending, Top,
+  // Gainers). Each tab opens to its own default and remembers user overrides
+  // until the page reloads. On tab switch, snapshot the outgoing tab's
+  // current (window, sortKey, direction), then restore the incoming tab's.
+  // Trending keeps its score/1h default; Top opens to 24h volume ("biggest
+  // 24h volume"); Gainers opens to 1h % change with strict default filters
+  // applied via useDiscoverFilters.
+  type TabUiState = {
+    tf: Timeframe;
+    sk: SortKey;
+    sd: "asc" | "desc";
+  };
+  const tabUiStateRef = useRef<
+    Record<"trending" | "top" | "gainers", TabUiState>
+  >({
+    trending: { tf: "1h", sk: "score", sd: "desc" },
+    top: { tf: "24h", sk: "volume", sd: "desc" },
+    gainers: { tf: "1h", sk: "priceChange", sd: "desc" },
+  });
   // Store new pairs data per chain to preserve data when switching chains
   const [newPairsRawByChain, setNewPairsRawByChain] = useState<
     Record<string, TokenWithDexPaid[]>
@@ -3352,10 +3415,13 @@ export function DiscoverPageContent({
   };
 
   const handleTimeframeClick = (tf: string) => {
-    // console.log('🖱️ Discover: Timeframe clicked:', tf);
+    // Only switch the timeframe — leave the user's chosen sort key alone.
+    // The active sort keys ("score", "txns", "volume", "priceChange") all
+    // re-evaluate against the new timeframe automatically; "liquidity" /
+    // "market_cap_total" are timeframe-independent. Resetting sortKey here
+    // would erase the per-tab default sort (e.g. Gainers' priceChange) the
+    // moment a user taps a window chip.
     setSelectedTimeframe(tf as Timeframe);
-    setSortKey("volume");
-    setSortDirection("desc");
   };
 
   // Helper to compute volume by timeframe for sorting in trending view
@@ -3388,6 +3454,24 @@ export function DiscoverPageContent({
 
     return sum > 0 ? sum : 0;
   }, []);
+
+  // Helper to read price % change for the given timeframe. Used by the
+  // Gainers tab as its default sort (sortKey === "priceChange") so the row
+  // ordering tracks the currently selected window. Tokens missing the field
+  // resolve to 0 and sink to the bottom on `desc` sort — they shouldn't
+  // appear on a Gainers leaderboard if we have no % change to rank them by.
+  const getPriceChangeForTimeframe = useCallback(
+    (t: any, tf: Timeframe): number => {
+      const raw = t?.[`price_percent_change_${tf}`];
+      if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+      if (typeof raw === "string" && raw.trim() !== "") {
+        const n = parseFloat(raw);
+        if (Number.isFinite(n)) return n;
+      }
+      return 0;
+    },
+    [],
+  );
 
   // Helper to compute total transactions (buys + sells) by timeframe for sorting
   // Used when sorting by TXNS column - shows tokens with most activity first
@@ -3929,6 +4013,9 @@ export function DiscoverPageContent({
         } else if (sortKey === "volume") {
           aVal = getVolumeForTimeframe(a, selectedTimeframe);
           bVal = getVolumeForTimeframe(b, selectedTimeframe);
+        } else if (sortKey === "priceChange") {
+          aVal = getPriceChangeForTimeframe(a, selectedTimeframe);
+          bVal = getPriceChangeForTimeframe(b, selectedTimeframe);
         } else if (
           sortKey === "liquidity" ||
           sortKey === "total_liquidity_usd"
@@ -4346,6 +4433,9 @@ export function DiscoverPageContent({
       } else if (sortKey === "volume") {
         aVal = getVolumeForTimeframe(a, selectedTimeframe);
         bVal = getVolumeForTimeframe(b, selectedTimeframe);
+      } else if (sortKey === "priceChange") {
+        aVal = getPriceChangeForTimeframe(a, selectedTimeframe);
+        bVal = getPriceChangeForTimeframe(b, selectedTimeframe);
       } else if (sortKey === "liquidity" || sortKey === "total_liquidity_usd") {
         aVal = Number((a as any).total_liquidity_usd) || 0;
         bVal = Number((b as any).total_liquidity_usd) || 0;
@@ -4468,6 +4558,9 @@ export function DiscoverPageContent({
       } else if (sortKey === "volume") {
         aVal = getVolumeForTimeframe(a, selectedTimeframe);
         bVal = getVolumeForTimeframe(b, selectedTimeframe);
+      } else if (sortKey === "priceChange") {
+        aVal = getPriceChangeForTimeframe(a, selectedTimeframe);
+        bVal = getPriceChangeForTimeframe(b, selectedTimeframe);
       } else if (sortKey === "liquidity" || sortKey === "total_liquidity_usd") {
         aVal = Number((a as any).total_liquidity_usd) || 0;
         bVal = Number((b as any).total_liquidity_usd) || 0;
@@ -4771,14 +4864,7 @@ export function DiscoverPageContent({
           {/* Tab buttons with glowing underline effect */}
           <button
             className={`group relative px-3 py-2 text-[0.9375rem] font-medium tracking-tight whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] ${activeTab === "trending" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
-            onClick={() => {
-              setActiveTab("trending");
-              setShowDiscoverFilter(false);
-              if (sortKey === "timestamp") {
-                setSortKey("score");
-                setSortDirection("desc");
-              }
-            }}
+            onClick={() => switchToDataTab("trending")}
           >
             <span className="relative z-10">Trending</span>
             {/* Glowing underline */}
@@ -4814,14 +4900,7 @@ export function DiscoverPageContent({
             <>
               <button
                 className={`group relative px-3 py-2 text-[0.9375rem] font-medium tracking-tight whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] ${activeTab === "gainers" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
-                onClick={() => {
-                  setActiveTab("gainers");
-                  setShowDiscoverFilter(false);
-                  if (sortKey === "timestamp") {
-                    setSortKey("score");
-                    setSortDirection("desc");
-                  }
-                }}
+                onClick={() => switchToDataTab("gainers")}
               >
                 <span className="relative z-10">Gainers</span>
                 <span
@@ -4834,14 +4913,7 @@ export function DiscoverPageContent({
 
               <button
                 className={`group relative px-3 py-2 text-[0.9375rem] font-medium tracking-tight whitespace-nowrap transition-all duration-200 sm:text-[1rem] lg:px-4 lg:text-[1.125rem] ${activeTab === "top" ? "text-[#f4f4f5]" : "text-[#52525b] hover:text-[#a1a1aa]"} cursor-pointer`}
-                onClick={() => {
-                  setActiveTab("top");
-                  setShowDiscoverFilter(false);
-                  if (sortKey === "timestamp") {
-                    setSortKey("score");
-                    setSortDirection("desc");
-                  }
-                }}
+                onClick={() => switchToDataTab("top")}
               >
                 <span className="relative z-10">Top</span>
                 <span

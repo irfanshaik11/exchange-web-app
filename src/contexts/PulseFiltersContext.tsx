@@ -136,6 +136,26 @@ export const defaultPulseFilters: PulseFilters = {
   sortOrder: "desc",
 };
 
+// Quality-gated defaults for the Gainers tab.
+// Sorting by % price change makes rug pumps (tokens with $500 liquidity that
+// pumped 5000% on $50 of buys) dominate the top rows. These gates filter the
+// obvious noise out of the box. Users can clear any of them via the filter
+// modal — Gainers gets its own filter bucket in useDiscoverFilters.
+//
+// Mayhem is intentionally OFF here. Mayhem is a timed event window, not a
+// quality signal — defaulting it ON would make Gainers empty for most of the
+// day. Users can opt in via the chip if they want it.
+export const defaultGainersFilters: PulseFilters = {
+  ...defaultPulseFilters,
+  // $10k liquidity floor — modest, doesn't exclude legit small caps but
+  // rules out tokens nobody can actually exit
+  minLiquidity: "10000",
+  // 50+ holder floor — rules out 3-wallet dev bags
+  holdersMin: "50",
+  // Top-10 holders < 50% — not strict, just rules out obvious manipulation
+  top10HoldersPercentMax: "50",
+};
+
 interface PulseFiltersContextValue {
   filters: PulseFilters;
   setFilters: React.Dispatch<React.SetStateAction<PulseFilters>>;
