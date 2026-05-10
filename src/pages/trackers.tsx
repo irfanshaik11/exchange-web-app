@@ -266,8 +266,11 @@ export default function TrackersPage() {
   const dockCtx = useDockedPanel();
   const [viewportNarrow, setViewportNarrow] = useState(false);
   const isMobile = viewportNarrow || (dockCtx?.isContentNarrow ?? false);
-  const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "telegram">(
+  const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "social">(
     "wallets",
+  );
+  const [socialPanelTab, setSocialPanelTab] = useState<"twitter" | "telegram">(
+    "telegram",
   );
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<
@@ -561,8 +564,7 @@ export default function TrackersPage() {
 
   // Hide wallet section when chain is Monad
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
-  const showTwitterSection = false; // X Tracker hidden (API cost)
-  const showTelegramSection = !isMobile || mobileMainTab === "telegram";
+  const showSocialSection = !isMobile || mobileMainTab === "social";
 
   // Calculate if all notifications are enabled
   const allNotificationsEnabled =
@@ -1692,14 +1694,14 @@ export default function TrackersPage() {
                       </button>
                       <button
                         className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
-                          mobileMainTab === "telegram"
+                          mobileMainTab === "social"
                             ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
                             : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                         }`}
-                        onClick={() => setMobileMainTab("telegram")}
+                        onClick={() => setMobileMainTab("social")}
                       >
-                        Telegram
-                        {mobileMainTab === "telegram" && (
+                        Social
+                        {mobileMainTab === "social" && (
                           <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
                         )}
                       </button>
@@ -2012,7 +2014,7 @@ export default function TrackersPage() {
                   )}
 
                   {/* RESIZE HANDLE — JTX style */}
-                  {showTelegramSection && !isMobile && (
+                  {showSocialSection && !isMobile && (
                     <div
                       className="group relative hidden h-full min-h-[530px] w-1.5 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#18c48c]/5 lg:flex"
                       onMouseDown={() => setIsResizing(true)}
@@ -2021,11 +2023,11 @@ export default function TrackersPage() {
                     </div>
                   )}
 
-                  {/* RIGHT: TELEGRAM CHANNELS SECTION - JTX premium card */}
-                  {showTelegramSection && (
+                  {/* RIGHT: SOCIAL TRACKERS (X + TG) - JTX premium card */}
+                  {showSocialSection && (
                     <div
                       className="relative flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 backdrop-blur-xl sm:px-5"
-											aria-label="Telegram Tracker"
+											aria-label="Social Tracker"
                       style={
                         isMobile
                           ? {
@@ -2050,9 +2052,35 @@ export default function TrackersPage() {
                         <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b border-l border-white/[0.1]" />
                         <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.1]" />
                       </div>
-											<h2 className="border-b border-white/[0.06] pt-3.5 pb-2.5 text-sm font-semibold tracking-tight text-[#f4f4f5] sm:pt-4 sm:pb-3 sm:text-base">
-                        Telegram Tracker
-                      </h2>
+                      {/* Top-level tabs: X Tracker / TG Tracker */}
+                      <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pt-3.5 pb-2.5 sm:pt-4 sm:pb-3">
+                        <div className="flex items-center gap-4 sm:gap-5">
+                          {/* <button
+                            type="button"
+                            onClick={() => setSocialPanelTab("twitter")}
+                            className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              socialPanelTab === "twitter"
+                                ? "text-[#f4f4f5]"
+                                : "text-[#52525b] hover:text-[#a1a1aa]"
+                            }`}
+                          >
+                            X Tracker
+                          </button> */}
+                          <button
+                            type="button"
+                            onClick={() => setSocialPanelTab("telegram")}
+                            className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              socialPanelTab === "telegram"
+                                ? "text-[#f4f4f5]"
+                                : "text-[#52525b] hover:text-[#a1a1aa]"
+                            }`}
+                          >
+                            Telegram Tracker
+                          </button>
+                        </div>
+                      </div>
+                      {socialPanelTab === "telegram" && (
+                      <>
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pt-2.5 pb-2.5 sm:gap-3 sm:pt-3 sm:pb-3">
                         <div className="flex gap-1 sm:gap-1.5">
                           {TELEGRAM_TABS.map((label, i) => (
@@ -2308,54 +2336,34 @@ export default function TrackersPage() {
                           </>
                         )}
                       </div>
-                    </div>
-                  )}
-
-                  {/* RIGHT: TWITTER SECTION — hidden until cost-effective X API architecture is in place */}
-                  {false && showTwitterSection && (
-                    <div
-                      className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
-                      style={
-                        isMobile
-                          ? {
-                              boxShadow:
-                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                              maxHeight: "calc(100vh - 200px)",
-                            }
-                          : {
-                              width: `${sidebarWidth}px`,
-                              minWidth: "560px",
-                              maxWidth: "800px",
-                              maxHeight: "calc(100vh - 240px)",
-                              boxShadow:
-                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                            }
-                      }
-                    >
+                      </>
+                      )}
+                      {socialPanelTab === "twitter" && (
+                      <>
                       {/* Twitter Tabs Header */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
-                        <div className="flex gap-2 sm:gap-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pt-2.5 pb-2.5 sm:gap-3 sm:pt-3 sm:pb-3">
+                        <div className="flex gap-1 sm:gap-1.5">
                           {TWITTER_TABS.map((tab, i) => (
                             <button
                               key={tab}
-                              className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
+                              className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-3 sm:py-2 sm:text-xs ${
                                 twitterTab === i
-                                  ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                                  : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
+                                  ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
+                                  : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                               }`}
                               onClick={() => setTwitterTab(i)}
                             >
-                              {tab}
+                              <span className="relative z-10">{tab}</span>
+                              {twitterTab === i && (
+                                <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                              )}
                             </button>
                           ))}
                         </div>
                         {twitterTab === 0 && (
                           <button
-                            className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-black transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
-                            style={{
-                              backgroundColor: "#7FFFC9",
-                              border: "none",
-                            }}
+                            type="button"
+                            className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-xs"
                             onClick={() => setShowAddTwitterModal(true)}
                           >
                             Add Handle
@@ -2365,139 +2373,139 @@ export default function TrackersPage() {
 
                       {/* Twitter Content */}
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        {twitterTab === 0 ? (
+                        {!user ? (
+                          <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                            <FiLock className="mb-4 h-10 w-10 text-[#52525b]" />
+                            <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
+                              Log in to track accounts
+                            </span>
+                            <span className="mt-1.5 text-xs text-[#71717a]">
+                              Add X accounts to your watchlist
+                            </span>
+                          </div>
+                        ) : twitterTab === 0 ? (
                           // Tracked Accounts Tab
-                          <>
-                            {twitterAccounts.length === 0 ? (
-                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                                <FiAtSign className="mb-3 h-10 w-10 text-neutral-700" />
-                                <span className="text-sm font-medium text-neutral-300">
-                                  No accounts tracked
-                                </span>
-                                <span className="mt-1 text-xs text-neutral-500">
-                                  Track crypto Twitter accounts to catch alpha
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="scrollbar-hide flex-1 overflow-auto">
-                                <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
-                                  <tbody>
-                                    {twitterAccounts.map((account) => (
-                                      <TwitterAccountRow
-                                        key={account.username}
-                                        account={account}
-                                        onRemove={handleRemoveTwitterAccount}
-                                        onViewProfile={handleViewTwitterProfile}
-                                      />
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </>
+                          twitterAccounts.length === 0 ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                              <FiAtSign className="mb-4 h-10 w-10 text-[#52525b]" />
+                              <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
+                                No accounts tracked
+                              </span>
+                              <span className="mt-1.5 text-xs text-[#71717a]">
+                                Track crypto X accounts to catch alpha
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="scrollbar-hide flex-1 overflow-auto">
+                              <table className="w-full min-w-[280px] text-[10px] sm:min-w-[320px] sm:text-xs">
+                                <tbody>
+                                  {twitterAccounts.map((account) => (
+                                    <TwitterAccountRow
+                                      key={account.username}
+                                      account={account}
+                                      onRemove={handleRemoveTwitterAccount}
+                                      onViewProfile={handleViewTwitterProfile}
+                                    />
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
                         ) : twitterTab === 1 ? (
                           // X Feed Tab
-                          <>
-                            {loadingTwitterFeed ? (
-                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                                <div className="mb-2 flex gap-1.5">
-                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
-                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
-                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
-                                </div>
-                                <span className="text-xs text-neutral-500">
-                                  Loading feed...
-                                </span>
+                          loadingTwitterFeed ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                              <div className="mb-3 flex gap-1.5">
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:150ms]" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:300ms]" />
                               </div>
-                            ) : twitterFeed.length === 0 ? (
-                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                                <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
-                                <span className="text-sm font-medium text-neutral-300">
-                                  No tweets yet
-                                </span>
-                                <span className="mt-1 text-xs text-neutral-500">
-                                  Add accounts or check back later
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="space-y-2 p-2">
-                                {twitterFeed.map((tweet) => (
-                                  <div
-                                    key={tweet.id}
-                                    className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-colors duration-200 hover:bg-white/[0.04]"
-                                  >
-                                    <div className="mb-2 flex items-center gap-2">
+                              <span className="text-xs text-[#71717a]">
+                                Loading feed...
+                              </span>
+                            </div>
+                          ) : twitterFeed.length === 0 ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center px-4">
+                              <FiMessageCircle className="mb-4 h-10 w-10 text-[#52525b]" />
+                              <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
+                                No tweets yet
+                              </span>
+                              <span className="mt-1.5 text-xs text-[#71717a]">
+                                Add accounts or check back later
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="scrollbar-hide flex-1 overflow-auto space-y-2 p-2">
+                              {twitterFeed.map((tweet) => (
+                                <a
+                                  key={tweet.id}
+                                  href={tweet.url || `https://x.com/${tweet.authorUsername}/status/${tweet.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="relative block rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-3.5 text-left backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-[#080a0d]/80"
+                                >
+                                  {/* Mini corner brackets on tweet cards */}
+                                  <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                                    <div className="absolute left-1 top-1 h-2 w-2 border-l border-t border-white/[0.08]" />
+                                    <div className="absolute right-1 top-1 h-2 w-2 border-r border-t border-white/[0.08]" />
+                                  </div>
+                                  <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
+                                    <div className="flex min-w-0 items-center gap-2">
                                       {tweet.authorProfileImage ? (
                                         <img
                                           src={tweet.authorProfileImage}
                                           alt={tweet.authorName}
-                                          className="h-8 w-8 rounded-full ring-1 ring-white/10"
+                                          className="h-6 w-6 shrink-0 rounded-full ring-1 ring-white/10"
                                         />
                                       ) : (
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 text-xs text-neutral-300">
+                                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#1a1d22] to-[#0c0e12] text-[10px] text-[#a1a1aa]">
                                           {tweet.authorName
                                             .charAt(0)
                                             .toUpperCase()}
                                         </div>
                                       )}
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <span className="font-semibold text-neutral-100">
-                                            {tweet.authorName}
-                                          </span>
-                                          <span className="text-xs text-neutral-400">
-                                            @{tweet.authorUsername}
-                                          </span>
-                                          <span className="text-xs text-neutral-500">
-                                            {new Date(
-                                              tweet.createdAt,
-                                            ).toLocaleString()}
-                                          </span>
-                                        </div>
-                                      </div>
+                                      <span className="truncate text-xs font-semibold text-[#18c48c] sm:text-sm">
+                                        @{tweet.authorUsername}
+                                      </span>
                                     </div>
-                                    <p className="mb-2 text-sm text-neutral-300">
-                                      {tweet.text}
-                                    </p>
-                                    {tweet.images &&
-                                      tweet.images.length > 0 && (
-                                        <div className="mb-2 flex gap-2">
-                                          {tweet.images.map((img, idx) => (
-                                            <img
-                                              key={idx}
-                                              src={img}
-                                              alt={`Tweet image ${idx + 1}`}
-                                              className="max-h-48 rounded-xl ring-1 ring-white/[0.06]"
-                                            />
-                                          ))}
-                                        </div>
-                                      )}
-
-                                    {/* Tweet Stats */}
-                                    <div className="flex items-center gap-4 text-xs text-neutral-500">
-                                      <span>❤️ {tweet.likeCount || 0}</span>
-                                      <span>🔄 {tweet.retweetCount || 0}</span>
-                                      <span>💬 {tweet.replyCount || 0}</span>
-                                      {tweet.url && (
-                                        <a
-                                          href={tweet.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-[#70E0B0] hover:underline"
-                                        >
-                                          View on X →
-                                        </a>
-                                      )}
-                                    </div>
+                                    <span className="text-[10px] tabular-nums text-[#52525b] shrink-0">
+                                      {new Date(
+                                        tweet.createdAt,
+                                      ).toLocaleString(undefined, {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
                                   </div>
-                                ))}
-                              </div>
-                            )}
-                          </>
+                                  <div className="text-xs text-[#a1a1aa] sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                    {tweet.text}
+                                  </div>
+                                  {tweet.images && tweet.images.length > 0 && (
+                                    <div className="mt-2.5 flex gap-2 flex-wrap">
+                                      {tweet.images.map((img, idx) => (
+                                        <img
+                                          key={idx}
+                                          src={img}
+                                          alt={`Tweet image ${idx + 1}`}
+                                          className="max-h-48 rounded-lg ring-1 ring-white/[0.06]"
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="mt-2.5 flex items-center gap-4 text-[10px] text-[#52525b] sm:text-xs">
+                                    <span>❤️ {tweet.likeCount || 0}</span>
+                                    <span>🔄 {tweet.retweetCount || 0}</span>
+                                    <span>💬 {tweet.replyCount || 0}</span>
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          )
                         ) : (
-                          // Recommended Wallets Tab
                           <>
-                            <div className="my-2 flex items-center gap-2 border-b border-white/[0.04] pb-2">
+                            <div className="my-2.5 flex items-center gap-2 border-b border-white/[0.06] pb-2.5">
                               <input
                                 type="text"
                                 placeholder="@ Search handle"
@@ -2505,18 +2513,24 @@ export default function TrackersPage() {
                                 onChange={(e) =>
                                   setApprovedHandlesSearch(e.target.value)
                                 }
-                                className="max-w-[180px] flex-1 rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/50 focus:outline-none sm:text-xs"
+                                className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm placeholder:text-[#52525b] transition-all duration-200 focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
                               />
                             </div>
-                            {loadingApprovedHandles ? (
-                              <div className="flex items-center justify-center py-8">
-                                <span className="text-xs text-neutral-500">
-                                  Loading list...
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="scrollbar-hide max-h-[400px] overflow-y-auto">
-                                {(approvedHandlesSearch.trim()
+                            <div className="scrollbar-hide flex-1 overflow-y-auto">
+                              {loadingApprovedHandles ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center">
+                                  <span className="text-xs text-[#71717a]">
+                                    Loading list...
+                                  </span>
+                                </div>
+                              ) : approvedHandles.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center">
+                                  <span className="text-xs text-[#71717a]">
+                                    No approved handles to show
+                                  </span>
+                                </div>
+                              ) : (
+                                (approvedHandlesSearch.trim()
                                   ? approvedHandles.filter((h) =>
                                       h
                                         .toLowerCase()
@@ -2537,19 +2551,19 @@ export default function TrackersPage() {
                                   return (
                                     <div
                                       key={handle}
-                                      className="flex items-center justify-between gap-2 border-b border-white/[0.04] py-1.5 text-[10px] sm:text-xs"
+                                      className="flex items-center justify-between gap-2 border-b border-white/[0.06] py-2 text-[10px] sm:text-xs"
                                     >
-                                      <div className="flex items-center">
-                                        <span className="w-8 shrink-0 text-neutral-500">
+                                      <div className="flex items-center min-w-0">
+                                        <span className="w-8 shrink-0 tabular-nums text-[#52525b]">
                                           {idx + 1}
                                         </span>
                                         <a
                                           href={`https://x.com/${handle}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="min-w-0 truncate text-neutral-200 hover:underline"
+                                          className="min-w-0 truncate text-[#a1a1aa] transition-colors hover:text-[#f4f4f5] hover:underline"
                                         >
-                                          {handle}
+                                          @{handle}
                                         </a>
                                       </div>
                                       <button
@@ -2566,7 +2580,7 @@ export default function TrackersPage() {
                                           }
                                         }}
                                         disabled={isTracked || isAdding}
-                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-neutral-400 transition-colors hover:border-[#7FFFC9]/50 hover:bg-[#7FFFC9]/10 hover:text-[#7FFFC9] disabled:opacity-50 disabled:hover:border-white/[0.08] disabled:hover:bg-white/[0.04] disabled:hover:text-neutral-400"
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] transition-all duration-200 hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#080a0d]/60 disabled:hover:text-[#71717a]"
                                         title={
                                           isTracked
                                             ? "Already tracked"
@@ -2577,17 +2591,19 @@ export default function TrackersPage() {
                                         {isAdding ? (
                                           <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
                                         ) : (
-                                          <FiPlus className="h-3.5 w-3.5 text-white" />
+                                          <FiPlus className="h-3.5 w-3.5" />
                                         )}
                                       </button>
                                     </div>
                                   );
-                                })}
-                              </div>
-                            )}
+                                })
+                              )}
+                            </div>
                           </>
                         )}
                       </div>
+                      </>
+                      )}
                     </div>
                   )}
                 </div>
