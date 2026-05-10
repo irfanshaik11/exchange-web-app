@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -355,7 +355,16 @@ let globalReconnectAttempt = 0;
 let globalIsConnecting = false;
 let globalIsConnected = false;
 
+// Bumped on every WS message (snapshot or update). Subscribed to by the hook
+// via `setDataVersion(globalDataVersion)` so the `tokens` useMemo recomputes
+// when underlying maps mutate. Replaces the old setState-in-useEffect pattern
+// that lagged `tokens` one render behind `timeframe` and caused tab-switch
+// flicker on Top/Gainers (renders 1 and 2 had different tokens for the same
+// final state).
+let globalDataVersion = 0;
+
 function notifyListeners(timeframe?: TrendingTimeframe) {
+  globalDataVersion++;
   globalListeners.forEach((listener) => listener(timeframe || "1h"));
 }
 
@@ -651,106 +660,123 @@ export function useTrendingWebSocket(
   options: UseTrendingWebSocketOptions = {},
 ) {
   const { timeframe = "1h", enabled = true } = options;
+  const mountedRef = useRef(true);
 
-  // Initialize state - try to load from cache for instant display
-  const [state, setState] = useState<TrendingWebSocketState>(() => {
-    // Check if global maps already have data (from previous mount)
-    const existingTokens = Array.from(globalTokenMaps[timeframe].values());
-    if (existingTokens.length > 0) {
-      return {
-        tokens: existingTokens,
-        loading: false,
-        error: null,
-        isConnected: globalIsConnected,
-        isReconnecting: false,
-        lastUpdate: new Date(),
-      };
+  // Connection metadata (loading / error / isConnected / etc.) — kept in
+  // useState because it's React-driven UI state. Tokens are NOT in here:
+  // they're derived synchronously from `globalTokenMaps[timeframe]` via the
+  // useMemo below, so a `timeframe` change yields the new slice in the SAME
+  // render as the change (no one-render lag, no flicker on tab switch).
+  const [meta, setMeta] = useState<{
+    loading: boolean;
+    error: string | null;
+    isConnected: boolean;
+    isReconnecting: boolean;
+    lastUpdate: Date | null;
+  }>(() => {
+    // Pre-populate global maps from localStorage cache on first mount so
+    // the useMemo below has data to render immediately. Bump the global
+    // version after populating so any other instances mounted later (or
+    // any listener registered before this populate completed) see fresh
+    // data instead of a frozen pre-cache snapshot.
+    if (globalTokenMaps[timeframe].size === 0) {
+      const cached = loadTrendingCache(timeframe);
+      if (cached && cached.length > 0) {
+        cached.forEach((t) => globalTokenMaps[timeframe].set(t.mint, t));
+        globalDataVersion++;
+      }
     }
-
-    // Try to load from localStorage cache
-    const cachedTokens = loadTrendingCache(timeframe);
-    if (cachedTokens && cachedTokens.length > 0) {
-      // Also populate global maps from cache for consistency
-      cachedTokens.forEach((token) => {
-        globalTokenMaps[timeframe].set(token.mint, token);
-      });
-      return {
-        tokens: cachedTokens,
-        loading: false, // Show cached data, don't show loading
-        error: null,
-        isConnected: false,
-        isReconnecting: false,
-        lastUpdate: new Date(),
-      };
-    }
-
-    // No cache available - show loading
+    const hasData = globalTokenMaps[timeframe].size > 0;
     return {
-      tokens: [],
-      loading: true,
+      loading: !hasData,
       error: null,
-      isConnected: false,
+      isConnected: globalIsConnected,
       isReconnecting: false,
-      lastUpdate: null,
+      lastUpdate: hasData ? new Date() : null,
     };
   });
 
-  const mountedRef = useRef(true);
-  const currentTimeframeRef = useRef(timeframe);
+  // Version counter — bumped via `setDataVersion(globalDataVersion)` inside
+  // the WS listener. Forces the tokens useMemo to recompute when the
+  // underlying global maps mutate. Initialised lazily so the read happens
+  // AFTER the cache-populate block above, not before.
+  const [dataVersion, setDataVersion] = useState(() => globalDataVersion);
 
-  // Keep timeframe ref in sync
-  useEffect(() => {
-    currentTimeframeRef.current = timeframe;
-  }, [timeframe]);
-
-  // Sync state from global for the selected timeframe
-  const syncState = useCallback((updatedTimeframe?: TrendingTimeframe) => {
-    if (!mountedRef.current) return;
-
-    // Get tokens for the current timeframe
-    const tf = currentTimeframeRef.current;
-    const tokenMap = globalTokenMaps[tf];
-    const tokens = Array.from(tokenMap.values());
-
-    // Sort by rank
-    tokens.sort((a, b) => {
+  // Tokens for the current timeframe — derived synchronously. Changing
+  // `timeframe` swaps to the new slice in the SAME render as the change.
+  // Changing `dataVersion` (on WS push) recomputes against the new map state.
+  const tokens = useMemo<NormalizedTrendingToken[]>(() => {
+    const arr = Array.from(globalTokenMaps[timeframe].values());
+    arr.sort((a, b) => {
       if (a.rank && b.rank) return a.rank - b.rank;
       return (b.fully_diluted_value || 0) - (a.fully_diluted_value || 0);
     });
+    return arr;
+  }, [timeframe, dataVersion]);
 
-    setState({
-      tokens,
-      loading: globalIsConnecting && tokens.length === 0,
-      error: null,
-      isConnected: globalIsConnected,
-      isReconnecting: globalReconnectAttempt > 0 && !globalIsConnected,
-      lastUpdate: new Date(),
-    });
+  // Track unmount once via the cleanup of a permanent effect — flipping
+  // `mountedRef` inside the per-`enabled` effect's body would race against
+  // its own cleanup under StrictMode and rapid `enabled` toggles, causing
+  // a window where a still-registered listener is gated by a false `mounted`
+  // value and silently drops a WS update.
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
+  // Subscribe to WS updates: bump dataVersion + refresh meta. The listener
+  // is created once per `enabled` toggle and is independent of `timeframe`
+  // — it doesn't read or filter by timeframe; the useMemo handles that.
+  // This avoids tearing down and re-establishing the global subscription
+  // on every timeframe pill click.
   useEffect(() => {
-    mountedRef.current = true;
+    if (!enabled) return;
 
-    if (enabled) {
-      // Register listener
-      globalListeners.add(syncState);
+    const listener = () => {
+      if (!mountedRef.current) return;
+      setDataVersion(globalDataVersion);
+      setMeta((prev) => {
+        // Avoid spuriously creating a new meta ref on every WS push when
+        // the connection-state fields haven't actually changed. The token
+        // refresh signal is carried by `dataVersion` instead.
+        const nextIsConnected = globalIsConnected;
+        const nextIsReconnecting =
+          globalReconnectAttempt > 0 && !globalIsConnected;
+        if (
+          !prev.loading &&
+          prev.isConnected === nextIsConnected &&
+          prev.isReconnecting === nextIsReconnecting &&
+          prev.error === null
+        ) {
+          return prev;
+        }
+        return {
+          loading: false,
+          error: null,
+          isConnected: nextIsConnected,
+          isReconnecting: nextIsReconnecting,
+          lastUpdate: new Date(),
+        };
+      });
+    };
+    globalListeners.add(listener);
 
-      // Connect if not already connected
-      if (!globalWs || globalWs.readyState !== WebSocket.OPEN) {
-        connectGlobal();
-      } else {
-        // Already connected, just sync state for current timeframe
-        syncState();
-      }
+    if (!globalWs || globalWs.readyState !== WebSocket.OPEN) {
+      connectGlobal();
+    } else {
+      // Already connected — pull current snapshot immediately so first
+      // paint reflects live state, not the initial cache value.
+      listener();
     }
 
     return () => {
-      mountedRef.current = false;
-      globalListeners.delete(syncState);
+      globalListeners.delete(listener);
 
-      // Disconnect if no more listeners
-      // NOTE: We do NOT clear the token maps here - this allows instant display
-      // when switching back to the trending tab. Fresh data will come from WebSocket.
+      // Disconnect if no more listeners.
+      // NOTE: We do NOT clear the token maps here — this allows instant
+      // display when switching back to the trending tab. Fresh data will
+      // come from WebSocket.
       if (globalListeners.size === 0) {
         isDev &&
           console.log(
@@ -759,14 +785,7 @@ export function useTrendingWebSocket(
         disconnectGlobal();
       }
     };
-  }, [enabled, syncState]);
-
-  // When timeframe changes, just re-sync state (no reconnect needed!)
-  useEffect(() => {
-    if (enabled && globalIsConnected) {
-      syncState();
-    }
-  }, [timeframe, enabled, syncState]);
+  }, [enabled]);
 
   // Manual reconnect function
   const reconnect = useCallback(() => {
@@ -776,7 +795,8 @@ export function useTrendingWebSocket(
   }, []);
 
   return {
-    ...state,
+    tokens,
+    ...meta,
     reconnect,
     tokenCount: globalTokenMaps[timeframe].size,
   };
