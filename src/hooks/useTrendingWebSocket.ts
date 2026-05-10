@@ -675,11 +675,15 @@ export function useTrendingWebSocket(
     lastUpdate: Date | null;
   }>(() => {
     // Pre-populate global maps from localStorage cache on first mount so
-    // the useMemo below has data to render immediately.
+    // the useMemo below has data to render immediately. Bump the global
+    // version after populating so any other instances mounted later (or
+    // any listener registered before this populate completed) see fresh
+    // data instead of a frozen pre-cache snapshot.
     if (globalTokenMaps[timeframe].size === 0) {
       const cached = loadTrendingCache(timeframe);
       if (cached && cached.length > 0) {
         cached.forEach((t) => globalTokenMaps[timeframe].set(t.mint, t));
+        globalDataVersion++;
       }
     }
     const hasData = globalTokenMaps[timeframe].size > 0;
@@ -694,8 +698,9 @@ export function useTrendingWebSocket(
 
   // Version counter — bumped via `setDataVersion(globalDataVersion)` inside
   // the WS listener. Forces the tokens useMemo to recompute when the
-  // underlying global maps mutate.
-  const [dataVersion, setDataVersion] = useState(globalDataVersion);
+  // underlying global maps mutate. Initialised lazily so the read happens
+  // AFTER the cache-populate block above, not before.
+  const [dataVersion, setDataVersion] = useState(() => globalDataVersion);
 
   // Tokens for the current timeframe — derived synchronously. Changing
   // `timeframe` swaps to the new slice in the SAME render as the change.
@@ -709,24 +714,50 @@ export function useTrendingWebSocket(
     return arr;
   }, [timeframe, dataVersion]);
 
+  // Track unmount once via the cleanup of a permanent effect — flipping
+  // `mountedRef` inside the per-`enabled` effect's body would race against
+  // its own cleanup under StrictMode and rapid `enabled` toggles, causing
+  // a window where a still-registered listener is gated by a false `mounted`
+  // value and silently drops a WS update.
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // Subscribe to WS updates: bump dataVersion + refresh meta. The listener
   // is created once per `enabled` toggle and is independent of `timeframe`
   // — it doesn't read or filter by timeframe; the useMemo handles that.
   // This avoids tearing down and re-establishing the global subscription
   // on every timeframe pill click.
   useEffect(() => {
-    mountedRef.current = true;
     if (!enabled) return;
 
     const listener = () => {
       if (!mountedRef.current) return;
       setDataVersion(globalDataVersion);
-      setMeta({
-        loading: false,
-        error: null,
-        isConnected: globalIsConnected,
-        isReconnecting: globalReconnectAttempt > 0 && !globalIsConnected,
-        lastUpdate: new Date(),
+      setMeta((prev) => {
+        // Avoid spuriously creating a new meta ref on every WS push when
+        // the connection-state fields haven't actually changed. The token
+        // refresh signal is carried by `dataVersion` instead.
+        const nextIsConnected = globalIsConnected;
+        const nextIsReconnecting =
+          globalReconnectAttempt > 0 && !globalIsConnected;
+        if (
+          !prev.loading &&
+          prev.isConnected === nextIsConnected &&
+          prev.isReconnecting === nextIsReconnecting &&
+          prev.error === null
+        ) {
+          return prev;
+        }
+        return {
+          loading: false,
+          error: null,
+          isConnected: nextIsConnected,
+          isReconnecting: nextIsReconnecting,
+          lastUpdate: new Date(),
+        };
       });
     };
     globalListeners.add(listener);
@@ -740,7 +771,6 @@ export function useTrendingWebSocket(
     }
 
     return () => {
-      mountedRef.current = false;
       globalListeners.delete(listener);
 
       // Disconnect if no more listeners.

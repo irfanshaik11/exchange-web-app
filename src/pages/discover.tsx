@@ -3414,13 +3414,27 @@ export function DiscoverPageContent({
   };
 
   const handleTimeframeClick = (tf: string) => {
-    // Only switch the timeframe — leave the user's chosen sort key alone.
-    // The active sort keys ("score", "txns", "volume", "priceChange") all
-    // re-evaluate against the new timeframe automatically; "liquidity" /
-    // "market_cap_total" are timeframe-independent. Resetting sortKey here
-    // would erase the per-tab default sort (e.g. Gainers' priceChange) the
-    // moment a user taps a window chip.
-    setSelectedTimeframe(tf as Timeframe);
+    // Switch the timeframe and keep the user's chosen sort key. The active
+    // sort keys ("score", "txns", "volume", "priceChange") all re-evaluate
+    // against the new timeframe automatically; "liquidity" /
+    // "market_cap_total" are timeframe-independent. Resetting sortKey
+    // here would erase the per-tab default sort (e.g. Gainers'
+    // priceChange) the moment a user taps a window chip.
+    const newTf = tf as Timeframe;
+    setSelectedTimeframe(newTf);
+    // Persist the timeframe into this tab's UI snapshot so a round-trip to
+    // another tab and back restores it instead of snapping to the
+    // hardcoded default.
+    if (
+      activeTab === "trending" ||
+      activeTab === "top" ||
+      activeTab === "gainers"
+    ) {
+      tabUiStateRef.current[activeTab] = {
+        ...tabUiStateRef.current[activeTab],
+        tf: newTf,
+      };
+    }
   };
 
   // Helper to compute volume by timeframe for sorting in trending view
@@ -3835,11 +3849,31 @@ export function DiscoverPageContent({
 
   // Sorting handler
   const handleSort = (key: typeof sortKey) => {
+    let nextKey: typeof sortKey;
+    let nextDir: "asc" | "desc";
     if (sortKey === key) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+      nextKey = key;
+      nextDir = sortDirection === "asc" ? "desc" : "asc";
+      setSortDirection(nextDir);
     } else {
+      nextKey = key;
+      nextDir = "desc";
       setSortKey(key);
       setSortDirection("desc");
+    }
+    // Persist sort into the per-tab UI snapshot so round-tripping (e.g.
+    // Trending → New Pairs → Trending) restores what the user picked
+    // instead of the hardcoded default.
+    if (
+      activeTab === "trending" ||
+      activeTab === "top" ||
+      activeTab === "gainers"
+    ) {
+      tabUiStateRef.current[activeTab] = {
+        ...tabUiStateRef.current[activeTab],
+        sk: nextKey,
+        sd: nextDir,
+      };
     }
   };
 

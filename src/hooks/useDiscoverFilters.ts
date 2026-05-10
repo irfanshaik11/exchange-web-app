@@ -1,17 +1,17 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   type PulseFilters,
   defaultPulseFilters,
   defaultGainersFilters,
-} from '~/contexts/PulseFiltersContext';
+} from "~/contexts/PulseFiltersContext";
 import {
-  countActiveFilters,
-  hasActiveFilters as hasActiveDiscoverFilters,
-} from '~/utils/discoverFilterUtils';
+  countActiveFiltersAgainst,
+  hasActiveFiltersAgainst,
+} from "~/utils/discoverFilterUtils";
 
 /** Load filters from localStorage, falling back to the supplied defaults on error. */
 function loadFilters(key: string, defaults: PulseFilters): PulseFilters {
-  if (typeof window === 'undefined') return defaults;
+  if (typeof window === "undefined") return defaults;
   try {
     const raw = localStorage.getItem(key);
     if (raw) {
@@ -26,7 +26,7 @@ function loadFilters(key: string, defaults: PulseFilters): PulseFilters {
 
 /** Persist filters to localStorage. */
 function saveFilters(key: string, filters: PulseFilters) {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   try {
     localStorage.setItem(key, JSON.stringify(filters));
   } catch {
@@ -34,18 +34,18 @@ function saveFilters(key: string, filters: PulseFilters) {
   }
 }
 
-const LS_KEY_TRENDING = 'discover_filters_trending';
-const LS_KEY_NEW_PAIRS = 'discover_filters_newPairs';
-const LS_KEY_TOP = 'discover_filters_top';
-const LS_KEY_GAINERS = 'discover_filters_gainers';
+const LS_KEY_TRENDING = "discover_filters_trending";
+const LS_KEY_NEW_PAIRS = "discover_filters_newPairs";
+const LS_KEY_TOP = "discover_filters_top";
+const LS_KEY_GAINERS = "discover_filters_gainers";
 
-type Bucket = 'trending' | 'newPairs' | 'top' | 'gainers';
+type Bucket = "trending" | "newPairs" | "top" | "gainers";
 
 function bucketFor(activeTab: string): Bucket {
-  if (activeTab === 'trending') return 'trending';
-  if (activeTab === 'top') return 'top';
-  if (activeTab === 'gainers') return 'gainers';
-  return 'newPairs';
+  if (activeTab === "trending") return "trending";
+  if (activeTab === "top") return "top";
+  if (activeTab === "gainers") return "gainers";
+  return "newPairs";
 }
 
 /**
@@ -116,21 +116,21 @@ export function useDiscoverFilters(activeTab: string) {
   let lsKey: string;
   let bucketDefaults: PulseFilters;
 
-  if (bucket === 'trending') {
+  if (bucket === "trending") {
     filters = trendingFilters;
     pendingFilters = trendingPending;
     setFilters = setTrendingFilters;
     setPending = setTrendingPending;
     lsKey = LS_KEY_TRENDING;
     bucketDefaults = defaultPulseFilters;
-  } else if (bucket === 'top') {
+  } else if (bucket === "top") {
     filters = topFilters;
     pendingFilters = topPending;
     setFilters = setTopFilters;
     setPending = setTopPending;
     lsKey = LS_KEY_TOP;
     bucketDefaults = defaultPulseFilters;
-  } else if (bucket === 'gainers') {
+  } else if (bucket === "gainers") {
     filters = gainersFilters;
     pendingFilters = gainersPending;
     setFilters = setGainersFilters;
@@ -186,8 +186,18 @@ export function useDiscoverFilters(activeTab: string) {
   }, [filters, setPending]);
 
   // ── Derived ──
-  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
-  const hasActive = useMemo(() => hasActiveDiscoverFilters(filters), [filters]);
+  // Compare against the bucket's baseline, not against fully-empty defaults.
+  // Otherwise the Gainers tab's strict default filters (min liq $10k, etc.)
+  // would always register as "active" even when the user hasn't touched
+  // anything, lighting up the filter badge spuriously on first load.
+  const activeFilterCount = useMemo(
+    () => countActiveFiltersAgainst(filters, bucketDefaults),
+    [filters, bucketDefaults],
+  );
+  const hasActive = useMemo(
+    () => hasActiveFiltersAgainst(filters, bucketDefaults),
+    [filters, bucketDefaults],
+  );
 
   return {
     filters,
