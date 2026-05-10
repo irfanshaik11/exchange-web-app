@@ -842,15 +842,13 @@ export function WalletTrackerProvider({
       reconnectAttempts = 0; // Reset on successful connection
       setWsConnected(true);
 
-      // Subscribe to all tracked wallets after connection is established
+      // Subscribe to all tracked wallets immediately. The factory's safeSend
+      // queues messages internally if the socket is still CONNECTING, so we no
+      // longer need the racy 100ms setTimeout.
       if (watchedWalletsRef.current.length > 0 && connection) {
-        setTimeout(() => {
-          if (connection?.ws.readyState === WebSocket.OPEN) {
-            const addresses = watchedWalletsRef.current.map((w) => w.address);
-            connection.subscribe(addresses);
-            subscribedWalletsRef.current = addresses;
-          }
-        }, 100);
+        const addresses = watchedWalletsRef.current.map((w) => w.address);
+        connection.subscribe(addresses);
+        subscribedWalletsRef.current = addresses;
       }
     };
 
@@ -895,11 +893,48 @@ export function WalletTrackerProvider({
     // Initialize WebSocket connection
     initializeWebSocket();
 
+    // Visibility / online revival: when the user comes back to the tab or the
+    // network reconnects, force-reconnect if we haven't seen a server ping in
+    // ~30s. Browsers throttle background tabs and silently kill long-idle
+    // sockets — without this the tracker can sit "connected" but stale.
+    const reviveIfStale = (trigger: string) => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (!connection) return;
+      const last = connection.getLastPingAt();
+      const stale = last === 0 || Date.now() - last > 30_000;
+      if (stale) {
+        isDev && console.log(`[WalletTracker] reviving (${trigger}, lastPingAt=${last})`);
+        reconnectAttempts = 0; // immediate retry, skip backoff
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
+        connection.forceReconnect(`revive:${trigger}`);
+      }
+    };
+    const onVisibility = () => reviveIfStale("visibility");
+    const onOnline = () => reviveIfStale("online");
+    const onFocus = () => reviveIfStale("focus");
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", onOnline);
+      window.addEventListener("focus", onFocus);
+    }
+
     // Cleanup on unmount or when user changes
     return () => {
       reconnectAttempts = 0;
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
+      }
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", onOnline);
+        window.removeEventListener("focus", onFocus);
       }
       if (connection) {
         isDev && console.log("Closing WebSocket connection (cleanup)...");
