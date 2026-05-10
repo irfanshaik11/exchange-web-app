@@ -4,6 +4,18 @@ import { getTradeHistoryByTokenAddress } from '~/utils/functions';
 import type { TradeRow } from '~/utils/functions';
 import type { Token } from '~/utils/db';
 
+/* Axiom-style palette */
+const AX = {
+  bg: "#0c0d10",
+  surface: "#101114",
+  border: "#1f2127",
+  text: "#f4f4f5",
+  muted: "#71717a",
+  mint: "#18c48c",
+  sell: "#ef4444",
+  blue: "#3b82f6",
+};
+
 function getAge(ts: string | number) {
   const now = Date.now();
   const t = typeof ts === 'string' ? new Date(ts).getTime() : ts;
@@ -68,23 +80,23 @@ const Trades: React.FC<TradesProps> = ({ token, trades }) => {
   const displayTrades = trades;
 
   return (
-    <div className="w-full">
+    <div className="w-full" style={{ backgroundColor: AX.surface }}>
       <table className="w-full text-xs">
         <thead>
-          <tr className="text-neutral-400 border-b border-neutral-800">
-            <th className="px-2 py-2 text-left">Age</th>
-            <th className="px-2 py-2 text-left">Type</th>
-            <th className="px-2 py-2 text-left">MC</th>
-            <th className="px-2 py-2 text-left">Amount</th>
-            <th className="px-2 py-2 text-left">Total USD</th>
-            <th className="px-2 py-2 text-left">Trader</th>
+          <tr style={{ color: AX.muted, borderBottom: `1px solid ${AX.border}` }}>
+            <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide">Age</th>
+            <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide">Type</th>
+            <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide">MC</th>
+            <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide">Amount</th>
+            <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide">Total USD</th>
+            <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide">Trader</th>
           </tr>
         </thead>
         <tbody>
           {!trades ? (
-            <tr><td colSpan={6} className="text-center py-6 text-neutral-500">Loading...</td></tr>
+            <tr><td colSpan={6} className="text-center py-8" style={{ color: AX.muted }}>Loading...</td></tr>
           ) : !displayTrades || displayTrades.length === 0 ? (
-            <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No trades found.</td></tr>
+            <tr><td colSpan={6} className="text-center py-8" style={{ color: AX.muted }}>No trades found.</td></tr>
           ) : (
             displayTrades.map((trade, idx) => {
               const type = isBuy(trade) ? 'Buy' : 'Sell';
@@ -92,19 +104,27 @@ const Trades: React.FC<TradesProps> = ({ token, trades }) => {
               const totalUSD = getTotalUSD(trade);
               const age = getAgeFromBlockTime(trade?.trade_data?.Block?.Time || trade?.timestamp);
               const trader = getTrader(trade);
+              const typeColor = type === 'Buy' ? AX.mint : AX.sell;
               return (
-                <tr key={trader + idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
-                  <td className="px-2 py-2">{age}</td>
-                  <td className={`px-2 py-2 font-semibold ${type === 'Buy' ? 'text-emerald-400' : 'text-red-400'}`}>{type}</td>
-                  <td className="px-2 py-2">-</td>
-                  <td className="px-2 py-2">{formatSmartNumber(amount)}</td>
-                  <td className={`px-2 py-2 font-semibold ${type === 'Buy' ? 'text-emerald-400' : 'text-red-400'}`}>{type === 'Buy' ? '+' : '-'}${formatSmartNumber(totalUSD)}</td>
-                  <td className="px-2 py-2">
+                <tr 
+                  key={trader + idx} 
+                  className="transition-colors duration-150"
+                  style={{ borderBottom: `1px solid ${AX.border}` }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${AX.border}40`}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <td className="px-3 py-2" style={{ color: AX.muted }}>{age}</td>
+                  <td className="px-3 py-2 font-semibold" style={{ color: typeColor }}>{type}</td>
+                  <td className="px-3 py-2" style={{ color: AX.muted }}>-</td>
+                  <td className="px-3 py-2 tabular-nums" style={{ color: AX.text }}>{formatSmartNumber(amount)}</td>
+                  <td className="px-3 py-2 font-semibold tabular-nums" style={{ color: typeColor }}>{type === 'Buy' ? '+' : '-'}${formatSmartNumber(totalUSD)}</td>
+                  <td className="px-3 py-2">
                     <a
                       href={`https://solscan.io/tx/${trader}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-300 hover:underline"
+                      className="hover:underline transition-colors"
+                      style={{ color: AX.blue }}
                     >
                       {shortAddr(trader)}
                     </a>

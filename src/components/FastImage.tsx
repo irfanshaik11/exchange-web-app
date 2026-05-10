@@ -113,6 +113,18 @@ interface FastImageProps {
   bubbleSrc?: string;
   /** Fired when all auto-retries are exhausted. Parent can swap to a fallback src. */
   onLoadFailed?: () => void;
+  /**
+   * Stable identifier for the entity this image belongs to (e.g. token mint,
+   * wallet address, user id). Enables the double-buffer to distinguish:
+   *   - same entity, different src   → keep previous image painted while next
+   *     loads (eliminates the cloudflare-ipfs 404 → URI fallback flicker)
+   *   - different entity (row recycled by a virtualized list) → drop the
+   *     previous image immediately so the new entity's row doesn't briefly
+   *     paint the previous entity's avatar.
+   * If omitted, the double-buffer is disabled — safer default for callers
+   * that don't opt in (no risk of cross-entity image bleed).
+   */
+  stableId?: string;
 }
 
 /**
@@ -137,6 +149,7 @@ function FastImageInner({
   showBubble = true,
   bubbleSrc,
   onLoadFailed,
+  stableId,
 }: FastImageProps) {
   const inputSrc = src || fallbackSrc;
 
@@ -223,6 +236,31 @@ function FastImageInner({
   const [imageError, setImageError] = useState(false);
   const [retryVersion, setRetryVersion] = useState(0);
   const currentUrlRef = useRef<string | null>(null);
+
+  // Last URL whose <img> successfully fired onLoad. Used as the visible
+  // background while a NEW src is being fetched, so the previously-painted
+  // avatar stays on screen during the transition instead of flashing to a
+  // letter placeholder. This is the double-buffering that eliminates the
+  // failed-load → fallback flicker on Pulse (e.g. cloudflare-ipfs.com 404 →
+  // URI fallback). Capturing here (per-instance) instead of relying on the
+  // shared globalLoadedImages map means the previous URL stays the
+  // background even if it was loaded by THIS row only.
+  const [lastDisplayedUrl, setLastDisplayedUrl] = useState<string | null>(null);
+
+  // Tracks the stableId we currently consider "the entity this slot belongs
+  // to." Paired with `lastDisplayedUrl` and updated during render (not in an
+  // effect) so an entity change resets the buffer in the SAME render the new
+  // stableId arrives — eliminating the one-frame window where the previous
+  // entity's image could paint in the new entity's slot before an effect
+  // commits the clear. React's recommended pattern for adjusting state when
+  // a prop changes; see https://react.dev/learn/you-might-not-need-an-effect
+  const [trackedStableId, setTrackedStableId] = useState<string | undefined>(
+    undefined,
+  );
+  if (stableId !== trackedStableId) {
+    setLastDisplayedUrl(null);
+    setTrackedStableId(stableId);
+  }
 
   // Ref for the <img> element (used by visibilitychange handler)
   const imgRef = useRef<HTMLImageElement>(null);
@@ -333,9 +371,18 @@ function FastImageInner({
       autoRetryTimerRef.current = null;
     }
 
+    // Note: entity-change buffer clearing happens in render-phase (see
+    // trackedStableId block above). The same-entity src swap (e.g. cloudflare
+    // 404 → URI fallback) keeps the buffer for the no-flicker transition.
+
     if (!imageUrl) {
       setImageLoaded(false);
       setImageError(false);
+      // Parent intentionally cleared src → drop the double-buffer so the
+      // letter placeholder shows immediately. Without this, a stale previous
+      // avatar would persist as background, which callers expect to be
+      // cleared when they pass a falsy src.
+      setLastDisplayedUrl(null);
       return;
     }
 
@@ -371,7 +418,7 @@ function FastImageInner({
       setImageLoaded(false);
       setImageError(false);
     }
-  }, [imageUrl]);
+  }, [imageUrl, stableId]);
 
   // Retry failed / evicted images when the tab becomes visible again
   useEffect(() => {
@@ -415,7 +462,13 @@ function FastImageInner({
     autoRetryCountRef.current = 0;
     setImageLoaded(true);
     setImageError(false);
+    // Lock in the canonical URL (not the cache-busted finalImageUrl with
+    // ?_r=N suffix) as the visible-background fallback for the next src
+    // transition. Storing the canonical URL means the browser can serve it
+    // straight from the HTTP cache when it gets painted as the background,
+    // instead of treating the cache-busted variant as a separate resource.
     if (currentUrlRef.current) {
+      setLastDisplayedUrl(currentUrlRef.current);
       trackLoadedImage(currentUrlRef.current);
       // Retain an Image object so the decoded bitmap survives component unmount
       if (!isImageRetained(currentUrlRef.current)) {
@@ -455,11 +508,19 @@ function FastImageInner({
     } else {
       setImageError(true);
       setImageLoaded(false);
+      // Permanent failure (auto-retries exhausted): drop the double-buffer so
+      // the user sees the letter placeholder instead of a stuck-forever stale
+      // image with no error signal. The same-entity src swap still uses the
+      // buffer (transient state); only terminal failure clears it.
+      setLastDisplayedUrl(null);
     }
   };
 
-  // No URL - show fallback only
-  if (!imageUrl || imageError) {
+  // No URL or permanent error AND no previously-displayed image to fall back to:
+  // pure letter placeholder. If we DO have a previous URL, fall through to the
+  // normal render path and use it as the background (avoids letter-flash flicker
+  // during failed-image fallback or src clearing).
+  if ((!imageUrl || imageError) && !lastDisplayedUrl) {
     return (
       <div
         className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black font-bold text-white shadow-lg`}
@@ -474,6 +535,17 @@ function FastImageInner({
   // Has URL - render background + image layered
   // Background shows through until image loads, then image covers it
   // NO conditional rendering = NO flicker
+  //
+  // Background URL resolution priority:
+  //   1. Current URL when it's actually displayable (loaded OR known-cached)
+  //   2. Last successfully-displayed URL (double-buffer: keeps the previous
+  //      avatar visible during a src transition or retry, eliminating the
+  //      letter-flash that happens when neither current nor previous load is
+  //      ready)
+  //   3. Plain gradient (only when there's nothing to show)
+  const showCurrent =
+    (imageLoaded || isKnownUrl) && finalImageUrl && !imageError;
+  const backgroundUrl = showCurrent ? finalImageUrl : lastDisplayedUrl;
   return (
     <div
       className={`relative ${className} overflow-hidden`}
@@ -481,51 +553,60 @@ function FastImageInner({
         width,
         height,
         borderRadius: "inherit",
-        // For cached/known images: CSS background-image resolves from SW/HTTP/memory cache,
-        // painting the image behind the letter (no gradient flash on F5 or SPA nav).
-        // isKnownUrl covers post-refresh when bitmap isn't decoded yet but URL is in cache.
-        background:
-          (imageLoaded || isKnownUrl) && finalImageUrl
-            ? `url("${finalImageUrl}") center/cover no-repeat, linear-gradient(to bottom right, #1f2937, #000000)`
-            : "linear-gradient(to bottom right, #1f2937, #000000)",
+        // backgroundUrl resolves to: (1) finalImageUrl when this URL is loaded
+        // or known-cached, (2) lastDisplayedUrl when retained for a same-entity
+        // src transition, or (3) null. The CSS url() resolves from SW/HTTP/memory
+        // cache so cached images paint behind the letter without a gradient flash
+        // on F5/SPA nav. The same trick covers the same-entity src swap so the
+        // previous successful image stays painted while the next one loads.
+        background: backgroundUrl
+          ? `url("${backgroundUrl}") center/cover no-repeat, linear-gradient(to bottom right, #1f2937, #000000)`
+          : "linear-gradient(to bottom right, #1f2937, #000000)",
       }}
     >
-      {/* Fallback letter - always rendered, hidden by image when loaded */}
+      {/* Fallback letter - always rendered, hidden by image when loaded
+          OR when a previously-loaded image is still painted as background. */}
       <div
         className="absolute inset-0 flex items-center justify-center font-bold text-white"
         style={{
-          // Hide when image is loaded (image will cover this anyway, but this ensures clean state)
-          opacity: imageLoaded ? 0 : 1,
+          opacity: imageLoaded || lastDisplayedUrl ? 0 : 1,
           pointerEvents: "none",
         }}
       >
         <span className="text-lg select-none">{firstLetter}</span>
       </div>
 
-      {/* Image - always rendered, naturally covers background when loaded */}
-      <img
-        ref={imgRef}
-        src={finalImageUrl!}
-        alt={alt}
-        width={width}
-        height={height}
-        onLoad={handleLoad}
-        onError={handleError}
-        loading={
-          priority || wasCachedAtMount.current || isKnownUrl ? "eager" : "lazy"
-        }
-        decoding={wasCachedAtMount.current || isKnownUrl ? "sync" : "async"}
-        fetchPriority={priority ? "high" : "auto"}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          display: "block",
-          // Hide img until loaded — prevents browser broken-icon flash.
-          // Gradient+letter fallback shows through cleanly when opacity is 0.
-          opacity: imageLoaded ? 1 : 0,
-        }}
-      />
+      {/* Image - rendered when we have a current URL and no permanent error.
+          Skip rendering during error/no-url so the broken-icon never flashes;
+          background still shows lastDisplayedUrl during this window. */}
+      {finalImageUrl && !imageError && (
+        <img
+          ref={imgRef}
+          src={finalImageUrl}
+          alt={alt}
+          width={width}
+          height={height}
+          onLoad={handleLoad}
+          onError={handleError}
+          loading={
+            priority || wasCachedAtMount.current || isKnownUrl
+              ? "eager"
+              : "lazy"
+          }
+          decoding={wasCachedAtMount.current || isKnownUrl ? "sync" : "async"}
+          fetchPriority={priority ? "high" : "auto"}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+            // Hide img until loaded — prevents browser broken-icon flash.
+            // Gradient+letter (or lastDisplayedUrl bg) shows through cleanly
+            // when opacity is 0.
+            opacity: imageLoaded ? 1 : 0,
+          }}
+        />
+      )}
 
       {/* Bubble overlay */}
       {showBubble && <ImageBubble src={bubbleSrc} />}
@@ -548,6 +629,7 @@ export default memo(FastImageInner, (prevProps, nextProps) => {
     prevProps.showBubble === nextProps.showBubble &&
     prevProps.bubbleSrc === nextProps.bubbleSrc &&
     prevProps.priority === nextProps.priority &&
-    prevProps.onLoadFailed === nextProps.onLoadFailed
+    prevProps.onLoadFailed === nextProps.onLoadFailed &&
+    prevProps.stableId === nextProps.stableId
   );
 });

@@ -160,35 +160,62 @@ import { useBlacklist } from "~/hooks/useBlacklist";
 import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
+/* ---- JTX-style Dark Palette ---- */
 const AX = {
-  bg: "#0b0c0e",
-  surface: "#16171C",
-  surface2: "#121317",
-  border: "#24252C",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mint: "#31e3ac", // Green - Monad brand color (matching MonadTable)
-  mintHover: "#28c896", // Darker green for hover (matching MonadTable)
-  sell: "#ed3a7a",
-  aiBlue: "#526fff", // Blue variant (matching MonadTable)
-  aiBlueHover: "#3f56d9", // Darker blue variant (matching MonadTable)
-  aiGreen: "#31e3ac", // Green for primary actions (matching MonadTable)
-  aiGreenHover: "#28c896", // Darker green for hover (matching MonadTable)
-  aiCyan: "#06B6D4", // Cyan variant (matching MonadTable)
-  aiCyanHover: "#0891B2", // Cyan hover (matching MonadTable)
-  glowBlue: "rgba(82, 111, 255, 0.3)", // Blue glow (matching MonadTable)
-  glowGreen: "rgba(49, 227, 172, 0.3)", // Green glow (matching MonadTable)
-  glowCyan: "rgba(6, 182, 212, 0.3)", // Cyan glow (matching MonadTable)
+  // Deep void backgrounds
+  bg: "#030304",
+  bgDeep: "#050608",
+  surface: "#08090c",
+  surface2: "#0c0e12",
+  surfaceHover: "#10131a",
+  card: "#141720",
+  
+  // Borders
+  border: "rgba(255,255,255,0.06)",
+  borderHover: "rgba(255,255,255,0.10)",
+  borderStrong: "rgba(255,255,255,0.14)",
+  
+  // Text hierarchy
+  text: "#f4f4f5",
+  textSecondary: "#a1a1aa",
+  muted: "#71717a",
+  textDim: "#52525b",
+  
+  // Accent colors - Emerald/Mint
+  mint: "#18c48c",
+  mintBright: "#22d99a",
+  mintHover: "#14a877",
+  mintGlow: "rgba(24, 196, 140, 0.15)",
+  mintGlowStrong: "rgba(24, 196, 140, 0.25)",
+  
+  // Status colors
+  success: "#22c55e",
+  sell: "#ef4444",
+  danger: "#ef4444",
+  warning: "#f59e0b",
+  
+  // Legacy compatibility
+  aiBlue: "#18c48c",
+  aiBlueHover: "#14a877",
+  aiGreen: "#22c55e",
+  aiGreenHover: "#16a34a",
+  aiCyan: "#06b6d4",
+  aiCyanHover: "#0891b2",
+  glowBlue: "rgba(24, 196, 140, 0.2)",
+  glowGreen: "rgba(34, 197, 94, 0.2)",
+  glowCyan: "rgba(6, 182, 212, 0.2)",
+  
   // Risk-based semantic colors
-  riskHigh: "#ef4444", // Red - risky metrics
-  riskHighBg: "#2a1419", // Dark red background
-  riskMedium: "#f59e0b", // Orange/Yellow - caution metrics
-  riskMediumBg: "#2a2314", // Dark orange background
-  riskLow: "#31e3ac", // Green - safe metrics (same as mint)
-  riskLowBg: "#0f2419", // Dark green background
+  riskHigh: "#ef4444",
+  riskHighBg: "rgba(239, 68, 68, 0.08)",
+  riskMedium: "#f59e0b",
+  riskMediumBg: "rgba(245, 158, 11, 0.08)",
+  riskLow: "#22c55e",
+  riskLowBg: "rgba(34, 197, 94, 0.08)",
+  
   // Badge backgrounds
-  badgeBg: "#1a1c23", // Neutral badge background
-  twitterBlue: "#1DA1F2", // Twitter brand color
+  badgeBg: "rgba(255,255,255,0.04)",
+  twitterBlue: "#1DA1F2",
 };
 
 interface PulseTableProps {
@@ -2228,6 +2255,7 @@ function TokenImage({
                 priority={priority}
                 showBubble={false}
                 onLoadFailed={handleDirectImageFailed}
+                stableId={token.mint || token.pair_address || undefined}
               />
               {/* Dark dim overlay on hover */}
               <div
@@ -2565,6 +2593,7 @@ function TokenImage({
                   height={225}
                   className="h-full w-full object-cover"
                   priority={priority}
+                  stableId={token.mint || token.pair_address || undefined}
                 />
               </div>
               {/* Migration progress tooltip - only for New Pairs */}

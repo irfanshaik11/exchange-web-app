@@ -62,20 +62,22 @@ const MONAD_BRAND = {
 // Monad candle colors (matches chart colors)
 const MONAD_RED = "#f26682";
 
-/* ---------- AXIOM palette ---------- */
+/* ---------- AXIOM palette (refined) ---------- */
 const AX = {
-	bg: "#111214",
-	surface: "#1A1A1A",
-	surface2: "#17191E",
-	border: "#2A2B33",
-	text: "#f0f5f5",
-	muted: "#9CA3AF",
-	green: "#3DDC84",
-	blue: "#8EC5FF",
+	bg: "#0c0d10",
+	surface: "#101114",
+	surface2: "#141619",
+	border: "#1f2127",
+	borderHover: "#2a2d36",
+	text: "#f4f4f5",
+	muted: "#71717a",
+	green: "#18c48c",
+	blue: "#3b82f6",
 	warning: "#facc15",
 	aiBlue: "#3B82F6",
 	aiGreen: "#18c48c",
 	aiCyan: "#06B6D4",
+	sell: "#ef4444",
 	glowBlue: "rgba(59, 130, 246, 0.35)",
 	glowGreen: "rgba(24, 196, 140, 0.3)",
 	glowCyan: "rgba(6, 182, 212, 0.3)",
@@ -482,11 +484,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		// No data yet — reserve layout space with invisible placeholder (no skeleton flicker)
 		return (
 			<div className="flex-shrink-0 px-2">
-				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.surface }}>
-					<div className="h-10 w-10 rounded-md" />
+				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.bg }}>
+					<div className="h-10 w-10 rounded-lg" style={{ backgroundColor: AX.border }} />
 					<div className="flex flex-col gap-1">
-						<div className="h-4 w-24 rounded" />
-						<div className="h-3 w-16 rounded" />
+						<div className="h-4 w-24 rounded" style={{ backgroundColor: AX.border }} />
+						<div className="h-3 w-16 rounded" style={{ backgroundColor: AX.border }} />
 					</div>
 				</div>
 			</div>
@@ -497,11 +499,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		// Have objects but no identity yet — invisible placeholder
 		return (
 			<div className="flex-shrink-0 px-2">
-				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.surface }}>
-					<div className="h-10 w-10 rounded-md" />
+				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.bg }}>
+					<div className="h-10 w-10 rounded-lg" style={{ backgroundColor: AX.border }} />
 					<div className="flex flex-col gap-1">
-						<div className="h-4 w-24 rounded" />
-						<div className="h-3 w-16 rounded" />
+						<div className="h-4 w-24 rounded" style={{ backgroundColor: AX.border }} />
+						<div className="h-3 w-16 rounded" style={{ backgroundColor: AX.border }} />
 					</div>
 				</div>
 			</div>

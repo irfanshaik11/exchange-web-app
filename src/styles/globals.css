@@ -1,228 +1,112 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 @import "tailwindcss";
 @import './interstate.css';
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* Prevent black screen flash */
-html, body {
-  background-color: #050608 !important;
-  color: white !important;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-  font-weight: 400; /* Normal weight */
-}
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE DESIGN SYSTEM - Premium Dark Trading UI
+   Inspired by jtx.trade + axiom.trade
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Instant page rendering */
-#__next {
-  background-color: #050608;
-  min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-}
-
-/* Inherit font family globally */
-* {
-  font-family: inherit;
-}
-
-/* Prevent layout shift */
-.layout-stable {
-  contain: layout;
-}
-
-/* make the scrollbar hidden */
-::-webkit-scrollbar {
-  display: none;
-}
-
-/* Utility class to hide scrollbar while maintaining scroll functionality */
-.scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari and Opera */
-}
-
-/* TradingView Widget Styling - Official Look */
-.tradingview-widget-container {
-  background-color: #131722 !important;
-  border-radius: 0 !important;
-  overflow: hidden !important;
-}
-
-.tradingview-widget-container__widget {
-  background-color: #131722 !important;
-  border: none !important;
-  border-radius: 0 !important;
-}
-
-.tradingview-widget-copyright {
-  display: none !important;
-}
-
-/* Ensure TradingView has full control over styling */
-.tradingview-widget-container iframe {
-  border: none !important;
-  border-radius: 0 !important;
-  background-color: #131722 !important;
-}
-
-/* Remove any custom styling that might interfere */
-.tradingview-widget-container * {
-  font-family: inherit !important;
-}
-
-/* Lightweight Charts Styling */
-.lightweight-chart-container {
-  background-color: #131722;
-  border-radius: 0;
-  overflow: hidden;
-}
-@theme {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-  --font-orbitron: "Orbitron", sans-serif;
-	--font-geist: "Geist", sans-serif;
-}
-
-/* Global font family - Inter at normal/medium weight */
+/* Core Background Colors - Deep blacks with subtle blue undertones */
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-  font-weight: 400; /* Normal weight */ --radius: 0.625rem; --background: oklch(1 0 0); --foreground: oklch(0.145 0 0); --card: oklch(1 0 0); --card-foreground: oklch(0.145 0 0); --popover: oklch(1 0 0); --popover-foreground: oklch(0.145 0 0); --primary: oklch(0.205 0 0); --primary-foreground: oklch(0.985 0 0); --secondary: oklch(0.97 0 0); --secondary-foreground: oklch(0.205 0 0); --muted: oklch(0.97 0 0); --muted-foreground: oklch(0.556 0 0); --accent: oklch(0.97 0 0); --accent-foreground: oklch(0.205 0 0); --destructive: oklch(0.577 0.245 27.325); --border: oklch(0.922 0 0); --input: oklch(0.922 0 0); --ring: oklch(0.708 0 0); --chart-1: oklch(0.646 0.222 41.116); --chart-2: oklch(0.6 0.118 184.704); --chart-3: oklch(0.398 0.07 227.392); --chart-4: oklch(0.828 0.189 84.429); --chart-5: oklch(0.769 0.188 70.08); --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0); --sidebar-primary: oklch(0.205 0 0); --sidebar-primary-foreground: oklch(0.985 0 0); --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0); --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0);
+  /* Primary backgrounds */
+  --bg-void: #030304;
+  --bg-deep: #050608;
+  --bg-base: #08090c;
+  --bg-elevated: #0c0e12;
+  --bg-surface: #10131a;
+  --bg-card: #141720;
+  --bg-hover: #1a1e28;
+  
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-glow: rgba(24, 196, 140, 0.3);
+  
+  /* Text Colors */
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-muted: #52525b;
+  
+  /* Accent Colors - Emerald/Mint */
+  --accent-primary: #18c48c;
+  --accent-primary-bright: #22d99a;
+  --accent-primary-dim: #14a877;
+  --accent-primary-glow: rgba(24, 196, 140, 0.15);
+  --accent-primary-glow-strong: rgba(24, 196, 140, 0.25);
+  
+  /* Status Colors */
+  --color-success: #22c55e;
+  --color-success-dim: rgba(34, 197, 94, 0.15);
+  --color-danger: #ef4444;
+  --color-danger-dim: rgba(239, 68, 68, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-dim: rgba(245, 158, 11, 0.15);
+  --color-info: #3b82f6;
+  --color-info-dim: rgba(59, 130, 246, 0.15);
+  
+  /* Shadows & Glows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow-sm: 0 0 12px rgba(24, 196, 140, 0.15);
+  --shadow-glow-md: 0 0 24px rgba(24, 196, 140, 0.2);
+  --shadow-glow-lg: 0 0 48px rgba(24, 196, 140, 0.25);
+  
+  /* Radius */
+  --radius: 0.625rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-full: 9999px;
+  
+  /* shadcn design tokens */
+  --background: oklch(0.06 0.005 260);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.1 0.008 260);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.1 0.008 260);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.7 0.18 160);
+  --primary-foreground: oklch(0.1 0.02 160);
+  --secondary: oklch(0.15 0.01 260);
+  --secondary-foreground: oklch(0.9 0 0);
+  --muted: oklch(0.2 0.01 260);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent: oklch(0.7 0.18 160);
+  --accent-foreground: oklch(0.1 0.02 160);
+  --destructive: oklch(0.6 0.24 25);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.7 0.18 160);
+  --chart-1: oklch(0.7 0.18 160);
+  --chart-2: oklch(0.6 0.2 25);
+  --chart-3: oklch(0.65 0.15 220);
+  --chart-4: oklch(0.75 0.15 50);
+  --chart-5: oklch(0.7 0.2 300);
+  --sidebar: oklch(0.08 0.008 260);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.7 0.18 160);
+  --sidebar-primary-foreground: oklch(0.1 0.02 160);
+  --sidebar-accent: oklch(0.15 0.01 260);
+  --sidebar-accent-foreground: oklch(0.9 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.7 0.18 160);
 }
 
-/* Medium weight for headings and emphasized text */
-h1, h2, h3, h4, h5, h6,
-.font-semibold,
-[class*="font-semibold"],
-.font-medium,
-[class*="font-medium"] {
-  font-weight: 500; /* Medium weight */
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "ss01" 1;
-}
-
-/* Number font for consistent metric display */
-.number-font {
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "ss01" 1;
-}
-
-/* When main content area is narrow (e.g. docked panels), show mobile layout */
-.content-narrow .content-mobile-only {
-  display: flex !important;
-}
-.content-narrow .content-desktop-only {
-  display: none !important;
-}
-
-/* styles/globals.css */
-html,
-body {
-  overflow-x: hidden;
-  height: 100vh; /* or h-screen with Tailwind */
-  margin: 0;
-  padding: 0;
-  background-color: #000000;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-  font-weight: 400; /* Normal weight */
-}
-
-/* Interstate Popout Styles */
-.interstate-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  background-color: transparent;
-  opacity: 0;
-  transition: opacity 200ms ease-in-out;
-  pointer-events: none;
-}
-
-.interstate-overlay.visible {
-  opacity: 1;
-  pointer-events: auto;
-  background-color: rgba(0, 0, 0, 0.6); /* Added for background dimming */
-}
-
-.interstate-overlay.align-center {
-  justify-content: center;
-  align-items: center;
-}
-
-.interstate-overlay.align-top-right {
-  justify-content: flex-end;
-  align-items: flex-start;
-  padding: 1rem;
-}
-
-.interstate-content {
-  position: relative;
-  opacity: 0;
-  transform: scale(0.95);
-  transition: all 200ms ease-in-out;
-  will-change: opacity, transform;
-  background: #262626;
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-}
-
-.interstate-content.visible {
-  opacity: 1;
-  transform: scale(1);
-}
-
-@keyframes wiggle {
-  0% { transform: translateX(0); }
-  15% { transform: translateX(-8px); }
-  30% { transform: translateX(8px); }
-  45% { transform: translateX(-6px); }
-  60% { transform: translateX(6px); }
-  75% { transform: translateX(-4px); }
-  90% { transform: translateX(4px); }
-  100% { transform: translateX(0); }
-}
-.wiggle {
-  animation: wiggle 0.6s cubic-bezier(.36,.07,.19,.97) both;
-}
-
-/* Hidden scrollbar — still scrollable via trackpad/wheel/touch */
-.custom-scrollbar {
-  scrollbar-width: none; /* Firefox */
-}
-.custom-scrollbar::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Edge */
-}
-
-/* Jupiter Terminal Styling */
-#jupiter-swap-container {
-  --jup-bg-primary: #0a0b0f;
-  --jup-bg-secondary: #1a1b20;
-  --jup-bg-tertiary: #2A2B33;
-  --jup-text-primary: #E6E7EA;
-  --jup-text-secondary: #9CA3AF;
-  --jup-accent: #18c48c;
-  --jup-border-color: #2A2B33;
-}
-
-#jupiter-swap-container * {
-  transition: none !important;
-}
-
-/* Ensure Jupiter widget fits properly in the modal */
-#jupiter-swap-container iframe {
-  border: none !important;
-  border-radius: 1.5rem !important;
-  background-color: #0a0b0f !important;
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-orbitron: "Orbitron", sans-serif;
+  --font-geist: "Geist", sans-serif;
 }
 
 @theme inline {
@@ -266,40 +150,6 @@ body {
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -308,6 +158,261 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BASE STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+html, body {
+  background-color: var(--bg-void) !important;
+  color: var(--text-primary) !important;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-weight: 400;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+#__next {
+  background-color: var(--bg-void);
+  min-height: 100vh;
+  font-family: inherit;
+}
+
+* {
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+/* Medium weight for headings and emphasized text */
+h1, h2, h3, h4, h5, h6,
+.font-semibold,
+[class*="font-semibold"],
+.font-medium,
+[class*="font-medium"] {
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TYPOGRAPHY UTILITIES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+.number-font {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+.text-glow {
+  text-shadow: 0 0 20px var(--accent-primary-glow);
+}
+
+.text-glow-strong {
+  text-shadow: 0 0 30px var(--accent-primary-glow-strong), 0 0 60px var(--accent-primary-glow);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SCROLLBAR STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLASS MORPHISM & SURFACES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.glass {
+  background: linear-gradient(
+    135deg,
+    rgba(16, 19, 26, 0.8) 0%,
+    rgba(12, 14, 18, 0.9) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+}
+
+.glass-hover:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(20, 23, 32, 0.85) 0%,
+    rgba(16, 19, 26, 0.95) 100%
+  );
+  border-color: var(--border-default);
+}
+
+.surface {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+
+.surface-elevated {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+
+.surface-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLOW EFFECTS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.glow-accent {
+  box-shadow: var(--shadow-glow-sm);
+}
+
+.glow-accent-hover:hover {
+  box-shadow: var(--shadow-glow-md);
+}
+
+.glow-border {
+  border-color: var(--border-glow);
+  box-shadow: 0 0 0 1px var(--accent-primary-glow), var(--shadow-glow-sm);
+}
+
+.glow-text {
+  color: var(--accent-primary);
+  text-shadow: 0 0 20px var(--accent-primary-glow);
+}
+
+/* Ring glow for focus states */
+.ring-glow:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--accent-primary), var(--shadow-glow-md);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BUTTON STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-primary-dim) 100%);
+  color: var(--bg-void);
+  font-weight: 600;
+  border: none;
+  box-shadow: var(--shadow-glow-sm);
+  transition: all 150ms ease;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-primary-bright) 0%, var(--accent-primary) 100%);
+  box-shadow: var(--shadow-glow-md);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-glow-sm);
+}
+
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  transition: all 150ms ease;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  transition: all 150ms ease;
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  transition: all 150ms ease;
+}
+
+.btn-outline:hover {
+  background: var(--accent-primary-glow);
+  box-shadow: var(--shadow-glow-sm);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INPUT STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.input-base {
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  transition: all 150ms ease;
+}
+
+.input-base::placeholder {
+  color: var(--text-muted);
+}
+
+.input-base:hover {
+  border-color: var(--border-strong);
+}
+
+.input-base:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
 /* Remove number input spinner arrows globally */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
@@ -320,12 +425,14 @@ input[type="number"] {
   appearance: textfield;
 }
 
-/* PHASE 3 CPU Optimization: Token Row Hover Styles */
-/* Clean borderless rows - GPU accelerated */
+/* ═══════════════════════════════════════════════════════════════════════════
+   TABLE ROW STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .token-row {
   background-color: transparent;
   border: none !important;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   margin-bottom: 0;
   transition: background-color 100ms ease-out !important;
   max-width: 100%;
@@ -335,10 +442,14 @@ input[type="number"] {
 }
 
 .token-row.row-hovered {
-  background-color: rgba(255, 255, 255, 0.04) !important;
+  background-color: var(--bg-hover) !important;
 }
 
-/* Status popup visibility - CSS-only show/hide (GPU accelerated) */
+.token-row:hover {
+  background: linear-gradient(90deg, transparent 0%, var(--accent-primary-glow) 50%, transparent 100%);
+}
+
+/* Status popup visibility */
 .status-popup {
   opacity: 0;
   pointer-events: none;
@@ -350,16 +461,75 @@ input[type="number"] {
   display: block !important;
 }
 
-/* Pulse table action buttons - GPU accelerated */
-.pulse-action-btn {
-  transition: color 100ms ease-out, opacity 100ms ease-out !important;
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE OVERLAY/POPOUT STYLES
+   ══════════════════════════════════════════════════════════════════════��════ */
+
+.interstate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  background-color: transparent;
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  pointer-events: none;
 }
 
-.pulse-action-btn:hover {
-  opacity: 0.8;
+.interstate-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
 }
 
-/* Wave animation - can be conditionally disabled for performance */
+.interstate-overlay.align-center {
+  justify-content: center;
+  align-items: center;
+}
+
+.interstate-overlay.align-top-right {
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 1rem;
+}
+
+.interstate-content {
+  position: relative;
+  opacity: 0;
+  transform: scale(0.95) translateY(10px);
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg), var(--shadow-glow-sm);
+}
+
+.interstate-content.visible {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes wiggle {
+  0% { transform: translateX(0); }
+  15% { transform: translateX(-8px); }
+  30% { transform: translateX(8px); }
+  45% { transform: translateX(-6px); }
+  60% { transform: translateX(6px); }
+  75% { transform: translateX(-4px); }
+  90% { transform: translateX(4px); }
+  100% { transform: translateX(0); }
+}
+
+.wiggle {
+  animation: wiggle 0.6s cubic-bezier(.36,.07,.19,.97) both;
+}
+
 @keyframes subtleWaveFlow {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
@@ -369,47 +539,451 @@ input[type="number"] {
   animation: none !important;
 }
 
-/*
- * Token avatar fade-in.
- *
- * Used by the New Pairs / Trending row avatars (TokenAvatar in InterstateTable.tsx)
- * to smoothly cross-fade the real token image over its placeholder once preloading
- * finishes. The animation runs once, on mount of the <img>, because the <img> only
- * mounts after `visibleSrc` flips from '' to a fully-preloaded URL. Letting the
- * browser drive this via @keyframes (rather than a JS opacity-flip in a callback
- * ref) avoids the "no paint at opacity:0 first → transition starts from opacity:1
- * → instant pop" footgun, and is immune to React StrictMode double-invocation.
- */
 @keyframes tokenAvatarFadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-/* 50ms — borderline imperceptible, the fade is almost instant with just a
-   tiny softening of the edge. Maximum sensation of speed. */
+
 .token-avatar-fade-in {
   animation: tokenAvatarFadeIn 50ms ease-out;
 }
 
-/* Bottom card info badges - horizontal scroll without visible scrollbar */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: var(--shadow-glow-sm); }
+  50% { box-shadow: var(--shadow-glow-md); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg-hover) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 200ms ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slideUp 200ms ease-out;
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-scale-in {
+  animation: scaleIn 150ms ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BADGES & CHIPS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.badge-success {
+  background: var(--color-success-dim);
+  color: var(--color-success);
+  border-color: transparent;
+}
+
+.badge-danger {
+  background: var(--color-danger-dim);
+  color: var(--color-danger);
+  border-color: transparent;
+}
+
+.badge-warning {
+  background: var(--color-warning-dim);
+  color: var(--color-warning);
+  border-color: transparent;
+}
+
+.badge-accent {
+  background: var(--accent-primary-glow);
+  color: var(--accent-primary);
+  border-color: transparent;
+}
+
 .badges-scroll {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
 .badges-scroll::-webkit-scrollbar {
   display: none;
 }
 
-/* Pulse Table Column Styling */
+/* ═══════════════════════════════════════════════════════════════════════════
+   PULSE TABLE COLUMNS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .pulse-column {
-  background-color: #13151b;
+  background-color: var(--bg-surface);
 }
 
 .pulse-column-header {
-  background-color: #13151b;
-  border-bottom: 1px solid #1e2028;
+  background-color: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
 }
 
-/* Vertical separator between columns */
 .pulse-column:not(:last-child) {
-  border-right: 1px solid #1e2028;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.pulse-action-btn {
+  transition: color 100ms ease-out, opacity 100ms ease-out !important;
+}
+
+.pulse-action-btn:hover {
+  opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRADINGVIEW WIDGET STYLING
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.tradingview-widget-container {
+  background-color: var(--bg-base) !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+}
+
+.tradingview-widget-container__widget {
+  background-color: var(--bg-base) !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.tradingview-widget-copyright {
+  display: none !important;
+}
+
+.tradingview-widget-container iframe {
+  border: none !important;
+  border-radius: 0 !important;
+  background-color: var(--bg-base) !important;
+}
+
+.tradingview-widget-container * {
+  font-family: inherit !important;
+}
+
+.lightweight-chart-container {
+  background-color: var(--bg-base);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   JUPITER TERMINAL STYLING
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#jupiter-swap-container {
+  --jup-bg-primary: var(--bg-card);
+  --jup-bg-secondary: var(--bg-surface);
+  --jup-bg-tertiary: var(--bg-elevated);
+  --jup-text-primary: var(--text-primary);
+  --jup-text-secondary: var(--text-secondary);
+  --jup-accent: var(--accent-primary);
+  --jup-border-color: var(--border-default);
+}
+
+#jupiter-swap-container * {
+  transition: none !important;
+}
+
+#jupiter-swap-container iframe {
+  border: none !important;
+  border-radius: var(--radius-2xl) !important;
+  background-color: var(--bg-card) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE UTILITIES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.content-narrow .content-mobile-only {
+  display: flex !important;
+}
+
+.content-narrow .content-desktop-only {
+  display: none !important;
+}
+
+.layout-stable {
+  contain: layout;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HOVER GRADIENT LINE (like axiom)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.hover-gradient-line {
+  position: relative;
+  overflow: hidden;
+}
+
+.hover-gradient-line::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.hover-gradient-line:hover::after {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NOISE TEXTURE OVERLAY (subtle grain effect)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.noise-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DIVIDER STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-default), transparent);
+}
+
+.divider-vertical {
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--border-default), transparent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SELECTION STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+::selection {
+  background: var(--accent-primary);
+  color: var(--bg-void);
+}
+
+::-moz-selection {
+  background: var(--accent-primary);
+  color: var(--bg-void);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   JTX/AXIOM-INSPIRED DISCOVER PAGE STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Corner bracket decorations */
+.jtx-brackets {
+  position: relative;
+}
+
+.jtx-brackets::before,
+.jtx-brackets::after,
+.jtx-brackets > .bracket-bl,
+.jtx-brackets > .bracket-br {
+  content: '';
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-color: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+.jtx-brackets::before {
+  top: 0.5rem;
+  left: 0.5rem;
+  border-left: 1px solid;
+  border-top: 1px solid;
+}
+
+.jtx-brackets::after {
+  top: 0.5rem;
+  right: 0.5rem;
+  border-right: 1px solid;
+  border-top: 1px solid;
+}
+
+/* Tab with glowing underline effect */
+.jtx-tab {
+  position: relative;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: color 200ms ease;
+}
+
+.jtx-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  transform: translateX(-50%);
+  transition: width 300ms ease;
+}
+
+.jtx-tab:hover {
+  color: var(--text-secondary);
+}
+
+.jtx-tab.active {
+  color: var(--text-primary);
+}
+
+.jtx-tab.active::after {
+  width: 100%;
+}
+
+/* Premium control pill styling */
+.jtx-control-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  backdrop-filter: blur(20px);
+}
+
+.jtx-control-pill button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border-radius: 0.375rem;
+  transition: all 200ms ease;
+}
+
+.jtx-control-pill button:hover {
+  color: var(--text-secondary);
+}
+
+.jtx-control-pill button.active {
+  background: rgba(24, 196, 140, 0.15);
+  color: var(--accent-primary);
+  box-shadow: 0 0 12px rgba(24, 196, 140, 0.15);
+}
+
+/* Ambient glow for cards/containers */
+.jtx-ambient-glow {
+  position: relative;
+}
+
+.jtx-ambient-glow::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: 50%;
+  width: 120%;
+  height: 60%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(24, 196, 140, 0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Live pulse indicator */
+.jtx-live-pulse {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.jtx-live-pulse::after {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  background: #ef4444;
+  border-radius: 9999px;
+  animation: jtx-pulse 2s ease-in-out infinite;
+}
+
+@keyframes jtx-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+}
+
+/* Subtle scan line effect (optional - very subtle) */
+.jtx-scanlines {
+  position: relative;
+  overflow: hidden;
+}
+
+.jtx-scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  opacity: 0.5;
 }

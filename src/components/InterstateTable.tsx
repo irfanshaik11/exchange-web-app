@@ -51,26 +51,50 @@ import { copyToClipboard } from "~/utils/clipboard";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-/* ---- Enhanced Axiom AI Palette ---- */
+/* ---- JTX-style Dark Palette ---- */
 const AX = {
-  bg: "#0f1012",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#E6E7EA",
-  muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-  aiBlue: "#22C55E",
-  aiBlueHover: "#16A34A",
-  aiGreen: "#22C55E",
-  aiGreenHover: "#16A34A",
-  aiCyan: "#06B6D4",
-  aiCyanHover: "#0891B2",
-  glowBlue: "rgba(34, 197, 94, 0.3)",
-  glowGreen: "rgba(34, 197, 94, 0.3)",
-  glowCyan: "rgba(6, 182, 212, 0.3)",
+  // Deep void backgrounds
+  bg: "#030304",
+  bgDeep: "#050608",
+  surface: "#08090c",
+  surface2: "#0c0e12",
+  surfaceHover: "#10131a",
+  card: "#141720",
+
+  // Borders
+  border: "rgba(255,255,255,0.06)",
+  borderHover: "rgba(255,255,255,0.10)",
+  borderStrong: "rgba(255,255,255,0.14)",
+
+  // Text hierarchy
+  text: "#f4f4f5",
+  textSecondary: "#a1a1aa",
+  muted: "#71717a",
+  textDim: "#52525b",
+
+  // Accent colors - Emerald/Mint
+  mint: "#18c48c",
+  mintBright: "#22d99a",
+  mintHover: "#14a877",
+  mintGlow: "rgba(24, 196, 140, 0.15)",
+  mintGlowStrong: "rgba(24, 196, 140, 0.25)",
+
+  // Status colors
+  success: "#22c55e",
+  sell: "#ef4444",
+  danger: "#ef4444",
+  warning: "#f59e0b",
+
+  // Legacy compatibility
+  aiBlue: "#18c48c",
+  aiBlueHover: "#14a877",
+  aiGreen: "#22c55e",
+  aiGreenHover: "#16a34a",
+  aiCyan: "#06b6d4",
+  aiCyanHover: "#0891b2",
+  glowBlue: "rgba(24, 196, 140, 0.2)",
+  glowGreen: "rgba(34, 197, 94, 0.2)",
+  glowCyan: "rgba(6, 182, 212, 0.2)",
 };
 
 // Types
@@ -659,17 +683,19 @@ const TableHeader: React.FC<{
       >
         {headers.map((header, idx) => {
           let label = header.label;
-          // For trending, the sparkline column tracks the user-selected
-          // timeframe — surface that in the header so the chart and label
-          // stay in sync (5M / 1H / 6H / 24H).
-          if (isTrending && header.label === "24h") {
+          // For trending and dexscreener, the sparkline column tracks the
+          // user-selected timeframe — surface that in the header so the chart
+          // and label stay in sync (5M / 1H / 6H / 24H).
+          if (
+            (isTrending || tableType === "dexscreener") &&
+            header.label === "24h"
+          ) {
             label = (selectedTimeframe || "24h").toUpperCase();
           }
-          // Hide 24h sparkline column for newPairs and dexscreener tabs
-          if (
-            header.label === "24h" &&
-            (tableType === "newPairs" || tableType === "dexscreener")
-          ) {
+          // Hide 24h sparkline column for newPairs only. DexScreener shows
+          // the chart (axiom-style) — sparkline tracks selectedTimeframe via
+          // the same MiniSparkline as Trending uses.
+          if (header.label === "24h" && tableType === "newPairs") {
             return null;
           }
           // Hide Token Info / Holders column for newPairs and dexscreener
@@ -683,10 +709,8 @@ const TableHeader: React.FC<{
           if (header.label === "Volume" && tableType === "newPairs") {
             return null;
           }
-          // Show TXNS column for newPairs and trending tabs (hidden for dexscreener)
-          if (header.label === "TXNS" && tableType === "dexscreener") {
-            return null;
-          }
+          // TXNS column is now shown on every table type. DexScreener tokens
+          // carry total_buys_<tf> / total_sells_<tf> from the upstream payload.
           const hideOnNarrow =
             header.label === "Token Info" || header.label === "Holders";
 
@@ -1107,7 +1131,9 @@ const TokenInfo: React.FC<{
   chain = "sol",
   tableType = "trending",
 }) => {
-  const isTrending = tableType === "trending";
+  // DexScreener uses the same stacked layout as Trending (symbol on top,
+  // name on its own line, action icons inline) — visually closer to axiom.
+  const isTrending = tableType === "trending" || tableType === "dexscreener";
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
@@ -2226,6 +2252,24 @@ const sparklineCache = new Map<
 >();
 const SPARKLINE_CACHE_TTL_MS = 5 * 60 * 1000;
 
+// When OHLCV data is missing for a token (common for newly-trending pump.fun
+// mints not yet indexed by token-service), synthesize a 5-point trajectory
+// from the per-timeframe percent-change fields the upstream payload already
+// carries. Points oldest → newest: 24h, 6h, 1h, 5m, now. Returns null when
+// the token doesn't have these fields populated or every change is zero.
+function synthesizeSparklineFromPriceChanges(token: Token): number[] | null {
+  const c5m = Number(token.price_percent_change_5m);
+  const c1h = Number(token.price_percent_change_1h);
+  const c6h = Number(token.price_percent_change_6h);
+  const c24h = Number(token.price_percent_change_24h);
+  if (![c5m, c1h, c6h, c24h].every(Number.isFinite)) return null;
+  if (!c5m && !c1h && !c6h && !c24h) return null;
+  // Derive each historic price from now's price by reversing the % change.
+  // priceNow / (1 + chg/100) = priceThen. Normalise priceNow = 1.
+  const ratio = (chg: number) => 1 / (1 + chg / 100);
+  return [ratio(c24h), ratio(c6h), ratio(c1h), ratio(c5m), 1];
+}
+
 const MiniSparkline: React.FC<{
   token: Token;
   width?: number;
@@ -2249,9 +2293,28 @@ const MiniSparkline: React.FC<{
     (token as any).priceChange24h ||
     0;
 
-  // Fetch chart data immediately on mount and whenever timeframe changes
+  // Fetch chart data immediately on mount and whenever timeframe changes.
+  // Effect cleanup signals cancellation: a stale fetch resolving after the
+  // user clicked a different timeframe pill must NOT overwrite the new
+  // pill's priceData. Without this guard, a slow Geckoterminal response
+  // for "5m" can land seconds later and replace the user's now-displayed
+  // "1h" curve, giving them mismatched sparkline shape + color.
   useEffect(() => {
     if (!mintAddress) return;
+
+    const controller = new AbortController();
+    const { signal } = controller;
+    const isCancelled = () => signal.aborted;
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, ms);
+        const onAbort = () => {
+          clearTimeout(t);
+          reject(new DOMException("aborted", "AbortError"));
+        };
+        if (signal.aborted) return onAbort();
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
 
     // Cache check (TTL'd so the curve refreshes a few minutes after the user
     // first opens the tab and we don't show stale lines forever).
@@ -2260,59 +2323,119 @@ const MiniSparkline: React.FC<{
       setPriceData(cached.data);
       setPriceChange(cached.priceChange);
       setLoading(false);
-      return;
+      return () => controller.abort();
     }
     setLoading(true);
 
     const fetchSparkline = async () => {
+      const extractCloses = (result: any): number[] => {
+        if (!result?.success || !Array.isArray(result?.data?.items)) return [];
+        return result.data.items
+          .map((item: any) => Number(item.c))
+          .filter((n: number) => Number.isFinite(n) && n > 0);
+      };
+
+      let closes: number[] = [];
       try {
-        const now = Math.floor(Date.now() / 1000);
-        const fromSec = now - tfConfig.windowSec;
+        // Phase 1 — primary: token-service OHLCV (rich for tokens our
+        // indexer covers; empty for newly-trending pump.fun mints).
         // Send `interval` only (no `timeframe`) — the API handler would
         // otherwise prefer `timeframe` and fall through to 5m for any value
         // not in its INTERVAL_MAP.
-        const response = await fetch(
+        const now = Math.floor(Date.now() / 1000);
+        const fromSec = now - tfConfig.windowSec;
+        const primary = await fetch(
           `/api/token-service/ohlc?mint=${mintAddress}&interval=${tfConfig.interval}&from=${fromSec}&to=${now}`,
+          { signal },
         );
-        if (!response.ok) throw new Error("Failed to fetch");
+        if (primary.ok) closes = extractCloses(await primary.json());
+      } catch {
+        if (isCancelled()) return;
+        /* otherwise fall through to fallback */
+      }
 
-        const result = await response.json();
-        if (result.success && result.data?.items?.length > 0) {
-          const closes = result.data.items.map((item: any) => item.c);
+      if (isCancelled()) return;
+
+      // Phase 2 — DEX-side fallback: Geckoterminal returns real OHLCV per
+      // pool keyed on pair_address. Used when our indexer hasn't ingested
+      // the token yet (most DexScreener-trending pump.fun mints). The proxy
+      // dedupes concurrent requests + retries 429s server-side; FE jitter
+      // additionally spreads the initial render burst across ~800ms so we
+      // stay under Geckoterminal's 30/min/IP limit on a cold tab.
+      const pairAddress = token.pair_address;
+      const fetchFallback = async () => {
+        const r = await fetch(
+          `/api/dex-ohlc-fallback?pair_address=${encodeURIComponent(pairAddress)}&timeframe=${encodeURIComponent(selectedTimeframe)}`,
+          { signal },
+        );
+        return r.ok ? extractCloses(await r.json()) : [];
+      };
+
+      if (closes.length < 5 && pairAddress) {
+        try {
+          await sleep(Math.random() * 800);
+          if (isCancelled()) return;
+          closes = await fetchFallback();
+          // Server-side retry already handles the 429 case; a single FE
+          // attempt is enough. The architect review flagged the second FE
+          // retry as wasted (proxy caches negative results, retry would
+          // hit the cached failure anyway).
+        } catch (err) {
+          if (isCancelled()) return;
+          /* otherwise fall through to synth curve */
+        }
+      }
+
+      if (isCancelled()) return;
+
+      try {
+        if (closes.length > 0) {
           const firstPrice = closes[0] || 0;
           const lastPrice = closes[closes.length - 1] || 0;
           const change =
             firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
-
           sparklineCache.set(cacheKey, {
             data: closes,
             priceChange: change,
             ts: Date.now(),
           });
-
           setPriceData(closes);
           setPriceChange(change);
         } else {
+          // Cache the empty result with a short TTL so subsequent re-renders
+          // don't re-fire the whole fetch chain. Re-render churn from WS
+          // updates would otherwise hammer the proxy + Geckoterminal.
+          sparklineCache.set(cacheKey, {
+            data: [],
+            priceChange: existingPriceChange,
+            ts: Date.now() - SPARKLINE_CACHE_TTL_MS + 60_000, // ~60s effective TTL
+          });
           setPriceData([]);
         }
       } catch (err) {
-        console.debug(
-          "[Sparkline] Failed to fetch for",
-          mintAddress,
-          selectedTimeframe,
-        );
+        if (!isCancelled()) {
+          console.debug(
+            "[Sparkline] Failed to fetch for",
+            mintAddress,
+            selectedTimeframe,
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled()) setLoading(false);
       }
     };
 
     fetchSparkline();
+
+    return () => controller.abort();
   }, [
     cacheKey,
     mintAddress,
     selectedTimeframe,
     tfConfig.interval,
     tfConfig.windowSec,
+    token.pair_address,
+    existingPriceChange,
   ]);
 
   // Generate a simple placeholder line based on existing price change data
@@ -2361,14 +2484,18 @@ const MiniSparkline: React.FC<{
     );
   }
 
-  // Need at least 5 data points for a meaningful chart
-  // Otherwise show a simple direction indicator
-  if (priceData.length < 5) {
-    const hasData = priceData.length >= 2;
-    const change = hasData
-      ? ((priceData[priceData.length - 1] - priceData[0]) / priceData[0]) * 100
-      : existingPriceChange;
-    const isUp = change >= 0;
+  // Prefer real OHLCV; otherwise synthesize a 5-point curve from the
+  // per-TF percent changes already on the token. Only fall back to the
+  // direction-indicator curve when neither source has data.
+  const synthetic =
+    priceData.length < 5 ? synthesizeSparklineFromPriceChanges(token) : null;
+  const effectiveData: number[] =
+    priceData.length >= 5 ? priceData : (synthetic ?? []);
+  const effectiveChange =
+    priceData.length >= 5 ? priceChange : existingPriceChange;
+
+  if (effectiveData.length < 5) {
+    const isUp = effectiveChange >= 0;
     const color = isUp ? "#85d99f" : "#f26681";
 
     return (
@@ -2412,7 +2539,7 @@ const MiniSparkline: React.FC<{
     return downsampled;
   };
 
-  const smoothedData = processData(priceData);
+  const smoothedData = processData(effectiveData);
 
   // Calculate bounds
   const minPrice = Math.min(...smoothedData);
@@ -2429,8 +2556,8 @@ const MiniSparkline: React.FC<{
     y: padding + chartHeight - ((price - minPrice) / priceRange) * chartHeight,
   }));
 
-  // Sharp polyline preserves spike shape — Axiom-style. Bezier smoothing was
-  // rounding off real price moves traders need to see.
+  // Real OHLCV: sharp polyline preserves spike shape — Axiom-style. Bezier
+  // smoothing rounds off real price moves traders need to see.
   const createPolyline = (pts: { x: number; y: number }[]): string => {
     if (pts.length < 2) return "";
     let path = `M ${pts[0].x},${pts[0].y}`;
@@ -2440,7 +2567,34 @@ const MiniSparkline: React.FC<{
     return path;
   };
 
-  const linePath = createPolyline(coords);
+  // Synthesized data (only 5 anchor points from per-TF percent changes):
+  // Catmull-Rom-to-cubic-bezier interpolation makes the curve read as an
+  // organic chart instead of a polygon. We don't fabricate intermediate
+  // values — the curve still passes through every anchor — but the smooth
+  // tangents fill in plausible micro-shape between the macro datapoints.
+  const createSmoothPath = (pts: { x: number; y: number }[]): string => {
+    if (pts.length < 2) return "";
+    if (pts.length === 2)
+      return `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y}`;
+    let path = `M ${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] ?? pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] ?? p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+    }
+    return path;
+  };
+
+  const isSynthetic = priceData.length < 5 && synthetic !== null;
+  const linePath = isSynthetic
+    ? createSmoothPath(coords)
+    : createPolyline(coords);
 
   // Create closed path for gradient fill
   const fillPath =
@@ -2448,7 +2602,7 @@ const MiniSparkline: React.FC<{
     ` L ${coords[coords.length - 1].x},${padding + chartHeight}` +
     ` L ${coords[0].x},${padding + chartHeight} Z`;
 
-  const isPositive = priceChange >= 0;
+  const isPositive = effectiveChange >= 0;
   const strokeColor = isPositive ? "#85d99f" : "#f26681";
   const gradientId = `sparkline-gradient-${mintAddress?.slice(0, 8)}-${selectedTimeframe}`;
 
@@ -2837,9 +2991,9 @@ const TableRow: React.FC<{
           />
         </td>
 
-        {/* Sparkline column — for trending it follows the user-selected
+        {/* Sparkline column — trending and dexscreener follow the user-selected
             timeframe (5m/1h/6h/24h); other tabs keep legacy 24h behaviour. */}
-        {tableType !== "newPairs" && tableType !== "dexscreener" && (
+        {tableType !== "newPairs" && (
           <td
             className={`${isTrending ? "w-28" : "w-32"} px-2 py-2.5 align-middle`}
           >
@@ -2848,7 +3002,11 @@ const TableRow: React.FC<{
                 token={token}
                 width={isTrending ? 100 : 120}
                 height={32}
-                selectedTimeframe={isTrending ? selectedTimeframe : "24h"}
+                selectedTimeframe={
+                  isTrending || tableType === "dexscreener"
+                    ? selectedTimeframe
+                    : "24h"
+                }
               />
             </div>
           </td>
@@ -2932,21 +3090,20 @@ const TableRow: React.FC<{
           </td>
         )}
 
-        {tableType !== "dexscreener" && (
-          // TXNS data is centered (matches the centered header) for the
-          // compact buys/sells variant. New Pairs uses the default variant
-          // which is right-aligned single-number transaction count.
-          <td
-            className={`${isTrending ? "w-32" : "w-24"} px-4 py-2.5 align-middle ${tableType === "newPairs" ? "text-right" : "text-center"}`}
-          >
-            <TxnsCell
-              token={token}
-              selectedTimeframe={selectedTimeframe}
-              isDiscoverPage={isDiscoverPage}
-              variant={tableType === "newPairs" ? "default" : "compact"}
-            />
-          </td>
-        )}
+        {/* TXNS data is centered (matches the centered header) for the
+            compact buys/sells variant. New Pairs uses the default variant
+            which is right-aligned single-number transaction count.
+            DexScreener uses the same compact variant as Trending. */}
+        <td
+          className={`${isTrending ? "w-32" : "w-24"} px-4 py-2.5 align-middle ${tableType === "newPairs" ? "text-right" : "text-center"}`}
+        >
+          <TxnsCell
+            token={token}
+            selectedTimeframe={selectedTimeframe}
+            isDiscoverPage={isDiscoverPage}
+            variant={tableType === "newPairs" ? "default" : "compact"}
+          />
+        </td>
 
         {/* Gas Fees column - commented out per user request
       <td className="w-28 px-4 py-2.5 align-middle text-right">

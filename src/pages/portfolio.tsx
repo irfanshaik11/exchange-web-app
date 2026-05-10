@@ -33,6 +33,8 @@ import ExportWalletModal from "../components/ExportWalletModal";
 import RealizedPnlChart, { type PnlChartDataPoint } from "~/components/charts/RealizedPnlChart";
 
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
+import { useImagePreloader } from "~/hooks/useImagePreloader";
+import { extractTokenImage } from "~/utils/images";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
@@ -79,20 +81,20 @@ const BalanceChart = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-black/90 backdrop-blur-xl border border-white/[0.06] rounded-lg p-3 shadow-lg z-50 pointer-events-none" style={{
+        <div className="bg-[#0c0e12]/95 backdrop-blur-xl border border-white/[0.08] rounded-md p-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-50 pointer-events-none" style={{
           position: 'absolute',
           transform: 'translateY(-100%)',
           marginTop: '-10px'
         }}>
-          <p className="text-[#6B7280] text-xs mb-2 font-medium">{data.time}</p>
-          <div className="space-y-1">
-            <p className="text-sm font-medium" style={{ color: data.balanceChangeFromInitial >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+          <p className="text-[#52525b] text-[10px] mb-1.5 font-semibold uppercase tracking-wide">{data.time}</p>
+          <div className="space-y-0.5">
+            <p className="text-xs font-semibold tabular-nums" style={{ color: data.balanceChangeFromInitial >= 0 ? "#18c48c" : "#ef4444" }}>
               Balance: {formatSmartNumber(data.balance)} {chain === 'monad' ? 'MON' : 'SOL'}
             </p>
-            <p className="text-xs" style={{ color: data.balanceChangeFromInitial >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+            <p className="text-[10px] tabular-nums" style={{ color: data.balanceChangeFromInitial >= 0 ? "#18c48c" : "#ef4444" }}>
               Change: {data.balanceChangeFromInitial >= 0 ? "+" : ""}{formatSmartNumber(Math.abs(data.balanceChangeFromInitial))} {chain === 'monad' ? 'MON' : 'SOL'}
             </p>
-            <p className="text-xs" style={{ color: data.balanceChangePercent >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+            <p className="text-[10px] tabular-nums" style={{ color: data.balanceChangePercent >= 0 ? "#18c48c" : "#ef4444" }}>
               {data.balanceChangePercent >= 0 ? "+" : ""}{data.balanceChangePercent.toFixed(2)}%
             </p>
           </div>
@@ -105,7 +107,7 @@ const BalanceChart = ({
   if (chartData.length === 0) return null;
 
   const isPositive = chartData[chartData.length - 1]?.balanceChangeFromInitial >= 0;
-  const strokeColor = isPositive ? "#70E0B0" : "#FF4D7F";
+  const strokeColor = isPositive ? "#18c48c" : "#ef4444";
 
   // Calculate fixed domain for Y-axis to prevent chart from moving
   const allValues = chartData.map(d => d.balanceChangeFromInitial);
@@ -133,20 +135,20 @@ const BalanceChart = ({
               <stop offset="95%" stopColor={strokeColor} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" opacity={0.5} />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" opacity={0.5} />
           <XAxis 
             dataKey="time" 
-            stroke="#6B7280"
+            stroke="#27272a"
             fontSize={8}
-            tick={{ fill: '#6B7280' }}
+            tick={{ fill: '#52525b' }}
             interval={Math.floor(chartData.length / 5)}
-            tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.04)' }}
           />
           <YAxis 
-            stroke="#6B7280"
+            stroke="#27272a"
             fontSize={8}
-            tick={{ fill: '#6B7280' }}
-            tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+            tick={{ fill: '#52525b' }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.04)' }}
             domain={yDomain}
             allowDataOverflow={false}
             width={40}
@@ -182,29 +184,29 @@ const BalanceChart = ({
   );
 };
 
-// Stacked Token Boxes Component
+// Stacked Token Boxes Component - JTX style
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
   <InterstateTooltip label="Tokens held">
-    <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-      <div className="flex items-center relative" style={{ width: "32px", height: "16px" }}>
+    <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity px-2 py-1 rounded-md bg-[#0c0e12]/60 border border-white/[0.06]">
+      <div className="flex items-center relative" style={{ width: "28px", height: "14px" }}>
         {[0, 1, 2].map((index) => (
           <div
             key={index}
-            className={`absolute w-4 h-4 rounded-sm ${
+            className={`absolute w-3.5 h-3.5 rounded ${
               index === 0
-                ? "bg-[#4B5563]"
+                ? "bg-[#3f3f46]"
                 : index === 1
-                ? "bg-[#6B7280]"
-                : "bg-[#9CA3AF]"
+                ? "bg-[#52525b]"
+                : "bg-[#71717a]"
             }`}
             style={{
-              left: `${index * 6}px`,
+              left: `${index * 5}px`,
               zIndex: 3 - index,
             }}
           />
         ))}
       </div>
-      <span className="text-sm text-[#f0f5f5]">{count}</span>
+      <span className="text-xs text-[#f4f4f5] tabular-nums">{count}</span>
     </div>
   </InterstateTooltip>
 );
@@ -927,6 +929,18 @@ export default function PortfolioPage() {
     const activityPollId = setInterval(loadTradeActivity, pollMs);
     return () => clearInterval(activityPollId);
   }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter, wsConnected]);
+
+  // Preload token images from activity rows as soon as data arrives
+  const { preloadImages } = useImagePreloader();
+  useEffect(() => {
+    if (!tradeActivity || tradeActivity.length === 0) return;
+    const imageSources = tradeActivity
+      .map((trade: any) => extractTokenImage(trade))
+      .filter(Boolean);
+    if (imageSources.length > 0) {
+      preloadImages(imageSources, { priority: true, timeout: 2000 });
+    }
+  }, [tradeActivity, preloadImages]);
 
   // Listen for trade-completed events and consume pending refreshes on mount
   useEffect(() => {
@@ -2944,50 +2958,66 @@ export default function PortfolioPage() {
       <Head>
         <title>Portfolio | Interstate Memeboard</title>
       </Head>
-      <div className="flex min-h-screen flex-col bg-[#050608] text-[#E6E7EA]">
+      <div className="flex min-h-screen flex-col bg-[#030304] text-zinc-100">
         <div className="relative z-[10000]"><Header /></div>
         <DockedPanelMarginWrapper>
         <div className="p-1 sm:p-1.5">
-          <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] min-h-[calc(100vh-80px)]">
-            {/* Background Image with multi-layer fade */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-              <div className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat" style={{ backgroundImage: 'url(/ranks/Background2.png)' }} />
-              <div className="absolute inset-0 bg-black/30" />
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)' }} />
-              <div className="absolute inset-x-0 top-1/4 bottom-0" style={{ background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)' }} />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+          {/* JTX-style main container */}
+          <div className="relative overflow-hidden rounded-xl border border-white/[0.06] min-h-[calc(100vh-80px)] bg-[#030304]">
+            {/* JTX-style background with corner brackets and ambient glow */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl bg-[#030304]/95">
+              {/* Corner brackets */}
+              <div className="absolute left-2 top-2 h-6 w-6 border-l border-t border-white/[0.12]" />
+              <div className="absolute right-2 top-2 h-6 w-6 border-r border-t border-white/[0.12]" />
+              <div className="absolute bottom-2 left-2 h-6 w-6 border-b border-l border-white/[0.12]" />
+              <div className="absolute bottom-2 right-2 h-6 w-6 border-b border-r border-white/[0.12]" />
+              
+              {/* Subtle ambient glow - emerald tint */}
+              <div
+                className="absolute -top-[40%] left-1/2 h-[60vh] w-[120%] -translate-x-1/2"
+                style={{ background: 'radial-gradient(ellipse at center, rgba(112, 224, 176, 0.03) 0%, transparent 70%)' }}
+              />
+              {/* Secondary purple glow */}
+              <div
+                className="absolute top-[20%] left-1/2 h-[40vh] w-[80%] -translate-x-1/2"
+                style={{ background: 'radial-gradient(ellipse at center, rgba(124, 58, 237, 0.02) 0%, transparent 60%)' }}
+              />
+              {/* Subtle side vignette */}
+              <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
+              {/* Subtle top-to-bottom gradient */}
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
             </div>
             {/* Content */}
             <div className="relative z-10 px-3 sm:px-4 md:px-6 pt-4 sm:pt-6 pb-6">
 
-          {/* Section Tabs */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 px-2 gap-3 sm:gap-0">
-            <div className="flex gap-2 sm:gap-4">
+          {/* JTX-style Section Tabs */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 px-2 gap-3 sm:gap-0">
+            <div className="flex gap-1 p-1 bg-[#0c0e12]/60 rounded-lg border border-white/[0.06]">
               <button
-                className={`text-xl font-medium transition cursor-pointer ${
+                className={`px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer rounded-md ${
                   activeSection === "spot"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f4f4f5] bg-white/[0.08] border border-white/[0.08]"
+                    : "text-[#71717a] hover:text-[#a1a1aa] border border-transparent"
                 }`}
                 onClick={() => setActiveSection("spot")}
               >
                 Spot
               </button>
               <button
-                className={`text-xl font-medium transition cursor-pointer ${
+                className={`px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer rounded-md ${
                   activeSection === "predictions"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f4f4f5] bg-white/[0.08] border border-white/[0.08]"
+                    : "text-[#71717a] hover:text-[#a1a1aa] border border-transparent"
                 }`}
                 onClick={() => setActiveSection("predictions")}
               >
                 Predictions
               </button>
               <button
-                className={`text-xl font-medium transition cursor-pointer ${
+                className={`px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer rounded-md ${
                   activeSection === "wallet"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f4f4f5] bg-white/[0.08] border border-white/[0.08]"
+                    : "text-[#71717a] hover:text-[#a1a1aa] border border-transparent"
                 }`}
                 onClick={() => setActiveSection("wallet")}
               >
@@ -3005,21 +3035,21 @@ export default function PortfolioPage() {
               </button> */}
             </div>
 
-            {/* Right side controls for Spot section */}
+            {/* Right side controls for Spot section - JTX style */}
             {activeSection === "spot" && (
-              <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
                 <InterstateTooltip label={currentChain === 'monad' ? 'MON Balance' : 'SOL Balance'}>
-                  <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                  <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity px-2.5 py-1.5 rounded-md bg-[#0c0e12]/60 border border-white/[0.06]">
                     {currentChain === 'monad' ? (
                       <img
                         src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
                         alt="Monad"
-                        className="h-6 w-6 -mt-px rounded"
+                        className="h-5 w-5 -mt-px rounded"
                         style={{ objectFit: 'contain' }}
                       />
                     ) : (
                       <SiSolana
-                        className="h-4 w-4 -mt-px"
+                        className="h-3.5 w-3.5 -mt-px"
                         aria-hidden="true"
                         style={{
                           color: "unset",
@@ -3052,7 +3082,7 @@ export default function PortfolioPage() {
                         </linearGradient>
                       </defs>
                     </svg>
-                    <span className="text-sm text-[#9CA3AF]">
+                    <span className="text-xs text-[#a1a1aa] tabular-nums">
                       {formatBalance(chainBalance)} {currentChain === "monad" ? "MON" : "SOL"}
                     </span>
                   </div>
@@ -3066,43 +3096,44 @@ export default function PortfolioPage() {
                     className="bg-transparent text-sm text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none"
                   /> */}
                 </div>
-                <div className="flex items-center gap-1">
+                {/* JTX-style timeframe selector */}
+                <div className="flex items-center gap-0.5 p-0.5 bg-[#0c0e12]/60 rounded-md border border-white/[0.06]">
                   <button
                     onClick={() => setSelectedTimeframe("1d")}
-                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
+                    className={`px-2.5 py-1 text-xs cursor-pointer transition-all duration-200 rounded ${
                       selectedTimeframe === "1d"
-                        ? "text-[#f0f5f5]"
-                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                        ? "text-[#f4f4f5] bg-white/[0.08]"
+                        : "text-[#71717a] hover:text-[#a1a1aa]"
                     }`}
                   >
                     1d
                   </button>
                   <button
                     onClick={() => setSelectedTimeframe("7d")}
-                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
+                    className={`px-2.5 py-1 text-xs cursor-pointer transition-all duration-200 rounded ${
                       selectedTimeframe === "7d"
-                        ? "text-[#f0f5f5]"
-                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                        ? "text-[#f4f4f5] bg-white/[0.08]"
+                        : "text-[#71717a] hover:text-[#a1a1aa]"
                     }`}
                   >
                     7d
                   </button>
                   <button
                     onClick={() => setSelectedTimeframe("30d")}
-                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
+                    className={`px-2.5 py-1 text-xs cursor-pointer transition-all duration-200 rounded ${
                       selectedTimeframe === "30d"
-                        ? "text-[#f0f5f5]"
-                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                        ? "text-[#f4f4f5] bg-white/[0.08]"
+                        : "text-[#71717a] hover:text-[#a1a1aa]"
                     }`}
                   >
                     30d
                   </button>
                   <button
                     onClick={() => setSelectedTimeframe("Max")}
-                    className={`px-2 sm:px-3 py-1 text-xs cursor-pointer transition-colors ${
+                    className={`px-2.5 py-1 text-xs cursor-pointer transition-all duration-200 rounded ${
                       selectedTimeframe === "Max"
-                        ? "text-[#f0f5f5]"
-                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                        ? "text-[#f4f4f5] bg-white/[0.08]"
+                        : "text-[#71717a] hover:text-[#a1a1aa]"
                     }`}
                   >
                     Max
@@ -3115,19 +3146,24 @@ export default function PortfolioPage() {
           {/* Spot Section */}
           {activeSection === "spot" && (
             <div className="space-y-4 sm:space-y-6">
-              {/* Top Panels */}
-              <div className={`grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${initialNativeBalanceRef.current !== null ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
-                {/* Balance */}
-                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
-                  <div className="mb-3 sm:mb-4 text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+              {/* JTX-style Top Panels */}
+              <div className={`grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${initialNativeBalanceRef.current !== null ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
+                {/* Balance Card - JTX style */}
+                <div className="relative rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-4 sm:p-5 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                  {/* Mini corner brackets */}
+                  <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                    <div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.08]" />
+                    <div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.08]" />
+                  </div>
+                  <div className="mb-3 sm:mb-4 text-[#f4f4f5] text-xs sm:text-sm font-semibold uppercase tracking-wide">
                     Balance
                   </div>
                   <div className="space-y-3 sm:space-y-4">
                     <div>
-                      <div className="text-[#6B7280] text-xs sm:text-sm font-light">
-                        Available Balance in $
+                      <div className="text-[#52525b] text-xs uppercase tracking-wide mb-0.5">
+                        Available Balance (USD)
                       </div>
-                      <div className="text-xl sm:text-2xl font-light text-[#f0f5f5]">
+                      <div className="text-xl sm:text-2xl font-semibold text-[#f4f4f5] tabular-nums">
                         ${formatCurrency(chainBalance * chainPrice)}
                       </div>
                     </div>
@@ -3149,10 +3185,10 @@ export default function PortfolioPage() {
                       )}
                     </div> */}
                     <div>
-                      <div className="text-[#6B7280] text-xs sm:text-sm font-light">
-                        Available Balance in {currentChain === "monad" ? "MON" : "SOL"}
+                      <div className="text-[#52525b] text-xs uppercase tracking-wide mb-0.5">
+                        Available ({currentChain === "monad" ? "MON" : "SOL"})
                       </div>
-                      <div className="text-xl sm:text-2xl font-light text-[#f0f5f5] flex items-center gap-1">
+                      <div className="text-xl sm:text-2xl font-semibold text-[#f4f4f5] flex items-center gap-1 tabular-nums">
                         <ChainIcon chain={currentChain} size="medium" />
                         {formatBalance(chainBalance)} {currentChain === "monad" ? "MON" : "SOL"}
                       </div>
@@ -3201,17 +3237,22 @@ export default function PortfolioPage() {
                   </div>
                 </div> */}
 
-                {/* Wallet Balance Change */}
+                {/* Wallet Balance Change - JTX style */}
                 {initialNativeBalanceRef.current !== null && (
-                  <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
-                    <div className="mb-3 sm:mb-4 text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
-                      Wallet Balance Change ({currentChain === "monad" ? "MON" : "SOL"})
+                  <div className="relative rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-4 sm:p-5 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                    {/* Mini corner brackets */}
+                    <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                      <div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.08]" />
+                      <div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.08]" />
+                    </div>
+                    <div className="mb-3 sm:mb-4 text-[#f4f4f5] text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                      Balance Change ({currentChain === "monad" ? "MON" : "SOL"})
                     </div>
                     <div className="flex flex-col">
                       <div
-                        className="text-xl sm:text-2xl font-light mb-2"
+                        className="text-xl sm:text-2xl font-semibold mb-2 tabular-nums"
                         style={{
-                          color: actualBalanceChangePnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                          color: actualBalanceChangePnl >= 0 ? "#18c48c" : "#ef4444",
                         }}
                       >
                         {sortByUSD && nativePriceForDisplay > 0 ? (
@@ -3225,9 +3266,9 @@ export default function PortfolioPage() {
                       </div>
                       {/* Show native balance change (MON or SOL) */}
                       <div 
-                        className="text-sm mb-1"
+                        className="text-sm mb-1 tabular-nums"
                         style={{
-                          color: actualBalanceChangeNative >= 0 ? "#70E0B0" : "#FF4D7F",
+                          color: actualBalanceChangeNative >= 0 ? "#18c48c" : "#ef4444",
                         }}
                       >
                         {actualBalanceChangeNative >= 0 ? "+" : "-"}
@@ -3239,9 +3280,9 @@ export default function PortfolioPage() {
                         const isNativeClamped = Math.abs(actualBalanceChangeNativePercentage) > 999.99;
                         return (
                           <div
-                            className="text-sm mb-2"
+                            className="text-sm mb-2 tabular-nums"
                             style={{
-                              color: actualBalanceChangeNativePercentage >= 0 ? "#70E0B0" : "#FF4D7F",
+                              color: actualBalanceChangeNativePercentage >= 0 ? "#18c48c" : "#ef4444",
                             }}
                           >
                             {isNativeClamped
@@ -3255,7 +3296,7 @@ export default function PortfolioPage() {
                         const clampedUsdPct = Math.max(-999.99, Math.min(999.99, actualBalanceChangePnlPercentage));
                         const isUsdClamped = Math.abs(actualBalanceChangePnlPercentage) > 999.99;
                         return (
-                          <div className={`text-sm mb-3 ${actualBalanceChangePnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          <div className={`text-sm mb-3 tabular-nums ${actualBalanceChangePnlPercentage >= 0 ? 'text-[#18c48c]' : 'text-[#ef4444]'}`}>
                             {isUsdClamped
                               ? (actualBalanceChangePnlPercentage > 0 ? ">+999.99% (USD)" : "<-999.99% (USD)")
                               : `${clampedUsdPct >= 0 ? "+" : ""}${formatSmallPrice(clampedUsdPct)}% (USD)`
@@ -3277,13 +3318,18 @@ export default function PortfolioPage() {
                   </div>
                 )}
 
-                {/* Realized PNL */}
-                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
+                {/* Realized PNL - JTX style */}
+                <div className="relative rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-4 sm:p-5 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                  {/* Mini corner brackets */}
+                  <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                    <div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.08]" />
+                    <div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.08]" />
+                  </div>
                   <div className="mb-3 sm:mb-4 flex items-center justify-between">
-                    <div className="text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors flex items-center gap-2">
+                    <div className="text-[#f4f4f5] text-xs sm:text-sm font-semibold uppercase tracking-wide flex items-center gap-2">
                       Realized PNL
                       <InterstateTooltip label="Profit/loss from completed trades (tokens you've sold). This is locked in and won't change unless you make more trades.">
-                        <FiInfo className="text-[#6B7280] hover:text-[#9CA3AF] cursor-help text-xs w-3.5 h-3.5 transition-colors" />
+                        <FiInfo className="text-[#52525b] hover:text-[#a1a1aa] cursor-help text-xs w-3.5 h-3.5 transition-colors" />
                       </InterstateTooltip>
                     </div>
                     {/* Calendar icon commented out */}
@@ -3299,10 +3345,10 @@ export default function PortfolioPage() {
                   </div>
                   <div className="flex flex-col">
                     <div
-                      className="text-xl sm:text-2xl font-light mb-2"
+                      className="text-xl sm:text-2xl font-semibold mb-2 tabular-nums"
                       style={{
                         color:
-                          timeframeMetrics.realizedPnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                          timeframeMetrics.realizedPnl >= 0 ? "#18c48c" : "#ef4444",
                       }}
                     >
                       {sortByUSD && contextSolPrice > 0 ? (
@@ -3321,7 +3367,7 @@ export default function PortfolioPage() {
                       )}
                     </div>
                     {/* Realized PNL Percentage - Always show */}
-                    <div className={`text-sm mb-2 ${timeframeMetrics.realizedPnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <div className={`text-sm mb-2 tabular-nums ${timeframeMetrics.realizedPnlPercentage >= 0 ? 'text-[#18c48c]' : 'text-[#ef4444]'}`}>
                       {timeframeMetrics.realizedPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(timeframeMetrics.realizedPnlPercentage)}%
                     </div>
                     {/* Interactive Realized PNL Chart */}
@@ -3331,22 +3377,27 @@ export default function PortfolioPage() {
                       </div>
                     ) : (
                       <div className="h-40 sm:h-48 w-full flex items-center justify-center">
-                        <p className="text-[#6B7280] text-xs">No realized trades yet</p>
+                        <p className="text-[#52525b] text-xs">No realized trades yet</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Performance */}
-                <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 sm:p-6 backdrop-blur-xl">
+                {/* Performance - JTX style */}
+                <div className="relative rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-4 sm:p-5 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                  {/* Mini corner brackets */}
+                  <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                    <div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.08]" />
+                    <div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.08]" />
+                  </div>
                   <div className="mb-3 sm:mb-4 flex items-center justify-between">
-                    <div className="text-[#f0f5f5] text-xs sm:text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                    <div className="text-[#f4f4f5] text-xs sm:text-sm font-semibold uppercase tracking-wide">
                       Performance
                     </div>
                     <InterstateTooltip label="Export">
                       <button
                         onClick={exportPerformanceData}
-                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-[#f0f5f5] transition-colors"
+                        className="text-[#52525b] text-sm cursor-pointer hover:text-[#a1a1aa] transition-colors"
                       >
                         <FaUpload />
                       </button>
@@ -3354,10 +3405,10 @@ export default function PortfolioPage() {
                   </div>
                   <div className="space-y-2 sm:space-y-3">
                     <div className="flex justify-between text-xs sm:text-sm">
-                      <span className="text-[#6B7280] font-light truncate pr-2">
+                      <span className="text-[#71717a] truncate pr-2">
                         {selectedTimeframe} Unrealized PNL
                       </span>
-                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
+                      <span className="text-[#f4f4f5] whitespace-nowrap tabular-nums">
                         {sortByUSD && contextSolPrice > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
@@ -3371,10 +3422,10 @@ export default function PortfolioPage() {
                       </span>
                     </div>
                     <div className="flex justify-between text-xs sm:text-sm">
-                      <span className="text-[#6B7280] font-light truncate pr-2">
+                      <span className="text-[#71717a] truncate pr-2">
                         {selectedTimeframe} Realized PNL
                       </span>
-                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
+                      <span className="text-[#f4f4f5] whitespace-nowrap tabular-nums">
                         {sortByUSD && contextSolPrice > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
@@ -3392,13 +3443,13 @@ export default function PortfolioPage() {
                       </span>
                     </div>
                     <div className="flex justify-between text-xs sm:text-sm">
-                      <span className="text-[#6B7280] font-light truncate pr-2">
+                      <span className="text-[#71717a] truncate pr-2">
                         {selectedTimeframe} Total PNL
                       </span>
                       <span
-                        className="font-light whitespace-nowrap"
+                        className="whitespace-nowrap tabular-nums"
                         style={{
-                          color: totalPnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                          color: totalPnl >= 0 ? "#18c48c" : "#ef4444",
                         }}
                       >
                         {sortByUSD && contextSolPrice > 0 ? (
@@ -3417,92 +3468,99 @@ export default function PortfolioPage() {
                       </span>
                     </div>
                     <div className="flex justify-between text-xs sm:text-sm">
-                      <span className="text-[#6B7280] font-light truncate pr-2">
+                      <span className="text-[#71717a] truncate pr-2">
                         {selectedTimeframe} Total TXNS
                       </span>
-                      <span className="text-[#f0f5f5] font-light whitespace-nowrap">
+                      <span className="text-[#f4f4f5] whitespace-nowrap tabular-nums">
                         {timeframeMetrics.winningTrades}/
                         {timeframeMetrics.losingTrades}
                       </span>
                     </div>
 
-                    {/* Performance breakdown */}
-                    <div className="space-y-2 mt-4">
+                    {/* Performance breakdown - JTX style */}
+                    <div className="space-y-2 mt-4 pt-3 border-t border-white/[0.06]">
                       <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
-                          <span className="text-[#6B7280] font-light truncate">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#18c48c] flex-shrink-0"></div>
+                          <span className="text-[#71717a] truncate">
                             &gt;500%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                        <span className="text-[#f4f4f5] whitespace-nowrap ml-2 tabular-nums">
                           {performanceBreakdown.above500}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
-                          <span className="text-[#6B7280] font-light truncate">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#18c48c] flex-shrink-0"></div>
+                          <span className="text-[#71717a] truncate">
                             200% ~ 500%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                        <span className="text-[#f4f4f5] whitespace-nowrap ml-2 tabular-nums">
                           {performanceBreakdown.between200And500}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#70E0B0] flex-shrink-0"></div>
-                          <span className="text-[#6B7280] font-light truncate">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#18c48c] flex-shrink-0"></div>
+                          <span className="text-[#71717a] truncate">
                             0% ~ 200%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                        <span className="text-[#f4f4f5] whitespace-nowrap ml-2 tabular-nums">
                           {performanceBreakdown.between0And200}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#FF4D7F] flex-shrink-0"></div>
-                          <span className="text-[#6B7280] font-light truncate">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#ef4444] flex-shrink-0"></div>
+                          <span className="text-[#71717a] truncate">
                             0% ~ -50%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                        <span className="text-[#f4f4f5] whitespace-nowrap ml-2 tabular-nums">
                           {performanceBreakdown.between0AndMinus50}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-[#FF4D7F] flex-shrink-0"></div>
-                          <span className="text-[#6B7280] font-light truncate">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#ef4444] flex-shrink-0"></div>
+                          <span className="text-[#71717a] truncate">
                             &lt; -50%
                           </span>
                         </div>
-                        <span className="text-[#f0f5f5] font-light whitespace-nowrap ml-2">
+                        <span className="text-[#f4f4f5] whitespace-nowrap ml-2 tabular-nums">
                           {performanceBreakdown.belowMinus50}
                         </span>
                       </div>
                     </div>
 
-                    {/* Pink line at bottom */}
-                    <div className="w-full h-px bg-[#FF4D7F] mt-4"></div>
+                    {/* Accent line at bottom - JTX style */}
+                    <div className="w-full h-0.5 bg-gradient-to-r from-[#ef4444] via-[#ef4444]/50 to-transparent mt-4 rounded-full"></div>
                   </div>
                 </div>
               </div>
 
-              {/* Positions Table Section  */}
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
-                {/* Sub-navigation tabs with controls */}
+              {/* Positions Table Section - JTX style */}
+              <div className="relative rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 overflow-hidden backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                {/* Mini corner brackets */}
+                <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden z-10">
+                  <div className="absolute left-1.5 top-1.5 h-3 w-3 border-l border-t border-white/[0.08]" />
+                  <div className="absolute right-1.5 top-1.5 h-3 w-3 border-r border-t border-white/[0.08]" />
+                  <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b border-l border-white/[0.08]" />
+                  <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.08]" />
+                </div>
+                {/* Sub-navigation tabs with controls - JTX style */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/[0.06] gap-3 sm:gap-0 p-3 sm:px-4 sm:py-3">
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1 p-0.5 bg-[#080a0d]/60 rounded-md border border-white/[0.04]">
                     {spotTabs.map((tab, i) => (
                       <button
                         key={tab}
-                        className={`px-3 sm:px-4 py-2 text-xs transition-colors cursor-pointer ${
+                        className={`px-3 sm:px-4 py-1.5 text-xs transition-all duration-200 cursor-pointer rounded ${
                           activeSpotTab === i
-                            ? "text-white font-semibold border border-white/[0.08] bg-white/[0.07] rounded-lg"
-                            : "text-neutral-400 font-medium border border-transparent hover:bg-white/[0.04] hover:text-neutral-200 rounded-lg"
+                            ? "text-[#f4f4f5] font-semibold bg-white/[0.08]"
+                            : "text-[#71717a] font-medium hover:text-[#a1a1aa]"
                         }`}
                         onClick={() => setActiveSpotTab(i)}
                       >
@@ -3512,26 +3570,27 @@ export default function PortfolioPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-colors flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
-                      <FaSearch className="text-[#9CA3AF] text-xs flex-shrink-0" />
+                    {/* JTX-style search input */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#080a0d]/60 border border-white/[0.06] hover:border-white/[0.1] transition-colors flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
+                      <FaSearch className="text-[#52525b] text-xs flex-shrink-0" />
                       <input
                         type="text"
                         placeholder="Search by name or address"
-                        className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-full sm:w-40"
+                        className="bg-transparent text-xs text-[#a1a1aa] placeholder-[#52525b] focus:outline-none w-full sm:w-40"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
                       {searchQuery.trim() && (
                         <button
                           onClick={() => setSearchQuery("")}
-                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors flex-shrink-0"
+                          className="text-[#52525b] hover:text-[#a1a1aa] transition-colors flex-shrink-0"
                         >
                           <FaTimes className="text-xs" />
                         </button>
                       )}
                     </div>
                     {searchQuery.trim() && (
-                      <div className="text-xs text-[#9CA3AF] whitespace-nowrap">
+                      <div className="text-xs text-[#71717a] whitespace-nowrap">
                         {(() => {
                           const activeTab = activeSpotTab;
                           if (activeTab === 0)
@@ -3545,12 +3604,13 @@ export default function PortfolioPage() {
                         })()}
                       </div>
                     )}
+                    {/* JTX-style toggle buttons */}
                     <button
                       onClick={() => setShowHidden(!showHidden)}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs whitespace-nowrap ${
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer text-xs whitespace-nowrap border ${
                         !showHidden
-                          ? "bg-white/[0.07] text-[#70E0B0]"
-                          : "bg-transparent hover:bg-white/[0.05] text-[#9CA3AF] hover:text-[#f0f5f5]"
+                          ? "bg-[#18c48c]/10 border-[#18c48c]/30 text-[#18c48c]"
+                          : "bg-transparent border-white/[0.06] hover:border-white/[0.1] text-[#71717a] hover:text-[#a1a1aa]"
                       }`}
                     >
                       <svg
@@ -3576,7 +3636,7 @@ export default function PortfolioPage() {
                     </button>
                     <button
                       onClick={() => setSortByUSD(!sortByUSD)}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer bg-transparent text-[#9CA3AF] hover:text-[#f0f5f5] text-xs"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer border border-white/[0.06] hover:border-white/[0.1] text-[#71717a] hover:text-[#a1a1aa] text-xs"
                     >
                       <span className="text-xs">↑↓</span>
                       {sortByUSD ? "USD" : "SOL"}
@@ -3588,7 +3648,7 @@ export default function PortfolioPage() {
                 <div className="min-h-[200px]">
                   <div style={{ display: activeSpotTab === 0 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
+                      <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your positions.
                       </div>
                     ) : !user?.id ? (
@@ -3629,7 +3689,7 @@ export default function PortfolioPage() {
                     ))} */}
                   <div style={{ display: activeSpotTab === 1 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
+                      <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your positions.
                       </div>
                     ) : !user?.id ? (
@@ -3659,7 +3719,7 @@ export default function PortfolioPage() {
                   </div>
                   <div style={{ display: activeSpotTab === 2 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
+                      <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your activity.
                       </div>
                     ) : !user?.id ? (
@@ -3683,16 +3743,23 @@ export default function PortfolioPage() {
             </div>
           )}
 
-          {/* Predictions Section */}
+          {/* Predictions Section - JTX style */}
           {activeSection === "predictions" && (
-            <div className="space-y-4 sm:space-y-6">
+            <div className="space-y-3 sm:space-y-4">
               {/* Polygon Wallet */}
               <PolygonWalletCard variant="compact" />
-
-              {/* Positions */}
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
-                <div className="border-b border-white/[0.06] px-4 py-3">
-                  <span className="text-sm font-medium text-white">Positions & History</span>
+              
+              {/* Positions - JTX style */}
+              <div className="relative rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 overflow-hidden backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                {/* Mini corner brackets */}
+                <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden z-10">
+                  <div className="absolute left-1.5 top-1.5 h-3 w-3 border-l border-t border-white/[0.08]" />
+                  <div className="absolute right-1.5 top-1.5 h-3 w-3 border-r border-t border-white/[0.08]" />
+                  <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b border-l border-white/[0.08]" />
+                  <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.08]" />
+                </div>
+                <div className="border-b border-white/[0.06] px-4 py-3 bg-[#080a0d]/40">
+                  <span className="text-xs font-semibold text-[#f4f4f5] uppercase tracking-wide">Positions & History</span>
                 </div>
                 <div className="p-4" style={{ minHeight: '200px' }}>
                   {user?.bearerToken ? (
@@ -3712,16 +3779,23 @@ export default function PortfolioPage() {
             </div>
           )}
 
-          {/* Wallet Section */}
+          {/* Wallet Section - JTX style */}
           {activeSection === "wallet" && (
-            <div className="rounded-xl border border-white/[0.08] bg-white/[0.05] overflow-hidden backdrop-blur-xl" style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)' }}>
-              {/* Header Row  */}
+            <div className="relative rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 overflow-hidden backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+              {/* Mini corner brackets */}
+              <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden z-10">
+                <div className="absolute left-1.5 top-1.5 h-3 w-3 border-l border-t border-white/[0.08]" />
+                <div className="absolute right-1.5 top-1.5 h-3 w-3 border-r border-t border-white/[0.08]" />
+                <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b border-l border-white/[0.08]" />
+                <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.08]" />
+              </div>
+              {/* Header Row - JTX style */}
               <div className="border-b border-white/[0.06]">
                 {/* Left Panel Header */}
                 <div className="px-3 sm:px-4 py-3">
                   <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-2">
-                    <div className="flex items-center px-2 sm:px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] w-full sm:w-48">
-                      <FaSearch className="text-[#9CA3AF] text-xs mr-2 flex-shrink-0" />
+                    <div className="flex items-center px-2.5 sm:px-3 py-1.5 rounded-md bg-[#080a0d]/60 border border-white/[0.06] w-full sm:w-48">
+                      <FaSearch className="text-[#52525b] text-xs mr-2 flex-shrink-0" />
                       <input
                         type="text"
                         placeholder="Search by name or address"
@@ -3739,12 +3813,13 @@ export default function PortfolioPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                    {/* JTX-style toggle */}
                     <button
                       onClick={() => setShowHidden(!showHidden)}
-                      className={`flex items-center gap-1 px-2 sm:px-1 sm:ml-0 py-1 rounded-full transition-colors duration-200 cursor-pointer text-xs whitespace-nowrap ${
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer text-xs whitespace-nowrap border ${
                         !showHidden
-                          ? "text-[#70E0B0]"
-                          : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+                          ? "bg-[#18c48c]/10 border-[#18c48c]/30 text-[#18c48c]"
+                          : "border-white/[0.06] text-[#71717a] hover:text-[#a1a1aa] hover:border-white/[0.1]"
                       }`}
                     >
                       <svg
@@ -3771,10 +3846,11 @@ export default function PortfolioPage() {
                       <span className="hidden sm:inline">Show Archived</span>
                       <span className="sm:hidden">Archived</span>
                     </button>
+                    {/* JTX-style wallet action buttons */}
                     {(currentChain === "sol" || currentChain === "monad") && (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1.5">
                         <button
-                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
+                          className="px-2.5 py-1.5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-xs text-[#a1a1aa] hover:bg-white/[0.05] hover:border-white/[0.1] hover:text-[#f4f4f5] transition-all cursor-pointer whitespace-nowrap"
                           onClick={() => {
                             if (currentChain === "sol") {
                               if (isAllSolSelected) clearSelectedWallets("sol");
@@ -3788,13 +3864,13 @@ export default function PortfolioPage() {
                           {(currentChain === "sol" ? isAllSolSelected : isAllMonSelected) ? "Unselect all" : "Select all"}
                         </button>
                         <button
-                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
+                          className="px-2.5 py-1.5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-xs text-[#a1a1aa] hover:bg-white/[0.05] hover:border-white/[0.1] hover:text-[#f4f4f5] transition-all cursor-pointer whitespace-nowrap"
                           onClick={() => selectWalletsWithFunds(currentChain as "sol" | "monad")}
                         >
                           Select with funds
                         </button>
                         <button
-                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          className="px-2.5 py-1.5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-xs text-[#a1a1aa] hover:bg-white/[0.05] hover:border-white/[0.1] hover:text-[#f4f4f5] transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 disabled:opacity-50"
                           disabled={redistributing}
                           onClick={() => handleRedistributeFunds("consolidate")}
                           title="Move all selected funds to the primary wallet"
@@ -3804,7 +3880,7 @@ export default function PortfolioPage() {
                           <span className="sm:hidden">{redistributing ? "..." : "Consolidate"}</span>
                         </button>
                         <button
-                          className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 disabled:opacity-60"
+                          className="px-2.5 py-1.5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-xs text-[#a1a1aa] hover:bg-white/[0.05] hover:border-white/[0.1] hover:text-[#f4f4f5] transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 disabled:opacity-50"
                           disabled={redistributing}
                           onClick={() => handleRedistributeFunds("split")}
                           title="Split selected balance equally across wallets"
@@ -3818,7 +3894,7 @@ export default function PortfolioPage() {
                     <div className="relative">
                       <button
                         onClick={() => setShowImportDropdown(!showImportDropdown)}
-                        className="px-2 sm:px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03] text-xs text-neutral-200 hover:bg-white/[0.07] hover:border-white/[0.1] transition-colors cursor-pointer whitespace-nowrap"
+                        className="px-2.5 py-1.5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-xs text-[#a1a1aa] hover:bg-white/[0.05] hover:border-white/[0.1] hover:text-[#f4f4f5] transition-all cursor-pointer whitespace-nowrap"
                       >
                         Import ▾
                       </button>
@@ -3828,16 +3904,16 @@ export default function PortfolioPage() {
                             className="fixed inset-0 z-10"
                             onClick={() => setShowImportDropdown(false)}
                           />
-                          <div className="absolute top-full mt-1 right-0 bg-black/90 backdrop-blur-xl border border-white/[0.06] rounded-lg shadow-lg z-20 min-w-[200px]">
+                          <div className="absolute top-full mt-1 right-0 bg-[#0c0e12]/95 backdrop-blur-xl border border-white/[0.08] rounded-md shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-20 min-w-[220px]">
                             <button
                               onClick={() => {
                                 setShowImportSolanaModal(true);
                                 setShowImportDropdown(false);
                                 posthog.capture("wallet_import_initiated", { chain: "sol" });
                               }}
-                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-white/[0.05] transition-colors first:rounded-t-lg flex items-center gap-2"
+                              className="w-full px-3 py-2.5 text-left text-xs text-[#a1a1aa] hover:bg-white/[0.05] hover:text-[#f4f4f5] transition-colors first:rounded-t-md flex items-center gap-2"
                             >
-                              <SolanaIcon size={16} />
+                              <SolanaIcon size={14} />
                               Import Solana Wallet
                             </button>
                             <button
@@ -3846,13 +3922,13 @@ export default function PortfolioPage() {
                                 setShowImportDropdown(false);
                                 posthog.capture("wallet_import_initiated", { chain: "evm" });
                               }}
-                              className="w-full px-4 py-2 text-left text-sm text-[#f0f5f5] hover:bg-white/[0.05] transition-colors last:rounded-b-lg flex items-center gap-2"
+                              className="w-full px-3 py-2.5 text-left text-xs text-[#a1a1aa] hover:bg-white/[0.05] hover:text-[#f4f4f5] transition-colors last:rounded-b-md flex items-center gap-2"
                             >
                               <img
                                 src="./monad_icon.png"
                                 alt="Monad"
                                 className="object-contain"
-                                style={{ width: 16, height: 16 }}
+                                style={{ width: 14, height: 14 }}
                               />
                               Import EVM Wallet (Monad/Polygon)
                             </button>
@@ -3860,12 +3936,14 @@ export default function PortfolioPage() {
                         </>
                       )}
                     </div>
+                    {/* JTX-style create wallet button */}
                     <button
                     onClick={handleCreateWallet}
                     disabled={creatingWallet || !user}
-                    className={`px-2 sm:px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors cursor-pointer
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all cursor-pointer
                       ${creatingWallet || !user
-                        ? "bg-white/[0.04] text-neutral-500 cursor-not-allowed" : "bg-[#70E0B0] text-[#1A1A1A] hover:brightness-90"
+                        ? "bg-white/[0.04] text-[#52525b] cursor-not-allowed border border-white/[0.04]" 
+                        : "bg-gradient-to-r from-[#18c48c] to-[#0ea371] text-[#030304] hover:brightness-110 border border-[#18c48c]/30 shadow-[0_0_12px_rgba(24,196,140,0.2)]"
 }`}
           >
                   {creatingWallet ? "Creating..." : "Create Wallet"}
@@ -3880,17 +3958,17 @@ export default function PortfolioPage() {
                 </div> */}
               </div>
 
-              {/* Table Headers Row - Spans Both Panels */}
-              <div className="border-b border-white/[0.06]">
-                <div className="py-2 -mx-3 sm:-mx-4 px-3 sm:px-4">
-                  <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF]">
-                    <div className="font-medium truncate">Wallet</div>
-                    <div className="font-medium truncate text-center flex items-center justify-center gap-2">
+              {/* Table Headers Row - JTX style */}
+              <div className="border-b border-white/[0.06] bg-[#080a0d]/40">
+                <div className="py-2.5 -mx-3 sm:-mx-4 px-3 sm:px-4">
+                  <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#71717a] uppercase tracking-wider">
+                    <div className="font-semibold truncate">Wallet</div>
+                    <div className="font-semibold truncate text-center flex items-center justify-center gap-2">
                       <span>
                         Balance ({currentChain === "monad" ? "MON" : "SOL"})
                       </span>
                       <button
-                        className="flex items-center justify-center rounded-full border border-white/[0.06] p-1 text-[10px] hover:border-white/[0.1] transition disabled:opacity-50"
+                        className="flex items-center justify-center rounded p-1 text-[10px] hover:bg-white/[0.05] transition disabled:opacity-50"
                         title="Refresh balances"
                         onClick={() => refreshBalancesForCurrentChain()}
                         disabled={refreshingBalances}
@@ -3901,8 +3979,8 @@ export default function PortfolioPage() {
                         />
                       </button>
                     </div>
-                    <div className="font-medium truncate text-center">Holdings</div>
-                    <div className="font-medium truncate text-center">Actions</div>
+                    <div className="font-semibold truncate text-center">Holdings</div>
+                    <div className="font-semibold truncate text-center">Actions</div>
                   </div>
                 </div>
                 {/* <div className="px-4 py-2 border-l border-white/[0.06]">
@@ -3923,19 +4001,19 @@ export default function PortfolioPage() {
                 <div className="px-3 sm:px-4 py-3">
                   <div className="min-h-[300px]">
                     {!user ? (
-                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                      <div className="flex h-24 flex-col items-center justify-center text-[#52525b] text-sm">
                         Please log in to view your wallets.
                       </div>
                     ) : isWalletsLoading ? (
-                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                      <div className="flex h-24 flex-col items-center justify-center text-[#52525b] text-sm">
                         Loading wallets...
                       </div>
                     ) : wallets.length === 0 ? (
-                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                      <div className="flex h-24 flex-col items-center justify-center text-[#52525b] text-xs">
                         No wallets yet. Click &quot;Create Wallet&quot; to get started.
                       </div>
                     ) : filteredWallets.length === 0 ? (
-                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                      <div className="flex h-24 flex-col items-center justify-center text-[#52525b] text-xs">
                         {walletSearchQuery.trim() 
                           ? `No wallets found matching "${walletSearchQuery}"`
                           : showHidden 

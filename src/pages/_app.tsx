@@ -380,6 +380,13 @@ function TurnkeySessionBridge() {
             // Clear referral code hint after successful login (it's been sent to backend)
             clearStoredReferralCodeHint();
 
+            // Surface backend rejection of referral attribution (no-op if field absent).
+            // Login itself succeeded, so the surface is informational, not a warning.
+            const referralStatus = data?.referralStatus;
+            if (referralStatus && referralStatus.applied === false && referralStatus.message) {
+              showEnhancedToast('info', referralStatus.message);
+            }
+
             pendingRefreshRef.current = true;
             await refreshUser();
             pendingRefreshRef.current = false;

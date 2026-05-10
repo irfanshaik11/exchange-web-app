@@ -335,8 +335,11 @@ export default function TrackersPage() {
   const dockCtx = useDockedPanel();
   const [viewportNarrow, setViewportNarrow] = useState(false);
   const isMobile = viewportNarrow || (dockCtx?.isContentNarrow ?? false);
-  const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "telegram">(
+  const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "social">(
     "wallets",
+  );
+  const [socialPanelTab, setSocialPanelTab] = useState<"twitter" | "telegram">(
+    "telegram",
   );
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<
@@ -630,8 +633,7 @@ export default function TrackersPage() {
 
   // Hide wallet section when chain is Monad
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
-  const showTwitterSection = false; // X Tracker hidden (API cost)
-  const showTelegramSection = !isMobile || mobileMainTab === "telegram";
+  const showSocialSection = !isMobile || mobileMainTab === "social";
 
   // Calculate if all notifications are enabled
   const allNotificationsEnabled =
@@ -1564,13 +1566,13 @@ export default function TrackersPage() {
     }
   };
 
-  const loadTelegramFeed = async () => {
+  const loadTelegramFeed = async (force: boolean = false) => {
     if (!user?.bearerToken) return;
     setLoadingTelegramFeed(true);
     setTelegramFeedHint(null);
     try {
       const feedLimit = wallets.length > 6 ? 5 : 10;
-      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, feedLimit);
+      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, feedLimit, force);
       setTelegramFeed(messages);
       setTelegramFeedHint(hint ?? null);
     } catch (error) {
@@ -1754,7 +1756,7 @@ export default function TrackersPage() {
         <title>Trackers | Interstate Memeboard</title>
       </Head>
       <div>
-        <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
+        <div className="flex min-h-screen flex-col bg-[#030304] text-zinc-100">
           {/* Header stays outside the rounded container */}
           <div className="relative z-[10000]">
             <Header isSticky={false} />
@@ -1763,36 +1765,46 @@ export default function TrackersPage() {
           {/* Outer padding wrapper - collapses when a popup is docked */}
           <DockedPanelMarginWrapper>
           <div className="p-1 sm:p-1.5">
-            {/* Rounded container with background */}
-            <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06]">
-              {/* Background image inside the container */}
-              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+            {/* Rounded container with JTX-style design */}
+            <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-xl border border-white/[0.06] bg-[#030304]/95">
+              {/* JTX-style corner brackets */}
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+                {/* Top-left bracket */}
+                <div className="absolute left-2 top-2 h-6 w-6 border-l border-t border-white/[0.12]" />
+                {/* Top-right bracket */}
+                <div className="absolute right-2 top-2 h-6 w-6 border-r border-t border-white/[0.12]" />
+                {/* Bottom-left bracket */}
+                <div className="absolute bottom-2 left-2 h-6 w-6 border-b border-l border-white/[0.12]" />
+                {/* Bottom-right bracket */}
+                <div className="absolute bottom-2 right-2 h-6 w-6 border-b border-r border-white/[0.12]" />
+              </div>
+              
+              {/* Subtle ambient glow effect */}
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
                 <div
-                  className="absolute inset-x-0 top-0 h-[80vh] bg-cover bg-top bg-no-repeat"
-                  style={{ backgroundImage: "url(/ranks/Background2.png)" }}
-                />
-                <div className="absolute inset-0 bg-black/30" />
-                <div
-                  className="absolute inset-0"
+                  className="absolute -top-[40%] left-1/2 h-[60vh] w-[120%] -translate-x-1/2"
                   style={{
-                    background:
-                      "linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.85) 75%, black 90%)",
+                    background: 'radial-gradient(ellipse at center, rgba(24, 196, 140, 0.03) 0%, transparent 70%)'
                   }}
                 />
-                <div
-                  className="absolute inset-x-0 top-1/4 bottom-0"
-                  style={{
-                    background:
-                      "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.2) 25%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 75%, black 100%)",
-                  }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20" />
+                {/* Subtle side vignette */}
+                <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
+                {/* Subtle top-to-bottom gradient */}
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
               </div>
 
-              <div className="relative z-10 mt-4 mb-2 flex flex-col gap-4 px-4 sm:my-6 sm:mb-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
-                {/* Tabs Section - Scrollable on mobile */}
-                <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
-                  <h1 className="text-xl font-medium text-white">Trackers</h1>
+              <div className="relative z-10 mt-5 mb-3 flex flex-col gap-4 px-5 sm:my-7 sm:mb-5 sm:px-7 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:px-10">
+                {/* Header Section - JTX premium style */}
+                <div className="scrollbar-hide -mx-5 flex items-center gap-4 overflow-x-auto px-5 pb-2 sm:-mx-7 sm:gap-5 sm:px-7 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
+                  <h1 className="text-xl font-semibold tracking-tight text-[#f4f4f5] sm:text-2xl">Trackers</h1>
+                  {/* Connection status indicator */}
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-3 py-1.5 backdrop-blur-xl">
+                    <span className="relative flex h-2 w-2">
+                      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${wsConnected ? 'bg-[#18c48c]' : 'bg-[#ef4444]'}`} />
+                      <span className={`relative inline-flex h-2 w-2 rounded-full ${wsConnected ? 'bg-[#18c48c]' : 'bg-[#ef4444]'}`} />
+                    </span>
+                    <span className="text-xs font-medium text-[#71717a]">{wsConnected ? 'Live' : 'Offline'}</span>
+                  </div>
                 </div>
               </div>
               <div className="relative z-10 mb-4 flex min-h-0 w-full flex-1 flex-col px-2 sm:mb-8 sm:px-6">
@@ -1801,493 +1813,532 @@ export default function TrackersPage() {
                   className={`flex min-h-0 flex-1 flex-col gap-2 ${!isMobile ? "flex-row" : ""}`}
                 >
                   {isMobile && (
-                    <div className="flex w-full rounded-xl border border-white/[0.06] bg-[#0f1014] p-1 text-[10px] font-medium text-neutral-400 shadow-lg sm:p-1.5 sm:text-xs">
+                    <div className="flex w-full rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-1 text-[10px] font-medium text-[#52525b] backdrop-blur-xl sm:p-1.5 sm:text-xs">
                       <button
-                        className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                        className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
                           mobileMainTab === "wallets"
-                            ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
-                            : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
+                            ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
+                            : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                         }`}
                         onClick={() => setMobileMainTab("wallets")}
                       >
                         Wallet Tracker
+                        {mobileMainTab === "wallets" && (
+                          <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                        )}
                       </button>
                       <button
-                        className={`flex-1 rounded-lg px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
-                          mobileMainTab === "telegram"
-                            ? "bg-[#7FFFC9] font-semibold text-neutral-900 shadow-[0_0_12px_rgba(127,255,201,0.3)]"
-                            : "text-neutral-300 hover:bg-neutral-800/30 hover:text-neutral-200"
+                        className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                          mobileMainTab === "social"
+                            ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
+                            : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                         }`}
-                        onClick={() => setMobileMainTab("telegram")}
+                        onClick={() => setMobileMainTab("social")}
                       >
-                        Telegram
+                        Social
+                        {mobileMainTab === "social" && (
+                          <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                        )}
                       </button>
                     </div>
                   )}
 
-                  {/* LEFT: WALLET SECTION */}
+                  {/* LEFT: WALLET SECTION - JTX premium card style */}
                   {showWalletSection && (
                     <div
-                      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 pb-4 backdrop-blur-xl sm:px-5"
+                      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 pb-4 backdrop-blur-xl sm:px-5"
                       style={{
                         boxShadow:
-                          "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                          "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
                         maxHeight: isMobile
                           ? "calc(100vh - 200px)"
                           : "calc(100vh - 240px)",
                       }}
                     >
-                      {/* Tabs always visible; wallet/live content gated when logged out */}
-                      <>
-                        {/* HEADER BAR – three zones like reference screenshot */}
-                        <div className="flex justify-between gap-3 border-b border-white/[0.04] py-3 sm:items-center sm:gap-4 sm:py-4">
-                            {/* Left: tabs + wallet count */}
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-                              {TABS.map((tab, i) => (
-                                <button
-                                  key={tab}
-                                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
-                                    activeTab === i
-                                      ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                                      : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
-                                  }`}
-                                  onClick={() => setActiveTab(i)}
-                                >
-                                  {tab}
-                                </button>
-                              ))}
-                              <div className="flex items-center rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1 text-[10px] text-neutral-300 sm:px-3.5 sm:py-1.5 sm:text-[11px]">
-                                {activeTab === 2 ? (
-                                  <>
-                                    <span className="text-neutral-500">
-                                      {KOL_TRACKER_ENTRIES.length} KOL
-                                      {KOL_TRACKER_ENTRIES.length === 1
-                                        ? ""
-                                        : "s"}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="font-semibold text-[#7FFFC9]">
-                                      {wallets.length}
-                                    </span>
-                                    <span className="ml-1 hidden text-neutral-500 sm:ml-1.5 sm:inline">
-                                      / {MAX_WALLETS} wallet
-                                      {wallets.length === 1 ? "" : "s"}
-                                    </span>
-                                    <span className="ml-1 text-neutral-500 sm:ml-1.5 sm:hidden">
-                                      / {MAX_WALLETS}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
+                      {/* Card corner brackets */}
+                      <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                        <div className="absolute left-1.5 top-1.5 h-3 w-3 border-l border-t border-white/[0.1]" />
+                        <div className="absolute right-1.5 top-1.5 h-3 w-3 border-r border-t border-white/[0.1]" />
+                        <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b border-l border-white/[0.1]" />
+                        <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.1]" />
+                      </div>
+                      {/* If user is not logged in, show JTX-style empty state */}
+												{!user ? (
+													<div className="flex flex-1 items-center justify-center">
+														<div className="relative flex flex-col items-center rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-8 text-center backdrop-blur-sm">
+															{/* Mini corner brackets */}
+															<div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+																<div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.1]" />
+																<div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.1]" />
+																<div className="absolute bottom-1.5 left-1.5 h-2.5 w-2.5 border-b border-l border-white/[0.1]" />
+																<div className="absolute bottom-1.5 right-1.5 h-2.5 w-2.5 border-b border-r border-white/[0.1]" />
+															</div>
+															<FiLock className="mb-4 h-10 w-10 text-[#52525b]" />
+															<p className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
+																Log in to start tracking
+															</p>
+															<p className="mt-1.5 text-xs text-[#71717a]">
+																Monitor wallets and catch trades in real-time
+															</p>
+															<button
+																className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#18c48c] px-6 py-2.5 text-xs font-semibold text-[#030304] shadow-[0_0_16px_rgba(24,196,140,0.3)] transition-all duration-200 hover:brightness-110"
+																onClick={() => {
+																	const event = new CustomEvent(
+																		"open-login-modal",
+																	);
+																	window.dispatchEvent(event);
+																}}
+															>
+																Log in
+															</button>
+														</div>
+													</div>
+												) : (
+													<>
+														{/* HEADER BAR – JTX premium style */}
+														<div className="flex justify-between gap-3 border-b border-white/[0.06] py-3.5 sm:items-center sm:gap-4 sm:py-4">
+															{/* Left: tabs + wallet count */}
+															<div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+																{TABS.map((tab, i) => (
+																	<button
+																		key={tab}
+																		className={`group relative cursor-pointer rounded-md px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-4 sm:py-2 sm:text-xs ${activeTab === i
+																				? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
+																				: "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
+																			}`}
+																		onClick={() => setActiveTab(i)}
+																	>
+																		<span className="relative z-10">{tab}</span>
+																		{activeTab === i && (
+																			<span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+																		)}
+																	</button>
+																))}
+																<div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1 text-[10px] backdrop-blur-sm sm:px-3 sm:py-1.5 sm:text-[11px]">
+																	{activeTab === 2 ? (
+																		<>
+																			<span className="text-neutral-500">
+																				{KOL_TRACKER_ENTRIES.length} KOL
+																				{KOL_TRACKER_ENTRIES.length === 1
+																					? ""
+																					: "s"}
+																			</span>
+																		</>
+																	) : (
+																		<>
+																			<span className="font-bold tabular-nums text-[#18c48c]">
+																				{wallets.length}
+																			</span>
+																			<span className="ml-1 hidden text-[#52525b] sm:ml-1.5 sm:inline">
+																				/ {MAX_WALLETS} wallet
+																				{wallets.length === 1 ? "" : "s"}
+																			</span>
+																			<span className="ml-1 text-[#52525b] sm:ml-1.5 sm:hidden">
+																				/ {MAX_WALLETS}
+																			</span>
+																		</>
+																	)}
+																</div>
+															</div>
 
-                            {/* Middle: search bar (center, max width) */}
-                            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
-                              {activeTab === 0 && user && (
-                                <>
-                                  {selectedChain === "sol" && (
-                                    <button
-                                      className="cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.06] px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.12] hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:py-2 sm:text-xs"
-                                      onClick={handleAddDefault150Wallets}
-                                      disabled={isAtWalletLimit || isAddingDefaultWallets}
-                                      title="Add 150 default wallets for Solana"
-                                    >
-                                      {isAddingDefaultWallets
-                                        ? "Adding..."
-                                        : "Import top 150 wallets"}
-                                    </button>
-                                  )}
-                                  <button
-                                    className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
-                                    style={{
-                                      backgroundColor: "#7FFFC9",
-                                      color: "#000000",
-                                      border: "none",
-                                    }}
-                                    onClick={handleOpenAddWalletModal}
-                                  >
-                                    Add Wallet
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
+															{/* Right: action buttons - JTX style */}
+															<div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+																{activeTab === 0 && user && (
+																	<>
+																		{selectedChain === "sol" && (
+																			<button
+																				className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
+																				onClick={handleAddDefault150Wallets}
+																				disabled={isAtWalletLimit || isAddingDefaultWallets}
+																				title="Add 150 default wallets for Solana"
+																			>
+																				{isAddingDefaultWallets
+																					? "Adding..."
+																					: "Import top 150 wallets"}
+																			</button>
+																		)}
+																		<button
+																			className="cursor-pointer rounded-md bg-[#18c48c] px-4 py-1.5 text-[9px] font-semibold whitespace-nowrap text-[#030304] shadow-[0_0_12px_rgba(24,196,140,0.25)] transition-all duration-200 hover:brightness-110 sm:px-5 sm:py-2 sm:text-xs"
+																			onClick={handleOpenAddWalletModal}
+																		>
+																			Add Wallet
+																		</button>
+																	</>
+																)}
+															</div>
+														</div>
 
-                          {!user && activeTab !== 2 ? (
-                            <div className="flex min-h-[260px] flex-1 flex-col items-center justify-center px-4 py-12 text-center">
-                              <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
-                              <p className="text-sm font-medium text-neutral-300">
-                                Log in to start tracking
-                              </p>
-                              <p className="mt-1 text-xs text-neutral-500">
-                                Monitor wallets and catch trades in real-time
-                              </p>
-                              <button
-                                className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
-                                type="button"
-                                onClick={() => {
-                                  window.dispatchEvent(
-                                    new CustomEvent("open-login-modal"),
-                                  );
-                                }}
-                              >
-                                Log in
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              {/* Search bar — wallet manager */}
-                              {activeTab === 0 && user && (
-                            <div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
-                              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                                {/* Search input */}
-                                <div className="min-w-[200px] flex-1">
-                                  <input
-                                    type="text"
-                                    placeholder="Search by address"
-                                    className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
-                                    disabled={false}
-                                    value={searchTerm}
-                                    onChange={(e) =>
-                                      setSearchTerm(e.target.value)
-                                    }
-                                  />
-                                </div>
+														{!user && activeTab !== 2 ? (
+															<div className="flex min-h-[260px] flex-1 flex-col items-center justify-center px-4 py-12 text-center">
+																<FiLock className="mb-3 h-10 w-10 text-neutral-700" />
+																<p className="text-sm font-medium text-neutral-300">
+																	Log in to start tracking
+																</p>
+																<p className="mt-1 text-xs text-neutral-500">
+																	Monitor wallets and catch trades in real-time
+																</p>
+																<button
+																	className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
+																	type="button"
+																	onClick={() => {
+																		window.dispatchEvent(
+																			new CustomEvent("open-login-modal"),
+																		);
+																	}}
+																>
+																	Log in
+																</button>
+															</div>
+														) : (
+															<>
+																{/* Search bar — wallet manager */}
+																{activeTab === 0 && user && (
+																	<div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
+																		<div className="flex flex-wrap items-center gap-2 sm:gap-3">
+																			{/* Search input - JTX style */}
+																			<div className="min-w-[200px] flex-1">
+																				<input
+																					type="text"
+																					placeholder="Search by address"
+																					className="w-full rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#080a0d]/80 focus:shadow-[0_0_12px_rgba(24,196,140,0.1)] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+																					disabled={false}
+																					value={searchTerm}
+																					onChange={(e) =>
+																						setSearchTerm(e.target.value)
+																					}
+																				/>
+																			</div>
 
-                                {/* Right: actions (Import / Export / icons / Add Wallet) */}
-                                <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-                                  {activeTab === 0 && (
-                                    <>
-                                      <button
-                                        className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 py-2.5 sm:text-[10px]"
-                                        onClick={() => setShowImportModal(true)}
-                                      >
-                                        Import
-                                      </button>
-                                      <div className="relative">
-                                        {showExportSuccessTooltip && (
-                                          <div className="absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 rounded-md bg-neutral-800 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-white shadow-lg">
-                                            Export Successful
-                                          </div>
-                                        )}
-                                        <button
-                                          className="cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-[9px] font-semibold whitespace-nowrap text-neutral-200 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:px-3 py-2.5 sm:text-[10px]"
-                                          onClick={handleExportAddresses}
-                                        >
-                                          Export
-                                        </button>
-                                      </div>
+																			{/* Right: actions - JTX minimal style */}
+																			<div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+																				{activeTab === 0 && (
+																					<>
+																						<button
+																							className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+																							onClick={() => setShowImportModal(true)}
+																						>
+																							Import
+																						</button>
+																						<div className="relative">
+																							{showExportSuccessTooltip && (
+																								<div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#0c0e12]/95 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-[#18c48c] shadow-[0_4px_16px_rgba(0,0,0,0.5)]">
+																									Export Successful
+																								</div>
+																							)}
+																							<button
+																								className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+																								onClick={handleExportAddresses}
+																							>
+																								Export
+																							</button>
+																						</div>
 
-                                      {/* Icon buttons - hide some on mobile */}
-                                      {/* <button
+																						{/* Icon buttons - hide some on mobile */}
+																						{/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
-                                      <button
-                                        className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 sm:h-9 sm:w-9 ${
-                                          isTogglingAllNotifications
-                                            ? "cursor-not-allowed border-white/[0.06] bg-white/[0.03] opacity-50"
-                                            : allNotificationsEnabled
-                                              ? "cursor-pointer border-pink-500/50 bg-pink-500/20 hover:bg-pink-500/30"
-                                              : "cursor-pointer border-white/[0.06] bg-white/[0.03] hover:border-white/[0.1] hover:bg-white/[0.07]"
-                                        }`}
-                                        type="button"
-                                        onClick={handleToggleAllNotifications}
-                                        disabled={isTogglingAllNotifications}
-                                        title={
-                                          isTogglingAllNotifications
-                                            ? "Toggling..."
-                                            : allNotificationsEnabled
-                                              ? "Disable all notifications"
-                                              : "Enable all notifications"
-                                        }
-                                      >
-                                        <FiBell
-                                          className={`h-4 w-4 ${
-                                            allNotificationsEnabled
-                                              ? "fill-pink-400 text-pink-400"
-                                              : "text-neutral-500"
-                                          }`}
-                                        />
-                                      </button>
-                                      {/* <button
+																						<button
+																							className={`flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-200 sm:h-9 sm:w-9 ${isTogglingAllNotifications
+																									? "cursor-not-allowed border-white/[0.06] bg-[#080a0d]/60 opacity-40"
+																									: allNotificationsEnabled
+																										? "cursor-pointer border-[#ef4444]/40 bg-[#ef4444]/15 text-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.2)] hover:bg-[#ef4444]/25"
+																										: "cursor-pointer border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#a1a1aa]"
+																								}`}
+																							type="button"
+																							onClick={handleToggleAllNotifications}
+																							disabled={isTogglingAllNotifications}
+																							title={
+																								isTogglingAllNotifications
+																									? "Toggling..."
+																									: allNotificationsEnabled
+																										? "Disable all notifications"
+																										: "Enable all notifications"
+																							}
+																						>
+																							<FiBell
+																								className={`h-4 w-4 ${allNotificationsEnabled
+																										? "fill-pink-400 text-pink-400"
+																										: "text-neutral-500"
+																									}`}
+																							/>
+																						</button>
+																						{/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
-                                      {/* <button
+																						{/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                              )}
+																					</>
+																				)}
+																			</div>
+																		</div>
+																	</div>
+																)}
 
-                              {/* Search — KOL directory */}
-                              {activeTab === 2 && (
-                                <div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
-                                  <input
-                                    type="text"
-                                    placeholder="Search by name, @handle, or wallet"
-                                    className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
-                                    value={kolSearchTerm}
-                                    onChange={(e) =>
-                                      setKolSearchTerm(e.target.value)
-                                    }
-                                  />
-                                </div>
-                              )}
+																{/* Search — KOL directory */}
+																{activeTab === 2 && (
+																	<div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
+																		<input
+																			type="text"
+																			placeholder="Search by name, @handle, or wallet"
+																			className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+																			value={kolSearchTerm}
+																			onChange={(e) =>
+																				setKolSearchTerm(e.target.value)
+																			}
+																		/>
+																	</div>
+																)}
 
-                              <div className="-mx-3 min-h-0 flex-1 overflow-y-auto px-3 sm:-mx-5 sm:px-5">
-                            {activeTab === 0 && user ? (
-                              <>
-                                <div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
-                                  <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
-                                    <span className="flex w-16 justify-center sm:w-28">
-                                      Created
-                                    </span>
-                                    <span className="min-w-0 flex-1">Name</span>
-                                    <span className="w-20 sm:w-36">
-                                      Balance
-                                    </span>
-                                    <span className="hidden w-16 justify-center sm:flex sm:w-28">
-                                      Last Active
-                                    </span>
-                                    <div className="flex flex-1 items-center justify-end">
-                                      <button
-                                        className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
-                                        onClick={() =>
-                                          handleRemoveWallet("all")
-                                        }
-                                      >
-                                        Remove All
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                {wallets.length === 0 ? (
-                                  <div className="flex h-64 flex-col items-center justify-center">
-                                    <FiEye className="mb-3 h-10 w-10 text-neutral-700" />
-                                    <span className="text-sm font-medium text-neutral-300">
-                                      No wallets tracked yet
-                                    </span>
-                                    <span className="mt-1 text-xs text-neutral-500">
-                                      Add a wallet address to monitor its trades
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <div className="scrollbar-hide overflow-x-auto">
-                                    <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
-                                      <tbody>
-                                        {filteredWallets.map((wallet) => {
-                                          const watched = watchedWallets.find(
-                                            (ww) =>
-                                              ww.address === wallet.address,
-                                          );
-                                          const events =
-                                            walletEvents[wallet.address] || [];
-                                          const balance =
-                                            trackedWalletBalances[
-                                              wallet.address
-                                            ];
-                                          return (
-                                            <WalletRow
-                                              key={wallet.address}
-                                              wallet={wallet}
-                                              watchedWallet={watched}
-                                              events={events}
-                                              balance={balance}
-                                              lastActive={
-                                                lastActiveMap[wallet.address]
-                                              }
-                                              onRemove={handleRemoveWallet}
-                                              onClick={(wallet) => {
-                                                setScannedWallet(wallet);
-                                              }}
-                                              onNotificationToggle={async (
-                                                address,
-                                                enabled,
-                                              ) => {
-                                                // Refresh the global watched wallets to sync the state
-                                                await refreshWatchedWallets();
-                                              }}
-                                            />
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </>
-                            ) : activeTab === 1 ? (
-                              <LiveTradesPanel
-                                trades={liveTradesToRender}
-                                wallets={wallets}
-                                wsConnected={wsConnected}
-                                quickBuyAmount={quickBuyAmount}
-                                onQuickBuy={handleQuickBuy}
-                                isLoading={isLoadingHistory}
-                              />
-                            ) : activeTab === 2 ? (
-                              <div className="flex flex-col pb-2">
-                                {filteredKolEntries.length === 0 ? (
-                                  <div className="flex h-48 flex-col items-center justify-center text-center">
-                                    <FiEye className="mb-3 h-9 w-9 text-neutral-700" />
-                                    <span className="text-sm text-neutral-400">
-                                      No matching KOLs
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <ul className="flex flex-col">
-                                    {filteredKolEntries.map((kol) => {
-                                      const muted = kolMutedSet.has(
-                                        kol.wallet,
-                                      );
-                                      const starred = kolStarredSet.has(
-                                        kol.wallet,
-                                      );
-                                      const iconBtn =
-                                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-300 sm:h-8 sm:w-8";
-                                      return (
-                                        <li
-                                          key={kol.wallet}
-                                          role="presentation"
-                                          className={`flex cursor-pointer items-center gap-2 border-b border-white/[0.06] py-2.5 transition-colors hover:bg-white/[0.03] sm:gap-3 sm:py-3 px-2 ${
-                                            muted ? "opacity-40" : ""
-                                          }`}
-                                          onClick={(e) => {
-                                            const t = e.target as HTMLElement;
-                                            if (
-                                              t.closest("button") ||
-                                              t.closest("a")
-                                            )
-                                              return;
-                                            setScannedWallet(
-                                              kolEntryToWallet(kol),
-                                            );
-                                          }}
-                                        >
-                                          <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
-                                            <KolAvatar
-                                              name={kol.name}
-                                              handle={kol.handle}
-                                            />
-                                            <div className="min-w-0 flex-1">
-                                              <div className="truncate text-xs font-semibold text-white sm:text-sm">
-                                                {kol.name}
-                                              </div>
-                                              <div className="truncate text-[10px] text-neutral-500 sm:text-xs">
-                                                @{kol.handle}
-                                              </div>
-                                            </div>
-                                          </div>
-                                          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-                                            <span className="hidden font-mono text-[10px] text-neutral-200 tabular-nums sm:inline sm:text-xs">
-                                              {truncateKolAddress(kol.wallet)}
-                                            </span>
-                                            <span className="font-mono text-[10px] text-neutral-200 tabular-nums sm:hidden">
-                                              {truncateKolAddress(
-                                                kol.wallet,
-                                                3,
-                                                3,
-                                              )}
-                                            </span>
-                                            <button
-                                              type="button"
-                                              className={iconBtn}
-                                              title="Copy address"
-                                              onClick={async (e) => {
-                                                e.stopPropagation();
-                                                try {
-                                                  await navigator.clipboard?.writeText(
-                                                    kol.wallet,
-                                                  );
-                                                  showEnhancedToast(
-                                                    "success",
-                                                    "Address copied",
-                                                    { duration: 2000 },
-                                                  );
-                                                } catch {
-                                                  showToastMessage(
-                                                    "Could not copy address",
-                                                  );
-                                                }
-                                              }}
-                                            >
-                                              <FiCopy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                            </button>
-                                            <div className="ml-0.5 flex items-center gap-0.5 sm:ml-0 sm:gap-1">
-                                              <button
-                                                type="button"
-                                                className={iconBtn}
-                                                title="Scan wallet"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setScannedWallet(
-                                                    kolEntryToWallet(kol),
-                                                  );
-                                                }}
-                                              >
-                                                <FiBarChart2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                              </button>
-                                              <a
-                                                href={`https://x.com/${kol.handle}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className={iconBtn}
-                                                title={`@${kol.handle} on X`}
-                                                onClick={(e) =>
-                                                  e.stopPropagation()
-                                                }
-                                              >
-                                                <FaXTwitter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                              </a>
-                                            </div>
-                                          </div>
-                                        </li>
-                                      );
-                                    })}
-                                  </ul>
-                                )}
-                              </div>
-                            ) : null}
-                              </div>
-                            </>
-                          )}
-                        </>
+																<div className="-mx-3 min-h-0 flex-1 overflow-y-auto px-3 sm:-mx-5 sm:px-5">
+																	{activeTab === 0 && user ? (
+																		<>
+																			<div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
+																				<div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
+																					<span className="flex w-16 justify-center sm:w-28">
+																						Created
+																					</span>
+																					<span className="min-w-0 flex-1">Name</span>
+																					<span className="w-20 sm:w-36">
+																						Balance
+																					</span>
+																					<span className="hidden w-16 justify-center sm:flex sm:w-28">
+																						Last Active
+																					</span>
+																					<div className="flex flex-1 items-center justify-end">
+																						<button
+																							className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
+																							onClick={() =>
+																								handleRemoveWallet("all")
+																							}
+																						>
+																							Remove All
+																						</button>
+																					</div>
+																				</div>
+																			</div>
+																			{wallets.length === 0 ? (
+																				<div className="flex h-64 flex-col items-center justify-center">
+																					<FiEye className="mb-3 h-10 w-10 text-neutral-700" />
+																					<span className="text-sm font-medium text-neutral-300">
+																						No wallets tracked yet
+																					</span>
+																					<span className="mt-1 text-xs text-neutral-500">
+																						Add a wallet address to monitor its trades
+																					</span>
+																				</div>
+																			) : (
+																				<div className="scrollbar-hide overflow-x-auto">
+																					<table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
+																						<tbody>
+																							{filteredWallets.map((wallet) => {
+																								const watched = watchedWallets.find(
+																									(ww) =>
+																										ww.address === wallet.address,
+																								);
+																								const events =
+																									walletEvents[wallet.address] || [];
+																								const balance =
+																									trackedWalletBalances[
+																									wallet.address
+																									];
+																								return (
+																									<WalletRow
+																										key={wallet.address}
+																										wallet={wallet}
+																										watchedWallet={watched}
+																										events={events}
+																										balance={balance}
+																										lastActive={
+																											lastActiveMap[wallet.address]
+																										}
+																										onRemove={handleRemoveWallet}
+																										onClick={(wallet) => {
+																											setScannedWallet(wallet);
+																										}}
+																										onNotificationToggle={async (
+																											address,
+																											enabled,
+																										) => {
+																											// Refresh the global watched wallets to sync the state
+																											await refreshWatchedWallets();
+																										}}
+																									/>
+																								);
+																							})}
+																						</tbody>
+																					</table>
+																				</div>
+																			)}
+																		</>
+																	) : activeTab === 1 ? (
+																		<LiveTradesPanel
+																			trades={liveTradesToRender}
+																			wallets={wallets}
+																			wsConnected={wsConnected}
+																			quickBuyAmount={quickBuyAmount}
+																			onQuickBuy={handleQuickBuy}
+																			isLoading={isLoadingHistory}
+																		/>
+																	) : activeTab === 2 ? (
+																		<div className="flex flex-col pb-2">
+																			{filteredKolEntries.length === 0 ? (
+																				<div className="flex h-48 flex-col items-center justify-center text-center">
+																					<FiEye className="mb-3 h-9 w-9 text-neutral-700" />
+																					<span className="text-sm text-neutral-400">
+																						No matching KOLs
+																					</span>
+																				</div>
+																			) : (
+																				<ul className="flex flex-col">
+																					{filteredKolEntries.map((kol) => {
+																						const muted = kolMutedSet.has(
+																							kol.wallet,
+																						);
+																						const starred = kolStarredSet.has(
+																							kol.wallet,
+																						);
+																						const iconBtn =
+																							"flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-300 sm:h-8 sm:w-8";
+																						return (
+																							<li
+																								key={kol.wallet}
+																								role="presentation"
+																								className={`flex cursor-pointer items-center gap-2 border-b border-white/[0.06] py-2.5 transition-colors hover:bg-white/[0.03] sm:gap-3 sm:py-3 px-2 ${muted ? "opacity-40" : ""
+																									}`}
+																								onClick={(e) => {
+																									const t = e.target as HTMLElement;
+																									if (
+																										t.closest("button") ||
+																										t.closest("a")
+																									)
+																										return;
+																									setScannedWallet(
+																										kolEntryToWallet(kol),
+																									);
+																								}}
+																							>
+																								<div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
+																									<KolAvatar
+																										name={kol.name}
+																										handle={kol.handle}
+																									/>
+																									<div className="min-w-0 flex-1">
+																										<div className="truncate text-xs font-semibold text-white sm:text-sm">
+																											{kol.name}
+																										</div>
+																										<div className="truncate text-[10px] text-neutral-500 sm:text-xs">
+																											@{kol.handle}
+																										</div>
+																									</div>
+																								</div>
+																								<div className="flex shrink-0 items-center gap-1 sm:gap-2">
+																									<span className="hidden font-mono text-[10px] text-neutral-200 tabular-nums sm:inline sm:text-xs">
+																										{truncateKolAddress(kol.wallet)}
+																									</span>
+																									<span className="font-mono text-[10px] text-neutral-200 tabular-nums sm:hidden">
+																										{truncateKolAddress(
+																											kol.wallet,
+																											3,
+																											3,
+																										)}
+																									</span>
+																									<button
+																										type="button"
+																										className={iconBtn}
+																										title="Copy address"
+																										onClick={async (e) => {
+																											e.stopPropagation();
+																											try {
+																												await navigator.clipboard?.writeText(
+																													kol.wallet,
+																												);
+																												showEnhancedToast(
+																													"success",
+																													"Address copied",
+																													{ duration: 2000 },
+																												);
+																											} catch {
+																												showToastMessage(
+																													"Could not copy address",
+																												);
+																											}
+																										}}
+																									>
+																										<FiCopy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+																									</button>
+																									<div className="ml-0.5 flex items-center gap-0.5 sm:ml-0 sm:gap-1">
+																										<button
+																											type="button"
+																											className={iconBtn}
+																											title="Scan wallet"
+																											onClick={(e) => {
+																												e.stopPropagation();
+																												setScannedWallet(
+																													kolEntryToWallet(kol),
+																												);
+																											}}
+																										>
+																											<FiBarChart2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+																										</button>
+																										<a
+																											href={`https://x.com/${kol.handle}`}
+																											target="_blank"
+																											rel="noopener noreferrer"
+																											className={iconBtn}
+																											title={`@${kol.handle} on X`}
+																											onClick={(e) =>
+																												e.stopPropagation()
+																											}
+																										>
+																											<FaXTwitter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+																										</a>
+																									</div>
+																								</div>
+																							</li>
+																						);
+																					})}
+																				</ul>
+																			)}
+																		</div>
+																	) : null}
+																</div>
+															</>
+														)}
+													</>
+												)}
                     </div>
                   )}
 
-                  {/* RESIZE HANDLE — between wallet and Telegram panels on desktop */}
-                  {showTelegramSection && !isMobile && (
+                  {/* RESIZE HANDLE — JTX style */}
+                  {showSocialSection && !isMobile && (
                     <div
-                      className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#7FFFC9]/5 lg:flex"
+                      className="group relative hidden h-full min-h-[530px] w-1.5 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#18c48c]/5 lg:flex"
                       onMouseDown={() => setIsResizing(true)}
                     >
-                      <div className="absolute h-16 w-1 rounded-full bg-neutral-400 transition-colors group-hover:bg-[#7FFFC9]" />
+                      <div className="absolute h-20 w-0.5 rounded-full bg-[#52525b] transition-colors group-hover:bg-[#18c48c] group-hover:shadow-[0_0_6px_rgba(24,196,140,0.4)]" />
                     </div>
                   )}
 
-                  {/* RIGHT: TELEGRAM CHANNELS SECTION */}
-                  {showTelegramSection && (
+                  {/* RIGHT: SOCIAL TRACKERS (X + TG) - JTX premium card */}
+                  {showSocialSection && (
                     <div
-                      className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
-											aria-label="Telegram Tracker"
+                      className="relative flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 backdrop-blur-xl sm:px-5"
+											aria-label="Social Tracker"
                       style={
                         isMobile
                           ? {
                               boxShadow:
-                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                                "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
                               maxHeight: "calc(100vh - 200px)",
                             }
                           : {
@@ -2296,26 +2347,62 @@ export default function TrackersPage() {
                               maxWidth: "600px",
                               maxHeight: "calc(100vh - 240px)",
                               boxShadow:
-                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+                                "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
                             }
                       }
 										>
-											<h2 className="border-b border-white/[0.04] pt-3 pb-2 text-sm font-semibold text-white sm:pt-4 sm:pb-3 sm:text-base">
-                        Telegram Tracker
-                      </h2>
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-2 pb-2 sm:gap-3 sm:pt-3 sm:pb-3">
-                        <div className="flex gap-1.5 sm:gap-2">
+                      {/* Card corner brackets */}
+                      <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                        <div className="absolute left-1.5 top-1.5 h-3 w-3 border-l border-t border-white/[0.1]" />
+                        <div className="absolute right-1.5 top-1.5 h-3 w-3 border-r border-t border-white/[0.1]" />
+                        <div className="absolute bottom-1.5 left-1.5 h-3 w-3 border-b border-l border-white/[0.1]" />
+                        <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.1]" />
+                      </div>
+                      {/* Top-level tabs: X Tracker / TG Tracker */}
+                      <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pt-3.5 pb-2.5 sm:pt-4 sm:pb-3">
+                        <div className="flex items-center gap-4 sm:gap-5">
+                          {/* <button
+                            type="button"
+                            onClick={() => setSocialPanelTab("twitter")}
+                            className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              socialPanelTab === "twitter"
+                                ? "text-[#f4f4f5]"
+                                : "text-[#52525b] hover:text-[#a1a1aa]"
+                            }`}
+                          >
+                            X Tracker
+                          </button> */}
+                          <button
+                            type="button"
+                            onClick={() => setSocialPanelTab("telegram")}
+                            className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              socialPanelTab === "telegram"
+                                ? "text-[#f4f4f5]"
+                                : "text-[#52525b] hover:text-[#a1a1aa]"
+                            }`}
+                          >
+                            Telegram Tracker
+                          </button>
+                        </div>
+                      </div>
+                      {socialPanelTab === "telegram" && (
+                      <>
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pt-2.5 pb-2.5 sm:gap-3 sm:pt-3 sm:pb-3">
+                        <div className="flex gap-1 sm:gap-1.5">
                           {TELEGRAM_TABS.map((label, i) => (
                             <button
                               key={label}
-                              className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all sm:px-3 sm:py-2 sm:text-xs ${
+                              className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-3 sm:py-2 sm:text-xs ${
                                 telegramTab === i
-                                  ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                                  : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
+                                  ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
+                                  : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                               }`}
                               onClick={() => setTelegramTab(i as 0 | 1 | 2)}
                             >
-                              {label}
+                              <span className="relative z-10">{label}</span>
+                              {telegramTab === i && (
+                                <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                              )}
                             </button>
                           ))}
 												</div>
@@ -2324,7 +2411,7 @@ export default function TrackersPage() {
                             type="button"
                             onClick={handleRestoreTelegramDefaults}
                             disabled={restoringTelegramDefaults}
-                            className="cursor-pointer rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-medium text-neutral-300 transition-all hover:bg-white/[0.07] hover:text-white disabled:opacity-50 sm:px-3 sm:py-2 sm:text-xs"
+                            className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] disabled:opacity-40 sm:px-3 sm:py-2 sm:text-xs"
                           >
                             {restoringTelegramDefaults ? "Adding…" : "Restore to default"}
                           </button>
@@ -2333,33 +2420,33 @@ export default function TrackersPage() {
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {!user ? (
                           <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                            <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
-                            <span className="text-sm font-medium text-neutral-300">
+                            <FiLock className="mb-4 h-10 w-10 text-[#52525b]" />
+                            <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
                               Log in to track channels
                             </span>
-                            <span className="mt-1 text-xs text-neutral-500">
+                            <span className="mt-1.5 text-xs text-[#71717a]">
                               Add Telegram channels to your watchlist
                             </span>
                           </div>
                         ) : telegramTab === 0 ? (
                           loadingTelegramChannels ? (
                             <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                              <div className="mb-2 flex gap-1.5">
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
+                              <div className="mb-3 flex gap-1.5">
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:150ms]" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:300ms]" />
                               </div>
-                              <span className="text-xs text-neutral-500">
+                              <span className="text-xs text-[#71717a]">
                                 Loading channels...
                               </span>
                             </div>
                           ) : telegramChannels.length === 0 ? (
                             <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                              <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
-                              <span className="text-sm font-medium text-neutral-300">
+                              <FiMessageCircle className="mb-4 h-10 w-10 text-[#52525b]" />
+                              <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
                                 No channels tracked
                               </span>
-                              <span className="mt-1 text-xs text-neutral-500">
+                              <span className="mt-1.5 text-xs text-[#71717a]">
                                 Add Telegram channels to catch alpha
                               </span>
                             </div>
@@ -2367,14 +2454,14 @@ export default function TrackersPage() {
                             <div className="scrollbar-hide flex-1 overflow-auto">
                               <table className="w-full min-w-[280px] text-[10px] sm:min-w-[320px] sm:text-xs">
                                 <thead>
-                                  <tr className="border-b border-white/[0.04]">
-                                    <th className="px-2 py-2 text-left font-medium text-neutral-500">
+                                  <tr className="border-b border-white/[0.06]">
+                                    <th className="px-2 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-[#52525b] sm:text-xs">
                                       Channel
                                     </th>
-                                    <th className="px-2 py-2 text-left font-medium text-neutral-500">
+                                    <th className="px-2 py-2.5 text-left text-[10px] font-medium uppercase tracking-wider text-[#52525b] sm:text-xs">
                                       Added
                                     </th>
-                                    <th className="px-2 py-2 text-right font-medium text-neutral-500">
+                                    <th className="px-2 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider text-[#52525b] sm:text-xs">
                                       Actions
                                     </th>
                                   </tr>
@@ -2395,28 +2482,28 @@ export default function TrackersPage() {
                         ) : telegramTab === 1 ? (
                           loadingTelegramFeed ? (
                             <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-                              <div className="mb-2 flex gap-1.5">
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
-                                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
+                              <div className="mb-3 flex gap-1.5">
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:150ms]" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:300ms]" />
                               </div>
-                              <span className="text-xs text-neutral-500">
+                              <span className="text-xs text-[#71717a]">
                                 Loading messages...
                               </span>
                             </div>
                           ) : telegramFeed.length === 0 ? (
                             <div className="flex flex-1 flex-col items-center justify-center py-8 text-center px-4">
-                              <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
-                              <span className="text-sm font-medium text-neutral-300">
+                              <FiMessageCircle className="mb-4 h-10 w-10 text-[#52525b]" />
+                              <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
                                 No messages yet
                               </span>
-                              <span className="mt-1 text-xs text-neutral-500">
+                              <span className="mt-1.5 text-xs text-[#71717a]">
                                 {telegramFeedHint || "Add channels and ensure Telegram client is configured on the server."}
                               </span>
                               <button
                                 type="button"
-                                className="mt-4 rounded-lg border border-white/[0.1] bg-white/[0.05] px-4 py-2 text-xs font-medium text-neutral-200 hover:bg-white/[0.08]"
-                                onClick={() => loadTelegramFeed()}
+                                className="mt-5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-xs font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5]"
+                                onClick={() => loadTelegramFeed(true)}
                               >
                                 Retry
                               </button>
@@ -2429,13 +2516,18 @@ export default function TrackersPage() {
                                   href={`https://t.me/${msg.channelUsername}/${msg.id}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="block rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left transition-colors hover:bg-white/[0.05] hover:border-white/[0.1]"
+                                  className="relative block rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-3.5 text-left backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-[#080a0d]/80"
                                 >
-                                  <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
-                                    <span className="text-xs font-semibold text-[#0088cc] sm:text-sm">
+                                  {/* Mini corner brackets on message cards */}
+                                  <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                                    <div className="absolute left-1 top-1 h-2 w-2 border-l border-t border-white/[0.08]" />
+                                    <div className="absolute right-1 top-1 h-2 w-2 border-r border-t border-white/[0.08]" />
+                                  </div>
+                                  <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
+                                    <span className="text-xs font-semibold text-[#18c48c] sm:text-sm">
                                       @{msg.channelUsername}
                                     </span>
-                                    <span className="text-[10px] text-neutral-500 shrink-0">
+                                    <span className="text-[10px] tabular-nums text-[#52525b] shrink-0">
                                       {msg.date
                                         ? new Date(msg.date * 1000).toLocaleString(undefined, {
                                             month: "short",
@@ -2446,7 +2538,7 @@ export default function TrackersPage() {
                                         : ""}
                                     </span>
                                   </div>
-                                  <div className="text-xs text-neutral-200 sm:text-sm leading-relaxed">
+                                  <div className="text-xs text-[#a1a1aa] sm:text-sm leading-relaxed">
                                     <TelegramMessageBody
                                       text={msg.text}
                                       entities={msg.entities}
@@ -2458,7 +2550,7 @@ export default function TrackersPage() {
                           )
                         ) : (
                           <>
-                            <div className="my-2 flex items-center gap-2 border-b border-white/[0.04] pb-2">
+                            <div className="my-2.5 flex items-center gap-2 border-b border-white/[0.06] pb-2.5">
                               <input
                                 type="text"
                                 placeholder="@ Search channel"
@@ -2466,7 +2558,7 @@ export default function TrackersPage() {
                                 onChange={(e) =>
                                   setApprovedChannelsSearch(e.target.value)
                                 }
-                                className="max-w-[180px] flex-1 rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/50 focus:outline-none sm:text-xs"
+                                className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm placeholder:text-[#52525b] transition-all duration-200 focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
                               />
                             </div>
                             <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -2499,17 +2591,17 @@ export default function TrackersPage() {
                                   return (
                                     <div
                                       key={channel}
-                                      className="flex items-center justify-between gap-2 border-b border-white/[0.04] py-1.5 text-[10px] sm:text-xs"
+                                      className="flex items-center justify-between gap-2 border-b border-white/[0.06] py-2 text-[10px] sm:text-xs"
                                     >
                                       <div className="flex items-center min-w-0">
-                                        <span className="w-8 shrink-0 text-neutral-500">
+                                        <span className="w-8 shrink-0 tabular-nums text-[#52525b]">
                                           {idx + 1}
                                         </span>
                                         <a
                                           href={`https://t.me/${username}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="min-w-0 truncate text-neutral-200 hover:underline"
+                                          className="min-w-0 truncate text-[#a1a1aa] transition-colors hover:text-[#f4f4f5] hover:underline"
                                         >
                                           @{username}
                                         </a>
@@ -2528,7 +2620,7 @@ export default function TrackersPage() {
                                           }
                                         }}
                                         disabled={isTracked || isAdding}
-                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-neutral-400 transition-colors hover:border-[#7FFFC9]/50 hover:bg-[#7FFFC9]/10 hover:text-[#7FFFC9] disabled:opacity-50 disabled:hover:border-white/[0.08] disabled:hover:bg-white/[0.04] disabled:hover:text-neutral-400"
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] transition-all duration-200 hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#080a0d]/60 disabled:hover:text-[#71717a]"
                                         title={
                                           isTracked
                                             ? "Already tracked"
@@ -2539,7 +2631,7 @@ export default function TrackersPage() {
                                         {isAdding ? (
                                           <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
                                         ) : (
-                                          <FiPlus className="h-3.5 w-3.5 text-white" />
+                                          <FiPlus className="h-3.5 w-3.5" />
                                         )}
                                       </button>
                                     </div>
@@ -2550,54 +2642,34 @@ export default function TrackersPage() {
                           </>
                         )}
                       </div>
-                    </div>
-                  )}
-
-                  {/* RIGHT: TWITTER SECTION — hidden until cost-effective X API architecture is in place */}
-                  {false && showTwitterSection && (
-                    <div
-                      className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 backdrop-blur-xl sm:px-4"
-                      style={
-                        isMobile
-                          ? {
-                              boxShadow:
-                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                              maxHeight: "calc(100vh - 200px)",
-                            }
-                          : {
-                              width: `${sidebarWidth}px`,
-                              minWidth: "560px",
-                              maxWidth: "800px",
-                              maxHeight: "calc(100vh - 240px)",
-                              boxShadow:
-                                "0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-                            }
-                      }
-                    >
+                      </>
+                      )}
+                      {socialPanelTab === "twitter" && (
+                      <>
                       {/* Twitter Tabs Header */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.04] pt-3 pb-2 sm:gap-3 sm:pt-4 sm:pb-3">
-                        <div className="flex gap-2 sm:gap-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pt-2.5 pb-2.5 sm:gap-3 sm:pt-3 sm:pb-3">
+                        <div className="flex gap-1 sm:gap-1.5">
                           {TWITTER_TABS.map((tab, i) => (
                             <button
                               key={tab}
-                              className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-4 sm:py-2 sm:text-xs ${
+                              className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-3 sm:py-2 sm:text-xs ${
                                 twitterTab === i
-                                  ? "border border-white/[0.08] bg-white/[0.07] font-semibold text-white"
-                                  : "border border-transparent font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
+                                  ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
+                                  : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                               }`}
                               onClick={() => setTwitterTab(i)}
                             >
-                              {tab}
+                              <span className="relative z-10">{tab}</span>
+                              {twitterTab === i && (
+                                <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                              )}
                             </button>
                           ))}
                         </div>
                         {twitterTab === 0 && (
                           <button
-                            className="cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold whitespace-nowrap text-black transition-all duration-200 hover:brightness-90 sm:px-5 sm:py-2.5 sm:text-xs"
-                            style={{
-                              backgroundColor: "#7FFFC9",
-                              border: "none",
-                            }}
+                            type="button"
+                            className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-xs"
                             onClick={() => setShowAddTwitterModal(true)}
                           >
                             Add Handle
@@ -2607,139 +2679,139 @@ export default function TrackersPage() {
 
                       {/* Twitter Content */}
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        {twitterTab === 0 ? (
+                        {!user ? (
+                          <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                            <FiLock className="mb-4 h-10 w-10 text-[#52525b]" />
+                            <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
+                              Log in to track accounts
+                            </span>
+                            <span className="mt-1.5 text-xs text-[#71717a]">
+                              Add X accounts to your watchlist
+                            </span>
+                          </div>
+                        ) : twitterTab === 0 ? (
                           // Tracked Accounts Tab
-                          <>
-                            {twitterAccounts.length === 0 ? (
-                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                                <FiAtSign className="mb-3 h-10 w-10 text-neutral-700" />
-                                <span className="text-sm font-medium text-neutral-300">
-                                  No accounts tracked
-                                </span>
-                                <span className="mt-1 text-xs text-neutral-500">
-                                  Track crypto Twitter accounts to catch alpha
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="scrollbar-hide flex-1 overflow-auto">
-                                <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
-                                  <tbody>
-                                    {twitterAccounts.map((account) => (
-                                      <TwitterAccountRow
-                                        key={account.username}
-                                        account={account}
-                                        onRemove={handleRemoveTwitterAccount}
-                                        onViewProfile={handleViewTwitterProfile}
-                                      />
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </>
+                          twitterAccounts.length === 0 ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                              <FiAtSign className="mb-4 h-10 w-10 text-[#52525b]" />
+                              <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
+                                No accounts tracked
+                              </span>
+                              <span className="mt-1.5 text-xs text-[#71717a]">
+                                Track crypto X accounts to catch alpha
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="scrollbar-hide flex-1 overflow-auto">
+                              <table className="w-full min-w-[280px] text-[10px] sm:min-w-[320px] sm:text-xs">
+                                <tbody>
+                                  {twitterAccounts.map((account) => (
+                                    <TwitterAccountRow
+                                      key={account.username}
+                                      account={account}
+                                      onRemove={handleRemoveTwitterAccount}
+                                      onViewProfile={handleViewTwitterProfile}
+                                    />
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
                         ) : twitterTab === 1 ? (
                           // X Feed Tab
-                          <>
-                            {loadingTwitterFeed ? (
-                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                                <div className="mb-2 flex gap-1.5">
-                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500" />
-                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:150ms]" />
-                                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-500 [animation-delay:300ms]" />
-                                </div>
-                                <span className="text-xs text-neutral-500">
-                                  Loading feed...
-                                </span>
+                          loadingTwitterFeed ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+                              <div className="mb-3 flex gap-1.5">
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:150ms]" />
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#18c48c]/60 [animation-delay:300ms]" />
                               </div>
-                            ) : twitterFeed.length === 0 ? (
-                              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                                <FiMessageCircle className="mb-3 h-10 w-10 text-neutral-700" />
-                                <span className="text-sm font-medium text-neutral-300">
-                                  No tweets yet
-                                </span>
-                                <span className="mt-1 text-xs text-neutral-500">
-                                  Add accounts or check back later
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="space-y-2 p-2">
-                                {twitterFeed.map((tweet) => (
-                                  <div
-                                    key={tweet.id}
-                                    className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-colors duration-200 hover:bg-white/[0.04]"
-                                  >
-                                    <div className="mb-2 flex items-center gap-2">
+                              <span className="text-xs text-[#71717a]">
+                                Loading feed...
+                              </span>
+                            </div>
+                          ) : twitterFeed.length === 0 ? (
+                            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center px-4">
+                              <FiMessageCircle className="mb-4 h-10 w-10 text-[#52525b]" />
+                              <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
+                                No tweets yet
+                              </span>
+                              <span className="mt-1.5 text-xs text-[#71717a]">
+                                Add accounts or check back later
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="scrollbar-hide flex-1 overflow-auto space-y-2 p-2">
+                              {twitterFeed.map((tweet) => (
+                                <a
+                                  key={tweet.id}
+                                  href={tweet.url || `https://x.com/${tweet.authorUsername}/status/${tweet.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="relative block rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-3.5 text-left backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-[#080a0d]/80"
+                                >
+                                  {/* Mini corner brackets on tweet cards */}
+                                  <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+                                    <div className="absolute left-1 top-1 h-2 w-2 border-l border-t border-white/[0.08]" />
+                                    <div className="absolute right-1 top-1 h-2 w-2 border-r border-t border-white/[0.08]" />
+                                  </div>
+                                  <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
+                                    <div className="flex min-w-0 items-center gap-2">
                                       {tweet.authorProfileImage ? (
                                         <img
                                           src={tweet.authorProfileImage}
                                           alt={tweet.authorName}
-                                          className="h-8 w-8 rounded-full ring-1 ring-white/10"
+                                          className="h-6 w-6 shrink-0 rounded-full ring-1 ring-white/10"
                                         />
                                       ) : (
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 text-xs text-neutral-300">
+                                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#1a1d22] to-[#0c0e12] text-[10px] text-[#a1a1aa]">
                                           {tweet.authorName
                                             .charAt(0)
                                             .toUpperCase()}
                                         </div>
                                       )}
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <span className="font-semibold text-neutral-100">
-                                            {tweet.authorName}
-                                          </span>
-                                          <span className="text-xs text-neutral-400">
-                                            @{tweet.authorUsername}
-                                          </span>
-                                          <span className="text-xs text-neutral-500">
-                                            {new Date(
-                                              tweet.createdAt,
-                                            ).toLocaleString()}
-                                          </span>
-                                        </div>
-                                      </div>
+                                      <span className="truncate text-xs font-semibold text-[#18c48c] sm:text-sm">
+                                        @{tweet.authorUsername}
+                                      </span>
                                     </div>
-                                    <p className="mb-2 text-sm text-neutral-300">
-                                      {tweet.text}
-                                    </p>
-                                    {tweet.images &&
-                                      tweet.images.length > 0 && (
-                                        <div className="mb-2 flex gap-2">
-                                          {tweet.images.map((img, idx) => (
-                                            <img
-                                              key={idx}
-                                              src={img}
-                                              alt={`Tweet image ${idx + 1}`}
-                                              className="max-h-48 rounded-xl ring-1 ring-white/[0.06]"
-                                            />
-                                          ))}
-                                        </div>
-                                      )}
-
-                                    {/* Tweet Stats */}
-                                    <div className="flex items-center gap-4 text-xs text-neutral-500">
-                                      <span>❤️ {tweet.likeCount || 0}</span>
-                                      <span>🔄 {tweet.retweetCount || 0}</span>
-                                      <span>💬 {tweet.replyCount || 0}</span>
-                                      {tweet.url && (
-                                        <a
-                                          href={tweet.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-[#70E0B0] hover:underline"
-                                        >
-                                          View on X →
-                                        </a>
-                                      )}
-                                    </div>
+                                    <span className="text-[10px] tabular-nums text-[#52525b] shrink-0">
+                                      {new Date(
+                                        tweet.createdAt,
+                                      ).toLocaleString(undefined, {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
                                   </div>
-                                ))}
-                              </div>
-                            )}
-                          </>
+                                  <div className="text-xs text-[#a1a1aa] sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                    {tweet.text}
+                                  </div>
+                                  {tweet.images && tweet.images.length > 0 && (
+                                    <div className="mt-2.5 flex gap-2 flex-wrap">
+                                      {tweet.images.map((img, idx) => (
+                                        <img
+                                          key={idx}
+                                          src={img}
+                                          alt={`Tweet image ${idx + 1}`}
+                                          className="max-h-48 rounded-lg ring-1 ring-white/[0.06]"
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="mt-2.5 flex items-center gap-4 text-[10px] text-[#52525b] sm:text-xs">
+                                    <span>❤️ {tweet.likeCount || 0}</span>
+                                    <span>🔄 {tweet.retweetCount || 0}</span>
+                                    <span>💬 {tweet.replyCount || 0}</span>
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          )
                         ) : (
-                          // Recommended Wallets Tab
                           <>
-                            <div className="my-2 flex items-center gap-2 border-b border-white/[0.04] pb-2">
+                            <div className="my-2.5 flex items-center gap-2 border-b border-white/[0.06] pb-2.5">
                               <input
                                 type="text"
                                 placeholder="@ Search handle"
@@ -2747,18 +2819,24 @@ export default function TrackersPage() {
                                 onChange={(e) =>
                                   setApprovedHandlesSearch(e.target.value)
                                 }
-                                className="max-w-[180px] flex-1 rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/50 focus:outline-none sm:text-xs"
+                                className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm placeholder:text-[#52525b] transition-all duration-200 focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
                               />
                             </div>
-                            {loadingApprovedHandles ? (
-                              <div className="flex items-center justify-center py-8">
-                                <span className="text-xs text-neutral-500">
-                                  Loading list...
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="scrollbar-hide max-h-[400px] overflow-y-auto">
-                                {(approvedHandlesSearch.trim()
+                            <div className="scrollbar-hide flex-1 overflow-y-auto">
+                              {loadingApprovedHandles ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center">
+                                  <span className="text-xs text-[#71717a]">
+                                    Loading list...
+                                  </span>
+                                </div>
+                              ) : approvedHandles.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center">
+                                  <span className="text-xs text-[#71717a]">
+                                    No approved handles to show
+                                  </span>
+                                </div>
+                              ) : (
+                                (approvedHandlesSearch.trim()
                                   ? approvedHandles.filter((h) =>
                                       h
                                         .toLowerCase()
@@ -2779,19 +2857,19 @@ export default function TrackersPage() {
                                   return (
                                     <div
                                       key={handle}
-                                      className="flex items-center justify-between gap-2 border-b border-white/[0.04] py-1.5 text-[10px] sm:text-xs"
+                                      className="flex items-center justify-between gap-2 border-b border-white/[0.06] py-2 text-[10px] sm:text-xs"
                                     >
-                                      <div className="flex items-center">
-                                        <span className="w-8 shrink-0 text-neutral-500">
+                                      <div className="flex items-center min-w-0">
+                                        <span className="w-8 shrink-0 tabular-nums text-[#52525b]">
                                           {idx + 1}
                                         </span>
                                         <a
                                           href={`https://x.com/${handle}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="min-w-0 truncate text-neutral-200 hover:underline"
+                                          className="min-w-0 truncate text-[#a1a1aa] transition-colors hover:text-[#f4f4f5] hover:underline"
                                         >
-                                          {handle}
+                                          @{handle}
                                         </a>
                                       </div>
                                       <button
@@ -2808,7 +2886,7 @@ export default function TrackersPage() {
                                           }
                                         }}
                                         disabled={isTracked || isAdding}
-                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-neutral-400 transition-colors hover:border-[#7FFFC9]/50 hover:bg-[#7FFFC9]/10 hover:text-[#7FFFC9] disabled:opacity-50 disabled:hover:border-white/[0.08] disabled:hover:bg-white/[0.04] disabled:hover:text-neutral-400"
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] transition-all duration-200 hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#080a0d]/60 disabled:hover:text-[#71717a]"
                                         title={
                                           isTracked
                                             ? "Already tracked"
@@ -2819,17 +2897,19 @@ export default function TrackersPage() {
                                         {isAdding ? (
                                           <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
                                         ) : (
-                                          <FiPlus className="h-3.5 w-3.5 text-white" />
+                                          <FiPlus className="h-3.5 w-3.5" />
                                         )}
                                       </button>
                                     </div>
                                   );
-                                })}
-                              </div>
-                            )}
+                                })
+                              )}
+                            </div>
                           </>
                         )}
                       </div>
+                      </>
+                      )}
                     </div>
                   )}
                 </div>

@@ -16,8 +16,8 @@ import {
   GoogleLogin,
   type CredentialResponse,
 } from "@react-oauth/google";
-import { sha256 } from "@noble/hashes/sha256";
-import { bytesToHex } from "@noble/hashes/utils";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { useUserLimit } from "./UserLimitContext";
 import { ApiError } from "../utils/api";
 import { isBotUsername } from "../utils/botUsernames";
@@ -375,7 +375,7 @@ export default function LoginModal({
           throw new Error("Failed to create API keypair for Google login.");
         }
         pubKeyRef.current = pubKey;
-        setGoogleNonce(bytesToHex(sha256(pubKey)));
+        setGoogleNonce(bytesToHex(sha256(new TextEncoder().encode(pubKey))));
       } catch (err: any) {
         console.error("Failed to prepare Google login", err);
         setError(err?.message || "Unable to prepare Google login.");
@@ -624,42 +624,43 @@ export default function LoginModal({
       open={open}
       onClose={handleClose}
       align="center"
-      className={`relative max-h-[90vh] w-[460px] max-w-[94vw] overflow-y-auto rounded-[28px] border border-white/5 bg-[#0c0f18]/95 p-8 pt-12 text-neutral-100 shadow-[0_48px_160px_rgba(12,20,33,0.6)] backdrop-blur-xl ${wiggle ? "wiggle" : ""}`}
+      className={`relative w-[480px] max-w-[94vw] overflow-hidden rounded-xl bg-[#111214] p-8 pt-14 text-zinc-100 shadow-[0_0_100px_rgba(0,0,0,0.9)] ${wiggle ? "wiggle" : ""}`}
       disableClickOutside={forceLogin}
       zIndex={99999}
-      overlayClassName="bg-[radial-gradient(circle_at_22%_18%,rgba(16,185,129,0.02),transparent_62%),radial-gradient(circle_at_78%_20%,rgba(59,130,246,0.02),transparent_58%),radial-gradient(circle_at_center,rgba(12,18,32,0.05),rgba(6,8,12,0.08))]"
+      overlayClassName="bg-black/85 backdrop-blur-sm"
     >
-      <div className="pointer-events-none absolute -inset-14 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.25),transparent_55%),radial-gradient(circle_at_bottom_right,rgba(110,231,183,0.12),transparent_55%),radial-gradient(circle_at_top_right,rgba(129,140,248,0.2),transparent_55%)] opacity-80 blur-[90px]" />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(148,163,184,0.12),transparent_70%)]" />
-      <button
-        className="absolute top-4 right-4 rounded-full bg-white/5 px-2 text-lg text-neutral-400 transition hover:bg-white/10 hover:text-white"
-        onClick={handleClose}
-        type="button"
-      >
-        ×
-      </button>
+      {/* Corner bracket decorations */}
+      <div className="pointer-events-none absolute top-4 left-4 h-8 w-8 border-l-2 border-t-2 border-zinc-700/50" />
+      <div className="pointer-events-none absolute top-4 right-4 h-8 w-8 border-r-2 border-t-2 border-zinc-700/50" />
+      <div className="pointer-events-none absolute bottom-4 left-4 h-8 w-8 border-l-2 border-b-2 border-zinc-700/50" />
+      <div className="pointer-events-none absolute bottom-4 right-4 h-8 w-8 border-r-2 border-b-2 border-zinc-700/50" />
+      
+
 
       {/* Username Setup Step */}
       {loginStep === "username" ? (
         <div className="py-2">
           <div className="mb-6 text-center">
-            <p className="text-[0.65rem] tracking-[0.45em] text-emerald-300/70 uppercase">
+            <p className="text-xs font-medium tracking-[0.35em] text-emerald-500 uppercase">
               Welcome to Interstate
             </p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
               Choose Your Username
             </h2>
-            <p className="mt-2 text-sm text-neutral-400">
-              Pick a unique username for your profile and referral link
+            <p className="mt-2 text-[14px] text-zinc-500">
+              Pick a unique username for your profile
             </p>
           </div>
+          
+          {/* Divider line below heading */}
+          <div className="mb-6 h-px w-full bg-zinc-800" />
 
           <div className="mb-6">
-            <label className="mb-2 block text-xs font-medium text-neutral-400">
+            <label className="mb-3 block text-[14px] text-zinc-500">
               Username
             </label>
             <div className="relative">
-              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-neutral-500">
+              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-zinc-500">
                 @
               </span>
               <input
@@ -668,51 +669,50 @@ export default function LoginModal({
                 onChange={(e) => handleNewUsernameChange(e.target.value)}
                 placeholder="your_username"
                 maxLength={20}
-                className={`w-full rounded-xl border bg-neutral-800/50 py-3 pr-12 pl-8 text-white placeholder-neutral-500 transition-all focus:ring-2 focus:outline-none ${
+                className={`w-full rounded-xl bg-zinc-800 py-4 pr-12 pl-10 text-[15px] text-white placeholder-zinc-600 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${
                   usernameValidation.error
-                    ? "border-red-500/50 focus:ring-red-500/30"
+                    ? "ring-2 ring-red-500/50"
                     : usernameValidation.isAvailable
-                      ? "border-emerald-500/50 focus:ring-emerald-500/30"
-                      : "border-neutral-700 focus:ring-emerald-500/30"
+                      ? "ring-2 ring-emerald-500/50"
+                      : ""
                 }`}
               />
               <div className="absolute top-1/2 right-4 -translate-y-1/2">
                 {usernameChecking ? (
-                  <FiLoader className="h-5 w-5 animate-spin text-neutral-400" />
+                  <FiLoader className="h-4 w-4 animate-spin text-zinc-500" />
                 ) : usernameValidation.isAvailable ? (
-                  <FiCheck className="h-5 w-5 text-emerald-400" />
+                  <FiCheck className="h-4 w-4 text-emerald-400" />
                 ) : usernameValidation.error ? (
-                  <FiAlertCircle className="h-5 w-5 text-red-400" />
+                  <FiAlertCircle className="h-4 w-4 text-red-400" />
                 ) : null}
               </div>
             </div>
 
             {usernameValidation.error && (
-              <p className="mt-2 text-xs text-red-400">
+              <p className="mt-3 text-[13px] text-red-400">
                 {usernameValidation.error}
               </p>
             )}
             {usernameValidation.isAvailable && !usernameChecking && (
-              <p className="mt-2 text-xs text-emerald-400">
-                Username is available!
+              <p className="mt-3 text-[13px] text-emerald-400">
+                Username is available
               </p>
             )}
 
-            <p className="mt-3 text-xs text-neutral-500">
-              3-20 characters. Letters, numbers, and underscores only. Must
-              start with a letter or underscore.
+            <p className="mt-3 text-[13px] text-zinc-600">
+              3-20 characters. Letters, numbers, and underscores only.
             </p>
           </div>
 
           {/* Referral link preview */}
           {newUsername && usernameValidation.isValid && (
-            <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-900/20 p-3">
-              <p className="mb-1 text-xs text-emerald-400">
+            <div className="mb-6 rounded-xl bg-zinc-800/50 p-4">
+              <p className="mb-2 text-[13px] text-zinc-500">
                 Your referral link
               </p>
-              <p className="font-mono text-sm break-all text-white">
+              <p className="font-mono text-[14px] break-all text-zinc-300">
                 interstate.trade?ref=
-                {newUsername.toLowerCase().substring(0, 10)}
+                <span className="text-emerald-400">{newUsername.toLowerCase().substring(0, 10)}</span>
               </p>
             </div>
           )}
@@ -721,11 +721,10 @@ export default function LoginModal({
             <button
               type="button"
               onClick={() => {
-                // Signal parent that modal can close, then close
                 window.dispatchEvent(new CustomEvent("login-modal-can-close"));
                 onClose();
               }}
-              className="flex-1 rounded-xl bg-neutral-800 px-4 py-3 font-medium text-white transition-colors hover:bg-neutral-700"
+              className="flex-1 rounded-xl bg-zinc-800 px-4 py-3.5 text-[15px] font-medium text-zinc-400 transition-all hover:bg-zinc-700 hover:text-zinc-300"
             >
               Skip for now
             </button>
@@ -738,13 +737,13 @@ export default function LoginModal({
                 usernameChecking ||
                 usernameSubmitting
               }
-              className={`flex-1 rounded-xl px-4 py-3 font-medium transition-all ${
+              className={`flex-1 rounded-xl px-4 py-3.5 text-[15px] font-medium transition-all ${
                 usernameValidation.isValid &&
                 usernameValidation.isAvailable &&
                 !usernameChecking &&
                 !usernameSubmitting
-                  ? "bg-emerald-600 text-white hover:bg-emerald-500"
-                  : "cursor-not-allowed bg-neutral-800 text-neutral-500"
+                  ? "bg-emerald-500 text-white hover:bg-emerald-400"
+                  : "cursor-not-allowed bg-zinc-800 text-zinc-600"
               }`}
             >
               {usernameSubmitting ? (
@@ -761,16 +760,19 @@ export default function LoginModal({
       ) : (
         <>
           {/* Auth Step */}
-          <div className="mb-4 text-center">
-            <p className="text-[0.65rem] tracking-[0.45em] text-emerald-300/70 uppercase">
+          <div className="mb-6 text-center">
+            <p className="text-xs font-medium tracking-[0.35em] text-emerald-500 uppercase">
               Secure Access
             </p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
               Sign in to Interstate
             </h2>
           </div>
+          
+          {/* Divider line below heading */}
+          <div className="mb-6 h-px w-full bg-zinc-800" />
           {error && (
-            <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+            <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-3 py-2.5 text-[12px] text-red-300">
               {error}
             </div>
           )}
@@ -904,52 +906,27 @@ export default function LoginModal({
               )}
             </>
           )}
-          <hr className="mt-4 border-neutral-600" />
-          <div className="mt-4 flex flex-col items-center gap-2">
+          {/* Google/Preparing login button */}
+          <div className="flex flex-col items-center">
             {googleClientId ? (
               <GoogleOAuthProvider clientId={googleClientId}>
-                <div
-                  className={`mb-1 flex flex-col items-center ${AUTH_BUTTON_WIDTH_CLASS}`}
-                >
+                <div className="w-full">
                   {authState === AuthState.Authenticated ? (
-                    <div className="w-full rounded-3xl border border-neutral-700/60 bg-neutral-800/40 px-3 py-3 text-center text-sm text-neutral-200">
+                    <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-400">
                       Finishing sign-in…
                     </div>
                   ) : clientState !== ClientState.Ready ? (
-                    <InterstateButton
-                      type="button"
-                      fullWidth
-                      variant="secondary"
-                      disabled
-                    >
-                      <span className="flex items-center justify-center gap-2 text-sm font-normal">
-                        Preparing login…
-                      </span>
-                    </InterstateButton>
+                    <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-400">
+                      Preparing login...
+                    </div>
                   ) : !googleNonce ? (
-                    <InterstateButton
-                      type="button"
-                      fullWidth
-                      variant="secondary"
-                      disabled
-                    >
-                      <span className="flex items-center justify-center gap-2 text-sm font-normal">
-                        {googleLoading
-                          ? "Finishing sign-in…"
-                          : "Generating nonce…"}
-                      </span>
-                    </InterstateButton>
+                    <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-400">
+                      {googleLoading ? "Finishing sign-in…" : "Preparing login..."}
+                    </div>
                   ) : googleLoading ? (
-                    <InterstateButton
-                      type="button"
-                      fullWidth
-                      variant="secondary"
-                      disabled
-                    >
-                      <span className="flex items-center justify-center gap-2 text-sm font-normal">
-                        Signing in with Google…
-                      </span>
-                    </InterstateButton>
+                    <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-400">
+                      Signing in with Google…
+                    </div>
                   ) : (
                     <div className="flex w-full justify-center">
                       <GoogleLogin
@@ -957,7 +934,7 @@ export default function LoginModal({
                         onSuccess={handleGoogleSuccess}
                         onError={handleGoogleError}
                         useOneTap={false}
-                        theme="outline"
+                        theme="filled_black"
                         shape="pill"
                         text="continue_with"
                         size="large"
@@ -968,55 +945,49 @@ export default function LoginModal({
                 </div>
               </GoogleOAuthProvider>
             ) : (
-              <InterstateButton
-                type="button"
-                fullWidth
-                variant="secondary"
-                disabled
-                className={AUTH_BUTTON_WIDTH_CLASS}
-              >
-                <span className="flex items-center justify-center gap-2 text-sm font-normal">
-                  Google login not configured
-                </span>
-              </InterstateButton>
+              <div className="w-full rounded-full bg-zinc-800 px-6 py-4 text-center text-[15px] text-zinc-500">
+                Google login not configured
+              </div>
             )}
           </div>
 
           {(walletError || discoveryWalletError) && (
-            <div className="mt-4 text-center text-xs text-red-400">
+            <div className="mt-4 text-center text-[13px] text-red-400">
               {walletError || discoveryWalletError}
             </div>
           )}
 
-          {/* Wallet list — shown directly, no toggle */}
+          {/* Wallet list */}
           {allWallets.length > 0 && (
-            <div className={`mt-4 ${AUTH_BUTTON_WIDTH_CLASS}`}>
-              <div className="mb-2 text-xs font-medium text-neutral-500">
+            <div className="mt-6 w-full">
+              <div className="mb-4 text-[14px] text-zinc-500">
                 Sign in with wallet
               </div>
-              <div className="max-h-[35vh] space-y-1.5 overflow-y-auto pr-1">
+              <div className="space-y-3">
                 {allWallets.map((w) => (
                   <button
                     key={w.id}
                     type="button"
-                    className={`flex w-full items-center gap-3 rounded-lg border border-neutral-600/50 bg-neutral-700/50 p-3 transition-colors hover:border-neutral-500/50 hover:bg-neutral-600/50 ${activeWalletId === w.id ? "cursor-not-allowed opacity-50" : ""} ${activeWalletId && activeWalletId !== w.id ? "pointer-events-none opacity-30" : ""}`}
+                    className={`group flex w-full items-center gap-4 rounded-xl bg-zinc-800/80 p-4 transition-all hover:bg-zinc-700/80 ${activeWalletId === w.id ? "cursor-wait bg-zinc-700/80" : ""} ${activeWalletId && activeWalletId !== w.id ? "pointer-events-none opacity-40" : ""}`}
                     onClick={() => {
                       setGoogleLoading(false);
                       handleWalletLogin(w);
                     }}
                     disabled={!!activeWalletId}
                   >
-                    <img
-                      src={w.icon}
-                      alt=""
-                      className="h-5 w-5 shrink-0 rounded-full"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                    <span className="text-sm font-medium">{w.name}</span>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-700/50">
+                      <img
+                        src={w.icon}
+                        alt=""
+                        className="h-6 w-6 shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    </div>
+                    <span className="text-[15px] font-medium text-white">{w.name}</span>
                     {activeWalletId === w.id && (
-                      <span className="ml-auto text-xs text-yellow-400">
+                      <span className="ml-auto text-[13px] font-medium text-emerald-400">
                         Connecting...
                       </span>
                     )}
