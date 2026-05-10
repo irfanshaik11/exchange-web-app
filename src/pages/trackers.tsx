@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import Header from "../components/Header";
@@ -59,9 +59,12 @@ import {
   FiAtSign,
   FiMessageCircle,
   FiPlus,
+  FiCopy,
+  FiBarChart2,
+  FiExternalLink,
 } from "react-icons/fi";
+import { FaXTwitter } from "react-icons/fa6";
 import { SiSolana } from "react-icons/si";
-import { RiExchangeDollarLine } from "react-icons/ri";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
@@ -78,8 +81,71 @@ import { HiLightningBolt } from "react-icons/hi";
 import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 import LiveTradesPanel from "../components/LiveTradesPanel";
+import kolWalletTrackerData from "../data/kol-wallet-tracker.json";
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+type KolTrackerEntry = {
+  wallet: string;
+  name: string;
+  handle: string;
+};
+
+const KOL_TRACKER_ENTRIES = kolWalletTrackerData as KolTrackerEntry[];
+
+const LS_KOL_STARRED = "trackers:kolStarredWallets";
+const LS_KOL_MUTED = "trackers:kolMutedWallets";
+
+function truncateKolAddress(addr: string, head = 4, tail = 4): string {
+  const a = addr.trim();
+  if (a.length <= head + tail + 3) return a;
+  return `${a.slice(0, head)}...${a.slice(-tail)}`;
+}
+
+function kolEntryToWallet(entry: KolTrackerEntry): Wallet {
+  return {
+    address: entry.wallet,
+    name: entry.name,
+    createdAt: Date.now(),
+    emoji: "🎯",
+  };
+}
+
+/** Stable hue from handle for initials avatar fallback */
+function hslAvatarBg(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h + seed.charCodeAt(i)! * (i + 1)) % 360;
+  }
+  return `hsl(${h}, 42%, 32%)`;
+}
+
+function KolAvatar({ name, handle }: { name: string; handle: string }) {
+  const [failed, setFailed] = useState(false);
+  const raw = (name.trim().charAt(0) || handle.trim().charAt(0) || "?") as string;
+  const initial = raw.toUpperCase();
+
+  if (failed) {
+    return (
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white sm:h-10 sm:w-10 sm:text-sm"
+        style={{ backgroundColor: hslAvatarBg(handle || name) }}
+      >
+        {initial}
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/kol-avatars/${handle}.jpg`}
+      alt=""
+      className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 type DefaultWalletEntry = {
   chain: string;
@@ -89,7 +155,7 @@ type DefaultWalletEntry = {
   isAlertEnabled?: boolean;
 };
 
-const TABS = ["Wallet Manager", "Live Trades"];
+const TABS = ["Wallet Manager", "Live Trades", "KOLs"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const TELEGRAM_TABS = ["Channels", "Messages", "Add Channels"];
 /** Default Telegram channels to track for all users when they have none. */
@@ -252,6 +318,9 @@ export default function TrackersPage() {
   const [showAddWalletModal, setShowAddWalletModal] = useState(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [kolSearchTerm, setKolSearchTerm] = useState("");
+  const [kolStarredSet, setKolStarredSet] = useState(() => new Set<string>());
+  const [kolMutedSet, setKolMutedSet] = useState(() => new Set<string>());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [toast, setToast] = useState("");
@@ -766,7 +835,23 @@ export default function TrackersPage() {
 
   const loadTrackedWallets = loadWalletsFromBackend;
 
-  useEffect(() => {}, [activeTab]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const starRaw = localStorage.getItem(LS_KOL_STARRED);
+      const muteRaw = localStorage.getItem(LS_KOL_MUTED);
+      if (starRaw) {
+        const arr = JSON.parse(starRaw) as unknown;
+        if (Array.isArray(arr)) setKolStarredSet(new Set(arr.filter((x) => typeof x === "string")));
+      }
+      if (muteRaw) {
+        const arr = JSON.parse(muteRaw) as unknown;
+        if (Array.isArray(arr)) setKolMutedSet(new Set(arr.filter((x) => typeof x === "string")));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // Sync local watchedWallets state with global context
   useEffect(() => {
@@ -1268,6 +1353,56 @@ export default function TrackersPage() {
       wallet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wallet.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+
+  const kolWalletOrder = useMemo(() => {
+    const m = new Map<string, number>();
+    KOL_TRACKER_ENTRIES.forEach((e, i) => {
+      m.set(e.wallet, i);
+    });
+    return m;
+  }, []);
+
+  const filteredKolEntries = useMemo(() => {
+    const q = kolSearchTerm.trim().toLowerCase();
+    let list = KOL_TRACKER_ENTRIES.filter((e) => {
+      if (!q) return true;
+      return (
+        e.name.toLowerCase().includes(q) ||
+        e.handle.toLowerCase().includes(q) ||
+        e.wallet.toLowerCase().includes(q)
+      );
+    });
+    list = [...list].sort((a, b) => {
+      const sa = kolStarredSet.has(a.wallet) ? 0 : 1;
+      const sb = kolStarredSet.has(b.wallet) ? 0 : 1;
+      if (sa !== sb) return sa - sb;
+      return (kolWalletOrder.get(a.wallet) ?? 0) - (kolWalletOrder.get(b.wallet) ?? 0);
+    });
+    return list;
+  }, [kolSearchTerm, kolStarredSet, kolWalletOrder]);
+
+  const persistKolStarred = (next: Set<string>) => {
+    setKolStarredSet(next);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(LS_KOL_STARRED, JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const persistKolMuted = (next: Set<string>) => {
+    setKolMutedSet(next);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(LS_KOL_MUTED, JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
   // Filter live trades to only show trades from currently watched wallets
   const watchedWalletAddresses = new Set(watchedWallets.map((w) => w.address));
   const filteredLatestTrades = latestTrades.filter((trade) =>
@@ -1728,288 +1863,459 @@ export default function TrackersPage() {
                         <div className="absolute bottom-1.5 right-1.5 h-3 w-3 border-b border-r border-white/[0.1]" />
                       </div>
                       {/* If user is not logged in, show JTX-style empty state */}
-                      {!user ? (
-                        <div className="flex flex-1 items-center justify-center">
-                          <div className="relative flex flex-col items-center rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-8 text-center backdrop-blur-sm">
-                            {/* Mini corner brackets */}
-                            <div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
-                              <div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.1]" />
-                              <div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.1]" />
-                              <div className="absolute bottom-1.5 left-1.5 h-2.5 w-2.5 border-b border-l border-white/[0.1]" />
-                              <div className="absolute bottom-1.5 right-1.5 h-2.5 w-2.5 border-b border-r border-white/[0.1]" />
-                            </div>
-                            <FiLock className="mb-4 h-10 w-10 text-[#52525b]" />
-                            <p className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
-                              Log in to start tracking
-                            </p>
-                            <p className="mt-1.5 text-xs text-[#71717a]">
-                              Monitor wallets and catch trades in real-time
-                            </p>
-                            <button
-                              className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#18c48c] px-6 py-2.5 text-xs font-semibold text-[#030304] shadow-[0_0_16px_rgba(24,196,140,0.3)] transition-all duration-200 hover:brightness-110"
-                              onClick={() => {
-                                const event = new CustomEvent(
-                                  "open-login-modal",
-                                );
-                                window.dispatchEvent(event);
-                              }}
-                            >
-                              Log in
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {/* HEADER BAR – JTX premium style */}
-                          <div className="flex justify-between gap-3 border-b border-white/[0.06] py-3.5 sm:items-center sm:gap-4 sm:py-4">
-                            {/* Left: tabs + wallet count */}
-                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                              {TABS.map((tab, i) => (
-                                <button
-                                  key={tab}
-                                  className={`group relative cursor-pointer rounded-md px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-4 sm:py-2 sm:text-xs ${
-                                    activeTab === i
-                                      ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
-                                      : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
-                                  }`}
-                                  onClick={() => setActiveTab(i)}
-                                >
-                                  <span className="relative z-10">{tab}</span>
-                                  {activeTab === i && (
-                                    <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
-                                  )}
-                                </button>
-                              ))}
-                              <div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1 text-[10px] backdrop-blur-sm sm:px-3 sm:py-1.5 sm:text-[11px]">
-                                <span className="font-bold tabular-nums text-[#18c48c]">
-                                  {wallets.length}
-                                </span>
-                                <span className="ml-1 hidden text-[#52525b] sm:ml-1.5 sm:inline">
-                                  / {MAX_WALLETS} wallet
-                                  {wallets.length === 1 ? "" : "s"}
-                                </span>
-                                <span className="ml-1 text-[#52525b] sm:ml-1.5 sm:hidden">
-                                  / {MAX_WALLETS}
-                                </span>
-                              </div>
-                            </div>
+												{!user ? (
+													<div className="flex flex-1 items-center justify-center">
+														<div className="relative flex flex-col items-center rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-8 text-center backdrop-blur-sm">
+															{/* Mini corner brackets */}
+															<div className="pointer-events-none absolute inset-0 rounded-lg overflow-hidden">
+																<div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.1]" />
+																<div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.1]" />
+																<div className="absolute bottom-1.5 left-1.5 h-2.5 w-2.5 border-b border-l border-white/[0.1]" />
+																<div className="absolute bottom-1.5 right-1.5 h-2.5 w-2.5 border-b border-r border-white/[0.1]" />
+															</div>
+															<FiLock className="mb-4 h-10 w-10 text-[#52525b]" />
+															<p className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
+																Log in to start tracking
+															</p>
+															<p className="mt-1.5 text-xs text-[#71717a]">
+																Monitor wallets and catch trades in real-time
+															</p>
+															<button
+																className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#18c48c] px-6 py-2.5 text-xs font-semibold text-[#030304] shadow-[0_0_16px_rgba(24,196,140,0.3)] transition-all duration-200 hover:brightness-110"
+																onClick={() => {
+																	const event = new CustomEvent(
+																		"open-login-modal",
+																	);
+																	window.dispatchEvent(event);
+																}}
+															>
+																Log in
+															</button>
+														</div>
+													</div>
+												) : (
+													<>
+														{/* HEADER BAR – JTX premium style */}
+														<div className="flex justify-between gap-3 border-b border-white/[0.06] py-3.5 sm:items-center sm:gap-4 sm:py-4">
+															{/* Left: tabs + wallet count */}
+															<div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+																{TABS.map((tab, i) => (
+																	<button
+																		key={tab}
+																		className={`group relative cursor-pointer rounded-md px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-4 sm:py-2 sm:text-xs ${activeTab === i
+																				? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
+																				: "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
+																			}`}
+																		onClick={() => setActiveTab(i)}
+																	>
+																		<span className="relative z-10">{tab}</span>
+																		{activeTab === i && (
+																			<span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+																		)}
+																	</button>
+																))}
+																<div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1 text-[10px] backdrop-blur-sm sm:px-3 sm:py-1.5 sm:text-[11px]">
+																	{activeTab === 2 ? (
+																		<>
+																			<span className="text-neutral-500">
+																				{KOL_TRACKER_ENTRIES.length} KOL
+																				{KOL_TRACKER_ENTRIES.length === 1
+																					? ""
+																					: "s"}
+																			</span>
+																		</>
+																	) : (
+																		<>
+																			<span className="font-bold tabular-nums text-[#18c48c]">
+																				{wallets.length}
+																			</span>
+																			<span className="ml-1 hidden text-[#52525b] sm:ml-1.5 sm:inline">
+																				/ {MAX_WALLETS} wallet
+																				{wallets.length === 1 ? "" : "s"}
+																			</span>
+																			<span className="ml-1 text-[#52525b] sm:ml-1.5 sm:hidden">
+																				/ {MAX_WALLETS}
+																			</span>
+																		</>
+																	)}
+																</div>
+															</div>
 
-                            {/* Right: action buttons - JTX style */}
-                            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
-                              {activeTab === 0 && (
-                                <>
-                                  {selectedChain === "sol" && (
-                                    <button
-                                      className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
-                                      onClick={handleAddDefault150Wallets}
-                                      disabled={isAtWalletLimit || isAddingDefaultWallets}
-                                      title="Add 150 default wallets for Solana"
-                                    >
-                                      {isAddingDefaultWallets
-                                        ? "Adding..."
-                                        : "Import top 150 wallets"}
-                                    </button>
-                                  )}
-                                  <button
-                                    className="cursor-pointer rounded-md bg-[#18c48c] px-4 py-1.5 text-[9px] font-semibold whitespace-nowrap text-[#030304] shadow-[0_0_12px_rgba(24,196,140,0.25)] transition-all duration-200 hover:brightness-110 sm:px-5 sm:py-2 sm:text-xs"
-                                    onClick={handleOpenAddWalletModal}
-                                  >
-                                    Add Wallet
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
+															{/* Right: action buttons - JTX style */}
+															<div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+																{activeTab === 0 && user && (
+																	<>
+																		{selectedChain === "sol" && (
+																			<button
+																				className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
+																				onClick={handleAddDefault150Wallets}
+																				disabled={isAtWalletLimit || isAddingDefaultWallets}
+																				title="Add 150 default wallets for Solana"
+																			>
+																				{isAddingDefaultWallets
+																					? "Adding..."
+																					: "Import top 150 wallets"}
+																			</button>
+																		)}
+																		<button
+																			className="cursor-pointer rounded-md bg-[#18c48c] px-4 py-1.5 text-[9px] font-semibold whitespace-nowrap text-[#030304] shadow-[0_0_12px_rgba(24,196,140,0.25)] transition-all duration-200 hover:brightness-110 sm:px-5 sm:py-2 sm:text-xs"
+																			onClick={handleOpenAddWalletModal}
+																		>
+																			Add Wallet
+																		</button>
+																	</>
+																)}
+															</div>
+														</div>
 
-                          {/* Search bar and action toolbar - JTX premium style */}
-                          {activeTab === 0 && (
-                            <div className="border-b border-white/[0.06] px-1 py-3.5 sm:px-2 sm:py-4">
-                              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                                {/* Search input - JTX style */}
-                                <div className="min-w-[200px] flex-1">
-                                  <input
-                                    type="text"
-                                    placeholder="Search by address"
-                                    className="w-full rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#080a0d]/80 focus:shadow-[0_0_12px_rgba(24,196,140,0.1)] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
-                                    disabled={false}
-                                    value={searchTerm}
-                                    onChange={(e) =>
-                                      setSearchTerm(e.target.value)
-                                    }
-                                  />
-                                </div>
+														{!user && activeTab !== 2 ? (
+															<div className="flex min-h-[260px] flex-1 flex-col items-center justify-center px-4 py-12 text-center">
+																<FiLock className="mb-3 h-10 w-10 text-neutral-700" />
+																<p className="text-sm font-medium text-neutral-300">
+																	Log in to start tracking
+																</p>
+																<p className="mt-1 text-xs text-neutral-500">
+																	Monitor wallets and catch trades in real-time
+																</p>
+																<button
+																	className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
+																	type="button"
+																	onClick={() => {
+																		window.dispatchEvent(
+																			new CustomEvent("open-login-modal"),
+																		);
+																	}}
+																>
+																	Log in
+																</button>
+															</div>
+														) : (
+															<>
+																{/* Search bar — wallet manager */}
+																{activeTab === 0 && user && (
+																	<div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
+																		<div className="flex flex-wrap items-center gap-2 sm:gap-3">
+																			{/* Search input - JTX style */}
+																			<div className="min-w-[200px] flex-1">
+																				<input
+																					type="text"
+																					placeholder="Search by address"
+																					className="w-full rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#080a0d]/80 focus:shadow-[0_0_12px_rgba(24,196,140,0.1)] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+																					disabled={false}
+																					value={searchTerm}
+																					onChange={(e) =>
+																						setSearchTerm(e.target.value)
+																					}
+																				/>
+																			</div>
 
-                                {/* Right: actions - JTX minimal style */}
-                                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                                  {activeTab === 0 && (
-                                    <>
-                                      <button
-                                        className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
-                                        onClick={() => setShowImportModal(true)}
-                                      >
-                                        Import
-                                      </button>
-                                      <div className="relative">
-                                        {showExportSuccessTooltip && (
-                                          <div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#0c0e12]/95 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-[#18c48c] shadow-[0_4px_16px_rgba(0,0,0,0.5)]">
-                                            Export Successful
-                                          </div>
-                                        )}
-                                        <button
-                                          className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
-                                          onClick={handleExportAddresses}
-                                        >
-                                          Export
-                                        </button>
-                                      </div>
+																			{/* Right: actions - JTX minimal style */}
+																			<div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+																				{activeTab === 0 && (
+																					<>
+																						<button
+																							className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+																							onClick={() => setShowImportModal(true)}
+																						>
+																							Import
+																						</button>
+																						<div className="relative">
+																							{showExportSuccessTooltip && (
+																								<div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#0c0e12]/95 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-[#18c48c] shadow-[0_4px_16px_rgba(0,0,0,0.5)]">
+																									Export Successful
+																								</div>
+																							)}
+																							<button
+																								className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+																								onClick={handleExportAddresses}
+																							>
+																								Export
+																							</button>
+																						</div>
 
-                                      {/* Icon buttons - hide some on mobile */}
-                                      {/* <button
+																						{/* Icon buttons - hide some on mobile */}
+																						{/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
-                                      <button
-                                        className={`flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-200 sm:h-9 sm:w-9 ${
-                                          isTogglingAllNotifications
-                                            ? "cursor-not-allowed border-white/[0.06] bg-[#080a0d]/60 opacity-40"
-                                            : allNotificationsEnabled
-                                              ? "cursor-pointer border-[#ef4444]/40 bg-[#ef4444]/15 text-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.2)] hover:bg-[#ef4444]/25"
-                                              : "cursor-pointer border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#a1a1aa]"
-                                        }`}
-                                        type="button"
-                                        onClick={handleToggleAllNotifications}
-                                        disabled={isTogglingAllNotifications}
-                                        title={
-                                          isTogglingAllNotifications
-                                            ? "Toggling..."
-                                            : allNotificationsEnabled
-                                              ? "Disable all notifications"
-                                              : "Enable all notifications"
-                                        }
-                                      >
-                                        <FiBell
-                                          className={`h-4 w-4 ${
-                                            allNotificationsEnabled
-                                              ? "fill-pink-400 text-pink-400"
-                                              : "text-neutral-500"
-                                          }`}
-                                        />
-                                      </button>
-                                      {/* <button
+																						<button
+																							className={`flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-200 sm:h-9 sm:w-9 ${isTogglingAllNotifications
+																									? "cursor-not-allowed border-white/[0.06] bg-[#080a0d]/60 opacity-40"
+																									: allNotificationsEnabled
+																										? "cursor-pointer border-[#ef4444]/40 bg-[#ef4444]/15 text-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.2)] hover:bg-[#ef4444]/25"
+																										: "cursor-pointer border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#a1a1aa]"
+																								}`}
+																							type="button"
+																							onClick={handleToggleAllNotifications}
+																							disabled={isTogglingAllNotifications}
+																							title={
+																								isTogglingAllNotifications
+																									? "Toggling..."
+																									: allNotificationsEnabled
+																										? "Disable all notifications"
+																										: "Enable all notifications"
+																							}
+																						>
+																							<FiBell
+																								className={`h-4 w-4 ${allNotificationsEnabled
+																										? "fill-pink-400 text-pink-400"
+																										: "text-neutral-500"
+																									}`}
+																							/>
+																						</button>
+																						{/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
-                                      {/* <button
+																						{/* <button
                                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )}
+																					</>
+																				)}
+																			</div>
+																		</div>
+																	</div>
+																)}
 
-                          <div className="-mx-3 min-h-0 flex-1 overflow-y-auto px-3 sm:-mx-5 sm:px-5">
-                            {activeTab === 0 ? (
-                              <>
-                                <div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
-                                  <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
-                                    <span className="flex w-16 justify-center sm:w-28">
-                                      Created
-                                    </span>
-                                    <span className="min-w-0 flex-1">Name</span>
-                                    <span className="w-20 sm:w-36">
-                                      Balance
-                                    </span>
-                                    <span className="hidden w-16 justify-center sm:flex sm:w-28">
-                                      Last Active
-                                    </span>
-                                    <div className="flex flex-1 items-center justify-end">
-                                      <button
-                                        className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
-                                        onClick={() =>
-                                          handleRemoveWallet("all")
-                                        }
-                                      >
-                                        Remove All
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                {wallets.length === 0 ? (
-                                  <div className="flex h-64 flex-col items-center justify-center">
-                                    <FiEye className="mb-3 h-10 w-10 text-neutral-700" />
-                                    <span className="text-sm font-medium text-neutral-300">
-                                      No wallets tracked yet
-                                    </span>
-                                    <span className="mt-1 text-xs text-neutral-500">
-                                      Add a wallet address to monitor its trades
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <div className="scrollbar-hide overflow-x-auto">
-                                    <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
-                                      <tbody>
-                                        {filteredWallets.map((wallet) => {
-                                          const watched = watchedWallets.find(
-                                            (ww) =>
-                                              ww.address === wallet.address,
-                                          );
-                                          const events =
-                                            walletEvents[wallet.address] || [];
-                                          const balance =
-                                            trackedWalletBalances[
-                                              wallet.address
-                                            ];
-                                          return (
-                                            <WalletRow
-                                              key={wallet.address}
-                                              wallet={wallet}
-                                              watchedWallet={watched}
-                                              events={events}
-                                              balance={balance}
-                                              lastActive={
-                                                lastActiveMap[wallet.address]
-                                              }
-                                              onRemove={handleRemoveWallet}
-                                              onClick={(wallet) => {
-                                                setScannedWallet(wallet);
-                                              }}
-                                              onNotificationToggle={async (
-                                                address,
-                                                enabled,
-                                              ) => {
-                                                // Refresh the global watched wallets to sync the state
-                                                await refreshWatchedWallets();
-                                              }}
-                                            />
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </>
-                            ) : activeTab === 1 ? (
-                              <LiveTradesPanel
-                                trades={liveTradesToRender}
-                                wallets={wallets}
-                                wsConnected={wsConnected}
-                                quickBuyAmount={quickBuyAmount}
-                                onQuickBuy={handleQuickBuy}
-                                isLoading={isLoadingHistory}
-                              />
-                            ) : null}
-                          </div>
-                        </>
-                      )}
+																{/* Search — KOL directory */}
+																{activeTab === 2 && (
+																	<div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
+																		<input
+																			type="text"
+																			placeholder="Search by name, @handle, or wallet"
+																			className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+																			value={kolSearchTerm}
+																			onChange={(e) =>
+																				setKolSearchTerm(e.target.value)
+																			}
+																		/>
+																	</div>
+																)}
+
+																<div className="-mx-3 min-h-0 flex-1 overflow-y-auto px-3 sm:-mx-5 sm:px-5">
+																	{activeTab === 0 && user ? (
+																		<>
+																			<div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
+																				<div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
+																					<span className="flex w-16 justify-center sm:w-28">
+																						Created
+																					</span>
+																					<span className="min-w-0 flex-1">Name</span>
+																					<span className="w-20 sm:w-36">
+																						Balance
+																					</span>
+																					<span className="hidden w-16 justify-center sm:flex sm:w-28">
+																						Last Active
+																					</span>
+																					<div className="flex flex-1 items-center justify-end">
+																						<button
+																							className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
+																							onClick={() =>
+																								handleRemoveWallet("all")
+																							}
+																						>
+																							Remove All
+																						</button>
+																					</div>
+																				</div>
+																			</div>
+																			{wallets.length === 0 ? (
+																				<div className="flex h-64 flex-col items-center justify-center">
+																					<FiEye className="mb-3 h-10 w-10 text-neutral-700" />
+																					<span className="text-sm font-medium text-neutral-300">
+																						No wallets tracked yet
+																					</span>
+																					<span className="mt-1 text-xs text-neutral-500">
+																						Add a wallet address to monitor its trades
+																					</span>
+																				</div>
+																			) : (
+																				<div className="scrollbar-hide overflow-x-auto">
+																					<table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
+																						<tbody>
+																							{filteredWallets.map((wallet) => {
+																								const watched = watchedWallets.find(
+																									(ww) =>
+																										ww.address === wallet.address,
+																								);
+																								const events =
+																									walletEvents[wallet.address] || [];
+																								const balance =
+																									trackedWalletBalances[
+																									wallet.address
+																									];
+																								return (
+																									<WalletRow
+																										key={wallet.address}
+																										wallet={wallet}
+																										watchedWallet={watched}
+																										events={events}
+																										balance={balance}
+																										lastActive={
+																											lastActiveMap[wallet.address]
+																										}
+																										onRemove={handleRemoveWallet}
+																										onClick={(wallet) => {
+																											setScannedWallet(wallet);
+																										}}
+																										onNotificationToggle={async (
+																											address,
+																											enabled,
+																										) => {
+																											// Refresh the global watched wallets to sync the state
+																											await refreshWatchedWallets();
+																										}}
+																									/>
+																								);
+																							})}
+																						</tbody>
+																					</table>
+																				</div>
+																			)}
+																		</>
+																	) : activeTab === 1 ? (
+																		<LiveTradesPanel
+																			trades={liveTradesToRender}
+																			wallets={wallets}
+																			wsConnected={wsConnected}
+																			quickBuyAmount={quickBuyAmount}
+																			onQuickBuy={handleQuickBuy}
+																			isLoading={isLoadingHistory}
+																		/>
+																	) : activeTab === 2 ? (
+																		<div className="flex flex-col pb-2">
+																			{filteredKolEntries.length === 0 ? (
+																				<div className="flex h-48 flex-col items-center justify-center text-center">
+																					<FiEye className="mb-3 h-9 w-9 text-neutral-700" />
+																					<span className="text-sm text-neutral-400">
+																						No matching KOLs
+																					</span>
+																				</div>
+																			) : (
+																				<ul className="flex flex-col">
+																					{filteredKolEntries.map((kol) => {
+																						const muted = kolMutedSet.has(
+																							kol.wallet,
+																						);
+																						const starred = kolStarredSet.has(
+																							kol.wallet,
+																						);
+																						const iconBtn =
+																							"flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-300 sm:h-8 sm:w-8";
+																						return (
+																							<li
+																								key={kol.wallet}
+																								role="presentation"
+																								className={`flex cursor-pointer items-center gap-2 border-b border-white/[0.06] py-2.5 transition-colors hover:bg-white/[0.03] sm:gap-3 sm:py-3 px-2 ${muted ? "opacity-40" : ""
+																									}`}
+																								onClick={(e) => {
+																									const t = e.target as HTMLElement;
+																									if (
+																										t.closest("button") ||
+																										t.closest("a")
+																									)
+																										return;
+																									setScannedWallet(
+																										kolEntryToWallet(kol),
+																									);
+																								}}
+																							>
+																								<div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
+																									<KolAvatar
+																										name={kol.name}
+																										handle={kol.handle}
+																									/>
+																									<div className="min-w-0 flex-1">
+																										<div className="truncate text-xs font-semibold text-white sm:text-sm">
+																											{kol.name}
+																										</div>
+																										<div className="truncate text-[10px] text-neutral-500 sm:text-xs">
+																											@{kol.handle}
+																										</div>
+																									</div>
+																								</div>
+																								<div className="flex shrink-0 items-center gap-1 sm:gap-2">
+																									<span className="hidden font-mono text-[10px] text-neutral-200 tabular-nums sm:inline sm:text-xs">
+																										{truncateKolAddress(kol.wallet)}
+																									</span>
+																									<span className="font-mono text-[10px] text-neutral-200 tabular-nums sm:hidden">
+																										{truncateKolAddress(
+																											kol.wallet,
+																											3,
+																											3,
+																										)}
+																									</span>
+																									<button
+																										type="button"
+																										className={iconBtn}
+																										title="Copy address"
+																										onClick={async (e) => {
+																											e.stopPropagation();
+																											try {
+																												await navigator.clipboard?.writeText(
+																													kol.wallet,
+																												);
+																												showEnhancedToast(
+																													"success",
+																													"Address copied",
+																													{ duration: 2000 },
+																												);
+																											} catch {
+																												showToastMessage(
+																													"Could not copy address",
+																												);
+																											}
+																										}}
+																									>
+																										<FiCopy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+																									</button>
+																									<div className="ml-0.5 flex items-center gap-0.5 sm:ml-0 sm:gap-1">
+																										<button
+																											type="button"
+																											className={iconBtn}
+																											title="Scan wallet"
+																											onClick={(e) => {
+																												e.stopPropagation();
+																												setScannedWallet(
+																													kolEntryToWallet(kol),
+																												);
+																											}}
+																										>
+																											<FiBarChart2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+																										</button>
+																										<a
+																											href={`https://x.com/${kol.handle}`}
+																											target="_blank"
+																											rel="noopener noreferrer"
+																											className={iconBtn}
+																											title={`@${kol.handle} on X`}
+																											onClick={(e) =>
+																												e.stopPropagation()
+																											}
+																										>
+																											<FaXTwitter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+																										</a>
+																									</div>
+																								</div>
+																							</li>
+																						);
+																					})}
+																				</ul>
+																			)}
+																		</div>
+																	) : null}
+																</div>
+															</>
+														)}
+													</>
+												)}
                     </div>
                   )}
 
