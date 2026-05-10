@@ -5,6 +5,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
+  useTransition,
 } from "react";
 import { createPortal } from "react-dom";
 import Head from "next/head";
@@ -308,6 +309,15 @@ export function DiscoverPageContent({
   // Tab switcher for the trending-data tabs (Trending / Top / Gainers).
   // Snapshots the outgoing tab's window+sort so users get back to where they
   // left off, then restores the incoming tab's last state.
+  //
+  // Wrapping the setStates in `startTransition` is what kills the visible
+  // flicker. The displayed list depends on multiple inputs that settle in
+  // stages across renders (activeTab → filter bucket → applyDiscoverFiltersFn
+  // ref → memoized sort). Without a transition, React commits each
+  // intermediate render and we paint half-applied lists between click and
+  // settled state. With a transition, React keeps the previous list visible
+  // until the new render is fully ready, then swaps atomically.
+  const [, startTabTransition] = useTransition();
   const switchToDataTab = (next: "trending" | "top" | "gainers") => {
     if (
       activeTab === "trending" ||
@@ -321,11 +331,15 @@ export function DiscoverPageContent({
       };
     }
     const incoming = tabUiStateRef.current[next];
-    setSelectedTimeframe(incoming.tf);
-    setSortKey(incoming.sk);
-    setSortDirection(incoming.sd);
-    setActiveTab(next);
+    // setShowDiscoverFilter is a UI-only toggle — keep it outside the
+    // transition so the modal closes immediately on click.
     setShowDiscoverFilter(false);
+    startTabTransition(() => {
+      setSelectedTimeframe(incoming.tf);
+      setSortKey(incoming.sk);
+      setSortDirection(incoming.sd);
+      setActiveTab(next);
+    });
   };
 
   const { newTokens: wsNewTokens, connected: wsNewConnected } =
@@ -400,7 +414,10 @@ export function DiscoverPageContent({
   } | null>(null);
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
-  const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
+  // `displayed` is now derived synchronously via useMemo (see below) instead
+  // of useState+useEffect — that pattern caused a tab-switch flicker because
+  // setDisplayed lagged the click commit by one render cycle (the user saw
+  // the old list painted with the new tab's chrome until the effect ran).
   type SortKey =
     | "market_cap_total"
     | "liquidity"
@@ -737,20 +754,8 @@ export function DiscoverPageContent({
     }
   }, []);
 
-  // Persist cache to sessionStorage periodically (after displayed changes is fine)
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined") {
-        const obj: Record<string, { cover?: string; avatar?: string }> = {};
-        imageCacheRef.current.forEach((v, k) => {
-          obj[k] = v;
-        });
-        sessionStorage.setItem("tokenImageCache", JSON.stringify(obj));
-      }
-    } catch {
-      // ignore
-    }
-  }, [displayed]);
+  // (Image-cache persistence effect moved below the `displayed` useMemo so
+  // `[displayed]` is in scope at its declaration.)
 
   // CRITICAL: Clear ALL data when chain changes to prevent stale data from showing
   useEffect(() => {
@@ -762,9 +767,9 @@ export function DiscoverPageContent({
       );
     // Clear token map
     tokenMapRef.current.clear();
-    // Clear filtered and displayed tokens
+    // Clear filtered tokens — `displayed` is derived via useMemo and will
+    // recompute on the next render against the cleared inputs.
     setFilteredTokens([]);
-    setDisplayed([]);
     // Force a small delay to ensure state is cleared before hook re-runs
   }, [currentChain]);
 
@@ -3900,11 +3905,13 @@ export function DiscoverPageContent({
     }
   }, [allTokens, isWrappedSol]);
 
-  // Update displayed tokens
-  // CRITICAL: This effect applies filters and updates displayed tokens
-  // For Solana trending, we use wsTokens directly (React state) instead of tokenMapRef (ref)
-  // This prevents flicker during tab switches because wsTokens is properly tracked by React
-  useEffect(() => {
+  // Derive `displayed` synchronously via useMemo so the first render after a
+  // tab switch already paints the correct sorted+filtered list. The previous
+  // useState+useEffect version lagged by one render — clicking Top would
+  // briefly paint the old Trending list (with Top's tab highlight) before
+  // the effect ran. useMemo is correct here because this is pure derivation:
+  // no async work, no subscriptions, no side effects.
+  const displayed = useMemo<TokenWithDexPaid[]>(() => {
     if (isTrendingDataTab) {
       // CRITICAL FIX: For Solana trending, use wsTokens directly instead of tokenMapRef
       // This prevents data mixing and flicker when switching tabs because:
@@ -4244,17 +4251,18 @@ export function DiscoverPageContent({
 
       // Apply discover-page filters (protocol, market cap, volume, etc.)
       const discoverFiltered = applyDiscoverFiltersFn(finalDisplayList);
-      setDisplayed(discoverFiltered);
+      return discoverFiltered;
     } else if (activeTab === "dex") {
       // dex tab → show all filtered tokens
       const safe = filteredTokens.filter(
         (t) => t && t.mint && !isWrappedSol(t),
       );
-      setDisplayed(safe);
+      return safe;
     } else {
-      setDisplayed([]);
+      return [];
     }
   }, [
+    isTrendingDataTab,
     activeTab,
     filteredTokens,
     sortKey,
@@ -4262,18 +4270,39 @@ export function DiscoverPageContent({
     selectedTimeframe,
     applyFilters,
     getVolumeForTimeframe,
+    getTxnsForTimeframe,
+    getCompositeScore,
+    getPriceChangeForTimeframe,
     isWrappedSol,
     filter,
     activeFilterCount,
     newPairsRaw,
     currentChain,
     isZeroLiquidityToken,
+    isMetadataUrl,
     featuredTokens,
     wsTokens,
     wsNewTokens,
     discoverFilters,
     applyDiscoverFiltersFn,
-  ]); // Ensure filters are reapplied when they change; wsTokens/wsNewTokens for real-time data
+    volumeEnrichedNewPairs,
+  ]);
+
+  // Persist token-image cache to sessionStorage whenever the displayed slate
+  // changes — that's when new images may have been resolved into the cache.
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const obj: Record<string, { cover?: string; avatar?: string }> = {};
+        imageCacheRef.current.forEach((v, k) => {
+          obj[k] = v;
+        });
+        sessionStorage.setItem("tokenImageCache", JSON.stringify(obj));
+      }
+    } catch {
+      // ignore
+    }
+  }, [displayed]);
 
   const processedNewPairs = useMemo(() => {
     const hasProtocolData =
@@ -4987,20 +5016,23 @@ export function DiscoverPageContent({
               <div
                 className={`relative h-8 min-w-[110px] items-center justify-center gap-0.5 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-1 backdrop-blur-xl ${variant === "popup" ? "flex" : "hidden sm:flex"}`}
               >
-                {/* For trending-style tabs, only show 5m, 1h, 6h (WebSocket supported timeframes) */}
-                {(
-                  (isTrendingDataTab
-                    ? ["5m", "1h", "6h"]
-                    : ["5m", "1h", "6h", "24h"]) as Timeframe[]
-                ).map((tf: Timeframe) => (
-                  <button
-                    key={tf}
-                    className={`relative flex h-6 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[#18c48c]/15 text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.15)]" : "text-[#71717a] hover:text-[#a1a1aa]"}`}
-                    onClick={() => handleTimeframeClick(tf)}
-                  >
-                    {tf}
-                  </button>
-                ))}
+                {/* All four windows on every tab. The trending WS only
+                    pulls 5m/1h/6h server-side, but every token already
+                    carries `volume_24h` and `price_percent_change_24h` from
+                    upstream — so a 24h sort works locally without changing
+                    the WS subscription. Top defaults to 24h; without the
+                    24h chip there was no active state and no way back. */}
+                {(["5m", "1h", "6h", "24h"] as Timeframe[]).map(
+                  (tf: Timeframe) => (
+                    <button
+                      key={tf}
+                      className={`relative flex h-6 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[#18c48c]/15 text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.15)]" : "text-[#71717a] hover:text-[#a1a1aa]"}`}
+                      onClick={() => handleTimeframeClick(tf)}
+                    >
+                      {tf}
+                    </button>
+                  ),
+                )}
               </div>
             )}
 
