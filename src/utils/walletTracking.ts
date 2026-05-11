@@ -794,6 +794,10 @@ export interface WalletTrackerWebSocket {
   subscribe: (wallets: string[]) => void;
   unsubscribe: (wallets: string[]) => void;
   close: () => void;
+  /** Force-close the socket so the caller's onDisconnect runs and a fresh connect happens. */
+  forceReconnect: (reason?: string) => void;
+  /** ms timestamp of the last server ping we acknowledged (0 if none yet). */
+  getLastPingAt: () => number;
 }
 
 export interface BalanceEvent {
@@ -816,10 +820,27 @@ export function createWalletTrackerWebSocket(
   let lastPingAt = Date.now();
   let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
+  /** Queue messages sent before the socket is OPEN; flush on open. */
+  const sendQueue: string[] = [];
+  const safeSend = (payload: string) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+    } else if (ws.readyState === WebSocket.CONNECTING) {
+      sendQueue.push(payload);
+    }
+    // CLOSING / CLOSED: drop — caller's onDisconnect will recreate the socket.
+  };
+
   ws.onopen = () => {
     isAlive = true;
     connectionEstablished = true;
     lastPingAt = Date.now();
+
+    // Flush anything queued during CONNECTING before invoking onConnect.
+    while (sendQueue.length) {
+      try { ws.send(sendQueue.shift()!); } catch {}
+    }
+
     onConnect?.();
 
     // Start heartbeat checker: if no server ping in 45s, force reconnect
@@ -881,16 +902,13 @@ export function createWalletTrackerWebSocket(
   };
 
   const subscribe = (wallets: string[]) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      const message = { method: "subscribe", wallets };
-      ws.send(JSON.stringify(message));
-    }
+    if (wallets.length === 0) return;
+    safeSend(JSON.stringify({ method: "subscribe", wallets }));
   };
 
   const unsubscribe = (wallets: string[]) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ method: "unsubscribe", wallets }));
-    }
+    if (wallets.length === 0) return;
+    safeSend(JSON.stringify({ method: "unsubscribe", wallets }));
   };
 
   const close = () => {
@@ -901,7 +919,15 @@ export function createWalletTrackerWebSocket(
     ws.close();
   };
 
-  return { ws, subscribe, unsubscribe, close };
+  const forceReconnect = (reason = "force-reconnect") => {
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      try { ws.close(4000, reason); } catch {}
+    }
+  };
+
+  const getLastPingAt = () => lastPingAt;
+
+  return { ws, subscribe, unsubscribe, close, forceReconnect, getLastPingAt };
 }
 
 // ===== Batch Balance Fetch =====
