@@ -30,7 +30,7 @@ if (typeof window !== 'undefined') {
     queryClient,
     persister,
     maxAge: 10 * 60 * 1000,
-    buster: 'v3', // Bust cache for arena cashback field additions
+    buster: 'v4', // v4: predictions catalog moved to slim card shape (May 11)
   });
 }
 

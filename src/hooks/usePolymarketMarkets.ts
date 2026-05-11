@@ -260,10 +260,19 @@ interface UsePolymarketMarketsOptions {
   limit?: number;
   category?: string;
   refreshInterval?: number;
+  // When true (default) request pre-transformed cards from the backend.
+  // Eliminates the per-event JSON.parse + map loop on the client.
+  slim?: boolean;
 }
 
 interface UsePolymarketMarketsResult {
   markets: ExtendedPredictionMarket[];
+  /**
+   * Raw Polymarket events. Always `[]` when the hook is in slim mode
+   * (default) because the backend ships pre-transformed cards and never
+   * sends raw events. Use `markets` for rendering. This field exists only
+   * for the legacy non-slim path (`slim: false` opt-out).
+   */
   events: PolymarketEvent[];
   isLoading: boolean;      // True only on first load (no cached data yet)
   isRefreshing?: boolean;  // True when fetching fresh data with cache displayed
@@ -278,22 +287,26 @@ interface UsePolymarketMarketsResult {
   isFetchingMore: boolean; // True when loading next page
 }
 
-// Catalog page response shape from our backend
+// Catalog page response shape from our backend.
+// `data` is either raw PolymarketEvent[] (legacy) or pre-transformed slim
+// cards (when slim=true). `slim` flag on the response is the source of truth.
 interface CatalogPageResponse {
   success: boolean;
-  data: PolymarketEvent[];
+  data: PolymarketEvent[] | ExtendedPredictionMarket[];
   page: number;
   pageSize: number;
   total: number;
   hasMore: boolean;
   count: number;
+  slim: boolean;
 }
 
 // Fetch a single page from our paginated /catalog endpoint
-async function fetchCatalogPage(page: number, pageSize: number): Promise<CatalogPageResponse> {
+async function fetchCatalogPage(page: number, pageSize: number, slim: boolean): Promise<CatalogPageResponse> {
   const params = new URLSearchParams();
   params.set('page', page.toString());
   params.set('pageSize', pageSize.toString());
+  if (slim) params.set('slim', 'true');
 
   const response = await fetch(`${API_BASE}/catalog?${params}`);
 
@@ -311,22 +324,27 @@ async function fetchCatalogPage(page: number, pageSize: number): Promise<Catalog
     total: json.total ?? 0,
     hasMore: json.hasMore ?? false,
     count: json.count ?? 0,
+    slim: !!json.slim,
   };
 }
 
 export default function usePolymarketMarkets(options: UsePolymarketMarketsOptions = {}): UsePolymarketMarketsResult {
   const {
     enabled = true,
-    limit = 500,
+    limit = 12,
     category,
     refreshInterval = 60000,
+    slim = true,
   } = options;
 
-  // Each page loads 500 events (max Gamma API batch) — the backend serves
-  // these as slices from a cached catalog so the cost is minimal.
+  // Initial page size is intentionally small (≈ first viewport) to cut TTFB
+  // and JSON-parse cost. `loadMore` paginates from the same cached catalog
+  // on the backend so subsequent pages stay cheap.
   const pageSize = Math.min(limit, 500);
 
-  // Use infinite query for paginated loading from /catalog
+  // Use infinite query for paginated loading from /catalog. `slim` is part
+  // of the queryKey so toggling it cannot collide with previously cached
+  // raw-event responses.
   const {
     data,
     isLoading,
@@ -337,8 +355,8 @@ export default function usePolymarketMarkets(options: UsePolymarketMarketsOption
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery({
-    queryKey: ['polymarket', 'catalog', pageSize],
-    queryFn: ({ pageParam = 1 }) => fetchCatalogPage(pageParam, pageSize),
+    queryKey: ['polymarket', 'catalog', pageSize, slim ? 'slim' : 'raw'],
+    queryFn: ({ pageParam = 1 }) => fetchCatalogPage(pageParam, pageSize, slim),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.page + 1 : undefined,
     enabled,
@@ -346,7 +364,9 @@ export default function usePolymarketMarkets(options: UsePolymarketMarketsOption
     gcTime: CACHE_TIME,
     refetchInterval: refreshInterval,
     refetchOnWindowFocus: true,
-    refetchOnMount: true,
+    // refetchOnMount intentionally inherits the global QueryClient default
+    // (false). On hard reload the persisted localStorage cache hydrates
+    // immediately, then refetchInterval keeps it fresh in the background.
     retry: 2,
   });
 
@@ -361,11 +381,27 @@ export default function usePolymarketMarkets(options: UsePolymarketMarketsOption
 
     for (const page of data.pages) {
       if (!page) continue;
-      const pageEvents = Array.isArray(page.data) ? page.data : [];
-      events.push(...pageEvents);
+      const pageItems = Array.isArray(page.data) ? page.data : [];
       total = page.total || total; // Use latest total from backend
 
-      for (const event of pageEvents) {
+      // Slim path: backend already ran transformToUnified. Just spread.
+      // Skips a 500× JSON.parse + map loop on the main thread. Defensively
+      // drop items missing the fields the renderer assumes — a malformed
+      // upstream cannot crash the entire grid.
+      if (page.slim) {
+        for (const item of pageItems as ExtendedPredictionMarket[]) {
+          if (!item || typeof item !== 'object') continue;
+          if (!item.ticker || !item.title) continue;
+          if (typeof item.yesPrice !== 'number') continue;
+          markets.push(item);
+        }
+        continue;
+      }
+
+      // Legacy path: backend returned raw PolymarketEvent[]; transform here.
+      events.push(...(pageItems as PolymarketEvent[]));
+
+      for (const event of pageItems as PolymarketEvent[]) {
         if (!event) continue;
         try {
           const transformed = transformToUnified(event);
