@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -8,6 +8,7 @@ import {
 } from 'react-icons/hi';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
+import dynamic from 'next/dynamic';
 import {
   PredictionCard,
   MarketFilters,
@@ -32,9 +33,26 @@ import useUnifiedPredictionMarkets from '~/hooks/useUnifiedPredictionMarkets';
 import type { UnifiedPredictionMarket } from '~/hooks/useUnifiedPredictionMarkets';
 import usePredictionFavorites from '~/hooks/usePredictionFavorites';
 import type { PredictionDataSource } from '~/components/predictions/DataSourceSwitcher';
-import { HomepageInsightPanel } from '~/components/insights/HomepageInsightPanel';
 import useNavLayout from '~/hooks/useNavLayout';
 import { checkPolymarketGeoblock, type PolymarketGeoblock } from '../../utils/api';
+
+// HomepageInsightPanel is gated behind `aiDrawerOpen` and only rendered when
+// the user opens the AI drawer. Splitting it out of the initial bundle saves
+// ~150 KB of insights chrome + iridescent CSS on first paint with zero CLS
+// risk (the chunk loads while the drawer animates in). TalarionCreate stays
+// statically imported because it renders unconditionally and a lazy chunk
+// would cause a layout shift on hard reload.
+const HomepageInsightPanel = dynamic(
+  () => import('~/components/insights/HomepageInsightPanel').then(m => ({ default: m.HomepageInsightPanel })),
+  { ssr: false, loading: () => null },
+);
+
+// One initial-page-size constant so the fetch limit, the visible-card slice,
+// and the "Show More" increment cannot drift apart.
+const INITIAL_PAGE_SIZE = 12;
+// Cap auto-paginate-on-empty-category so a sparsely-populated tab cannot
+// hammer the backend indefinitely (8 pages ≈ 96 markets searched).
+const CATEGORY_AUTOLOAD_MAX_PAGES = 8;
 
 // Sort tab config
 const SORT_TABS: { id: SortOption; label: string }[] = [
@@ -54,7 +72,7 @@ export default function PredictionsPage() {
   const [marketFilters, setMarketFilters] = useState<MarketFilterState>(DEFAULT_FILTERS);
   const [showEndedMarkets, setShowEndedMarkets] = useState(false);
   const [dataSource] = useState<PredictionDataSource>('polymarket');
-  const [visibleCardCount, setVisibleCardCount] = useState(24);
+  const [visibleCardCount, setVisibleCardCount] = useState(INITIAL_PAGE_SIZE);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const [geoblockStatus, setGeoblockStatus] = useState<PolymarketGeoblock | null>(null);
 
@@ -101,13 +119,16 @@ export default function PredictionsPage() {
     isFetchingMore,
   } = useUnifiedPredictionMarkets({
     source: dataSource,
-    limit: 500,
+    // Initial page = first viewport. The hook's infinite query loads more
+    // on scroll / "Show More" click. Category auto-paginate below also
+    // pulls additional pages when a sparse tab is selected.
+    limit: INITIAL_PAGE_SIZE,
     refreshInterval: 30000,
   });
 
   const { favorites, isFavorite, toggleFavorite, removeFavorite } = usePredictionFavorites();
 
-  useEffect(() => { setVisibleCardCount(24); }, [selectedCategory, selectedSort, searchQuery]);
+  useEffect(() => { setVisibleCardCount(INITIAL_PAGE_SIZE); }, [selectedCategory, selectedSort, searchQuery]);
 
   // Markets processing (same logic as before)
   const allMarkets = useMemo(() => {
@@ -212,6 +233,23 @@ export default function PredictionsPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Auto-paginate when a category tab is selected but the loaded set has
+  // no matches yet — otherwise users see a misleading "No markets found"
+  // when the category just lives further down the catalog. Capped so a
+  // genuinely empty category cannot loop forever.
+  const categoryAutoLoadAttemptsRef = useRef(0);
+  useEffect(() => {
+    categoryAutoLoadAttemptsRef.current = 0;
+  }, [selectedCategory]);
+  useEffect(() => {
+    if (selectedCategory === 'all') return;
+    if (filteredMarkets.length > 0) return;
+    if (!hasMore || isFetchingMore) return;
+    if (categoryAutoLoadAttemptsRef.current >= CATEGORY_AUTOLOAD_MAX_PAGES) return;
+    categoryAutoLoadAttemptsRef.current += 1;
+    loadMore();
+  }, [selectedCategory, filteredMarkets.length, hasMore, isFetchingMore, loadMore]);
 
   const mergedFilteredMarkets = useMemo(() => {
     const base = filteredMarkets || [];
@@ -568,7 +606,7 @@ export default function PredictionsPage() {
                 {hasMore && !searchQuery && (
                   <div className="flex flex-col items-center gap-2 mt-6">
                     <button
-                      onClick={() => { setVisibleCardCount(prev => prev + 24); loadMore(); }}
+                      onClick={() => { setVisibleCardCount(prev => prev + INITIAL_PAGE_SIZE); loadMore(); }}
                       disabled={isFetchingMore}
                       className="px-5 py-2 rounded-lg text-[12px] font-medium disabled:opacity-50"
                       style={{
