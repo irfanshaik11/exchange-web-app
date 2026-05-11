@@ -270,20 +270,35 @@ export function DiscoverPageContent({
   // Gainers and Top tabs render the same trending data as the Trending tab
   const isTrendingDataTab =
     activeTab === "trending" || activeTab === "gainers" || activeTab === "top";
-  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>(() => {
+  const [selectedTimeframe, _setSelectedTimeframe] = useState<Timeframe>(() => {
     // Match the saved tab's per-tab default so the first snapshot taken by
-    // switchToDataTab captures the correct timeframe (Top → 24h, Gainers →
+    // switchToDataTab captures the correct timeframe (Top → 6h, Gainers →
     // 1h). Without this, reloading on Top would snapshot a "1h" timeframe
-    // for Top, overwriting its 24h default the next time the user returns.
+    // for Top, overwriting its 6h default the next time the user returns.
     if (typeof window !== "undefined") {
       try {
         const savedTab = localStorage.getItem("discover_tab_v4");
-        if (savedTab === "top") return "24h";
+        if (savedTab === "top") return "6h";
         if (savedTab === "gainers") return "1h";
       } catch {}
     }
     return "1h";
   });
+  // Wrap setSelectedTimeframe to coerce "24h" → "6h". The 24h chip was
+  // removed because the sparkline can't render 24h windows for tokens
+  // younger than 24h (it would fall back to a hardcoded placeholder
+  // diagonal). Any in-memory or stored state still trying to set "24h"
+  // is silently mapped to 6h so no UI ends up in a state with no active
+  // chip.
+  const setSelectedTimeframe = useCallback(
+    (tf: Timeframe | ((prev: Timeframe) => Timeframe)) => {
+      _setSelectedTimeframe((prev) => {
+        const next = typeof tf === "function" ? tf(prev) : tf;
+        return next === "24h" ? "6h" : next;
+      });
+    },
+    [],
+  );
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
@@ -455,7 +470,7 @@ export function DiscoverPageContent({
     Record<"trending" | "top" | "gainers", TabUiState>
   >({
     trending: { tf: "1h", sk: "score", sd: "desc" },
-    top: { tf: "24h", sk: "volume", sd: "desc" },
+    top: { tf: "6h", sk: "volume", sd: "desc" },
     gainers: { tf: "1h", sk: "priceChange", sd: "desc" },
   });
   // Store new pairs data per chain to preserve data when switching chains
@@ -5044,23 +5059,23 @@ export function DiscoverPageContent({
               <div
                 className={`relative h-8 min-w-[110px] items-center justify-center gap-0.5 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-1 backdrop-blur-xl ${variant === "popup" ? "flex" : "hidden sm:flex"}`}
               >
-                {/* All four windows on every tab. The trending WS only
-                    pulls 5m/1h/6h server-side, but every token already
-                    carries `volume_24h` and `price_percent_change_24h` from
-                    upstream — so a 24h sort works locally without changing
-                    the WS subscription. Top defaults to 24h; without the
-                    24h chip there was no active state and no way back. */}
-                {(["5m", "1h", "6h", "24h"] as Timeframe[]).map(
-                  (tf: Timeframe) => (
-                    <button
-                      key={tf}
-                      className={`relative flex h-6 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[#18c48c]/15 text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.15)]" : "text-[#71717a] hover:text-[#a1a1aa]"}`}
-                      onClick={() => handleTimeframeClick(tf)}
-                    >
-                      {tf}
-                    </button>
-                  ),
-                )}
+                {/* Only 5m / 1h / 6h. The 24h sparkline depends on
+                    /api/token-service/ohlc returning 24 hours of 30m
+                    candles, which most newly-trending memecoins simply
+                    don't have (they're younger than 24h), so the 24h
+                    column rendered the same hardcoded placeholder line
+                    for every row. Drop the chip until the sparkline can
+                    handle short-lived tokens at long windows; Top now
+                    defaults to 6h instead. */}
+                {(["5m", "1h", "6h"] as Timeframe[]).map((tf: Timeframe) => (
+                  <button
+                    key={tf}
+                    className={`relative flex h-6 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[#18c48c]/15 text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.15)]" : "text-[#71717a] hover:text-[#a1a1aa]"}`}
+                    onClick={() => handleTimeframeClick(tf)}
+                  >
+                    {tf}
+                  </button>
+                ))}
               </div>
             )}
 
