@@ -409,14 +409,21 @@ export default function TradePage() {
   }, [optimisticToken?.mint, _mint, id]);
 
   // Fetch real circulating supply from token service. The launchpad_protocol
-  // hint lets useTokenSupply pick the right initial fallback: 1B for known
-  // bonding-curve launchpads (pump.fun, bonk.fun, meteora, etc. — so fresh
-  // tokens render correct MC during the 5-15s indexer propagation window),
-  // and the loading sentinel otherwise (so non-launchpad tokens like JUP
-  // briefly show "—" instead of a wrong 1B-based MC).
+  // hint lets useTokenSupply apply the 1B last-resort fallback for known
+  // bonding-curve launchpads (pump.fun, bonk.fun, meteora, etc.) when every
+  // accurate path has failed. We compose the hint from every source available
+  // at this point in render: URL query param (instant, present when entered
+  // via PulseTable hover) OR correctTokenData from /v1/search (~100-500ms
+  // after mount, present even when URL is a bare paste from SearchModal).
+  // useTokenSupply mirrors this prop into a ref, so a late arrival from
+  // search re-arms the 1B fallback even after the initial 2s timer ran.
+  const launchpadProtocolHint =
+    optimisticToken?.launchpad_protocol ??
+    (correctTokenData as any)?.launchpad_protocol ??
+    undefined;
   const { circulatingSupply, refetch: refetchSupply } = useTokenSupply(
     resolvedTokenMint,
-    optimisticToken?.launchpad_protocol,
+    launchpadProtocolHint,
   );
 
   // Prefetch is handled by TradeActionPanel when the user selects an amount.

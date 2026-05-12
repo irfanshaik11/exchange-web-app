@@ -101,9 +101,34 @@ export default function useTokenSupply(
   // restart the fetch on every protocol change — undesirable when the
   // protocol arrives slightly after the mint).
   const protocolRef = useRef<string | null | undefined>(launchpadProtocol);
+  // Time the current mint's effect mounted — used to decide whether a
+  // late-arriving protocol should still trigger the fast-fallback. If
+  // the original FAST_FALLBACK_DELAY_MS has already passed at the moment
+  // protocol becomes known, we apply 1B immediately. Otherwise the
+  // original 2s timer (still pending) will pick it up.
+  const mintMountedAtRef = useRef<number>(0);
+
   useEffect(() => {
     protocolRef.current = launchpadProtocol;
-  }, [launchpadProtocol]);
+    // Late-protocol fast-fallback: if the protocol info arrived AFTER
+    // the 2s grace window (e.g. /v1/search took ~3s to return), the
+    // original setTimeout has already fired with protocolRef=undefined
+    // and bailed out. Re-arm here so the user still sees 1B instead of
+    // staying on "—" forever. Guards mirror the timer's logic: still
+    // on the current mint, still unresolved, and the protocol now
+    // identifies a known 1B-supply launchpad.
+    if (
+      mint &&
+      mint.length >= 20 &&
+      requestedMintRef.current === mint &&
+      resolvedMintRef.current !== mint &&
+      isKnown1BLaunchpad(launchpadProtocol) &&
+      mintMountedAtRef.current > 0 &&
+      Date.now() - mintMountedAtRef.current >= FAST_FALLBACK_DELAY_MS
+    ) {
+      setCirculatingSupply(LAUNCHPAD_FALLBACK_SUPPLY);
+    }
+  }, [launchpadProtocol, mint]);
 
   const cancelRetry = useCallback(() => {
     if (retryTimerRef.current) {
@@ -196,6 +221,10 @@ export default function useTokenSupply(
     // wrong pricescale.
     cancelRetry();
     setCirculatingSupply(DEFAULT_SUPPLY);
+    // Record the mount time of the current mint's resolution attempt so
+    // the late-protocol effect above can decide whether to re-arm the
+    // 1B fallback (vs trusting the original 2s timer that's still pending).
+    mintMountedAtRef.current = Date.now();
 
     // WS fast-path: the OHLCV WebSocket piggybacks the supply payload
     // onto its snapshot message. By the time `useTokenSupply` mounts on
