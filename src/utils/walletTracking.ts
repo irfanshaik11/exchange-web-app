@@ -1,5 +1,7 @@
 const isDev = process.env.NODE_ENV !== "production";
 
+import type { TradeRow } from "~/utils/functions";
+
 // Wallet tracking API utilities - Integrates with wallet-tracker-backend
 
 // ===== Backend Data Types =====
@@ -1002,5 +1004,65 @@ export async function fetchBatchBalances(
   } catch (error) {
     console.error("[fetchBatchBalances] Error:", error);
     return {};
+  }
+}
+
+// ===== Portfolio Cache Bridge =====
+
+/** Convert a portfolio TradeRow to a wallet-tracker TradeEvent. */
+export function tradeRowToTradeEvent(row: TradeRow): TradeEvent {
+  const timestamp = new Date(row.tradeTime).getTime();
+  return {
+    type: "trade",
+    wallet: row.walletAddress || row.wallet || row.maker || row.owner || "",
+    mint: row.tokenAddress,
+    pair_address: row.pairAddress || row.originalPairAddress,
+    symbol: row.tokenSymbol || null,
+    name: row.tokenName || null,
+    side: row.type === "Buy" ? "buy" : "sell",
+    amount: typeof row.tokenAmount === "string" ? parseFloat(row.tokenAmount) : row.tokenAmount,
+    sol_spent: typeof row.solAmount === "string" ? parseFloat(row.solAmount) : row.solAmount,
+    price_usd: row.pricePerToken ?? null,
+    market_cap_usd: typeof row.marketCap === "string" ? parseFloat(row.marketCap) : row.marketCap,
+    venue: null,
+    tx: row.transactionHash,
+    at: isNaN(timestamp) ? 0 : timestamp,
+  };
+}
+
+/**
+ * Read portfolio trade history from localStorage cache, filtered for a specific wallet.
+ * Returns converted TradeEvent[] sorted newest-first, or null if no cache.
+ */
+export function readPortfolioCacheForWallet(
+  userId: string | undefined,
+  walletAddress: string,
+  chain: string = "sol",
+): TradeEvent[] | null {
+  if (!userId || typeof window === "undefined") return null;
+
+  try {
+    const cacheKey = `trade_history_cache_${userId}_${chain}`;
+    const cached = window.localStorage.getItem(cacheKey);
+    if (!cached) return null;
+
+    const parsed = JSON.parse(cached);
+    if (!parsed || !Array.isArray(parsed.data) || parsed.data.length === 0) return null;
+
+    const normalizedTarget = walletAddress.toLowerCase();
+    const walletTrades = (parsed.data as TradeRow[]).filter((row) => {
+      const rowWallet = (
+        row.walletAddress || row.wallet || row.maker || row.owner || row.userWalletAddress || ""
+      ).toLowerCase();
+      return rowWallet === normalizedTarget;
+    });
+
+    if (walletTrades.length === 0) return null;
+
+    const events = walletTrades.map(tradeRowToTradeEvent);
+    events.sort((a, b) => b.at - a.at);
+    return events;
+  } catch {
+    return null;
   }
 }
