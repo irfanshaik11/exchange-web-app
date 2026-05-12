@@ -15,6 +15,40 @@ const getWalletTrackerUrl = () => {
 
 const WALLET_TRACKER_API_URL = getWalletTrackerUrl();
 
+// Default timeout for tracker HTTP calls. We never want the "Adding..." spinner
+// to wait on an upstream X API rate-limit retry — the backend can be told to
+// wait minutes on 429, and the user shouldn't.
+const TRACKER_HTTP_TIMEOUT_MS = 15_000;
+
+async function fetchWithTimeout(
+  input: RequestInfo,
+  init: RequestInit = {},
+  timeoutMs = TRACKER_HTTP_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (e: any) {
+    if (e?.name === "AbortError") {
+      throw new Error("Request timed out — try again in a moment");
+    }
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+const resolveWsUrl = () => {
+  const envWs = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL;
+  if (!envWs) return "";
+  if (envWs.startsWith("http://")) return envWs.replace(/^http:\/\//, "ws://");
+  if (envWs.startsWith("https://"))
+    return envWs.replace(/^https:\/\//, "wss://");
+  return envWs;
+};
+const WALLET_TRACKER_WS_URL = resolveWsUrl();
+
 // Database model - minimal storage
 export interface TwitterAccountDb {
   id: string;
@@ -52,35 +86,33 @@ export interface Tweet {
 }
 
 /**
- * Add a Twitter account to track
- * SECURITY FIX: Now requires authentication token - ownerId parameter is ignored by backend
+ * Add a Twitter account to track.
+ *
+ * No client-side Twitter pre-flight: the backend validates against the
+ * approved-handles list (the source of truth for who can be tracked), and
+ * the poller hydrates profile data asynchronously. The previous pre-flight
+ * call to /api/twitter/user-info caused the "Adding..." spinner to hang
+ * forever whenever the upstream X API was rate-limited.
  */
 export async function addTrackedTwitterAccount(
   username: string,
   authToken: string,
 ): Promise<TwitterAccountDb> {
   try {
-    // First, validate the username exists on Twitter
-    const userInfo = await getTwitterUserInfo(username);
+    const normalized = username.trim().replace(/^@/, "").toLowerCase();
+    if (!normalized) throw new Error("Username is required");
 
-    if (!userInfo) {
-      throw new Error("Twitter user not found");
-    }
-
-    // Add to backend (only username)
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
-    };
-
-    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/twitter`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        username: userInfo.username, // Use normalized username from Twitter
-        // SECURITY: ownerId is no longer sent - backend uses authenticated user from JWT token
-      }),
-    });
+    const response = await fetchWithTimeout(
+      `${WALLET_TRACKER_API_URL}/api/twitter`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ username: normalized }),
+      },
+    );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -110,7 +142,7 @@ export async function removeTrackedTwitterAccount(
       Authorization: `Bearer ${authToken}`,
     };
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: "DELETE",
       headers,
     });
@@ -141,7 +173,7 @@ export async function getApprovedTwitterHandles(): Promise<string[]> {
       typeof window !== "undefined"
         ? "/api/twitter/approved-handles"
         : `${WALLET_TRACKER_API_URL}/api/twitter/approved-handles`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url);
     if (!response.ok) return [];
     const data = await response.json();
     return Array.isArray(data?.handles) ? data.handles : [];
@@ -160,7 +192,7 @@ export async function getTrackedTwitterAccountsDb(
       Authorization: `Bearer ${authToken}`,
     };
 
-    const response = await fetch(url, { headers });
+    const response = await fetchWithTimeout(url, { headers });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -177,69 +209,30 @@ export async function getTrackedTwitterAccountsDb(
 }
 
 /**
- * Get all tracked Twitter accounts with enriched data from Twitter API
- * SECURITY FIX: Now requires authentication token - ownerId parameter is ignored by backend
+ * Get all tracked Twitter accounts.
+ *
+ * The backend GET /api/twitter response already includes cached profile
+ * fields (name, profileImageUrl, followers, etc.) read from Redis in a
+ * single round trip. Rows whose cache hasn't warmed yet come back with
+ * bare fields — the WS will deliver enriched data as the poller fills
+ * them in. No per-row /user-info fan-out from the client, which is what
+ * was timing out at 15s.
  */
 export async function getTrackedTwitterAccounts(
   authToken: string,
 ): Promise<TwitterAccount[]> {
-  try {
-    // Get stored accounts (just usernames)
-    const dbAccounts = await getTrackedTwitterAccountsDb(authToken);
-
-    if (dbAccounts.length === 0) {
-      return [];
-    }
-
-    // Fetch fresh user info for each account
-    const enrichedAccounts = await Promise.all(
-      dbAccounts.map(async (dbAccount) => {
-        try {
-          const userInfo = await getTwitterUserInfo(dbAccount.username);
-
-          if (userInfo) {
-            return {
-              ...dbAccount,
-              name: userInfo.name,
-              twitterId: userInfo.id,
-              profileImageUrl: userInfo.profileImageUrl,
-              description: userInfo.description,
-              followers: userInfo.followers,
-            };
-          }
-
-          // If Twitter API fails, return basic info
-          return {
-            ...dbAccount,
-            name: dbAccount.username,
-            twitterId: undefined,
-            profileImageUrl: undefined,
-            description: undefined,
-            followers: undefined,
-          };
-        } catch (error) {
-          console.error(
-            `Failed to fetch info for @${dbAccount.username}:`,
-            error,
-          );
-          // Return basic info on error
-          return {
-            ...dbAccount,
-            name: dbAccount.username,
-            twitterId: undefined,
-            profileImageUrl: undefined,
-            description: undefined,
-            followers: undefined,
-          };
-        }
-      }),
-    );
-
-    return enrichedAccounts;
-  } catch (error) {
-    console.error("Error getting tracked Twitter accounts:", error);
-    return [];
-  }
+  const rows = await getTrackedTwitterAccountsDb(authToken);
+  return rows.map((row: any) => ({
+    id: row.id,
+    username: row.username,
+    ownerId: row.ownerId,
+    createdAt: row.createdAt,
+    name: row.name || row.username,
+    twitterId: row.twitterId,
+    profileImageUrl: row.profileImageUrl,
+    description: row.description,
+    followers: typeof row.followers === "number" ? row.followers : undefined,
+  }));
 }
 
 /**
@@ -249,7 +242,7 @@ export async function getTwitterUserInfo(
   username: string,
 ): Promise<TwitterAccount | null> {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${WALLET_TRACKER_API_URL}/api/twitter/user-info?username=${encodeURIComponent(username)}`,
     );
 
@@ -274,34 +267,46 @@ export async function getTwitterUserInfo(
 }
 
 /**
- * Get tweets from tracked accounts
+ * Get tweets from tracked accounts.
+ *
+ * The backend `/api/twitter/feed` route is authenticated, so `authToken` is
+ * required. Returns `[]` on any error (including missing token) — callers
+ * shouldn't crash the page when the feed isn't reachable yet.
  */
 export async function getTwitterFeed(
   usernames: string[],
   maxResults: number = 20,
+  authToken?: string,
 ): Promise<Tweet[]> {
   try {
-    if (usernames.length === 0) {
+    if (usernames.length === 0 || !authToken) {
       return [];
     }
 
-    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/twitter/feed`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      `${WALLET_TRACKER_API_URL}/api/twitter/feed`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ usernames, maxResults }),
       },
-      body: JSON.stringify({ usernames, maxResults }),
-    });
+    );
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(
-        error.error || error.message || "Failed to fetch Twitter feed",
+      // Don't throw — surface as empty feed; the WS will hydrate it as new
+      // tweets arrive and a transient 401/5xx shouldn't crash the page.
+      console.warn(
+        "[twitterTracking] feed fetch failed:",
+        response.status,
+        response.statusText,
       );
+      return [];
     }
 
     const data = await response.json();
-    // Backend returns { ok: true, tweets: [...] }
     return data.tweets || [];
   } catch (error: any) {
     console.error("Error fetching Twitter feed:", error);
@@ -317,7 +322,7 @@ export async function getUserTweets(
   maxResults: number = 20,
 ): Promise<Tweet[]> {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${WALLET_TRACKER_API_URL}/api/twitter/user-tweets?username=${encodeURIComponent(username)}&maxResults=${maxResults}`,
     );
 
@@ -335,4 +340,165 @@ export async function getUserTweets(
     console.error("Error fetching user tweets:", error);
     return [];
   }
+}
+
+// ===== Real-time Twitter WebSocket =====
+//
+// Subscribes to per-username "tw:new:*" pub/sub rooms on the wallet-tracker
+// WS endpoint. The poller worker publishes a NormalizedTweet each time it
+// observes a fresh tweet for one of the tracked accounts.
+
+export interface TwitterTrackerWebSocket {
+  subscribe: (usernames: string[]) => void;
+  unsubscribe: (usernames: string[]) => void;
+  close: () => void;
+}
+
+const normalizeHandle = (u: string) =>
+  u.trim().replace(/^@/, "").toLowerCase();
+
+/**
+ * Map a raw NormalizedTweet from the backend WS to the frontend Tweet shape.
+ * Kept lenient — the backend currently sends exactly the shape we want, but
+ * we strip unknown fields so a backend addition can't blow up the UI.
+ */
+function mapWsTweet(raw: any): Tweet | null {
+  if (!raw || typeof raw !== "object") return null;
+  const id = String(raw.id || "");
+  if (!id) return null;
+  return {
+    id,
+    text: String(raw.text || ""),
+    authorId: String(raw.authorId || ""),
+    authorUsername: String(raw.authorUsername || ""),
+    authorName: String(raw.authorName || raw.authorUsername || ""),
+    authorProfileImage: raw.authorProfileImage,
+    createdAt: String(raw.createdAt || new Date().toISOString()),
+    likeCount: Number(raw.likeCount ?? 0),
+    retweetCount: Number(raw.retweetCount ?? 0),
+    replyCount: Number(raw.replyCount ?? 0),
+    url: raw.url,
+    images: Array.isArray(raw.images) ? raw.images : [],
+  };
+}
+
+export function createTwitterTrackerWebSocket(
+  onTweet: (tweet: Tweet) => void,
+  onConnect?: () => void,
+  onDisconnect?: () => void,
+): TwitterTrackerWebSocket {
+  if (typeof window === "undefined" || !WALLET_TRACKER_WS_URL) {
+    return { subscribe: () => {}, unsubscribe: () => {}, close: () => {} };
+  }
+
+  const wsUrl = `${WALLET_TRACKER_WS_URL}/ws`;
+  let ws: WebSocket | null = null;
+  const pendingSubscriptions = new Set<string>();
+  let closedByUser = false;
+  let backoff = 1000;
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  let lastPingAt = Date.now();
+
+  const connect = () => {
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      console.error("[TwitterTracker WS] failed to open:", err);
+      scheduleReconnect();
+      return;
+    }
+
+    ws.onopen = () => {
+      backoff = 1000;
+      lastPingAt = Date.now();
+      onConnect?.();
+      if (pendingSubscriptions.size > 0) {
+        ws?.send(
+          JSON.stringify({
+            method: "subscribeTwitter",
+            usernames: [...pendingSubscriptions],
+          }),
+        );
+      }
+      heartbeatInterval = setInterval(() => {
+        if (Date.now() - lastPingAt > 45_000) {
+          console.warn("[TwitterTracker WS] heartbeat stale, reconnecting");
+          ws?.close();
+        }
+      }, 15_000);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.method === "ping") {
+          lastPingAt = Date.now();
+          ws?.send(JSON.stringify({ method: "pong" }));
+          return;
+        }
+        if (data.type === "subscribedTwitter") return;
+        if (data.type === "tweet" && data.tweet) {
+          const t = mapWsTweet(data.tweet);
+          if (t) onTweet(t);
+        }
+      } catch {
+        /* ignore malformed frames */
+      }
+    };
+
+    ws.onclose = () => {
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+      }
+      onDisconnect?.();
+      if (!closedByUser) scheduleReconnect();
+    };
+
+    ws.onerror = () => {
+      // onclose will fire next; reconnection handled there.
+    };
+  };
+
+  const scheduleReconnect = () => {
+    if (closedByUser) return;
+    const wait = Math.min(backoff, 15_000);
+    backoff = Math.min(backoff * 2, 15_000);
+    setTimeout(() => {
+      if (!closedByUser) connect();
+    }, wait);
+  };
+
+  connect();
+
+  const subscribe = (usernames: string[]) => {
+    const normalized = usernames.map(normalizeHandle).filter(Boolean);
+    for (const u of normalized) pendingSubscriptions.add(u);
+    if (ws && ws.readyState === WebSocket.OPEN && normalized.length > 0) {
+      ws.send(
+        JSON.stringify({ method: "subscribeTwitter", usernames: normalized }),
+      );
+    }
+  };
+
+  const unsubscribe = (usernames: string[]) => {
+    const normalized = usernames.map(normalizeHandle).filter(Boolean);
+    for (const u of normalized) pendingSubscriptions.delete(u);
+    if (ws && ws.readyState === WebSocket.OPEN && normalized.length > 0) {
+      ws.send(
+        JSON.stringify({ method: "unsubscribeTwitter", usernames: normalized }),
+      );
+    }
+  };
+
+  const close = () => {
+    closedByUser = true;
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+    try { ws?.close(); } catch { /* noop */ }
+  };
+
+  return { subscribe, unsubscribe, close };
 }

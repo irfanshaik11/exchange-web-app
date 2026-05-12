@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useUser } from "./UserContext";
 import AddTwitterHandleModal from "./AddTwitterHandleModal";
 import TwitterAccountRow from "./TwitterAccountRow";
@@ -10,8 +10,10 @@ import {
   getTrackedTwitterAccounts,
   getTwitterFeed,
   getUserTweets,
+  createTwitterTrackerWebSocket,
   type TwitterAccount,
   type Tweet,
+  type TwitterTrackerWebSocket,
 } from "~/utils/twitterTracking";
 
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
@@ -42,6 +44,7 @@ export default function TwitterTrackerContent() {
   const loadTwitterFeed = async () => {
     if (twitterAccounts.length === 0) {
       setTwitterFeed([]);
+      setLoadingTwitterFeed(false);
       return;
     }
 
@@ -58,6 +61,7 @@ export default function TwitterTrackerContent() {
         const combinedFeed = await getTwitterFeed(
           twitterAccounts.map((acc) => acc.username),
           20,
+          user?.bearerToken,
         );
         feed = combinedFeed;
       }
@@ -81,10 +85,58 @@ export default function TwitterTrackerContent() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (twitterTab === 1 && twitterAccounts.length > 0) {
-      loadTwitterFeed();
+    if (twitterTab !== 1) return;
+    if (twitterAccounts.length === 0) {
+      setTwitterFeed([]);
+      return;
     }
+    loadTwitterFeed();
   }, [twitterTab, twitterAccounts, selectedTwitterUser]);
+
+  // Real-time tweet subscription. One WS connection, re-subscribed whenever
+  // the tracked-accounts set changes. Inserts new tweets at the head of the
+  // feed; dedupes by id so a poll → WS race never produces visible dupes.
+  const wsRef = useRef<TwitterTrackerWebSocket | null>(null);
+  const subscribedHandlesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) return;
+
+    if (!wsRef.current) {
+      wsRef.current = createTwitterTrackerWebSocket((tweet) => {
+        const tweetUser = (tweet.authorUsername || "").toLowerCase();
+        if (
+          selectedTwitterUser &&
+          tweetUser !== selectedTwitterUser.toLowerCase()
+        ) {
+          return;
+        }
+        setTwitterFeed((prev) => {
+          if (prev.some((p) => p.id === tweet.id)) return prev;
+          return [tweet, ...prev].slice(0, 50);
+        });
+      });
+    }
+
+    const currentHandles = new Set(
+      twitterAccounts.map((a) => a.username.toLowerCase()),
+    );
+    const prevHandles = subscribedHandlesRef.current;
+
+    const toAdd = [...currentHandles].filter((h) => !prevHandles.has(h));
+    const toRemove = [...prevHandles].filter((h) => !currentHandles.has(h));
+    if (toAdd.length > 0) wsRef.current.subscribe(toAdd);
+    if (toRemove.length > 0) wsRef.current.unsubscribe(toRemove);
+    subscribedHandlesRef.current = currentHandles;
+  }, [user, twitterAccounts, selectedTwitterUser]);
+
+  useEffect(() => {
+    return () => {
+      wsRef.current?.close();
+      wsRef.current = null;
+      subscribedHandlesRef.current = new Set();
+    };
+  }, []);
 
   const handleAddTwitterAccount = async (username: string) => {
     try {

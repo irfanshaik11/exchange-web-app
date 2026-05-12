@@ -344,7 +344,7 @@ export default function TrackersPage() {
     "wallets",
   );
   const [socialPanelTab, setSocialPanelTab] = useState<"twitter" | "telegram">(
-    "telegram",
+    "twitter",
   );
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<
@@ -725,11 +725,16 @@ export default function TrackersPage() {
     }
   }, [telegramTab, user?.bearerToken, telegramChannels.length]);
 
-  // Load Twitter feed when tab, accounts, or selected user changes
+  // Load Twitter feed when tab, accounts, or selected user changes.
+  // We also reset the feed to [] when there are no accounts so removed handles
+  // don't keep showing on the X Feed tab.
   useEffect(() => {
-    if (twitterTab === 1 && twitterAccounts.length > 0) {
-      loadTwitterFeed();
+    if (twitterTab !== 1) return;
+    if (twitterAccounts.length === 0) {
+      setTwitterFeed([]);
+      return;
     }
+    loadTwitterFeed();
   }, [twitterTab, twitterAccounts, selectedTwitterUser]);
 
   // Load approved handles for Recommended Wallets tab
@@ -1641,6 +1646,13 @@ export default function TrackersPage() {
   };
 
   const loadTwitterFeed = async () => {
+    // No accounts → no feed. Keeps stale tweets from showing after the user
+    // removes the last tracked handle.
+    if (twitterAccounts.length === 0) {
+      setTwitterFeed([]);
+      setLoadingTwitterFeed(false);
+      return;
+    }
     setLoadingTwitterFeed(true);
     try {
       let tweets: Tweet[] = [];
@@ -1651,7 +1663,7 @@ export default function TrackersPage() {
       } else {
         // Load tweets from all tracked accounts
         const usernames = twitterAccounts.map((acc) => acc.username);
-        tweets = await getTwitterFeed(usernames, 20);
+        tweets = await getTwitterFeed(usernames, 20, user?.bearerToken);
       }
 
       setTwitterFeed(tweets);
