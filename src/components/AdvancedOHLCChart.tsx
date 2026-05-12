@@ -490,7 +490,11 @@ function applyFlatCandleSpread(bar: {
  *  to a real trading price, creating a single candle with ~1000x high/low ratio.
  *  Mutates the array in place. Only checks the first few candles. */
 const LAUNCH_SPIKE_RATIO = 100;
-const MAX_LAUNCH_CANDLES_CHECK = 10;
+// Was 10 — clamped only the first ten bars of a snapshot. Continuous-aggregate
+// snapshots can reach back hundreds of buckets; a spike at index 50 of a 500-bar
+// snapshot was silently passed through to TradingView. Now scans every bar in
+// the snapshot. O(N) over <=500 bars is negligible compared to the chart render.
+const MAX_LAUNCH_CANDLES_CHECK = 500;
 
 function clampLaunchCandles(candles: BackendOHLCData[]): void {
   const limit = Math.min(candles.length, MAX_LAUNCH_CANDLES_CHECK);
@@ -3098,13 +3102,17 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           wsGapBridgedRef.current = false; // Reset for the upcoming real-time candles
 
           if (snapshotCandles.length === 0) {
-            const now = Math.floor(Date.now() / 1000);
-            const placeholderCandle: BackendOHLCData = {
-              unix_time: now,
-              o: 0, h: 0, l: 0, c: 0,
-              v_usd: 0,
-            };
-            lastGoodCandlesRef.current = [placeholderCandle];
+            // Bug N: previously we inserted a {o:0,h:0,l:0,c:0} placeholder here
+            // so getBars() and the chart had *something* to render. The downstream
+            // connectivity logic (~3318) reads prevCandle.c as previousClose and
+            // forces the next live bar's open to that value. When prevCandle.c is
+            // 0, the first real trade renders as a flat-line-at-zero followed by a
+            // green jump-bar — visible artifact on fresh tokens.
+            // Fix: leave lastGoodCandlesRef empty. The connectivity check now
+            // guards on prevCandle.c > 0 so it no-ops cleanly when the cache is
+            // empty; the first real live bar becomes the first real candle without
+            // any synthetic prior to glue to.
+            lastGoodCandlesRef.current = [];
             cachedIntervalRef.current = latestParamsRef.current.interval;
             cachedTimeframeRef.current = latestParamsRef.current.timeframe;
             wsConnectedRef.current = true;
@@ -3113,7 +3121,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               snapshotResolverRef.current();
               snapshotResolverRef.current = null;
             }
-            setCandles([placeholderCandle]);
+            setCandles([]);
             setIsLoading(false);
             hasInitializedRef.current = true;
             firstLoadRef.current = false;
@@ -3122,18 +3130,42 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
           // Convert snapshot to our format, dropping all-zero candles (no trades in
           // that second). Without this filter, getBars() substitutes MIN_PRICE (1e-7)
-          // which in MC mode = 0.0000001 × 1B = 100 — creating a visible green dot.
+          // which historically multiplied by 1B in MC mode yielded ~100 — creating a
+          // visible green dot. That artifact is gone with DEFAULT_SUPPLY=1 sentinel.
+          // Use `??` (nullish coalescing) instead of `||` so legitimate 0 values
+          // aren't coerced to the alternate field — important for sub-cent tokens
+          // where a momentary 0 in one of the OHLC fields is real, not "missing".
           const converted: BackendOHLCData[] = snapshotCandles
             .map((c: any) => ({
-              unix_time: c.unix_time || c.time,
-              o: c.o || c.open || 0,
-              h: c.h || c.high || 0,
-              l: c.l || c.low || 0,
-              c: c.c || c.close || 0,
-              v_usd: c.v_usd || c.v || c.volume || 0,
+              unix_time: c.unix_time ?? c.time,
+              o: c.o ?? c.open ?? 0,
+              h: c.h ?? c.high ?? 0,
+              l: c.l ?? c.low ?? 0,
+              c: c.c ?? c.close ?? 0,
+              v_usd: c.v_usd ?? c.v ?? c.volume ?? 0,
             }))
-            .filter((c: BackendOHLCData) => !(c.o === 0 && c.h === 0 && c.l === 0 && c.c === 0))
-            .sort((a: BackendOHLCData, b: BackendOHLCData) => a.unix_time - b.unix_time);
+            .filter((c: BackendOHLCData) => !(c.o === 0 && c.h === 0 && c.l === 0 && c.c === 0));
+          // Bug K: defensively dedupe by unix_time, keep last (most-recent) value
+          // per timestamp. Server snapshot path may include duplicates if the
+          // Redis 1s-cache hasn't been deduped server-side yet (token-service
+          // PR #211 fixes that source; this is the client-side defense). Then
+          // re-sort ASC — input may already be sorted, but resort cheaply.
+          {
+            const dedup: BackendOHLCData[] = [];
+            const seen = new Map<number, number>();   // unix_time -> dedup index
+            for (const bar of converted) {
+              const idx = seen.get(bar.unix_time);
+              if (idx === undefined) {
+                seen.set(bar.unix_time, dedup.length);
+                dedup.push(bar);
+              } else {
+                dedup[idx] = bar;
+              }
+            }
+            converted.length = 0;
+            converted.push(...dedup);
+          }
+          converted.sort((a: BackendOHLCData, b: BackendOHLCData) => a.unix_time - b.unix_time);
 
           // RACE FIX (defense-in-depth): If chart hasn't been populated yet
           // (token switch in progress), any existing cache is stale from the
@@ -3158,6 +3190,10 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
             // Sync cached refs so getBars() knows this data matches the current params
             cachedTimeframeRef.current = latestParamsRef.current.timeframe;
+            // Bug X: this merge branch never cleared the loading spinner. When HTTP
+            // preload had populated the cache before WS arrived, the spinner stuck
+            // because only the else-branch below called setIsLoading(false).
+            setIsLoading(false);
 
             // Always trigger resetData() to re-render with merged data (through getBars → collapseTimeGaps)
             if (!chartPopulatedRef.current) {
@@ -3246,12 +3282,12 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             });
             const ohlcData = message.data;
             const oneSecCandle: BackendOHLCData = {
-              unix_time: ohlcData.unix_time || ohlcData.time,
-              o: ohlcData.o || ohlcData.open || 0,
-              h: ohlcData.h || ohlcData.high || 0,
-              l: ohlcData.l || ohlcData.low || 0,
-              c: ohlcData.c || ohlcData.close || 0,
-              v_usd: ohlcData.v_usd || ohlcData.v || ohlcData.volume || 0,
+              unix_time: ohlcData.unix_time ?? ohlcData.time,
+              o: ohlcData.o ?? ohlcData.open ?? 0,
+              h: ohlcData.h ?? ohlcData.high ?? 0,
+              l: ohlcData.l ?? ohlcData.low ?? 0,
+              c: ohlcData.c ?? ohlcData.close ?? 0,
+              v_usd: ohlcData.v_usd ?? ohlcData.v ?? ohlcData.volume ?? 0,
             };
             // Clamp launch-candle artifacts (l=0) before caching
             if (oneSecCandle.c > 0 && oneSecCandle.l <= 0) {
@@ -3318,12 +3354,24 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           const cachedData = lastGoodCandlesRef.current;
           if (cachedData.length > 0) {
             const prevCandle = cachedData[cachedData.length - 1];
-            if (oneSecCandle.unix_time > prevCandle.unix_time) {
+            if (oneSecCandle.unix_time > prevCandle.unix_time && prevCandle.c > 0) {
               const previousClose = prevCandle.c;
               if (baseBar.open !== previousClose) {
                 baseBar.open = previousClose;
                 if (baseBar.high < baseBar.open) baseBar.high = baseBar.open;
                 if (baseBar.low > baseBar.open) baseBar.low = baseBar.open;
+              }
+              // Symmetric anti-stale-wick clamp: if the live bar's `low` is far
+              // below previousClose, treat it as a stale-cache artifact from the
+              // indexer (Bug F — e.g. seed from a dead 30m aggregate produced
+              // l=0.18 on a token trading at 0.24). The existing clamp above only
+              // handles `low > open`; this catches the opposite direction.
+              // Threshold 30% — generous enough to allow real rug-pull crashes
+              // (which the indexer marks isPoolDrain/isCrashSell to bypass the
+              // server's spike protection in the first place).
+              const MAX_LOW_DROP_PCT = 0.30;
+              if (baseBar.low > 0 && baseBar.low < previousClose * (1 - MAX_LOW_DROP_PCT)) {
+                baseBar.low = baseBar.open;
               }
             }
           }
@@ -4086,6 +4134,37 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           // Phase 5: Per-resolution cache — save current candles to old resolution's cache slot,
           // then restore from new resolution's cache if available (avoids re-fetching on switch-back)
           if (lastGoodCandlesRef.current.length > 0) {
+            // Bug G instrumentation: live WS handler pushes raw 1s bars into
+            // lastGoodCandlesRef regardless of which resolution is currently
+            // displayed. If the user sits on (say) 5m long enough, this cache
+            // ends up holding 1s rows being saved under cache[5]. Track the
+            // delta between bars vs the expected bucket size — if they don't
+            // line up, the cache is mixed-resolution and Bug G is real.
+            // (Sample only first few pairs to keep logs cheap.)
+            try {
+              const bars = lastGoodCandlesRef.current;
+              const expectedBucket: Record<string, number> = {
+                "1S": 1, "5S": 5, "15S": 15, "30S": 30,
+                "1": 60, "5": 300, "15": 900, "30": 1800,
+                "60": 3600, "240": 14400, "1D": 86400, "1W": 604800,
+              };
+              const exp = expectedBucket[prevTvResolution];
+              if (exp && bars.length >= 2) {
+                const deltas: number[] = [];
+                for (let i = 1; i < Math.min(bars.length, 6); i++) {
+                  deltas.push(bars[i].unix_time - bars[i - 1].unix_time);
+                }
+                const allMatch = deltas.every(d => d === exp || d % exp === 0);
+                if (!allMatch) {
+                  // eslint-disable-next-line no-console
+                  console.warn(
+                    `[CACHE_SAVE_MISMATCH] prevTvResolution=${prevTvResolution} expectedBucket=${exp}s actualDeltas=${deltas.join(",")} — Bug G candidate (mixed-resolution cache)`
+                  );
+                }
+              }
+            } catch {
+              // instrumentation must never throw
+            }
             resolutionCacheRef.current.set(prevTvResolution, [...lastGoodCandlesRef.current]);
           }
           const cached = resolutionCacheRef.current.get(resolution);
