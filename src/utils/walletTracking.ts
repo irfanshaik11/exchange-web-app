@@ -1,4 +1,4 @@
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 // Wallet tracking API utilities - Integrates with wallet-tracker-backend
 
@@ -104,6 +104,22 @@ const WALLET_TRACKER_WS_URL = resolveWsUrl();
 
 // ===== API Functions =====
 
+/** Thrown when the wallet-tracker API rejects the bearer token (401/403). The
+ *  caller (context) should react by surfacing a re-auth prompt instead of
+ *  silently rendering an empty watchlist. Transient/network errors are not
+ *  raised — they still fall back to []. */
+export class WalletTrackerAuthError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    // Preserve prototype chain so `instanceof WalletTrackerAuthError`
+    // works across module/bundle boundaries even when downleveled.
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.name = "WalletTrackerAuthError";
+    this.status = status;
+  }
+}
+
 // Get all tracked wallets
 export async function getTrackedWallets(
   authToken?: string,
@@ -150,6 +166,12 @@ export async function getTrackedWallets(
               : typeof body === "string"
                 ? body
                 : "Failed to fetch wallets";
+        if (response.status === 401 || response.status === 403) {
+          throw new WalletTrackerAuthError(
+            response.status,
+            msg || "Authentication required",
+          );
+        }
         throw new Error(msg || "Failed to fetch wallets");
       }
 
@@ -162,7 +184,13 @@ export async function getTrackedWallets(
       throw fetchError;
     }
   } catch (error: any) {
-    // During logout / missing service we don't want to surface a runtime error
+    // Auth failures must surface so the UI can prompt re-login — otherwise
+    // an empty watchlist silently produces a "WS connected, no trades" state.
+    if (error instanceof WalletTrackerAuthError) {
+      throw error;
+    }
+    // Transient errors (network, missing service, abort) keep the original
+    // soft-fail behavior so we don't crash the page during logout.
     const message = error?.message || "Failed to fetch wallets";
     console.warn("Error fetching tracked wallets:", message);
     return [];
@@ -498,22 +526,25 @@ export async function getWalletBalance(
   try {
     if (WALLET_TRACKER_API_URL) {
       const url = `${WALLET_TRACKER_API_URL}/api/wallet-balance/${encodeURIComponent(address)}?chain=${chain}`;
-      isDev && console.log(
-        `[getWalletBalance] Fetching ${chain} balance for ${address.slice(0, 8)}... from ${url}`,
-      );
+      isDev &&
+        console.log(
+          `[getWalletBalance] Fetching ${chain} balance for ${address.slice(0, 8)}... from ${url}`,
+        );
       const response = await fetch(url);
 
       if (response.ok) {
         const data = await response.json();
-        isDev && console.log(
-          `[getWalletBalance] Response for ${chain} wallet ${address.slice(0, 8)}...:`,
-          data,
-        );
+        isDev &&
+          console.log(
+            `[getWalletBalance] Response for ${chain} wallet ${address.slice(0, 8)}...:`,
+            data,
+          );
         const balance = parseBalanceFromResponse(data);
         if (balance !== null) {
-          isDev && console.log(
-            `[getWalletBalance] Successfully got ${chain} balance: ${balance}`,
-          );
+          isDev &&
+            console.log(
+              `[getWalletBalance] Successfully got ${chain} balance: ${balance}`,
+            );
           return balance;
         }
       } else {
@@ -539,9 +570,10 @@ export async function getWalletBalance(
           const data = await fallbackRes.json();
           const balance = parseBalanceFromResponse(data);
           if (balance !== null) {
-            isDev && console.log(
-              `[getWalletBalance] Got SOL balance via fallback: ${balance}`,
-            );
+            isDev &&
+              console.log(
+                `[getWalletBalance] Got SOL balance via fallback: ${balance}`,
+              );
             return balance;
           }
         }
@@ -838,7 +870,9 @@ export function createWalletTrackerWebSocket(
 
     // Flush anything queued during CONNECTING before invoking onConnect.
     while (sendQueue.length) {
-      try { ws.send(sendQueue.shift()!); } catch {}
+      try {
+        ws.send(sendQueue.shift()!);
+      } catch {}
     }
 
     onConnect?.();
@@ -846,7 +880,9 @@ export function createWalletTrackerWebSocket(
     // Start heartbeat checker: if no server ping in 45s, force reconnect
     heartbeatInterval = setInterval(() => {
       if (Date.now() - lastPingAt > 45_000) {
-        console.warn("[WalletTracker WS] Heartbeat stale (>45s), forcing reconnect");
+        console.warn(
+          "[WalletTracker WS] Heartbeat stale (>45s), forcing reconnect",
+        );
         ws.close();
       }
     }, 15_000);
@@ -920,8 +956,13 @@ export function createWalletTrackerWebSocket(
   };
 
   const forceReconnect = (reason = "force-reconnect") => {
-    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-      try { ws.close(4000, reason); } catch {}
+    if (
+      ws.readyState === WebSocket.OPEN ||
+      ws.readyState === WebSocket.CONNECTING
+    ) {
+      try {
+        ws.close(4000, reason);
+      } catch {}
     }
   };
 
@@ -939,11 +980,14 @@ export async function fetchBatchBalances(
   if (!WALLET_TRACKER_API_URL || wallets.length === 0) return {};
 
   try {
-    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/wallet-balance/batch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wallets, chain }),
-    });
+    const response = await fetch(
+      `${WALLET_TRACKER_API_URL}/api/wallet-balance/batch`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallets, chain }),
+      },
+    );
 
     if (!response.ok) {
       console.error("[fetchBatchBalances] HTTP error:", response.status);

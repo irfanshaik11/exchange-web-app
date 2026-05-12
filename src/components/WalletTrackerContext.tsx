@@ -17,6 +17,7 @@ import {
   fetchBatchBalances,
   toggleWalletNotifications,
   getWalletsLastActive,
+  WalletTrackerAuthError,
   type WatchWallet,
 } from "~/utils/walletTracking";
 import toast from "react-hot-toast";
@@ -24,12 +25,16 @@ import { useRouter } from "next/router";
 import CheckCircle from "lucide-react/dist/esm/icons/circle-check-big";
 import X from "lucide-react/dist/esm/icons/x";
 import { useUser } from "./UserContext";
-import { normalizeImageUrl, extractTokenImage, resolveTokenImage } from "~/utils/images";
+import {
+  normalizeImageUrl,
+  extractTokenImage,
+  resolveTokenImage,
+} from "~/utils/images";
 import FastImage from "~/components/FastImage";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
-import { FiBell } from 'react-icons/fi';
+import { FiBell } from "react-icons/fi";
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 const LAST_ACTIVE_CACHE_KEY = "trackers:lastActiveMap";
 const LAST_ACTIVE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -42,14 +47,21 @@ function readLocalCache<T>(key: string, ttl: number): T | null {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const { data, ts } = JSON.parse(raw);
-    if (Date.now() - ts > ttl) { localStorage.removeItem(key); return null; }
+    if (Date.now() - ts > ttl) {
+      localStorage.removeItem(key);
+      return null;
+    }
     return data as T;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function writeLocalCache(key: string, data: unknown) {
   if (typeof window === "undefined") return;
-  try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+  try {
+    localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+  } catch {}
 }
 
 const BLOCKVISION_API_KEY = process.env.NEXT_PUBLIC_BLOCKVISION_API_KEY;
@@ -137,6 +149,9 @@ interface WalletTrackerContextValue {
   isLoadingHistory: boolean;
   walletBalances: Record<string, number>;
   lastActiveMap: Record<string, number | null | undefined>;
+  /** Non-null when the watchlist API rejected the bearer token. UI can use
+   *  this to prompt the user to re-authenticate. Null otherwise. */
+  watchlistAuthError: { status: number; message: string } | null;
 }
 
 const WalletTrackerContext = createContext<
@@ -157,10 +172,13 @@ function NotificationToastWithMuteButton({
   toastId,
   customContent,
   onMute,
+  borderColor,
 }: {
   toastId: string;
   customContent: React.ReactNode;
   onMute: (toastId: string) => Promise<void>;
+  /** When set, paints the outer toast border (used for buy/sell tint). */
+  borderColor?: string;
 }) {
   const [isMuting, setIsMuting] = useState(false);
   const handleClick = async (e: React.MouseEvent) => {
@@ -171,24 +189,25 @@ function NotificationToastWithMuteButton({
     } finally {
       setIsMuting(false);
     }
-	};
-	
+  };
+
   return (
     <div
       onClick={() => toast.remove(toastId)}
-      className="cursor-pointer rounded-xl border border-white/[0.06] bg-[#1a1b1f] shadow-lg min-w-[320px] max-w-[380px] px-4 py-2 flex items-center gap-2"
+      className="flex max-w-[380px] min-w-[320px] cursor-pointer items-center gap-2 rounded-xl border bg-[#1a1b1f] px-4 py-2 shadow-lg"
+      style={{ borderColor: borderColor ?? "rgba(255,255,255,0.06)" }}
     >
       {customContent}
       <button
         type="button"
         onClick={handleClick}
         disabled={isMuting}
-        className="shrink-0 rounded-lg p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 transition-colors border border-transparent hover:border-neutral-700 disabled:opacity-70 disabled:pointer-events-none"
+        className="shrink-0 rounded-lg border border-transparent p-1.5 text-neutral-400 transition-colors hover:border-neutral-700 hover:bg-neutral-800/80 hover:text-neutral-200 disabled:pointer-events-none disabled:opacity-70"
         title="Mute notifications for this wallet"
       >
         {isMuting ? (
           <span
-            className="h-4 w-4 block animate-spin rounded-full border-2 border-neutral-500 border-t-transparent"
+            className="block h-4 w-4 animate-spin rounded-full border-2 border-neutral-500 border-t-transparent"
             aria-hidden
           />
         ) : (
@@ -201,7 +220,7 @@ function NotificationToastWithMuteButton({
           e.stopPropagation();
           toast.remove(toastId);
         }}
-        className="shrink-0 rounded-lg p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 transition-colors border border-transparent hover:border-neutral-700"
+        className="shrink-0 rounded-lg border border-transparent p-1.5 text-neutral-400 transition-colors hover:border-neutral-700 hover:bg-neutral-800/80 hover:text-neutral-200"
         title="Close"
         aria-label="Close notification"
       >
@@ -246,19 +265,39 @@ export function WalletTrackerProvider({
   );
   const TOKEN_METADATA_MAX = 500;
   const SHOWN_TOAST_TXS_MAX = 500;
+  /** Max trade-event toasts visible at once. Mirrors the GMGN / Axiom
+   *  pattern: bounded FIFO queue — when a new toast pushes the count
+   *  over the cap, the oldest is dismissed so the stack stays compact
+   *  instead of covering the screen. */
+  const MAX_VISIBLE_TRADE_TOASTS = 7;
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
-    () => readLocalCache<Record<string, number>>(WALLET_BALANCES_CACHE_KEY, WALLET_BALANCES_CACHE_TTL) ?? {}
+    () =>
+      readLocalCache<Record<string, number>>(
+        WALLET_BALANCES_CACHE_KEY,
+        WALLET_BALANCES_CACHE_TTL,
+      ) ?? {},
   );
-  const [lastActiveMap, setLastActiveMap] = useState<Record<string, number | null | undefined>>(
-    () => readLocalCache<Record<string, number | null | undefined>>(LAST_ACTIVE_CACHE_KEY, LAST_ACTIVE_CACHE_TTL) ?? {}
+  const [lastActiveMap, setLastActiveMap] = useState<
+    Record<string, number | null | undefined>
+  >(
+    () =>
+      readLocalCache<Record<string, number | null | undefined>>(
+        LAST_ACTIVE_CACHE_KEY,
+        LAST_ACTIVE_CACHE_TTL,
+      ) ?? {},
   );
+  const [watchlistAuthError, setWatchlistAuthError] = useState<{
+    status: number;
+    message: string;
+  } | null>(null);
 
   const watchedWalletsRef = useRef<WatchWallet[]>([]);
   const subscribedWalletsRef = useRef<string[]>([]);
   const hydrationRef = useRef(false);
   const initialHistoryFetchedRef = useRef(false);
   const shownToastTxsRef = useRef<Set<string>>(new Set());
+  const activeTradeToastIdsRef = useRef<string[]>([]);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -272,7 +311,22 @@ export function WalletTrackerProvider({
     try {
       const wallets = await getTrackedWallets(user.bearerToken);
       setWatchedWallets(wallets);
+      setWatchlistAuthError(null);
     } catch (error) {
+      if (error instanceof WalletTrackerAuthError) {
+        // Surface auth failure so the UI can prompt re-login. Without this
+        // the watchlist silently renders empty and WS connects but never
+        // subscribes — looks like "feature broken" to the user.
+        setWatchlistAuthError({ status: error.status, message: error.message });
+        setWatchedWallets([]);
+        toast.error("Wallet tracker session expired — please sign in again.", {
+          id: "wallet-tracker-auth-error",
+        });
+        console.warn(
+          `[wallet-tracker] watchlist auth rejected (${error.status}): ${error.message}`,
+        );
+        return;
+      }
       console.error("Failed to fetch watched wallets:", error);
     }
   }, [user?.bearerToken]);
@@ -282,9 +336,14 @@ export function WalletTrackerProvider({
     if (!user?.id) {
       setWatchedWallets([]);
       setLatestTrades([]);
+      setWatchlistAuthError(null);
       watchedWalletsRef.current = [];
       subscribedWalletsRef.current = [];
       initialHistoryFetchedRef.current = false;
+      // Clear any in-flight trade toasts so logout doesn't leave a
+      // half-stack visible on the login screen.
+      for (const id of activeTradeToastIdsRef.current) toast.dismiss(id);
+      activeTradeToastIdsRef.current = [];
       // Clear notifications from localStorage on logout
       if (typeof window !== "undefined") {
         try {
@@ -360,7 +419,10 @@ export function WalletTrackerProvider({
           setLatestTrades((prev) => mergeTrades(prev, trades));
         }
       } catch (error) {
-        console.error("[WalletTracker] Failed to fetch initial history:", error);
+        console.error(
+          "[WalletTracker] Failed to fetch initial history:",
+          error,
+        );
       } finally {
         setIsLoadingHistory(false);
       }
@@ -384,8 +446,8 @@ export function WalletTrackerProvider({
     let connection: WalletTrackerWebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout | null = null;
     let reconnectAttempts = 0;
-    const BASE_RECONNECT_DELAY = 3000;   // 3s initial
-    const MAX_RECONNECT_DELAY = 60000;   // 60s cap
+    const BASE_RECONNECT_DELAY = 3000; // 3s initial
+    const MAX_RECONNECT_DELAY = 60000; // 60s cap
 
     const handleTradeEvent = async (event: TradeEvent) => {
       const normalizedEvent = normalizeTradeForState(event);
@@ -427,7 +489,9 @@ export function WalletTrackerProvider({
               tokenData = responseData?.token || null;
               // Merge marketData fields onto tokenData (market_cap lives in marketData)
               if (tokenData && responseData?.marketData) {
-                tokenData.market_cap_usd = responseData.marketData.market_cap_usd || tokenData.market_cap_usd;
+                tokenData.market_cap_usd =
+                  responseData.marketData.market_cap_usd ||
+                  tokenData.market_cap_usd;
               }
             }
           } catch (searchError) {
@@ -480,7 +544,10 @@ export function WalletTrackerProvider({
                   tokenData.marketCapUsd ||
                   tokenData.fully_diluted_value,
                 createdAt:
-                  tokenData.created_at || tokenData.createdAt || tokenData.CreatedAt || null,
+                  tokenData.created_at ||
+                  tokenData.createdAt ||
+                  tokenData.CreatedAt ||
+                  null,
               });
               // Cap size to prevent unbounded growth
               if (updated.size > TOKEN_METADATA_MAX) {
@@ -594,7 +661,9 @@ export function WalletTrackerProvider({
       // Cap the set size to prevent unbounded growth
       if (shownToastTxsRef.current.size > SHOWN_TOAST_TXS_MAX) {
         const entries = Array.from(shownToastTxsRef.current);
-        shownToastTxsRef.current = new Set(entries.slice(-Math.floor(SHOWN_TOAST_TXS_MAX / 2)));
+        shownToastTxsRef.current = new Set(
+          entries.slice(-Math.floor(SHOWN_TOAST_TXS_MAX / 2)),
+        );
       }
 
       // Find wallet info for better notification
@@ -681,7 +750,10 @@ export function WalletTrackerProvider({
             const startTime = ac.currentTime + i * noteDuration;
             gain.gain.setValueAtTime(0, startTime);
             gain.gain.linearRampToValueAtTime(0.2, startTime + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.01, startTime + noteDuration);
+            gain.gain.exponentialRampToValueAtTime(
+              0.01,
+              startTime + noteDuration,
+            );
 
             osc.start(startTime);
             osc.stop(startTime + noteDuration);
@@ -694,11 +766,13 @@ export function WalletTrackerProvider({
       // Show toast notification using enhanced toast only if enabled
       if (displayNotificationsEnabled) {
         // Get token image from metadata using extractTokenImage (handles all field names + normalization)
-        const tokenImage = resolvedImage || (() => {
-          const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
-          if (!cachedMetadata) return null;
-          return extractTokenImage(cachedMetadata);
-        })();
+        const tokenImage =
+          resolvedImage ||
+          (() => {
+            const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
+            if (!cachedMetadata) return null;
+            return extractTokenImage(cachedMetadata);
+          })();
 
         const isBuy = normalizedEvent.side === "buy";
         const sideColor = isBuy ? "#70E0B0" : "#ff6b6b";
@@ -709,28 +783,37 @@ export function WalletTrackerProvider({
         const cachedMeta = tokenMetadata.get(normalizedEvent.mint);
 
         // Preload chart data so clicking the toast navigates instantly
-        preloadTradeChart({
-          mint: normalizedEvent.mint,
-          pairAddress: normalizedEvent.pair_address,
-          chain: 'sol',
-          name: tokenName,
-          symbol: normalizedEvent.symbol || cachedMeta?.symbol,
-          marketCapUsd: cachedMeta?.market_cap_usd,
-          image: tokenImage || undefined,
-          launchpadProtocol: cachedMeta?.launchpad_protocol,
-        }, { router });
+        preloadTradeChart(
+          {
+            mint: normalizedEvent.mint,
+            pairAddress: normalizedEvent.pair_address,
+            chain: "sol",
+            name: tokenName,
+            symbol: normalizedEvent.symbol || cachedMeta?.symbol,
+            marketCapUsd: cachedMeta?.market_cap_usd,
+            image: tokenImage || undefined,
+            launchpadProtocol: cachedMeta?.launchpad_protocol,
+          },
+          { router },
+        );
 
         const tradeUrl = `/trade/${normalizedEvent.mint || normalizedEvent.pair_address}`;
 
         // Create clickable custom content for live trades toast (wide, compact)
         const customContent = (
           <div
-            className="flex cursor-pointer items-center gap-3 py-0.5 flex-1 min-w-0"
-            style={{ borderLeft: `3px solid ${sideColor}`, paddingLeft: "10px" }}
-            onClick={() => { router.push(tradeUrl); }}
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-0.5"
+            onClick={() => {
+              router.push(tradeUrl);
+            }}
           >
             {/* Token Image */}
-            <div style={{ border: `2px solid ${sideColor}40`, borderRadius: "0.5rem" }}>
+            <div
+              style={{
+                border: `2px solid ${sideColor}40`,
+                borderRadius: "0.5rem",
+              }}
+            >
               <FastImage
                 src={tokenImage}
                 alt={tokenName || "token"}
@@ -744,8 +827,8 @@ export function WalletTrackerProvider({
             </div>
 
             {/* Content — single row where possible */}
-            <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[12px] font-medium text-[#9CA3AF]">
                   {walletName}
                 </span>
@@ -761,12 +844,14 @@ export function WalletTrackerProvider({
                   {sideText}
                 </span>
               </div>
-              <div className="flex items-baseline gap-2 flex-wrap">
+              <div className="flex flex-wrap items-baseline gap-2">
                 <span className="text-[14px] font-semibold text-[#E6E7EA]">
                   {tokenName}
                 </span>
                 {amountDisplay && (
-                  <span className="text-[11px] text-[#9CA3AF]">{amountDisplay}</span>
+                  <span className="text-[11px] text-[#9CA3AF]">
+                    {amountDisplay}
+                  </span>
                 )}
               </div>
             </div>
@@ -796,7 +881,7 @@ export function WalletTrackerProvider({
           toast.custom(
             () => (
               <div
-                className="rounded-2xl border shadow-lg flex items-start gap-3 px-4 py-3 min-w-[280px] max-w-[360px]"
+                className="flex max-w-[360px] min-w-[280px] items-start gap-3 rounded-2xl border px-4 py-3 shadow-lg"
                 style={{
                   backgroundColor: "#1a1b1f",
                   borderColor: successColor,
@@ -808,7 +893,7 @@ export function WalletTrackerProvider({
                   style={{ color: successColor }}
                   strokeWidth={2}
                 />
-                <div className="flex flex-col gap-0.5 min-w-0">
+                <div className="flex min-w-0 flex-col gap-0.5">
                   <span
                     className="text-base font-bold"
                     style={{ color: successColor }}
@@ -821,20 +906,37 @@ export function WalletTrackerProvider({
                 </div>
               </div>
             ),
-            { duration: 4000 }
+            { duration: 4000 },
           );
         };
 
-        toast.custom(
+        const TRADE_TOAST_DURATION_MS = 5000;
+        const newToastId = toast.custom(
           (t) => (
             <NotificationToastWithMuteButton
               toastId={t.id}
               customContent={customContent}
               onMute={performMuteToast}
+              borderColor={sideColor}
             />
           ),
-          { duration: 5000 }
+          { duration: TRADE_TOAST_DURATION_MS },
         );
+        // Bounded FIFO queue: drop the oldest visible trade toasts when
+        // the cap is exceeded so a busy feed never carpets the screen.
+        activeTradeToastIdsRef.current.push(newToastId);
+        while (activeTradeToastIdsRef.current.length > MAX_VISIBLE_TRADE_TOASTS) {
+          const oldest = activeTradeToastIdsRef.current.shift();
+          if (oldest) toast.dismiss(oldest);
+        }
+        // Remove the id from the active list once the toast self-expires
+        // so future pushes only count toasts that are still on screen.
+        // Must stay in sync with the `duration` above — both literals
+        // share `TRADE_TOAST_DURATION_MS` to make drift impossible.
+        setTimeout(() => {
+          const idx = activeTradeToastIdsRef.current.indexOf(newToastId);
+          if (idx !== -1) activeTradeToastIdsRef.current.splice(idx, 1);
+        }, TRADE_TOAST_DURATION_MS);
       }
     };
 
@@ -857,10 +959,13 @@ export function WalletTrackerProvider({
 
       const delay = Math.min(
         BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts),
-        MAX_RECONNECT_DELAY
+        MAX_RECONNECT_DELAY,
       );
       reconnectAttempts++;
-      isDev && console.log(`[WalletTracker] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
+      isDev &&
+        console.log(
+          `[WalletTracker] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`,
+        );
 
       reconnectTimeout = setTimeout(() => {
         initializeWebSocket();
@@ -898,12 +1003,19 @@ export function WalletTrackerProvider({
     // ~30s. Browsers throttle background tabs and silently kill long-idle
     // sockets — without this the tracker can sit "connected" but stale.
     const reviveIfStale = (trigger: string) => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return;
       if (!connection) return;
       const last = connection.getLastPingAt();
       const stale = last === 0 || Date.now() - last > 30_000;
       if (stale) {
-        isDev && console.log(`[WalletTracker] reviving (${trigger}, lastPingAt=${last})`);
+        isDev &&
+          console.log(
+            `[WalletTracker] reviving (${trigger}, lastPingAt=${last})`,
+          );
         reconnectAttempts = 0; // immediate retry, skip backoff
         if (reconnectTimeout) {
           clearTimeout(reconnectTimeout);
@@ -1013,7 +1125,9 @@ export function WalletTrackerProvider({
   useEffect(() => {
     fetchedAddressesRef.current = new Set();
     setWalletBalances({});
-    try { localStorage.removeItem(WALLET_BALANCES_CACHE_KEY); } catch {}
+    try {
+      localStorage.removeItem(WALLET_BALANCES_CACHE_KEY);
+    } catch {}
   }, [user?.id]);
 
   // Safety net: re-fetch batch every 3 minutes ONLY if WebSocket is disconnected
@@ -1141,13 +1255,18 @@ export function WalletTrackerProvider({
       if (hadWalletsForLastActiveRef.current) {
         setLastActiveMap({});
         lastActiveFetchedKeyRef.current = "";
-        try { localStorage.removeItem(LAST_ACTIVE_CACHE_KEY); } catch {}
+        try {
+          localStorage.removeItem(LAST_ACTIVE_CACHE_KEY);
+        } catch {}
       }
       return;
     }
     hadWalletsForLastActiveRef.current = true;
 
-    const key = watchedWallets.map((w) => w.address).sort().join(",");
+    const key = watchedWallets
+      .map((w) => w.address)
+      .sort()
+      .join(",");
     if (key === lastActiveFetchedKeyRef.current) return;
     lastActiveFetchedKeyRef.current = key;
 
@@ -1162,10 +1281,11 @@ export function WalletTrackerProvider({
           .filter((w) => w.chain !== "monad")
           .map((w) => w.address);
 
-        isDev && console.log("[lastActive] fetching timestamps:", {
-          monad: monadWallets.length,
-          sol: solWallets.length,
-        });
+        isDev &&
+          console.log("[lastActive] fetching timestamps:", {
+            monad: monadWallets.length,
+            sol: solWallets.length,
+          });
 
         const map: Record<string, number | null> = {};
 
@@ -1176,18 +1296,35 @@ export function WalletTrackerProvider({
             const monadSettled = await Promise.allSettled(
               monadWallets.map(async (address) => {
                 const url = `https://api.blockvision.org/v2/monad/account/transactions?address=${encodeURIComponent(address)}&limit=20&ascendingOrder=false`;
-                const resp = await fetchWithTimeout(url, {
-                  method: "GET",
-                  headers: { accept: "application/json", "x-api-key": BLOCKVISION_API_KEY! },
-                }, 10_000);
+                const resp = await fetchWithTimeout(
+                  url,
+                  {
+                    method: "GET",
+                    headers: {
+                      accept: "application/json",
+                      "x-api-key": BLOCKVISION_API_KEY!,
+                    },
+                  },
+                  10_000,
+                );
                 let payload: any = null;
-                try { payload = await resp.json(); } catch {}
-                if (!resp.ok) throw new Error((payload?.message || payload?.error) || `HTTP ${resp.status}`);
-                return { address, lastActive: ensureMs(payload?.result?.data?.[0]?.timestamp) };
+                try {
+                  payload = await resp.json();
+                } catch {}
+                if (!resp.ok)
+                  throw new Error(
+                    payload?.message || payload?.error || `HTTP ${resp.status}`,
+                  );
+                return {
+                  address,
+                  lastActive: ensureMs(payload?.result?.data?.[0]?.timestamp),
+                };
               }),
             );
 
-            const allFailed = monadSettled.every((r) => r.status === "rejected");
+            const allFailed = monadSettled.every(
+              (r) => r.status === "rejected",
+            );
             const likelyCors = monadSettled.every((r) => {
               if (r.status !== "rejected") return false;
               const msg = r.reason?.message || String(r.reason);
@@ -1196,34 +1333,51 @@ export function WalletTrackerProvider({
 
             if (allFailed && likelyCors) {
               try {
-                const proxyResp = await fetch("/api/blockvision/monad/last-active", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ wallets: monadWallets, limit: 20 }),
-                });
+                const proxyResp = await fetch(
+                  "/api/blockvision/monad/last-active",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ wallets: monadWallets, limit: 20 }),
+                  },
+                );
                 const proxyPayload = await proxyResp.json().catch(() => null);
-                if (proxyResp.ok && proxyPayload?.ok === true && Array.isArray(proxyPayload?.data)) {
+                if (
+                  proxyResp.ok &&
+                  proxyPayload?.ok === true &&
+                  Array.isArray(proxyPayload?.data)
+                ) {
                   for (const item of proxyPayload.data) {
                     if (!item?.wallet) continue;
-                    map[item.wallet] = typeof item.lastActive === "number" ? item.lastActive : null;
+                    map[item.wallet] =
+                      typeof item.lastActive === "number"
+                        ? item.lastActive
+                        : null;
                   }
                 }
               } catch {}
             } else {
               monadSettled.forEach((res, idx) => {
                 const address = monadWallets[idx];
-                map[address] = res.status === "fulfilled" ? res.value.lastActive : null;
+                map[address] =
+                  res.status === "fulfilled" ? res.value.lastActive : null;
               });
             }
-            monadWallets.forEach((addr) => { if (!(addr in map)) map[addr] = null; });
+            monadWallets.forEach((addr) => {
+              if (!(addr in map)) map[addr] = null;
+            });
           }
         }
 
         if (solWallets.length > 0) {
           try {
             const solResults = await getWalletsLastActive(solWallets, "sol");
-            for (const result of solResults) { map[result.wallet] = result.lastActive; }
-            solWallets.forEach((addr) => { if (!(addr in map)) map[addr] = null; });
+            for (const result of solResults) {
+              map[result.wallet] = result.lastActive;
+            }
+            solWallets.forEach((addr) => {
+              if (!(addr in map)) map[addr] = null;
+            });
           } catch {
             solWallets.forEach((addr) => (map[addr] = null));
           }
@@ -1233,7 +1387,9 @@ export function WalletTrackerProvider({
       } catch (error) {
         console.error("[lastActive] Failed to fetch timestamps:", error);
         const errorMap: Record<string, number | null> = {};
-        currentWallets.forEach((w) => { errorMap[w.address] = null; });
+        currentWallets.forEach((w) => {
+          errorMap[w.address] = null;
+        });
         setLastActiveMap((prev) => ({ ...prev, ...errorMap }));
       }
     };
@@ -1253,16 +1409,30 @@ export function WalletTrackerProvider({
     writeLocalCache(WALLET_BALANCES_CACHE_KEY, walletBalances);
   }, [walletBalances]);
 
-  const value = useMemo<WalletTrackerContextValue>(() => ({
-    wsConnected,
-    latestTrades,
-    watchedWallets,
-    refreshWatchedWallets,
-    clearNotifications,
-    isLoadingHistory,
-    walletBalances,
-    lastActiveMap,
-  }), [wsConnected, latestTrades, watchedWallets, refreshWatchedWallets, clearNotifications, isLoadingHistory, walletBalances, lastActiveMap]);
+  const value = useMemo<WalletTrackerContextValue>(
+    () => ({
+      wsConnected,
+      latestTrades,
+      watchedWallets,
+      refreshWatchedWallets,
+      clearNotifications,
+      isLoadingHistory,
+      walletBalances,
+      lastActiveMap,
+      watchlistAuthError,
+    }),
+    [
+      wsConnected,
+      latestTrades,
+      watchedWallets,
+      refreshWatchedWallets,
+      clearNotifications,
+      isLoadingHistory,
+      walletBalances,
+      lastActiveMap,
+      watchlistAuthError,
+    ],
+  );
 
   return (
     <WalletTrackerContext.Provider value={value}>
