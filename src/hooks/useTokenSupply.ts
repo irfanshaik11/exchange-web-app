@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { getWsSupply } from "~/utils/wsSupplyCache";
 
 const GO_SERVICE_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL || "";
 
@@ -127,6 +128,30 @@ export default function useTokenSupply(mint: string | undefined | null): UseToke
     // wrong pricescale.
     cancelRetry();
     setCirculatingSupply(DEFAULT_SUPPLY);
+
+    // WS fast-path: the OHLCV WebSocket piggybacks the supply payload
+    // onto its snapshot message. By the time `useTokenSupply` mounts on
+    // the trade page, the chart's WS is usually already open (often
+    // prewarmed by SearchModal hover), and supply has landed in the
+    // shared cache. Skip the HTTP round-trip entirely when it's there.
+    // No retry/backoff needed — the cached value came from a successful
+    // PG read upstream.
+    const wsCached = getWsSupply(mint);
+    if (wsCached) {
+      const parsed = parseFloat(wsCached.circulating_supply);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        setCirculatingSupply(parsed);
+        resolvedMintRef.current = mint;
+        requestedMintRef.current = mint;
+        return () => {
+          // Cleanup mirrors the HTTP-path cleanup below: abort any
+          // in-flight request just in case Strict-Mode mounted between
+          // the WS-hit and this cleanup.
+          abortRef.current?.abort();
+        };
+      }
+    }
+
     fetchSupply(mint, 0);
 
     return () => {

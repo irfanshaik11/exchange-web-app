@@ -1,4 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
+import { setWsSupply } from "~/utils/wsSupplyCache";
 import { subscribe as subscribePendingTradeMarkers } from "../utils/pendingTradeMarkers";
 import {
   KOL_ADDRESS_MAP,
@@ -3156,6 +3157,14 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         if (message.type === "snapshot") {
           const snapshotCandles = (message.data as Array<any>) || [];
           wsGapBridgedRef.current = false; // Reset for the upcoming real-time candles
+
+          // Token-service piggybacks `circulating_supply` onto the snapshot
+          // when the indexer has it. Pre-warming the supply cache here lets
+          // `useTokenSupply` skip the /v1/supply HTTP fetch entirely for
+          // non-pump.fun tokens — chart MC renders correctly on first paint.
+          if (message.supply && message.mint) {
+            setWsSupply(message.mint, message.supply);
+          }
 
           if (snapshotCandles.length === 0) {
             // Bug N: previously we inserted a {o:0,h:0,l:0,c:0} placeholder here
