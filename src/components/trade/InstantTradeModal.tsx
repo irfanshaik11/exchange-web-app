@@ -16,7 +16,7 @@ import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
 import { tradeMonadSell, preCheckMonadBalance, tradeSellPercentage } from '~/utils/api';
 import { executeMonadMultiBuy, formatMonadTxSummary } from '~/utils/monadWalletAllocation';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
-import { validateMonadBalance, validateSolanaBalance, computeMonadBalanceForValidation } from '~/utils/tradeBalanceValidation';
+import { validateMonadBalance, computeMonadBalanceForValidation } from '~/utils/tradeBalanceValidation';
 import { formatMonadError } from '~/utils/monadError';
 import { getTradeActivityByUser } from '~/utils/functions';
 import { formatSmartNumber } from '~/utils/db';
@@ -1055,19 +1055,35 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         }
       }
     } else {
-      // Solana validation
+      // Solana validation — use multi-wallet-aware validateSolanaBuy so the
+      // user's PRIMARY wallet balance is checked (not the first-listed wallet).
+      // Previously used validateSolanaBalance({ balance: solBalance, ... }) which
+      // read the default-wallet's balance regardless of which wallet the user
+      // had selected as primary, producing false "insufficient balance" errors.
       const priorityFee = settings?.priority ?? 0.001;
       const bribe = settings?.bribe ?? 0;
-
-      const clientValidation = validateSolanaBalance({
-        balance: solBalance,
-        tradeAmount: requested,
+      const { allocations } = buildSolanaWalletAllocations({
+        amount: requested,
+        walletList,
+        walletBalances,
+        selectedWalletIds: selectedWalletIds?.sol || [],
         priorityFee,
         bribe,
       });
 
-      if (!clientValidation.isValid) {
-        toast.error('Insufficient balance', { duration: 5000 });
+      const clientValidation = validateSolanaBuy(
+        requested,
+        allocations,
+        walletBalances,
+        walletList,
+        selectedWalletIds?.sol || [],
+        priorityFee,
+        bribe,
+        null, // ataExists unknown at this pre-validation checkpoint
+      );
+
+      if (!clientValidation.valid) {
+        toast.error(clientValidation.error || 'Insufficient balance', { duration: 5000 });
         return;
       }
     }

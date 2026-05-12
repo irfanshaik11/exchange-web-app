@@ -977,13 +977,41 @@ const Positions: React.FC<PositionsProps> = ({
     }
   }, [positionsCacheKey, skipFetch, userId]);
 
-  // If preloaded positions are provided, use them
+  // If preloaded positions are provided, mirror them into local state so
+  // existing internal logic (sort, filter, hidden tokens, sell handlers) keeps
+  // working unchanged. The render path *also* reads `livePreloaded` directly
+  // (see useMemo below) so live updates show without waiting for setPositions
+  // → re-render → effect → setPositions cycle. This is the pulse-style "data
+  // arrives at one place, render reads from there directly" pattern.
   useEffect(() => {
     if (preloadedPositions && skipFetch) {
-      // Reverse so newest positions appear at the top
       const reversedPositions = [...preloadedPositions].reverse();
       setPositions(reversedPositions);
       setLoading(false);
+    }
+  }, [preloadedPositions, skipFetch]);
+
+  // Live render-source: when the parent owns the data (skipFetch=true), read
+  // preloadedPositions directly during render so a WS-driven prop change
+  // reflects in the DOM on the SAME render cycle, not after a setPositions
+  // round-trip. Falls back to internal `positions` state when the component
+  // is in fetch-mode (legacy path for monad / search filters / etc).
+  const livePreloaded: PositionRow[] | null = useMemo(() => {
+    if (preloadedPositions && skipFetch) {
+      return [...preloadedPositions].reverse();
+    }
+    return null;
+  }, [preloadedPositions, skipFetch]);
+
+  // The single source the render iterates over. positions stays in sync via
+  // the useEffect above for any code path that still consults internal state.
+  const renderPositions: PositionRow[] = livePreloaded ?? positions;
+
+  useEffect(() => {
+    if (preloadedPositions && skipFetch && preloadedPositions.length > 0) {
+      // requestMetadataForTokens already filters to uncached mints internally,
+      // so calling it on every preload change is cheap when nothing is new.
+      const reversedPositions = [...preloadedPositions].reverse();
       requestMetadataForTokens(reversedPositions);
     }
   }, [preloadedPositions, skipFetch, requestMetadataForTokens]);
@@ -1457,8 +1485,8 @@ const Positions: React.FC<PositionsProps> = ({
           </tr>
         </thead>
         <tbody>
-          {positions.length > 0 ? (
-            positions
+          {renderPositions.length > 0 ? (
+            renderPositions
               .filter(pos => (pos.remaining > 0) && (showHidden || !hiddenTokens.has(pos.tokenAddress)))
               .map((pos, idx) => {
               const sourcePosition = mergeWithFallback(pos);
@@ -1810,7 +1838,7 @@ const Positions: React.FC<PositionsProps> = ({
           ) : (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions yet.</td></tr>
           )}
-          {positions.length > 0 && (
+          {renderPositions.length > 0 && (
             <tr style={{ height: '48px' }}>
               <td colSpan={6}></td>
             </tr>

@@ -7,6 +7,9 @@ import { DockedPanelMarginWrapper } from "../contexts/DockedPanelContext";
 import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
 import Activity from "../components/trade/Activity";
+import { useWalletPortfolio } from "~/hooks/useWalletPortfolio";
+import { useWalletTrades } from "~/hooks/useWalletTrades";
+import { walletPortfolioTradeToTradeRow } from "~/utils/walletTradeAdapter";
 import { useUser } from "../components/UserContext";
 import { useSolPrice } from "../components/SolPriceContext";
 import InterstateTooltip from "~/components/InterstateTooltip";
@@ -40,6 +43,7 @@ import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
 import { TRADE_COMPLETED_EVENT, consumePendingTradeRefreshes, type TradeCompletedDetail } from "~/utils/tradeEvents";
 import { redistributeWalletFunds } from "~/utils/api";
+import { getWalletPortfolioSummary } from "~/utils/api";
 import { deleteUserWallet } from "~/utils/api";
 import { PredictionPositions, UnifiedPortfolio, PolygonWalletCard } from "~/components/predictions";
 import { useSolanaPositionWebSocketContext } from "~/contexts/SolanaPositionWebSocketContext";
@@ -357,6 +361,81 @@ export default function PortfolioPage() {
   const monBalance = chainBalances?.monad || 0;
   const chainBalance = chainBalances?.[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
   const chainPrice = currentChain === 'monad' ? (monPrice || 0) : (contextSolPrice || 0);
+
+  // Chain-derived portfolio for the primary Solana wallet. Source of truth for
+  // Active Positions + Top 100 + the position-derived top metric cards.
+  // Returns empty state when chain != "sol" or no primary is set yet.
+  // Powered by /v1/wallet/:addr/* on token-service (live via WS, see useRobustWebSocket).
+  const primarySolAddr = currentChain === "sol" ? (primaryWalletAddresses?.solana ?? null) : null;
+  const wp = useWalletPortfolio(primarySolAddr);
+
+  // Chain-derived trade history for Activity tab. Only fetches when:
+  //  - The Activity tab (index 2) is active (lazy fetch — no waste on Active Positions/Top 100 views)
+  //  - Chain is Solana with a primary wallet set
+  // When the wallet trader index is still building, isIndexing flips true and the
+  // Activity render below falls back to existing on-platform trades + shows a banner.
+  const wt = useWalletTrades(primarySolAddr, currentChain === "sol" && activeSpotTab === 2);
+
+  // Per-wallet chain-derived holdings counts. The Wallets list shows a holdings
+  // badge per row; backend's wallet.holdingsCount is computed from TradeHistory
+  // (on-platform trades only), which means wallets that traded primarily off-
+  // platform (Axiom/Phantom/etc.) show 0 even though they hold tokens on chain.
+  // Fix: for each Solana wallet in walletList, fetch its summary and use the
+  // chain-derived active_position_count. Refreshes on walletList change.
+  const [chainHoldingsCounts, setChainHoldingsCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (currentChain !== "sol") return;
+    const solWallets = (contextWalletList || []).filter(
+      (w: any) => w.solanaAddress && !w.isArchived,
+    );
+    if (solWallets.length === 0) return;
+    let cancelled = false;
+
+    // Concurrency cap: token-service runs a wallet_holder_positions aggregate
+    // per request (236M-row table). Power users may have 10-20 wallets in
+    // their list — firing them all in parallel can starve the token-service
+    // connection pool. Cap at 3 in flight; total wall-clock is still <2s for
+    // typical lists.
+    const CONCURRENCY = 3;
+    const fetchSummariesLimited = async (): Promise<Array<{ addr: string; count: number } | null>> => {
+      const results: Array<{ addr: string; count: number } | null> = new Array(solWallets.length).fill(null);
+      let cursor = 0;
+      const worker = async (): Promise<void> => {
+        while (true) {
+          if (cancelled) return;
+          const i = cursor++;
+          if (i >= solWallets.length) return;
+          const w = solWallets[i];
+          try {
+            const s = await getWalletPortfolioSummary(w.solanaAddress);
+            results[i] = { addr: w.solanaAddress, count: s.active_position_count };
+          } catch {
+            results[i] = null;
+          }
+        }
+      };
+      const workers = Array.from({ length: Math.min(CONCURRENCY, solWallets.length) }, () => worker());
+      await Promise.all(workers);
+      return results;
+    };
+
+    fetchSummariesLimited().then((results) => {
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      results.forEach((r) => {
+        if (r) map[r.addr] = r.count;
+      });
+      setChainHoldingsCounts(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Note: not depending on tradeRefreshCounter (declared later in this scope)
+    // — would cause TDZ. Non-primary wallet counts refresh on walletList changes
+    // only; primary wallet count is live via positions.length so doesn't need
+    // this map.
+  }, [contextWalletList, currentChain]);
+
   const [walletChecked, setWalletChecked] = useState(false);
   // Incremented when a trade-completed event fires, triggers re-fetch of history/activity
   const [tradeRefreshCounter, setTradeRefreshCounter] = useState(0);
@@ -501,6 +580,103 @@ export default function PortfolioPage() {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Mirror chain-derived positions for the primary Solana wallet into the page-level
+  // `positions` state. Downstream consumers (Performance breakdown, top100Positions
+  // derivation, Realized PNL math, etc.) all read from `positions` — by syncing here,
+  // they continue to work without per-call rewrites. When chain is Monad, leave the
+  // existing Monad position flow alone.
+  //
+  // Filter dust (remaining ≤ 0.001) defensively so a sold-out token can't linger in
+  // any downstream computation — Top 100 in particular sorts by USD value desc and
+  // doesn't filter; without this, a just-sold position with remaining=0 would still
+  // appear at the bottom of Top 100 until the next REST refetch.
+  //
+  // Reverse to oldest-first: <Positions> at line 983 does `[...preloaded].reverse()`
+  // before render — a hidden convention from the legacy user-keyed API that returned
+  // ASC. Our chain-derived endpoint returns DESC (newest-first). Without this reverse,
+  // the component's reverse pushes the newest buy to the bottom of the list.
+  //
+  // USD enrichment: chain endpoint returns 0 for *_usd fields (backend USD multiplier
+  // is a separate TODO). We have live SOL price client-side via SolPrice context, so
+  // populate USD fields here so downstream consumers (Performance breakdown bins,
+  // Realized PNL display, top100 sorting) work correctly. Computed locally — no extra
+  // network calls.
+  useEffect(() => {
+    if (currentChain !== "sol") return;
+    const solPrice = contextSolPrice || 0;
+    const enriched = wp.positions
+      .filter((p) => p.remaining > 0.001)
+      .map((p) => {
+        // Prefer backend-supplied USD values when present; fall back to SOL × solPrice.
+        const boughtSol = (p as any).bought_sol ?? 0;  // raw fields preserved on PositionRow via spread
+        const soldSol = (p as any).sold_sol ?? 0;
+        const realizedSol = (p as any).realized_pnl_sol ?? 0;
+        const boughtUsd = p.boughtUsdValue && p.boughtUsdValue > 0
+          ? p.boughtUsdValue
+          : boughtSol * solPrice;
+        const soldUsd = p.soldUsdValue && p.soldUsdValue > 0
+          ? p.soldUsdValue
+          : soldSol * solPrice;
+        const realizedUsd = realizedSol * solPrice; // SOL-based realized * USD/SOL
+        const remainingUsd = p.remainingUsdValue || 0;
+        // Total PnL on this position: realized (closed portion) + unrealized (open).
+        // unrealized = (remaining at current price) - (cost basis of remaining).
+        const remainingFraction = boughtSol > 0 ? (boughtSol - soldSol * (boughtSol / Math.max(boughtSol, 1e-9))) / boughtSol : 0; // simplified
+        const costBasisRemainingUsd = boughtSol > 0
+          ? boughtUsd * Math.max(0, 1 - (soldSol / boughtSol))
+          : 0;
+        const unrealizedUsd = remainingUsd - costBasisRemainingUsd;
+        const totalPnlUsd = realizedUsd + unrealizedUsd;
+        const pnlPercentage = boughtUsd > 0 ? (totalPnlUsd / boughtUsd) * 100 : 0;
+        return {
+          ...p,
+          boughtUsdValue: boughtUsd,
+          soldUsdValue: soldUsd,
+          pnl: totalPnlUsd,
+          pnlPercentage,
+        };
+      })
+      .reverse();
+    setPositions(enriched);
+  }, [wp.positions, currentChain, contextSolPrice]);
+
+  // Realized PNL override for primary-wallet view on sol. Existing computation
+  // (lines ~1664-1948) iterates user-keyed `tradeHistory` from memecoin-backend —
+  // returns user-aggregate, not wallet-scoped. wp.summary.* IS wallet-scoped +
+  // chain-authoritative. Prefer the indexer's USD field (priced at trade time)
+  // over SOL × current-price, which retroactively re-prices closed trades and
+  // distorts realized PnL during SOL-volatile periods.
+  const chainRealizedPnlUsd = useMemo(() => {
+    if (currentChain !== "sol" || !wp.summary) return null;
+    const usdField = wp.summary.total_realized_pnl_usd;
+    if (typeof usdField === "number" && usdField !== 0) return usdField;
+    const solPrice = contextSolPrice || 0;
+    return (wp.summary.total_realized_pnl_sol || 0) * solPrice;
+  }, [currentChain, wp.summary, contextSolPrice]);
+
+  // Wallet-scoped Realized PnL percentage. True accuracy would need
+  // cost_basis_of_sold (per-token avg-buy × sold), which summary doesn't expose;
+  // approximate as realized / total_bought_usd. Good enough for v1 vs. the
+  // alternative (user-aggregate timeframe percentage), which is even less
+  // correct for the primary-wallet view.
+  const chainRealizedPnlPct = useMemo(() => {
+    if (currentChain !== "sol" || !wp.summary || chainRealizedPnlUsd == null) return null;
+    const solPrice = contextSolPrice || 0;
+    const boughtUsd = (wp.summary.total_bought_sol || 0) * solPrice;
+    if (boughtUsd <= 0) return 0;
+    return (chainRealizedPnlUsd / boughtUsd) * 100;
+  }, [currentChain, wp.summary, contextSolPrice, chainRealizedPnlUsd]);
+
+  // The display values: chain-derived when on Solana with summary loaded;
+  // fall back to the legacy user-aggregate `timeframeMetrics` for Monad and
+  // pre-summary-load states.
+  const displayRealizedPnl = useMemo(() => {
+    return chainRealizedPnlUsd ?? null; // null = "use legacy"
+  }, [chainRealizedPnlUsd]);
+  const displayRealizedPnlPct = useMemo(() => {
+    return chainRealizedPnlPct ?? null;
+  }, [chainRealizedPnlPct]);
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
@@ -1056,6 +1232,16 @@ export default function PortfolioPage() {
       // Delay REST re-fetch by 2s so backend setImmediate saves complete before fetch
       // WS solanaNewTrade events still push real data at ~200ms for instant display
       setTimeout(() => setTradeRefreshCounter((c) => c + 1), 2000);
+
+      // Refresh chain-derived positions for the primary Solana wallet immediately
+      // after a trade. Without this, the page waits for the chain WS push (~1-3s
+      // after confirmation) — feels sluggish vs the old user-keyed flow that had
+      // optimistic in-component updates. wp.refetch() pulls fresh /v1/wallet/:addr/
+      // {summary,positions} in ~500ms, much closer to the old "instant" feel.
+      // Stagger slightly so backend has had a chance to write the trade.
+      if (currentChain === "sol" && detail?.chain === "sol") {
+        setTimeout(() => { void wp.refetch().catch(() => {}); }, 800);
+      }
     };
 
     window.addEventListener(TRADE_COMPLETED_EVENT, handleTradeCompleted);
@@ -1064,6 +1250,11 @@ export default function PortfolioPage() {
     const handlePositionsChanged = () => {
       refreshBalance({ chain: currentChain === 'monad' ? 'monad' : 'sol', force: true }).catch(() => {});
       setTradeRefreshCounter((c) => c + 1);
+      // Same chain-derived refresh trigger — covers WS-driven changes that didn't
+      // go through TRADE_COMPLETED_EVENT (e.g. trades from another tab/device).
+      if (currentChain === "sol") {
+        void wp.refetch().catch(() => {});
+      }
     };
     window.addEventListener('solanaPositionsChanged', handlePositionsChanged);
 
@@ -1160,7 +1351,7 @@ export default function PortfolioPage() {
       window.removeEventListener('solanaActivitySnapshot', handleActivitySnapshot);
       window.removeEventListener('solanaWsReconnected', handleWsReconnected);
     };
-  }, [currentChain, refreshBalance, tradeActivityCacheKey, tradeHistoryCacheKey, isTradeOnCurrentChain, requestSnapshot]);
+  }, [currentChain, refreshBalance, tradeActivityCacheKey, tradeHistoryCacheKey, isTradeOnCurrentChain, requestSnapshot, wp.refetch]);
 
   // Note: Initial balance is set once when first detected and persists
   // It does NOT auto-reset to prevent wallet balance change from going to 0
@@ -1424,11 +1615,15 @@ export default function PortfolioPage() {
       });
       setTop100Positions(sortedByUsdValue.slice(0, 100));
     } else {
-      // Reset values when no positions
+      // Reset values when no positions. Top 100 must also reset here —
+      // otherwise it retains its last-non-empty snapshot when the user sells
+      // their final position, causing the Top 100 tab to show stale rows
+      // (e.g., a just-sold token still appearing as the sole entry).
       setUnrealizedPnl(0);
       setUnrealizedPnlPercentage(0);
       setTotalPnl(0);
       setTotalPnlPercentage(0);
+      setTop100Positions([]);
     }
   }, [positions, solBalance, monBalance, currentChain, monPrice, livePrices, actualBalances]);
 
@@ -1527,12 +1722,46 @@ export default function PortfolioPage() {
     });
   }, [searchQuery, tradeHistory, tokenNames, tokenMetadataCache]);
 
+  // Adapt chain-derived trades (from token-service /v1/wallet/:addr/trades) into
+  // the legacy TradeRow shape that <Activity> renders. Enrich with cached token
+  // metadata where available (name, symbol, image). Adapter leaves PnL fields
+  // undefined since chain rows don't contain matched buy/sell pairs.
+  const chainTradeActivity = useMemo(() => {
+    if (currentChain !== "sol" || !wt.trades || wt.trades.length === 0) return [];
+    return wt.trades.map((t) =>
+      walletPortfolioTradeToTradeRow(t, tokenMetadataCache[t.token_mint]),
+    );
+  }, [wt.trades, currentChain, tokenMetadataCache]);
+
   const filteredTradeActivity = useMemo(() => {
+    // Source selection:
+    //   - Solana + chain trades available (index built, wallet has trades): use chain-derived (full history including off-platform).
+    //   - Solana but indexing/empty: fall back to on-platform tradeActivity filtered by primary wallet.
+    //   - Monad: existing user-aggregate tradeActivity (no per-wallet scope on Monad yet).
+    const useChainSource =
+      currentChain === "sol" && !wt.isIndexing && chainTradeActivity.length > 0;
+
+    const baseTrades: TradeRow[] = useChainSource
+      ? chainTradeActivity
+      : (() => {
+          if (currentChain !== "sol" || !primarySolAddr) return tradeActivity;
+          return tradeActivity.filter((trade) => {
+            const candidates = [
+              trade.walletAddress,
+              trade.wallet,
+              trade.userWalletAddress,
+              trade.userWallet,
+              trade.fromAddress,
+            ];
+            return candidates.some((c) => c && c === primarySolAddr);
+          });
+        })();
+
     if (!searchQuery.trim()) {
-      return tradeActivity;
+      return baseTrades;
     }
     const query = searchQuery.toLowerCase().trim();
-    return tradeActivity.filter((trade) => {
+    return baseTrades.filter((trade) => {
       const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
       const txHash = trade.transactionHash?.toLowerCase() || "";
       const tradeName = trade.tokenName?.toLowerCase() || "";
@@ -1556,7 +1785,16 @@ export default function PortfolioPage() {
         metadataSymbol.includes(query)
       );
     });
-  }, [searchQuery, tradeActivity, tokenNames, tokenMetadataCache]);
+  }, [
+    searchQuery,
+    tradeActivity,
+    chainTradeActivity,
+    wt.isIndexing,
+    tokenNames,
+    tokenMetadataCache,
+    currentChain,
+    primarySolAddr,
+  ]);
 
   // Calculate metrics based on selected timeframe
   useEffect(() => {
@@ -3344,32 +3582,42 @@ export default function PortfolioPage() {
                     </InterstateTooltip> */}
                   </div>
                   <div className="flex flex-col">
-                    <div
-                      className="text-xl sm:text-2xl font-semibold mb-2 tabular-nums"
-                      style={{
-                        color:
-                          timeframeMetrics.realizedPnl >= 0 ? "#18c48c" : "#ef4444",
-                      }}
-                    >
-                      {sortByUSD && contextSolPrice > 0 ? (
+                    {/*
+                      Realized PnL display source:
+                      - On Solana with wp.summary loaded → wallet-scoped chain value
+                        (displayRealizedPnl / displayRealizedPnlPct).
+                      - Otherwise (Monad, pre-load) → legacy user-aggregate timeframeMetrics.
+                      The chart below still uses tradeHistory-derived series — it's
+                      timeframe-aware and the headline number is what users complained
+                      about being "user-aggregate, not wallet-scoped".
+                      Styling (font-semibold, tabular-nums, #18c48c/#ef4444 colors)
+                      comes from prod's design refresh; merged with our chain-source logic.
+                    */}
+                    {(() => {
+                      const realizedValue = displayRealizedPnl ?? timeframeMetrics.realizedPnl;
+                      const realizedPct = displayRealizedPnlPct ?? timeframeMetrics.realizedPnlPercentage;
+                      return (
                         <>
-                          <ChainIcon chain={currentChain} size="medium" />
-                          {formatSmartNumber(
-                            Math.abs(timeframeMetrics.realizedPnl) / contextSolPrice,
-                          )}
+                          <div
+                            className="text-xl sm:text-2xl font-semibold mb-2 tabular-nums"
+                            style={{ color: realizedValue >= 0 ? "#18c48c" : "#ef4444" }}
+                          >
+                            {sortByUSD && contextSolPrice > 0 ? (
+                              <>
+                                <ChainIcon chain={currentChain} size="medium" />
+                                {formatSmartNumber(Math.abs(realizedValue) / contextSolPrice)}
+                              </>
+                            ) : (
+                              `${realizedValue >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(realizedValue))}`
+                            )}
+                          </div>
+                          {/* Realized PNL Percentage - Always show */}
+                          <div className={`text-sm mb-2 tabular-nums ${realizedPct >= 0 ? 'text-[#18c48c]' : 'text-[#ef4444]'}`}>
+                            {realizedPct >= 0 ? "+" : ""}{formatSmallPrice(realizedPct)}%
+                          </div>
                         </>
-                      ) : (
-                        `${
-                          timeframeMetrics.realizedPnl >= 0 ? "+" : "-"
-                        }$${formatSmallPrice(
-                          Math.abs(timeframeMetrics.realizedPnl),
-                        )}`
-                      )}
-                    </div>
-                    {/* Realized PNL Percentage - Always show */}
-                    <div className={`text-sm mb-2 tabular-nums ${timeframeMetrics.realizedPnlPercentage >= 0 ? 'text-[#18c48c]' : 'text-[#ef4444]'}`}>
-                      {timeframeMetrics.realizedPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(timeframeMetrics.realizedPnlPercentage)}%
-                    </div>
+                      );
+                    })()}
                     {/* Interactive Realized PNL Chart */}
                     {pnlChartData.length > 1 ? (
                       <div className="h-40 sm:h-48 w-full">
@@ -3659,8 +3907,21 @@ export default function PortfolioPage() {
                         userId={user.id}
                         onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
-                        preloadedPositions={searchQuery.trim() !== "" ? filteredPositions : undefined}
-                        skipFetch={searchQuery.trim() !== ""}
+                        // For Solana: feed the *enriched* local `positions` state (sourced
+                        // from the useEffect at line 603-640 that maps wp.positions through
+                        // USD enrichment + dust filter + .reverse()). Reading wp.positions
+                        // directly here was Bug 1 — WS updates flowed in but with USD fields
+                        // = 0 and no dust filter, producing a visually-identical render even
+                        // though the prop reference changed. Top 100 was already keyed off
+                        // `positions` via top100Positions derivation; this aligns Active
+                        // Positions with the same source of truth.
+                        // For Monad: keep existing behavior — let Positions fetch internally.
+                        preloadedPositions={
+                          currentChain === "sol"
+                            ? (searchQuery.trim() !== "" ? filteredPositions : positions)
+                            : (searchQuery.trim() !== "" ? filteredPositions : undefined)
+                        }
+                        skipFetch={currentChain === "sol" || searchQuery.trim() !== ""}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}
@@ -3700,14 +3961,23 @@ export default function PortfolioPage() {
                         userId={user.id}
                         onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
+                        // For Solana: top100Positions is derived from wp.positions via the
+                        // existing useEffect (line ~1419) — top-100 by USD value desc.
+                        // skipFetch=true unconditionally for sol since wp owns the data.
                         preloadedPositions={
-                          searchQuery.trim()
-                            ? filteredTop100Positions
-                            : top100Positions.length > 0
-                              ? top100Positions
-                              : undefined
+                          currentChain === "sol"
+                            ? (searchQuery.trim() ? filteredTop100Positions : top100Positions)
+                            : (searchQuery.trim()
+                                ? filteredTop100Positions
+                                : top100Positions.length > 0
+                                  ? top100Positions
+                                  : undefined)
                         }
-                        skipFetch={activeSpotTab !== 1 || searchQuery.trim() !== "" || top100Positions.length > 0}
+                        skipFetch={
+                          currentChain === "sol"
+                            ? true
+                            : (activeSpotTab !== 1 || searchQuery.trim() !== "" || top100Positions.length > 0)
+                        }
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}
@@ -3726,9 +3996,17 @@ export default function PortfolioPage() {
                       <div />
                     ) : (
                       <div className="w-full">
+                        {/* Banner: chain-derived trade history is unavailable while the
+                            wallet trader index builds (~few hours). Falls back to on-platform
+                            trades filtered by primary wallet in the meantime. */}
+                        {currentChain === "sol" && wt.isIndexing && (
+                          <div className="mb-3 rounded-md border border-[#2A2D32] bg-[#15171C] px-3 py-2 text-xs text-[#9CA3AF]">
+                            Chain-wide trade history is being indexed (~few hours). Showing on-platform trades for now.
+                          </div>
+                        )}
                         <Activity
                           trades={filteredTradeActivity}
-                          loading={loadingTradeActivity}
+                          loading={loadingTradeActivity || (currentChain === "sol" && wt.loading && filteredTradeActivity.length === 0)}
                           onTokenNamesChange={setTokenNames}
                           tokenMetadataCache={tokenMetadataCache}
                           onUpdateCache={updateTokenMetadataCache}
@@ -4216,14 +4494,25 @@ export default function PortfolioPage() {
                                   <span className="text-xs text-[#6B7280] sm:hidden">Holdings:</span>
                                   <div className="flex items-center">
                                     <StackedTokenBoxes
-                                      count={
-                                        // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
-                                        wallet.holdingsCount > 0
-                                          ? wallet.holdingsCount
-                                          : wallet.isPrimary && positions.length > 0
-                                            ? positions.length
-                                            : wallet.holdingsCount
-                                      }
+                                      count={(() => {
+                                        // Priority for Solana wallets:
+                                        //   1. Primary wallet → live page-level `positions.length` (most up-to-date,
+                                        //      mirrors WS pushes and refetch-on-trade).
+                                        //   2. Any other wallet → chain-derived count from chainHoldingsCounts
+                                        //      (fetched once per walletList change; reflects on-chain truth).
+                                        //   3. Fallback → backend's wallet.holdingsCount (TradeHistory-based).
+                                        // For Monad / non-Solana, fall through to backend count.
+                                        const addr = wallet.solanaAddress as string | undefined;
+                                        if (currentChain === "sol") {
+                                          if (wallet.isPrimary && positions.length > 0) {
+                                            return positions.length;
+                                          }
+                                          if (addr && typeof chainHoldingsCounts[addr] === "number") {
+                                            return chainHoldingsCounts[addr];
+                                          }
+                                        }
+                                        return wallet.holdingsCount;
+                                      })()}
                                     />
                                   </div>
                                 </div>

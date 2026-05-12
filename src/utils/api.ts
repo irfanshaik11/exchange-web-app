@@ -1795,3 +1795,161 @@ export const updateUsername = async (
 };
 
 export { apiFetch };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wallet Portfolio (chain-derived) — token-service /v1/wallet/:addr/*
+//
+// Powered by the indexer's solana_trades + wallet_holder_positions tables. Works
+// for ANY pasted wallet address, not just the logged-in user's. Mirrors the
+// data Axiom/GMGN show.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TOKEN_SERVICE_URL = (env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(/\/$/, "");
+
+export interface WalletPortfolioPosition {
+  wallet_address: string;
+  token_mint: string;
+  token_name?: string | null;
+  token_symbol?: string | null;
+  image_url?: string | null;
+  launchpad_protocol?: string | null;
+  bought_tokens: number;
+  sold_tokens: number;
+  remaining_tokens: number;
+  bought_sol: number;
+  sold_sol: number;
+  buy_count: number;
+  sell_count: number;
+  first_buy_at?: string | null;
+  last_activity_at?: string | null;
+  on_chain_token_balance?: number | null;
+  current_price_usd?: number | null;
+  current_market_cap_usd?: number | null;
+  remaining_value_usd: number;
+  bought_usd_value: number;
+  sold_usd_value: number;
+  realized_pnl_sol: number;
+  realized_pnl_usd: number;
+  unrealized_pnl_usd: number;
+  is_sniper: boolean;
+  is_insider: boolean;
+  is_dev: boolean;
+  is_kol: boolean;
+  is_smart_money: boolean;
+  is_bundler: boolean;
+  holder_type: string;
+}
+
+export interface WalletPortfolioSummary {
+  wallet_address: string;
+  active_position_count: number;
+  total_realized_pnl_sol: number;
+  total_realized_pnl_usd: number;
+  total_unrealized_pnl_usd: number;
+  total_bought_sol: number;
+  total_sold_sol: number;
+  total_volume_sol: number;
+  total_trade_count: number;
+  winning_trades: number;
+  losing_trades: number;
+  win_rate_pct: number;
+  unique_tokens_traded: number;
+  first_activity_at?: string | null;
+  last_activity_at?: string | null;
+}
+
+export interface WalletPortfolioTopToken {
+  token_mint: string;
+  token_name?: string | null;
+  token_symbol?: string | null;
+  image_url?: string | null;
+  bought_sol: number;
+  sold_sol: number;
+  bought_tokens: number;
+  sold_tokens: number;
+  realized_pnl_sol: number;
+}
+
+export interface WalletPortfolioTrade {
+  signature: string;
+  block_time?: string | null;
+  created_at: string;
+  trader_wallet: string;
+  token_mint: string;
+  is_buy: boolean;
+  sol_amount: number;
+  token_amount: number;
+  price_sol: number;
+  price_usd: number;
+  market_cap_usd: number;
+  launchpad_protocol?: string | null;
+  pool_address?: string | null;
+  fee_lamports?: number | null;
+  quote_mint?: string | null;
+}
+
+async function tokenServiceJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  if (!TOKEN_SERVICE_URL) throw new Error("NEXT_PUBLIC_GO_SERVICE_URL not configured");
+  const res = await fetch(`${TOKEN_SERVICE_URL}${path}`, { signal });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = (body && body.error) || "";
+    } catch {}
+    throw new Error(detail || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const getWalletPortfolioSummary = (
+  address: string,
+  signal?: AbortSignal,
+): Promise<WalletPortfolioSummary> =>
+  tokenServiceJson<WalletPortfolioSummary>(`/v1/wallet/${encodeURIComponent(address)}`, signal);
+
+export const getWalletPortfolioPositions = (
+  address: string,
+  opts?: { includeClosed?: boolean; signal?: AbortSignal },
+): Promise<{ wallet_address: string; count: number; positions: WalletPortfolioPosition[] }> => {
+  const qs = opts?.includeClosed ? "?include_closed=1" : "";
+  return tokenServiceJson(`/v1/wallet/${encodeURIComponent(address)}/positions${qs}`, opts?.signal);
+};
+
+export const getWalletPortfolioTopTokens = (
+  address: string,
+  opts?: { limit?: number; signal?: AbortSignal },
+): Promise<{ wallet_address: string; count: number; tokens: WalletPortfolioTopToken[] }> => {
+  const limit = opts?.limit ?? 100;
+  return tokenServiceJson(
+    `/v1/wallet/${encodeURIComponent(address)}/top-tokens?limit=${limit}`,
+    opts?.signal,
+  );
+};
+
+export const getWalletPortfolioTrades = (
+  address: string,
+  opts?: { cursor?: string; limit?: number; signal?: AbortSignal },
+): Promise<{
+  wallet_address: string;
+  count: number;
+  trades: WalletPortfolioTrade[];
+  next_cursor: string | null;
+}> => {
+  const params = new URLSearchParams();
+  if (opts?.cursor) params.set("cursor", opts.cursor);
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  return tokenServiceJson(
+    `/v1/wallet/${encodeURIComponent(address)}/trades${qs ? `?${qs}` : ""}`,
+    opts?.signal,
+  );
+};
+
+/** Build the WS URL for the per-wallet stream. Returns null when SSR or address missing. */
+export function buildWalletPortfolioWsUrl(address: string): string | null {
+  if (!TOKEN_SERVICE_URL || !address) return null;
+  // Replace http(s) with ws(s) — useRobustWebSocket expects an absolute ws URL.
+  const wsBase = TOKEN_SERVICE_URL.replace(/^http/, "ws");
+  return `${wsBase}/v1/ws/wallet/${encodeURIComponent(address)}`;
+}
