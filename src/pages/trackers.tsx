@@ -2464,7 +2464,7 @@ export default function TrackersPage() {
                         {/* Top-level tabs: X Tracker / TG Tracker */}
                         <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pt-3.5 pb-2.5 sm:pt-4 sm:pb-3">
                           <div className="flex items-center gap-4 sm:gap-5">
-                            {/* <button
+                            <button
                             type="button"
                             onClick={() => setSocialPanelTab("twitter")}
                             className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
@@ -2474,7 +2474,7 @@ export default function TrackersPage() {
                             }`}
                           >
                             X Tracker
-                          </button> */}
+                          </button>
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("telegram")}
