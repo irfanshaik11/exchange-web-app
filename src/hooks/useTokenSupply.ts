@@ -9,18 +9,17 @@ const GO_SERVICE_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL || "";
 // <= 1 as "still loading" and show "—" / fall through to fallback math.
 const DEFAULT_SUPPLY = 1;
 
-// Optimistic fallback for known 1B-supply launchpads. Used as the initial
-// state when we know the token came from a launchpad whose bonding-curve
-// convention is exactly 1B tokens — so the chart can render correct MC
-// during the 5-15s window where the indexer's RPC retry cascade is still
-// landing the real value in PG. When the real value arrives (almost always
-// also 1B for these protocols), no visible change. On the rare token that
-// differs (e.g. graduated pump.fun = 2B), the chart's setSymbol re-resolve
-// fixes the pricescale.
+// Last-resort fallback for known 1B-bonding-curve launchpads. ONLY applied
+// after every other path has failed: the WS supply hint missed, the HTTP
+// /v1/supply path (which itself tries PG then Solana RPC inside token-
+// service) exhausted all 6 retries (~25s of exponential backoff). For
+// these protocols every bonding-curve mint is exactly 1B, so this is the
+// correct *default* answer — better than leaving "—" on the screen
+// indefinitely after we've genuinely tried everything.
 //
-// Intentionally excluded: arbitrary tokens like JUP (6.86B with 6 decimals).
-// For those, the fallback would show wrong MC — better to display "—"
-// briefly until the real value resolves.
+// Intentionally excluded: tokens we don't know the protocol for, and
+// tokens with non-1B supply conventions. For those we keep the sentinel
+// even after retries exhaust — better an empty value than a wrong one.
 const LAUNCHPAD_FALLBACK_SUPPLY = 1_000_000_000;
 const KNOWN_1B_LAUNCHPADS = new Set([
   "pump.fun",
@@ -36,11 +35,9 @@ const KNOWN_1B_LAUNCHPADS = new Set([
   "raydiumlaunchpad",
 ]);
 
-function initialSupplyFor(protocol?: string | null): number {
-  if (!protocol) return DEFAULT_SUPPLY;
-  return KNOWN_1B_LAUNCHPADS.has(protocol.toLowerCase())
-    ? LAUNCHPAD_FALLBACK_SUPPLY
-    : DEFAULT_SUPPLY;
+function isKnown1BLaunchpad(protocol?: string | null): boolean {
+  if (!protocol) return false;
+  return KNOWN_1B_LAUNCHPADS.has(protocol.toLowerCase());
 }
 
 // Retry policy for /v1/supply. Solana RPC can flake on a freshly-discovered
@@ -65,15 +62,13 @@ interface UseTokenSupplyResult {
 
 export default function useTokenSupply(
   mint: string | undefined | null,
-  // Optional protocol hint: when caller knows the token came from a 1B-supply
-  // launchpad, we render the correct MC immediately instead of "—" while the
-  // /v1/supply fetch resolves. Backward-compatible: callers that don't pass
-  // this fall through to DEFAULT_SUPPLY (existing "—" behavior).
+  // Optional protocol hint: when caller knows the token came from a known
+  // 1B-supply launchpad, we apply a 1B last-resort fallback if every other
+  // path (WS + HTTP + HTTP retries) fails. Without this hint the hook leaves
+  // the sentinel in place and the trade-header keeps showing "—".
   launchpadProtocol?: string | null,
 ): UseTokenSupplyResult {
-  const [circulatingSupply, setCirculatingSupply] = useState<number>(() =>
-    initialSupplyFor(launchpadProtocol),
-  );
+  const [circulatingSupply, setCirculatingSupply] = useState<number>(DEFAULT_SUPPLY);
   const [isLoading, setIsLoading] = useState(false);
 
   // Tracks the mint whose supply we have *successfully* resolved. NOT the
@@ -91,6 +86,15 @@ export default function useTokenSupply(
   // Tracks the most-recent mint requested. Used by the retry timer to
   // bail out if the mint changed during backoff.
   const requestedMintRef = useRef<string | null>(null);
+
+  // Mirror launchpadProtocol into a ref so the fetchSupply callback can
+  // read the latest value without becoming a dep of useEffect (which would
+  // restart the fetch on every protocol change — undesirable when the
+  // protocol arrives slightly after the mint).
+  const protocolRef = useRef<string | null | undefined>(launchpadProtocol);
+  useEffect(() => {
+    protocolRef.current = launchpadProtocol;
+  }, [launchpadProtocol]);
 
   const cancelRetry = useCallback(() => {
     if (retryTimerRef.current) {
@@ -139,6 +143,18 @@ export default function useTokenSupply(
               fetchSupply(mintAddr, attempt + 1);
             }
           }, delay);
+        } else if (requestedMintRef.current === mintAddr) {
+          // All retries exhausted AND the mint hasn't changed. As a true
+          // last resort — every other path (WS hint, HTTP PG fast-path,
+          // HTTP RPC fallback, all 6 backoff retries totaling ~25s) has
+          // failed — fall back to 1B if the caller identified this as a
+          // known 1B-supply launchpad. For non-launchpad tokens we keep
+          // the sentinel so the UI keeps showing "—" rather than
+          // displaying wrong MC. Deliberately NOT marking resolvedMintRef
+          // here so refetch() can still try /v1/supply again.
+          if (isKnown1BLaunchpad(protocolRef.current)) {
+            setCirculatingSupply(LAUNCHPAD_FALLBACK_SUPPLY);
+          }
         }
       } finally {
         if (!controller.signal.aborted) setIsLoading(false);
@@ -149,7 +165,7 @@ export default function useTokenSupply(
 
   useEffect(() => {
     if (!mint || mint.length < 20) {
-      setCirculatingSupply(initialSupplyFor(launchpadProtocol));
+      setCirculatingSupply(DEFAULT_SUPPLY);
       resolvedMintRef.current = null;
       requestedMintRef.current = null;
       cancelRetry();
@@ -168,11 +184,9 @@ export default function useTokenSupply(
     // previous token's supply on the new chart. Critical for pricescale
     // correctness — the chart's resolveSymbol reads the multiplier at
     // init time; a leaked value from a previous token would set the
-    // wrong pricescale. For known 1B-supply launchpads, seed with 1B
-    // instead of the sentinel so the chart MC renders correctly during
-    // the indexer's 5-15s supply propagation window.
+    // wrong pricescale.
     cancelRetry();
-    setCirculatingSupply(initialSupplyFor(launchpadProtocol));
+    setCirculatingSupply(DEFAULT_SUPPLY);
 
     // WS fast-path: the OHLCV WebSocket piggybacks the supply payload
     // onto its snapshot message. By the time `useTokenSupply` mounts on
@@ -180,8 +194,7 @@ export default function useTokenSupply(
     // prewarmed by SearchModal hover), and supply has landed in the
     // shared cache. Skip the HTTP round-trip entirely when it's there.
     // No retry/backoff needed — the cached value came from a successful
-    // PG read upstream. Note: the WS value is authoritative, so it
-    // overrides any 1B optimistic fallback set above.
+    // PG read upstream.
     const wsCached = getWsSupply(mint);
     if (wsCached) {
       const parsed = parseFloat(wsCached.circulating_supply);
@@ -207,7 +220,7 @@ export default function useTokenSupply(
       // cleanup ABOVE at line "if (!mint || ...)" handles real teardown.
       abortRef.current?.abort();
     };
-  }, [mint, launchpadProtocol, fetchSupply, cancelRetry]);
+  }, [mint, fetchSupply, cancelRetry]);
 
   const refetch = useCallback(() => {
     if (mint && mint.length >= 20) {
