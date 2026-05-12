@@ -889,13 +889,21 @@ export function createWalletTrackerWebSocket(
   };
 
   ws.onmessage = (event) => {
+    // Any inbound frame proves the socket is alive — bump the heartbeat
+    // unconditionally. Browsers handle native ping/pong control frames
+    // (RFC 6455) transparently and never surface them to onmessage, so
+    // gating this on a specific JSON `method: "ping"` payload would silently
+    // break the moment the backend (or any proxy in front of it) switched
+    // to control-frame keepalive — clients would close on the 45s timeout
+    // and reconnect forever.
+    isAlive = true;
+    lastPingAt = Date.now();
+
     try {
       const data = JSON.parse(event.data);
 
       // Handle ping/pong
       if (data.method === "ping") {
-        isAlive = true;
-        lastPingAt = Date.now();
         ws.send(JSON.stringify({ method: "pong" }));
         return;
       }

@@ -49,6 +49,28 @@ const resolveWsUrl = () => {
 };
 const WALLET_TRACKER_WS_URL = resolveWsUrl();
 
+// One-shot startup audit: NEXT_PUBLIC_* env vars are inlined at build time on
+// Vercel, so a missed env var produces a *silent* stub WebSocket and silent
+// same-origin HTTP fetches. Warn loudly in the browser so a misconfigured
+// production deploy can't quietly ship without real-time updates / tracker
+// API connectivity. SSR skipped to keep build logs quiet.
+if (typeof window !== "undefined") {
+  if (!WALLET_TRACKER_WS_URL) {
+    console.warn(
+      "[twitterTracking] NEXT_PUBLIC_WALLET_TRACKER_WS_URL is not set. " +
+        "Real-time X tracker updates are disabled — createTwitterTrackerWebSocket() " +
+        "will return a no-op stub. Set the env var and rebuild to re-enable.",
+    );
+  }
+  if (!WALLET_TRACKER_API_URL) {
+    console.warn(
+      "[twitterTracking] NEXT_PUBLIC_WALLET_TRACKER_URL is not set. " +
+        "Tracker HTTP calls will hit same-origin paths and likely 404. " +
+        "Set the env var and rebuild.",
+    );
+  }
+}
+
 // Database model - minimal storage
 export interface TwitterAccountDb {
   id: string;
@@ -270,16 +292,27 @@ export async function getTwitterUserInfo(
  * Get tweets from tracked accounts.
  *
  * The backend `/api/twitter/feed` route is authenticated, so `authToken` is
- * required. Returns `[]` on any error (including missing token) — callers
- * shouldn't crash the page when the feed isn't reachable yet.
+ * required. Returns `[]` on any error so callers shouldn't crash the page
+ * when the feed isn't reachable yet, but we log loudly when the token is
+ * empty — that's the only failure mode the type system can't catch.
+ *
+ * Argument order: (usernames, authToken, maxResults). `authToken` was
+ * deliberately moved ahead of the defaulted `maxResults` so a future
+ * caller that forgets it gets a compile-time error instead of a silent
+ * empty feed.
  */
 export async function getTwitterFeed(
   usernames: string[],
+  authToken: string,
   maxResults: number = 20,
-  authToken?: string,
 ): Promise<Tweet[]> {
   try {
-    if (usernames.length === 0 || !authToken) {
+    if (usernames.length === 0) return [];
+    if (!authToken) {
+      console.warn(
+        "[twitterTracking] getTwitterFeed called without an authToken — " +
+          "/api/twitter/feed is authenticated. Returning empty feed.",
+      );
       return [];
     }
 
@@ -429,10 +462,17 @@ export function createTwitterTrackerWebSocket(
     };
 
     ws.onmessage = (event) => {
+      // Any inbound frame proves the socket is alive — bump the heartbeat
+      // unconditionally. Browsers handle native ping/pong control frames
+      // (RFC 6455) transparently and never surface them to onmessage, so
+      // gating this on a specific JSON `method: "ping"` payload would silently
+      // break the moment the backend (or any proxy in front of it) switched
+      // to control-frame keepalive — clients would close on the 45s timeout
+      // and reconnect forever.
+      lastPingAt = Date.now();
       try {
         const data = JSON.parse(event.data);
         if (data.method === "ping") {
-          lastPingAt = Date.now();
           ws?.send(JSON.stringify({ method: "pong" }));
           return;
         }

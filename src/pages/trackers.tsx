@@ -708,21 +708,52 @@ export default function TrackersPage() {
   }, [user?.id]);
 
   // Auto-retry while any tracked row is still un-enriched. TwitterAPI.io
-  // occasionally 429s our request; the backend now returns the bare DB row
-  // for that handle and kicks off a background re-prime. This loop polls
-  // every 4s for up to 30s so the user doesn't have to manually refresh.
+  // occasionally 429s; the backend then returns the bare DB row for that
+  // handle and kicks off a background re-prime. We poll every 4s for at
+  // most ~28s so the user doesn't have to manually refresh.
+  //
+  // The attempt counter lives in a ref because every loadTwitterAccounts
+  // call sets a fresh `twitterAccounts` array reference, which would otherwise
+  // re-run this effect and reset a local counter on every tick — making the
+  // "cap" fictional. The signature ref restarts the counter only when the
+  // *set* of incomplete handles actually changes (e.g., user added a new
+  // one), so a stuck handle is dropped after the cap instead of polling forever.
+  const twitterRetryAttemptsRef = useRef(0);
+  const twitterIncompleteSignatureRef = useRef<string>("");
+
   useEffect(() => {
     if (!user?.id || twitterAccounts.length === 0) return;
-    const allEnriched = twitterAccounts.every(
-      (a) => Boolean(a.profileImageUrl) && typeof a.followers === "number",
-    );
-    if (allEnriched) return;
-    let attempts = 0;
+
+    const incompleteSignature = twitterAccounts
+      .filter(
+        (a) =>
+          !Boolean(a.profileImageUrl) || typeof a.followers !== "number",
+      )
+      .map((a) => a.username.toLowerCase())
+      .sort()
+      .join(",");
+
+    if (!incompleteSignature) {
+      twitterRetryAttemptsRef.current = 0;
+      twitterIncompleteSignatureRef.current = "";
+      return;
+    }
+
+    if (incompleteSignature !== twitterIncompleteSignatureRef.current) {
+      twitterRetryAttemptsRef.current = 0;
+      twitterIncompleteSignatureRef.current = incompleteSignature;
+    }
+
+    // 3 × 10s = 30s budget. Fewer attempts + wider gap so a missing handle
+    // doesn't pile up TwitterAPI.io credit-spending calls — the backend's
+    // stale-while-revalidate fallback fills in the gap on next refresh.
+    if (twitterRetryAttemptsRef.current >= 3) return;
+
     const id = setInterval(() => {
-      attempts++;
+      twitterRetryAttemptsRef.current++;
       loadTwitterAccounts();
-      if (attempts >= 7) clearInterval(id); // 7 × 4s = 28s
-    }, 4_000);
+      if (twitterRetryAttemptsRef.current >= 3) clearInterval(id);
+    }, 10_000);
     return () => clearInterval(id);
   }, [user?.id, twitterAccounts]);
 
@@ -1682,7 +1713,7 @@ export default function TrackersPage() {
       } else {
         // Load tweets from all tracked accounts
         const usernames = twitterAccounts.map((acc) => acc.username);
-        tweets = await getTwitterFeed(usernames, 20, user?.bearerToken);
+        tweets = await getTwitterFeed(usernames, user?.bearerToken ?? "", 20);
       }
 
       setTwitterFeed(tweets);
