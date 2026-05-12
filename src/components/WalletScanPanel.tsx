@@ -24,9 +24,11 @@ import {
   getWalletTransactions,
   getWalletHistory,
   getWalletTradeHistory,
+  readPortfolioCacheForWallet,
   type TradeEvent,
 } from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
+import { useUser } from "./UserContext";
 import Activity from "./trade/Activity";
 import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
@@ -102,6 +104,21 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   // Get latest trades from context (same as Live Trades)
   const { latestTrades } = useWalletTracker();
 
+  // User context for detecting own wallets and reading portfolio cache
+  const { user, walletList } = useUser();
+
+  const isOwnWallet = useMemo(() => {
+    if (!user || !wallet?.address) return false;
+    const addr = wallet.address.toLowerCase();
+    if (user.publicKey?.toLowerCase() === addr) return true;
+    return walletList.some(
+      (w) =>
+        w.solanaAddress?.toLowerCase() === addr ||
+        w.ethereumAddress?.toLowerCase() === addr ||
+        w.address?.toLowerCase() === addr,
+    );
+  }, [user, wallet?.address, walletList]);
+
   const {
     tokens: devTokens,
     isLoading: devTokensLoading,
@@ -150,8 +167,16 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   } | null>(null);
 
   // History data - using TradeEvent format (same as Live Trades)
-  const [history, setHistory] = useState<TradeEvent[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  // For user's own wallets, hydrate from portfolio cache for instant display
+  const portfolioCacheRef = useRef<TradeEvent[] | null>(
+    isOwnWallet ? readPortfolioCacheForWallet(user?.id, wallet.address) : null,
+  );
+  const [history, setHistory] = useState<TradeEvent[]>(
+    () => portfolioCacheRef.current ?? [],
+  );
+  const [historyLoading, setHistoryLoading] = useState(
+    () => !portfolioCacheRef.current || portfolioCacheRef.current.length === 0,
+  );
   const [historyError, setHistoryError] = useState<string | null>(null);
   
   // Closed orders (completed positions with PnL)
@@ -1104,7 +1129,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     prevWalletAddressRef.current = wallet.address;
 
     if (isWalletChange) {
-      setHistoryLoading(true);
+      // Skip loading spinner if we already have cached portfolio data
+      const hasCachedData = history.length > 0;
+      if (!hasCachedData) {
+        setHistoryLoading(true);
+      }
     }
     setHistoryError(null);
 
