@@ -707,6 +707,25 @@ export default function TrackersPage() {
     loadTwitterAccounts();
   }, [user?.id]);
 
+  // Auto-retry while any tracked row is still un-enriched. TwitterAPI.io
+  // occasionally 429s our request; the backend now returns the bare DB row
+  // for that handle and kicks off a background re-prime. This loop polls
+  // every 4s for up to 30s so the user doesn't have to manually refresh.
+  useEffect(() => {
+    if (!user?.id || twitterAccounts.length === 0) return;
+    const allEnriched = twitterAccounts.every(
+      (a) => Boolean(a.profileImageUrl) && typeof a.followers === "number",
+    );
+    if (allEnriched) return;
+    let attempts = 0;
+    const id = setInterval(() => {
+      attempts++;
+      loadTwitterAccounts();
+      if (attempts >= 7) clearInterval(id); // 7 × 4s = 28s
+    }, 4_000);
+    return () => clearInterval(id);
+  }, [user?.id, twitterAccounts]);
+
   // Load Telegram channels on mount
   useEffect(() => {
     if (user?.bearerToken) loadTelegramChannels();

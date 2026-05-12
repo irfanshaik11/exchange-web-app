@@ -84,6 +84,25 @@ export default function TwitterTrackerContent() {
     loadTwitterAccounts();
   }, [user?.id]);
 
+  // Auto-retry while any tracked row is still un-enriched. TwitterAPI.io
+  // occasionally 429s; the backend then returns the bare DB row for that
+  // handle and kicks off a background re-prime. This loop polls every 4s
+  // for up to 30s so the user doesn't have to manually refresh.
+  useEffect(() => {
+    if (!user || twitterAccounts.length === 0) return;
+    const allEnriched = twitterAccounts.every(
+      (a) => Boolean(a.profileImageUrl) && typeof a.followers === "number",
+    );
+    if (allEnriched) return;
+    let attempts = 0;
+    const id = setInterval(() => {
+      attempts++;
+      loadTwitterAccounts();
+      if (attempts >= 7) clearInterval(id);
+    }, 4_000);
+    return () => clearInterval(id);
+  }, [user, twitterAccounts]);
+
   useEffect(() => {
     if (twitterTab !== 1) return;
     if (twitterAccounts.length === 0) {
