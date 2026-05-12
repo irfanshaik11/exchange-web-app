@@ -4261,6 +4261,59 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
                         dedup.push(b);
                         prevUt = b.unix_time;
                       }
+
+                      // STALE-LAST-BAR FIX. The /v1/ohlcv proxy reads from
+                      // TimescaleDB continuous aggregates which materialize
+                      // with an `end_offset` window (1h has 1h, 4h has 4h,
+                      // 1d has 1d, 1w has 1d). The snapshot's last bar is
+                      // therefore from end_offset ago — for 4h that's ~14h
+                      // stale; for 1d that's ~2 days; for 1w even more.
+                      // Reading the close of that stale bar gives the wrong
+                      // "current price" for downstream consumers (the header
+                      // MC reads chart's last close). Repair the tail by
+                      // aggregating the LIVE 1s cache (cache["1S"], which
+                      // contains the WS-fed 1s bars covering NOW back as
+                      // far as the WS has been streaming) into the same
+                      // target TF, then APPENDING/OVERWRITING any bucket
+                      // whose start-time is at or after the snapshot's
+                      // last bar. Result: last visible bar's close = close
+                      // of the most recent live 1s bar = current price.
+                      try {
+                        const liveOneS =
+                          resolutionCacheRef.current.get("1S") || [];
+                        if (liveOneS.length > 0) {
+                          const aggLive = aggregateCandlesToInterval(
+                            liveOneS,
+                            fetchInterval,
+                          );
+                          if (aggLive.length > 0) {
+                            // Index dedup'd snapshot by bucket-start
+                            const byTime = new Map<number, BackendOHLCData>();
+                            for (const b of dedup) byTime.set(b.unix_time, b);
+                            // Cutoff = snapshot's last bucket. We overwrite
+                            // that bucket and any newer ones with live data
+                            // (live is authoritative for in-progress + the
+                            // last-completed bucket the cagg hasn't yet
+                            // materialized).
+                            const cutoff = dedup[dedup.length - 1].unix_time;
+                            for (const b of aggLive) {
+                              if (b.unix_time >= cutoff) {
+                                byTime.set(b.unix_time, b);
+                              }
+                            }
+                            const merged = Array.from(byTime.values()).sort(
+                              (a, b) => a.unix_time - b.unix_time,
+                            );
+                            // Replace dedup with the merged result
+                            dedup.length = 0;
+                            for (const b of merged) dedup.push(b);
+                          }
+                        }
+                      } catch {
+                        // If aggregation fails the snapshot alone is still
+                        // shown — stale-last-bar but at least correct shape.
+                      }
+
                       lastGoodCandlesRef.current = dedup;
                       resolutionCacheRef.current.set(resolution, [...dedup]);
                       cachedIntervalRef.current = fetchInterval;
