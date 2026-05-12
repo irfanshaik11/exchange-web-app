@@ -13,6 +13,7 @@ import {
   addPendingTrade,
   removePendingTrade,
   updatePendingTrade,
+  verifyTxAndRollbackMarker,
 } from "~/utils/pendingTradeMarkers";
 import { getTradeActivityByUser } from "~/utils/functions";
 import toast, { type ToastOptions } from "react-hot-toast";
@@ -2855,6 +2856,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 signature: sellResult.hash,
                 status: "confirmed",
               });
+              // Fire-and-forget: verify the tx actually succeeded on-chain.
+              // If meta.err is set the marker is silently removed.
+              verifyTxAndRollbackMarker(sellMarkerId, sellResult.hash);
             }
 
             // Success - update link to be clickable
@@ -3199,6 +3203,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               signature: firstTxHash,
               status: "confirmed",
             });
+            // Fire-and-forget: verify the tx actually succeeded on-chain.
+            // If meta.err is set the marker is silently removed.
+            verifyTxAndRollbackMarker(buyMarkerId, firstTxHash);
           } else {
             removePendingTrade(buyMarkerId);
           }

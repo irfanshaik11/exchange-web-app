@@ -11,6 +11,8 @@
  * `src/pages/trade/[id].tsx` — this module is purely a state container.
  */
 
+import { Connection } from "@solana/web3.js";
+
 const STORAGE_KEY = "interstate_pending_trade_markers_v1";
 
 // TTL constants
@@ -326,6 +328,58 @@ export function confirmOptimisticMarker(
 export function rollbackOptimisticMarker(id: string): void {
   if (!id) return;
   removePendingTrade(id);
+}
+
+/**
+ * After a marker is confirmed with a txHash, verify on-chain that the
+ * transaction actually succeeded. If `meta.err` is set (slippage failure,
+ * insufficient balance at execution time, etc.), remove the marker so the
+ * user doesn't see a phantom trade on the chart.
+ *
+ * This is fire-and-forget — callers should NOT await it in the hot path.
+ */
+export function verifyTxAndRollbackMarker(
+  markerId: string,
+  txHash: string,
+  rpcUrl?: string,
+): void {
+  if (!markerId || !txHash) return;
+  const url =
+    rpcUrl ||
+    (typeof process !== "undefined"
+      ? process.env.NEXT_PUBLIC_SOLANA_RPC
+      : undefined) ||
+    "https://api.mainnet-beta.solana.com";
+
+  const connection = new Connection(url, "confirmed");
+
+  // Wait for confirmation then check meta.err
+  Promise.resolve()
+    .then(async () => {
+      // Give the network a moment to finalise the tx
+      await connection.confirmTransaction(txHash, "confirmed").catch(() => {
+        // timeout / ws failure — fall through to getTransaction
+      });
+
+      const tx = await connection.getTransaction(txHash, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+
+      if (tx?.meta?.err) {
+        console.warn(
+          "[pendingTradeMarkers] tx failed on-chain, removing marker",
+          { markerId, txHash, err: tx.meta.err },
+        );
+        removePendingTrade(markerId);
+      }
+    })
+    .catch((err) => {
+      console.warn(
+        "[pendingTradeMarkers] verifyTx failed, leaving marker for TTL cleanup",
+        err,
+      );
+    });
 }
 
 // Cross-tab sync: when another tab writes to our key, re-read and notify.
