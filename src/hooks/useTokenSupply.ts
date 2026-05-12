@@ -47,6 +47,15 @@ function isKnown1BLaunchpad(protocol?: string | null): boolean {
 const MAX_RETRIES = 6;
 const RETRY_BASE_DELAY_MS = 400;
 
+// How long to wait before showing the 1B optimistic fallback for known
+// launchpad tokens. The HTTP retry budget is ~25s — making the user
+// wait that long to see *any* MC on the chart is too slow. After 2s
+// the user sees 1B (correct in 99% of bonding-curve cases), and the
+// retries keep running in the background so a real value can override
+// when the indexer lands it. The chart's setSymbol(version-suffix)
+// re-resolve handles the pricescale flip if it differs.
+const FAST_FALLBACK_DELAY_MS = 2000;
+
 interface SupplyResponse {
   circulating_supply: string;
   total_supply: string;
@@ -211,9 +220,25 @@ export default function useTokenSupply(
       }
     }
 
+    // Fast-fallback timer: for known 1B-supply launchpads, show 1B
+    // after FAST_FALLBACK_DELAY_MS even though retries are still
+    // running. Doesn't mark resolvedMintRef, so a real value landing
+    // mid-retry will still override. Skipped for unknown protocols —
+    // those keep the sentinel and wait for the full retry budget.
+    const fastFallbackTimer = setTimeout(() => {
+      if (
+        requestedMintRef.current === mint &&
+        resolvedMintRef.current !== mint &&
+        isKnown1BLaunchpad(protocolRef.current)
+      ) {
+        setCirculatingSupply(LAUNCHPAD_FALLBACK_SUPPLY);
+      }
+    }, FAST_FALLBACK_DELAY_MS);
+
     fetchSupply(mint, 0);
 
     return () => {
+      clearTimeout(fastFallbackTimer);
       // Cleanup: abort the in-flight fetch. Don't cancel the retry
       // timer here unconditionally — if Strict Mode is the cleanup
       // cause, we WANT the retry/re-mount to refire the fetch. The
