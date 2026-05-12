@@ -931,6 +931,8 @@ export function WalletTrackerProvider({
         }
         // Remove the id from the active list once the toast self-expires
         // so future pushes only count toasts that are still on screen.
+        // Must stay in sync with the `duration` above — both literals
+        // share `TRADE_TOAST_DURATION_MS` to make drift impossible.
         setTimeout(() => {
           const idx = activeTradeToastIdsRef.current.indexOf(newToastId);
           if (idx !== -1) activeTradeToastIdsRef.current.splice(idx, 1);
