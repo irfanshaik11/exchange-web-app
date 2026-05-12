@@ -1144,9 +1144,6 @@ export default function TrackersPage() {
         selectedChain,
         user?.bearerToken,
       );
-      await ensureNotificationsEnabled(
-        capped.map((w) => ({ address: w.address })),
-      );
       if (typeof window !== "undefined") {
         capped.forEach((w) => {
           localStorage.setItem(
@@ -1825,7 +1822,6 @@ export default function TrackersPage() {
             selectedChain,
             user?.bearerToken,
           );
-          await ensureNotificationsEnabled(walletsToAdd);
 
           let successCount = walletsToAdd.length;
           let errorCount = 0;
@@ -3211,7 +3207,6 @@ export default function TrackersPage() {
               selectedChain,
               user?.bearerToken,
             );
-            await ensureNotificationsEnabled(walletsToAdd);
             await loadWalletsFromBackend();
             setShowImportModal(false);
 

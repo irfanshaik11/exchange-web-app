@@ -24,9 +24,11 @@ import {
   getWalletTransactions,
   getWalletHistory,
   getWalletTradeHistory,
+  readPortfolioCacheForWallet,
   type TradeEvent,
 } from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
+import { useUser } from "./UserContext";
 import Activity from "./trade/Activity";
 import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
@@ -102,6 +104,21 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   // Get latest trades from context (same as Live Trades)
   const { latestTrades } = useWalletTracker();
 
+  // User context for detecting own wallets and reading portfolio cache
+  const { user, walletList } = useUser();
+
+  const isOwnWallet = useMemo(() => {
+    if (!user || !wallet?.address) return false;
+    const addr = wallet.address.toLowerCase();
+    if (user.publicKey?.toLowerCase() === addr) return true;
+    return walletList.some(
+      (w) =>
+        w.solanaAddress?.toLowerCase() === addr ||
+        w.ethereumAddress?.toLowerCase() === addr ||
+        w.address?.toLowerCase() === addr,
+    );
+  }, [user, wallet?.address, walletList]);
+
   const {
     tokens: devTokens,
     isLoading: devTokensLoading,
@@ -150,8 +167,16 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   } | null>(null);
 
   // History data - using TradeEvent format (same as Live Trades)
-  const [history, setHistory] = useState<TradeEvent[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  // For user's own wallets, hydrate from portfolio cache for instant display
+  const portfolioCacheRef = useRef<TradeEvent[] | null>(
+    isOwnWallet ? readPortfolioCacheForWallet(user?.id, wallet.address) : null,
+  );
+  const [history, setHistory] = useState<TradeEvent[]>(
+    () => portfolioCacheRef.current ?? [],
+  );
+  const [historyLoading, setHistoryLoading] = useState(
+    () => !portfolioCacheRef.current || portfolioCacheRef.current.length === 0,
+  );
   const [historyError, setHistoryError] = useState<string | null>(null);
   
   // Closed orders (completed positions with PnL)
@@ -1104,7 +1129,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     prevWalletAddressRef.current = wallet.address;
 
     if (isWalletChange) {
-      setHistoryLoading(true);
+      // Skip loading spinner if we already have cached portfolio data
+      const hasCachedData = history.length > 0;
+      if (!hasCachedData) {
+        setHistoryLoading(true);
+      }
     }
     setHistoryError(null);
 
@@ -1802,8 +1831,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                           Remaining
                         </th>
                         <th className="px-4 py-3 text-right font-semibold">
-                          PnL
+                          PNL ↑
                         </th>
+                        <th className="px-4 py-3 text-right font-semibold">$</th>
+                        <th className="px-4 py-3 text-right font-semibold"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
@@ -1823,76 +1854,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             metadata?.name ||
                             position.mint?.slice(0, 8) + "..." ||
                             "Unknown";
-
-                          // Format bought
-                          const boughtDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-emerald-400 font-semibold">
-                                ${formatSmartNumber(position.boughtValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.boughtAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format sold
-                          const soldDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-red-400 font-semibold">
-                                ${formatSmartNumber(position.soldValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.soldAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format remaining
-                          const remainingDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-white font-semibold">
-                                ${formatSmartNumber(position.remainingValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.remainingAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format PnL
-                          const pnlDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span
-                                className={`font-semibold ${
-                                  position.totalPnl >= 0
-                                    ? "text-emerald-400"
-                                    : "text-red-400"
-                                }`}
-                              >
-                                {position.totalPnl >= 0 ? "+" : ""}
-                                ${formatSmartNumber(Math.abs(position.totalPnl))}
-                              </span>
-                              <span
-                                className={`text-xs ${
-                                  position.pnlPercentage >= 0
-                                    ? "text-emerald-400/70"
-                                    : "text-red-400/70"
-                                }`}
-                              >
-                                {position.pnlPercentage >= 0 ? "+" : ""}
-                                {position.pnlPercentage.toFixed(2)}%
-                              </span>
-                            </div>
-                          );
+                          const imageUrl = metadata?.imageUrl || "";
 
                           return (
                             <tr
                               key={position.mint || idx}
-                              className="transition-colors hover:bg-neutral-800"
+                              className="transition-colors hover:bg-neutral-800/60"
                             >
                               <td
-                                className="cursor-pointer px-4 py-3"
+                                className="cursor-pointer px-4 py-2"
                                 onClick={() => {
                                   const trade = history.find(t => t.mint === position.mint);
                                   const addr = position.mint || trade?.pair_address;
@@ -1901,41 +1871,103 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                   }
                                 }}
                               >
-                                <div className="flex flex-col">
-                                  <span
-                                    className="font-semibold text-white hover:text-blue-400"
-                                    title={position.mint || undefined}
-                                  >
-                                    {truncateTokenName(displayName || displaySymbol)}
-                                  </span>
-                                  {displayName &&
-                                    displaySymbol &&
-                                    displayName !== displaySymbol && (
-                                      <span className="text-[10px] text-neutral-500">
-                                        {displaySymbol}
-                                      </span>
-                                    )}
-                                  {!displayName &&
-                                    !displaySymbol &&
-                                    position.mint && (
-                                      <span className="font-mono text-[10px] text-neutral-500">
-                                        {position.mint.slice(0, 4)}...
-                                        {position.mint.slice(-4)}
-                                      </span>
-                                    )}
+                                <div className="flex items-center gap-2">
+                                  <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
+                                    <FastImage
+                                      src={imageUrl}
+                                      alt={displayName || displaySymbol || "Token"}
+                                      symbol={displaySymbol || undefined}
+                                      name={displayName || undefined}
+                                      width={32}
+                                      height={32}
+                                      className="h-full w-full object-cover"
+                                      showBubble={false}
+                                    />
+                                  </div>
+                                  <div className="flex min-w-0 flex-col">
+                                    <span
+                                      className="truncate text-sm font-semibold text-white hover:text-blue-400"
+                                      title={position.mint || undefined}
+                                    >
+                                      {truncateTokenName(displayName || displaySymbol)}
+                                    </span>
+                                    <span className="truncate text-[11px] text-neutral-500">
+                                      {displaySymbol}
+                                    </span>
+                                  </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {boughtDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold text-neutral-100">
+                                    ${formatSmartNumber(position.boughtValue)}
+                                  </span>
+                                  <span className="text-xs text-neutral-500">
+                                    {formatSmartNumber(position.boughtAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {soldDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold text-neutral-100">
+                                    ${formatSmartNumber(position.soldValue)}
+                                  </span>
+                                  <span className="text-xs text-neutral-500">
+                                    {formatSmartNumber(position.soldAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {remainingDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold text-neutral-100">
+                                    ${formatSmartNumber(position.remainingValue)}
+                                  </span>
+                                  <span className="text-xs text-neutral-500">
+                                    {formatSmartNumber(position.remainingAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {pnlDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <span
+                                  className={`font-semibold ${
+                                    position.pnlPercentage >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                  }`}
+                                >
+                                  {position.pnlPercentage >= 0 ? "+" : ""}
+                                  {position.pnlPercentage.toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                <span
+                                  className={`font-semibold ${
+                                    position.totalPnl >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                  }`}
+                                >
+                                  {position.totalPnl >= 0 ? "+" : ""}$
+                                  {formatSmartNumber(Math.abs(position.totalPnl))}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                <button
+                                  className="text-neutral-400 hover:text-white transition-colors"
+                                  onClick={() => {
+                                    const trade = history.find(t => t.mint === position.mint);
+                                    const addr = position.mint || trade?.pair_address;
+                                    if (addr) {
+                                      window.open(`/trade/${addr}`, '_blank');
+                                    }
+                                  }}
+                                  title="Open trade"
+                                >
+                                  <FiExternalLink size={14} />
+                                </button>
                               </td>
                             </tr>
                           );

@@ -39,6 +39,7 @@ import {
   addPendingTrade,
   removePendingTrade,
   updatePendingTrade,
+  verifyTxAndRollbackMarker,
 } from "./pendingTradeMarkers";
 import {
   dispatchOptimisticBalance,
@@ -990,6 +991,9 @@ export async function executeEnhancedTrade(
           signature: txHash,
           status: "confirmed",
         });
+        // Fire-and-forget: verify the tx actually succeeded on-chain.
+        // If meta.err is set the marker is silently removed.
+        verifyTxAndRollbackMarker(pendingMarkerId, txHash, settings.rpc);
       }
 
       if (onSuccess) onSuccess(txHash, stats);
