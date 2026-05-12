@@ -9,6 +9,40 @@ const GO_SERVICE_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL || "";
 // <= 1 as "still loading" and show "—" / fall through to fallback math.
 const DEFAULT_SUPPLY = 1;
 
+// Optimistic fallback for known 1B-supply launchpads. Used as the initial
+// state when we know the token came from a launchpad whose bonding-curve
+// convention is exactly 1B tokens — so the chart can render correct MC
+// during the 5-15s window where the indexer's RPC retry cascade is still
+// landing the real value in PG. When the real value arrives (almost always
+// also 1B for these protocols), no visible change. On the rare token that
+// differs (e.g. graduated pump.fun = 2B), the chart's setSymbol re-resolve
+// fixes the pricescale.
+//
+// Intentionally excluded: arbitrary tokens like JUP (6.86B with 6 decimals).
+// For those, the fallback would show wrong MC — better to display "—"
+// briefly until the real value resolves.
+const LAUNCHPAD_FALLBACK_SUPPLY = 1_000_000_000;
+const KNOWN_1B_LAUNCHPADS = new Set([
+  "pump.fun",
+  "pumpfun",
+  "bonk.fun",
+  "bonkfun",
+  "meteora",
+  "moonshot",
+  "moonit",
+  "heaven",
+  "sugar",
+  "boopfun",
+  "raydiumlaunchpad",
+]);
+
+function initialSupplyFor(protocol?: string | null): number {
+  if (!protocol) return DEFAULT_SUPPLY;
+  return KNOWN_1B_LAUNCHPADS.has(protocol.toLowerCase())
+    ? LAUNCHPAD_FALLBACK_SUPPLY
+    : DEFAULT_SUPPLY;
+}
+
 // Retry policy for /v1/supply. Solana RPC can flake on a freshly-discovered
 // mint (rate limit, transient RPC error, abort due to rapid token-switch).
 // Without retries the trade-header gets stuck at "—" indefinitely.
@@ -29,8 +63,17 @@ interface UseTokenSupplyResult {
   refetch: () => void;
 }
 
-export default function useTokenSupply(mint: string | undefined | null): UseTokenSupplyResult {
-  const [circulatingSupply, setCirculatingSupply] = useState<number>(DEFAULT_SUPPLY);
+export default function useTokenSupply(
+  mint: string | undefined | null,
+  // Optional protocol hint: when caller knows the token came from a 1B-supply
+  // launchpad, we render the correct MC immediately instead of "—" while the
+  // /v1/supply fetch resolves. Backward-compatible: callers that don't pass
+  // this fall through to DEFAULT_SUPPLY (existing "—" behavior).
+  launchpadProtocol?: string | null,
+): UseTokenSupplyResult {
+  const [circulatingSupply, setCirculatingSupply] = useState<number>(() =>
+    initialSupplyFor(launchpadProtocol),
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   // Tracks the mint whose supply we have *successfully* resolved. NOT the
@@ -106,7 +149,7 @@ export default function useTokenSupply(mint: string | undefined | null): UseToke
 
   useEffect(() => {
     if (!mint || mint.length < 20) {
-      setCirculatingSupply(DEFAULT_SUPPLY);
+      setCirculatingSupply(initialSupplyFor(launchpadProtocol));
       resolvedMintRef.current = null;
       requestedMintRef.current = null;
       cancelRetry();
@@ -125,9 +168,11 @@ export default function useTokenSupply(mint: string | undefined | null): UseToke
     // previous token's supply on the new chart. Critical for pricescale
     // correctness — the chart's resolveSymbol reads the multiplier at
     // init time; a leaked value from a previous token would set the
-    // wrong pricescale.
+    // wrong pricescale. For known 1B-supply launchpads, seed with 1B
+    // instead of the sentinel so the chart MC renders correctly during
+    // the indexer's 5-15s supply propagation window.
     cancelRetry();
-    setCirculatingSupply(DEFAULT_SUPPLY);
+    setCirculatingSupply(initialSupplyFor(launchpadProtocol));
 
     // WS fast-path: the OHLCV WebSocket piggybacks the supply payload
     // onto its snapshot message. By the time `useTokenSupply` mounts on
@@ -135,7 +180,8 @@ export default function useTokenSupply(mint: string | undefined | null): UseToke
     // prewarmed by SearchModal hover), and supply has landed in the
     // shared cache. Skip the HTTP round-trip entirely when it's there.
     // No retry/backoff needed — the cached value came from a successful
-    // PG read upstream.
+    // PG read upstream. Note: the WS value is authoritative, so it
+    // overrides any 1B optimistic fallback set above.
     const wsCached = getWsSupply(mint);
     if (wsCached) {
       const parsed = parseFloat(wsCached.circulating_supply);
@@ -161,7 +207,7 @@ export default function useTokenSupply(mint: string | undefined | null): UseToke
       // cleanup ABOVE at line "if (!mint || ...)" handles real teardown.
       abortRef.current?.abort();
     };
-  }, [mint, fetchSupply, cancelRetry]);
+  }, [mint, launchpadProtocol, fetchSupply, cancelRetry]);
 
   const refetch = useCallback(() => {
     if (mint && mint.length >= 20) {

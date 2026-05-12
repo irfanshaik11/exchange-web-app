@@ -408,8 +408,16 @@ export default function TradePage() {
     return undefined;
   }, [optimisticToken?.mint, _mint, id]);
 
-  // Fetch real circulating supply from token service (falls back to 1B)
-  const { circulatingSupply, refetch: refetchSupply } = useTokenSupply(resolvedTokenMint);
+  // Fetch real circulating supply from token service. The launchpad_protocol
+  // hint lets useTokenSupply pick the right initial fallback: 1B for known
+  // bonding-curve launchpads (pump.fun, bonk.fun, meteora, etc. — so fresh
+  // tokens render correct MC during the 5-15s indexer propagation window),
+  // and the loading sentinel otherwise (so non-launchpad tokens like JUP
+  // briefly show "—" instead of a wrong 1B-based MC).
+  const { circulatingSupply, refetch: refetchSupply } = useTokenSupply(
+    resolvedTokenMint,
+    optimisticToken?.launchpad_protocol,
+  );
 
   // Prefetch is handled by TradeActionPanel when the user selects an amount.
   // The previous page-level prefetch used a hardcoded 0.1 SOL which spammed
