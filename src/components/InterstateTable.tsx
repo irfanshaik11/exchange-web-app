@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   FaQuestionCircle,
   FaRegStar,
@@ -1781,16 +1782,29 @@ const TokenInfo: React.FC<{
         </div>
       </div>
 
-      {/* X Profile Preview Popup */}
-      {showXPreview && buttonPosition && (
+      {showXPreview && buttonPosition && typeof document !== "undefined" && createPortal(
         <div
           className="fixed"
-          style={{
-            left: `${buttonPosition.left + 20}px`,
-            top: `${buttonPosition.top}px`,
-            width: "280px",
-            zIndex: 999999,
-          }}
+          style={(() => {
+            const POPUP_W = 280;
+            const POPUP_H_EST = 220;
+            const vw = typeof window !== "undefined" ? window.innerWidth : 1920;
+            const vh = typeof window !== "undefined" ? window.innerHeight : 1080;
+            let left = buttonPosition.left + 20;
+            let top = buttonPosition.top;
+            if (left + POPUP_W + 8 > vw) {
+              left = Math.max(8, buttonPosition.left - POPUP_W - 20);
+            }
+            if (top + POPUP_H_EST + 8 > vh) {
+              top = Math.max(8, vh - POPUP_H_EST - 8);
+            }
+            return {
+              left: `${left}px`,
+              top: `${top}px`,
+              width: `${POPUP_W}px`,
+              zIndex: 999999,
+            };
+          })()}
           onMouseEnter={() => {
             isOverXPreview.current = true;
           }}
@@ -1937,7 +1951,8 @@ const TokenInfo: React.FC<{
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
