@@ -4240,7 +4240,7 @@ export default function PortfolioPage() {
               <div className="border-b border-white/[0.06] bg-[#080a0d]/40">
                 <div className="py-2.5 -mx-3 sm:-mx-4 px-3 sm:px-4">
                   <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#71717a] uppercase tracking-wider">
-                    <div className="font-semibold truncate">Wallet</div>
+                    <div className="font-semibold truncate pl-7">Wallet</div>
                     <div className="font-semibold truncate text-center flex items-center justify-center gap-2">
                       <span>
                         Balance ({currentChain === "monad" ? "MON" : "SOL"})
@@ -4299,7 +4299,7 @@ export default function PortfolioPage() {
                             : "No wallets found"}
                       </div>
                     ) : (
-                      <div className="max-h-[70vh] overflow-y-auto pr-2 -mr-2 pb-10">
+                      <div className="max-h-[70vh] overflow-y-auto overflow-x-hidden pr-2 -mr-2 pb-10">
                         {filteredWallets.map((wallet) => {
                           const displayAddress = getAddressForChain(wallet, currentChain);
                           const truncated =
