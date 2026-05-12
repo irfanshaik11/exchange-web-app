@@ -4207,6 +4207,76 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             cachedTimeframeRef.current = (mappedTf && mappedTf !== "auto")
               ? mappedTf as BackendTimeRange
               : latestParamsRef.current.timeframe;
+          } else if (
+            latestParamsRef.current.network !== "monad" &&
+            resolution !== "1S"
+          ) {
+            // Bug: TF-change gap. On a high-volume token, the WS-prefetched 1s
+            // snapshot only spans the last few minutes (500 bars × ~1s each ≈
+            // <10 min wall-clock). Aggregating that to 30m/1h/1d via TradingView's
+            // local engine yields 1-2 partial bars at the right edge with a
+            // huge empty area to the left. Refresh "fixes" it because the page
+            // re-mounts and fetches a fresh 30m snapshot directly. Do the same
+            // explicitly here: when switching to a non-1S resolution for the
+            // first time, fetch historical data at that TF via the existing
+            // /api/token-service/ohlc proxy (same endpoint used by lazy-load
+            // and max-MC).
+            const fetchInterval = RESOLUTION_TO_INTERVAL[resolution] || "1s";
+            // Sub-minute fakes (5S/15S/30S) all collapse to 1s server-side; skip
+            // the explicit refetch for those — TradingView's aggregation of the
+            // existing 1s cache is sufficient there.
+            if (!["1s", "5s", "15s", "30s"].includes(fetchInterval)) {
+              const tokenAddress =
+                latestParamsRef.current.mint || latestParamsRef.current.pairAddress;
+              if (tokenAddress) {
+                try {
+                  const fetchUrl = new URL(
+                    "/api/token-service/ohlc",
+                    window.location.origin,
+                  );
+                  fetchUrl.searchParams.set("tokenAddress", tokenAddress);
+                  fetchUrl.searchParams.set("timeframe", fetchInterval);
+                  fetchUrl.searchParams.set("limit", "5000");
+                  const resp = await fetch(fetchUrl.toString(), {
+                    signal: AbortSignal.timeout(8000),
+                    headers: { Accept: "application/json" },
+                  });
+                  if (resp.ok) {
+                    const json = await resp.json();
+                    const items: BackendOHLCData[] =
+                      (json?.data?.items as BackendOHLCData[]) ||
+                      (json?.candles as BackendOHLCData[]) ||
+                      [];
+                    if (items.length > 0) {
+                      // Sort ASC and dedupe defensively (same posture as
+                      // snapshot-ingest in the live WS handler)
+                      items.sort((a, b) => a.unix_time - b.unix_time);
+                      const dedup: BackendOHLCData[] = [];
+                      let prevUt = -1;
+                      for (const b of items) {
+                        if (b.unix_time === prevUt) {
+                          dedup[dedup.length - 1] = b;
+                          continue;
+                        }
+                        dedup.push(b);
+                        prevUt = b.unix_time;
+                      }
+                      lastGoodCandlesRef.current = dedup;
+                      resolutionCacheRef.current.set(resolution, [...dedup]);
+                      cachedIntervalRef.current = fetchInterval;
+                      const mappedTf = RESOLUTION_TO_TIMEFRAME[resolution];
+                      cachedTimeframeRef.current =
+                        (mappedTf && mappedTf !== "auto"
+                          ? (mappedTf as BackendTimeRange)
+                          : latestParamsRef.current.timeframe);
+                    }
+                  }
+                } catch {
+                  // Fetch failed — fall through to existing aggregation behavior.
+                  // TradingView will aggregate from the 1s cache (small/empty).
+                }
+              }
+            }
           }
         }
 
