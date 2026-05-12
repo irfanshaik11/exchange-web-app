@@ -782,7 +782,23 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const isLiquidityLoading = isSolanaToken
 		? !hasWsLiquidity && !hasTokenLiquidity
 		: !hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData;
-	const supply = circulatingSupply ?? (token as any)?.total_supply ?? (token as any)?.supply ?? 1_000_000_000;
+	// `circulatingSupply` from useTokenSupply uses the value `1` as a sentinel
+	// meaning "still loading /v1/supply" — that's intentional so the chart's
+	// transformBar multiplier renders USD-scale values during the cold-start
+	// window instead of price×1B-fallback. But for the Supply STAT field we
+	// want a placeholder until the real value resolves; rendering "1.000" in
+	// the header is the ugly artifact the user reported. Any value <= 1 here
+	// is treated as "not loaded yet", with token.total_supply and token.supply
+	// as best-effort fallbacks (e.g. for tokens where useTokenSupply's RPC
+	// is still in flight but the token-service payload already had a value).
+	const supplyResolved =
+		circulatingSupply && circulatingSupply > 1
+			? circulatingSupply
+			: (token as any)?.total_supply ?? (token as any)?.supply ?? null;
+	// Keep `supply` defined for any downstream use that still expects a number.
+	// Falls back to 1B only when nothing else is known — same behavior as before
+	// my recent useTokenSupply sentinel change, just gated on resolution status.
+	const supply = supplyResolved ?? 1_000_000_000;
 	const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
 	const isLowLiquidity = Number(liq) < 1000;
 
@@ -1937,7 +1953,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 						})()}
 						<StatInline label="Supply">
 							<span className="inline-flex items-center gap-1">
-								{formatSmartNumber(supply)}
+								{/* Show placeholder until the real supply resolves. supplyResolved
+								    is null when useTokenSupply hasn't returned a real value AND
+								    the token payload doesn't carry a supply field. */}
+								{supplyResolved !== null ? formatSmartNumber(supplyResolved) : "—"}
 								{onRefreshSupply && (
 									<button
 										type="button"

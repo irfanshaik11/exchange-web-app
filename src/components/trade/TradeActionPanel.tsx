@@ -1565,7 +1565,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const tokenPriceUsdField = Number((token as any)?.price_usd) || 0;
 
   const liveTokenPriceInSol = useMemo(() => {
-    const supply = circulatingSupply ?? (Number(token?.total_supply) || 0);
+    // Treat `circulatingSupply <= 1` as "still loading" — useTokenSupply uses
+    // 1 as a sentinel before /v1/supply resolves. If we accept it as real,
+    // we compute baseMarketCap / (1 * solUsd) which is wildly wrong.
+    const supply =
+      circulatingSupply && circulatingSupply > 1
+        ? circulatingSupply
+        : (Number(token?.total_supply) || 0);
     const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
     // Best: derive from live market cap + circulating supply
     if (baseMarketCap > 0 && supply > 0 && solUsd > 0) {
@@ -1588,7 +1594,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Token price in SOL at the limit order's target market cap
   const limitTokenPriceInSol = useMemo(() => {
     if (tab !== "limit") return 0;
-    const supply = circulatingSupply ?? (Number(token?.total_supply) || 0);
+    // Same sentinel guard as liveTokenPriceInSol above.
+    const supply =
+      circulatingSupply && circulatingSupply > 1
+        ? circulatingSupply
+        : (Number(token?.total_supply) || 0);
     const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
     const tmc = Number(targetMC);
     if (tmc > 0 && supply > 0 && solUsd > 0) {
