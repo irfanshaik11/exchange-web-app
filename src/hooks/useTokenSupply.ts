@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 const GO_SERVICE_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL || "";
-const DEFAULT_SUPPLY = 1_000_000_000;
+// Sentinel "supply not loaded yet". Multiplier of 1 makes MC-mode render
+// numerically equal to USD until the real on-chain supply resolves via
+// /v1/supply. Previously this was 1_000_000_000, which caused non-pump.fun
+// tokens (e.g. JUP @ 6.86B real supply) to display a wrong MC scale during
+// cold start.
+const DEFAULT_SUPPLY = 1;
 
 interface SupplyResponse {
   circulating_supply: string;

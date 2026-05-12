@@ -96,7 +96,11 @@ const VALID_INTERVALS: BackendInterval[] = [
   "1d",
   "7d",
 ];
-const DEFAULT_SUPPLY = 1_000_000_000; // Fallback when circulatingSupply prop is not provided
+// Sentinel "supply not loaded yet". Multiplier of 1 keeps MC-mode visually
+// equivalent to USD until the real supply resolves via /v1/supply.
+// Previously hardcoded to 1_000_000_000, which silently rendered wrong-scale
+// MC values for any non-1B-supply token (e.g. JUP @ 6.86B real supply).
+const DEFAULT_SUPPLY = 1;
 const CHART_DEBUG = false; // Set to true only when debugging chart issues
 
 // Map our intervals to TradingView resolution format
@@ -3933,7 +3937,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           samplePrice = MIN_PRICE;
         }
 
-        // Adjust sample price based on display mode (MC = USD * 1 billion)
+        // Adjust sample price based on display mode (MC = USD * circulating supply).
         // Extract mode from symbol name (e.g., "TOKEN|MC" → "MC") rather than
         // displayModeRef — during rapid toggles, the ref may have been updated by
         // a later toggle, causing pricescale/data mismatch.
@@ -3941,7 +3945,13 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         const mode: "USD" | "MC" = (modeFromSymbol === "USD" || modeFromSymbol === "MC") ? modeFromSymbol : displayModeRef.current;
         let effectiveSample = samplePrice;
         if (mode === "MC") {
-          effectiveSample = samplePrice * 1_000_000_000;
+          // Use the live multiplier (real supply once /v1/supply resolves; 1 sentinel
+          // before then). Previously hardcoded to 1_000_000_000 here, which made
+          // pricescale wrong for non-1B-supply tokens like JUP.
+          const supplyMultiplier = multiplierRef.current && multiplierRef.current > 0
+            ? multiplierRef.current
+            : 1;
+          effectiveSample = samplePrice * supplyMultiplier;
         }
 
         // Calculate pricescale based on effective sample (accounts for MC mode)
