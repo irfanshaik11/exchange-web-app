@@ -632,23 +632,47 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     if (displayModeRef.current === "MC") {
       lastAppliedLinesRef.current = {};
       syncLinesInFlightRef.current = false;
-      const tryReset = (attempts: number): void => {
-        const chart = widgetRef.current?.activeChart?.();
-        if (chart?.resetData) {
+
+      // Pricescale was baked in at resolveSymbol-init time based on the
+      // sentinel multiplier (1). resetData() repaints the bars with the new
+      // multiplier values, but the axis labels keep using the old pricescale
+      // — so $30K MC values get formatted with 7 decimals and the axis
+      // column truncates to "0.00" everywhere. Mirror the displayMode-toggle
+      // pattern: setSymbol() with a versioned name forces TV to re-resolve
+      // the symbol, which recomputes pricescale based on the now-correct
+      // multiplier. Use Date.now() for uniqueness.
+      const trySetSymbol = (attempts: number): void => {
+        const widget = widgetRef.current;
+        const chart = widget?.activeChart?.();
+        if (chart?.setSymbol && chart?.symbol && chart?.resolution) {
           try {
-            chart.resetData();
-            // Re-sync price lines at the new scale once chart settles
-            requestPriceLineSync(50);
-          } catch {}
+            const rawSymbol = chart.symbol() || initialTokenId || "";
+            const baseSymbol = rawSymbol.split("|")[0];
+            const currentMode = displayModeRef.current;
+            const versionSuffix = `s${Date.now()}`;
+            const newSymbol = `${baseSymbol}|${currentMode}|${versionSuffix}`;
+            const currentResolution = chart.resolution?.() || "1S";
+            chart.setSymbol(newSymbol, currentResolution, () => {
+              // After re-resolve completes, sync price lines at new scale
+              requestPriceLineSync(50);
+            });
+          } catch {
+            // Fall back to plain resetData if setSymbol throws — at least
+            // the bars repaint, even if axis labels stay stale.
+            try {
+              chart.resetData?.();
+              requestPriceLineSync(50);
+            } catch {}
+          }
           return;
         }
         if (attempts > 0) {
           // Widget not ready yet — retry on next frame. Caps at 20 frames
           // (~330ms) so we never loop indefinitely if the widget never appears.
-          requestAnimationFrame(() => tryReset(attempts - 1));
+          requestAnimationFrame(() => trySetSymbol(attempts - 1));
         }
       };
-      tryReset(20);
+      trySetSymbol(20);
     }
     // Suppress unused-var lint for prev — kept for debugging
     void prev;
