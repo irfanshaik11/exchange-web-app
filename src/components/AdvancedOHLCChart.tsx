@@ -613,13 +613,45 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     const next =
       circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY;
     if (multiplierRef.current === next) return;
+    const prev = multiplierRef.current;
     multiplierRef.current = next;
 
-    if (displayModeRef.current === "MC" && widgetRef.current) {
-      try {
-        widgetRef.current.activeChart?.()?.resetData?.();
-      } catch {}
+    // When supply transitions from DEFAULT_SUPPLY (or any sentinel) to a real
+    // value, the chart may have already rendered bars at the old multiplier
+    // (race: WS snapshot arrives before /v1/supply resolves, especially on
+    // SearchModal click-time preload). Force a full repaint:
+    //   1. resetData() → TradingView re-fetches bars via getBars → transformBar
+    //      now uses the new multiplier
+    //   2. Clear lastAppliedLinesRef so price-lines get redrawn at new scale
+    //      (otherwise a USD-priced horizontal line stays pinned to its old
+    //      MC value — e.g. a $0.16 line showing as $162M with multiplier=1B
+    //      and never moving to $1.1B when multiplier updates to 6.86B)
+    //
+    // widgetRef may not be ready yet if this useEffect fires before
+    // TradingView's onChartReady. Use a short retry loop to handle that race.
+    if (displayModeRef.current === "MC") {
+      lastAppliedLinesRef.current = {};
+      syncLinesInFlightRef.current = false;
+      const tryReset = (attempts: number): void => {
+        const chart = widgetRef.current?.activeChart?.();
+        if (chart?.resetData) {
+          try {
+            chart.resetData();
+            // Re-sync price lines at the new scale once chart settles
+            requestPriceLineSync(50);
+          } catch {}
+          return;
+        }
+        if (attempts > 0) {
+          // Widget not ready yet — retry on next frame. Caps at 20 frames
+          // (~330ms) so we never loop indefinitely if the widget never appears.
+          requestAnimationFrame(() => tryReset(attempts - 1));
+        }
+      };
+      tryReset(20);
     }
+    // Suppress unused-var lint for prev — kept for debugging
+    void prev;
   }, [circulatingSupply]);
 
   // Helper function to transform OHLC values based on display mode (USD vs MC)
