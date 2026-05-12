@@ -624,7 +624,7 @@ export default function LoginModal({
       open={open}
       onClose={handleClose}
       align="center"
-      className={`relative w-[480px] max-w-[94vw] overflow-hidden rounded-xl bg-[#111214] p-8 pt-14 text-zinc-100 shadow-[0_0_100px_rgba(0,0,0,0.9)] ${wiggle ? "wiggle" : ""}`}
+      className={`relative flex w-[480px] max-w-[94vw] max-h-[88vh] flex-col overflow-hidden rounded-xl bg-[#111214] p-8 pt-14 text-zinc-100 shadow-[0_0_100px_rgba(0,0,0,0.9)] ${wiggle ? "wiggle" : ""}`}
       disableClickOutside={forceLogin}
       zIndex={99999}
       overlayClassName="bg-black/85 backdrop-blur-sm"
@@ -758,7 +758,7 @@ export default function LoginModal({
           </div>
         </div>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           {/* Auth Step */}
           <div className="mb-6 text-center">
             <p className="text-xs font-medium tracking-[0.35em] text-emerald-500 uppercase">
@@ -959,11 +959,11 @@ export default function LoginModal({
 
           {/* Wallet list */}
           {allWallets.length > 0 && (
-            <div className="mt-6 w-full">
+            <div className="mt-6 flex min-h-0 flex-1 w-full flex-col">
               <div className="mb-4 text-[14px] text-zinc-500">
                 Sign in with wallet
               </div>
-              <div className="space-y-3">
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2 -mr-2 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.15)_transparent]">
                 {allWallets.map((w) => (
                   <button
                     key={w.id}
@@ -996,7 +996,7 @@ export default function LoginModal({
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
     </InterstatePopout>
   );
