@@ -48,13 +48,18 @@ const MAX_RETRIES = 6;
 const RETRY_BASE_DELAY_MS = 400;
 
 // How long to wait before showing the 1B optimistic fallback for known
-// launchpad tokens. The HTTP retry budget is ~25s — making the user
-// wait that long to see *any* MC on the chart is too slow. After 2s
-// the user sees 1B (correct in 99% of bonding-curve cases), and the
-// retries keep running in the background so a real value can override
-// when the indexer lands it. The chart's setSymbol(version-suffix)
-// re-resolve handles the pricescale flip if it differs.
-const FAST_FALLBACK_DELAY_MS = 2000;
+// launchpad tokens. 500ms is the sweet spot:
+//   - WS supply hint typically lands in 100-300ms when prewarmed by
+//     SearchModal/PulseTable hover → wins the race, no fallback flash.
+//   - PG-fast-path HTTP also returns within 100-300ms when the indexer
+//     has the row → also wins.
+//   - For genuinely fresh tokens where neither path has data yet,
+//     the user sees 1B at 500ms instead of "—" while the indexer's
+//     RPC retry cascade lands the real value (5-30s).
+// HTTP retries keep running in the background; if a real value
+// eventually arrives, the chart's setSymbol(version-suffix) re-resolve
+// handles the pricescale flip.
+const FAST_FALLBACK_DELAY_MS = 500;
 
 interface SupplyResponse {
   circulating_supply: string;
