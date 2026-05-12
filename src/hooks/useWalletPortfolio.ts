@@ -122,6 +122,23 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
   // multiple positions back-to-back).
   const refetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Mints we authoritatively removed via a 100% sell WS event. The indexer's
+  // wallet_holder_positions aggregator can lag the solana_trades insert by
+  // 2-5 seconds (measured), and token-service's L2 Redis cache can hold a
+  // pre-sell snapshot for another 2s. During that window, a fetchAll() may
+  // return the stale aggregate row for a mint we already know is closed —
+  // and setRawPositions(stale) would resurrect the position visually,
+  // causing a sell-completes-then-position-reappears flicker that requires
+  // a manual page refresh to clear.
+  //
+  // Solution: when WS broadcasts a sell that brings remaining to <= DUST,
+  // we drop the row optimistically AND mark the mint here with an expiry.
+  // Any subsequent fetchAll within the expiry window filters out re-includes
+  // of this mint. After the window, the mint can be re-added normally
+  // (covers the case where the user re-buys the same token later).
+  const removedMintsRef = useRef<Map<string, number>>(new Map()); // mint -> expiresAt (ms)
+  const REMOVED_MINT_GUARD_MS = 10_000;
+
   // ─── REST: initial fetch + refetch on demand ────────────────────────────────
   const fetchAll = useCallback(async (): Promise<void> => {
     if (!address) return;
@@ -138,7 +155,24 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
       // Bail if a newer fetch superseded this one mid-flight.
       if (ac.signal.aborted) return;
       setSummary(s);
-      setRawPositions(p.positions);
+
+      // Stale-resurrection guard: if a mint was just authoritatively removed
+      // by a WS sell event, reject this REST response's row for it. The
+      // indexer's aggregator + token-service L2 cache can lag by several
+      // seconds, so a fetch fired shortly after a 100% sell may return the
+      // pre-sell snapshot. We trust the WS event over the lagged REST.
+      const now = Date.now();
+      // Sweep expired entries while we're here (avoids unbounded growth).
+      for (const [mint, expiresAt] of removedMintsRef.current) {
+        if (now >= expiresAt) removedMintsRef.current.delete(mint);
+      }
+      const filtered = removedMintsRef.current.size === 0
+        ? p.positions
+        : p.positions.filter((pos) => {
+            const expiresAt = removedMintsRef.current.get(pos.token_mint);
+            return !(expiresAt && now < expiresAt);
+          });
+      setRawPositions(filtered);
     } catch (e: unknown) {
       if ((e as { name?: string })?.name !== "AbortError") {
         setError(e instanceof Error ? e.message : "Failed to load wallet");
@@ -163,6 +197,11 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
     setRawPositions([]);
     setSummary(null);
     setError(null);
+    // Clear the removed-mint guard on wallet switch — the guard is keyed by
+    // mint and scoped to "this wallet's recent sells." Carrying it across to
+    // a new wallet could incorrectly filter out a position the new wallet
+    // legitimately holds for the same mint.
+    removedMintsRef.current.clear();
     if (!address) {
       setLoading(false);
       return;
@@ -275,6 +314,18 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
           const isBuy = !!t.is_buy;
           const DUST = 0.001;
 
+          // A fresh BUY for a mint means the aggregate has just been updated
+          // with new data for it — clear any "recently removed" guard so the
+          // next fetchAll's row for this mint doesn't get filtered out. This
+          // covers the sell-then-rebuy-within-10s sequence: the guard was
+          // installed by the prior 100% sell to reject the stale pre-sell
+          // aggregate, but a subsequent buy makes the aggregate current
+          // again, so the guard would otherwise incorrectly suppress the
+          // legitimate re-entry.
+          if (isBuy) {
+            removedMintsRef.current.delete(t.token_mint);
+          }
+
           setRawPositions((prev) => {
             const idx = prev.findIndex((p) => p.token_mint === t.token_mint);
             if (idx >= 0) {
@@ -284,14 +335,30 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
               const newBoughtSol = existing.bought_sol + (isBuy ? solAmt : 0);
               const newSoldSol = existing.sold_sol + (isBuy ? 0 : solAmt);
               const newRemaining = newBoughtTokens - newSoldTokens;
-              // Optimistic update only — never *drops* a row here. The WS
-              // payload carries a single trade, not the full aggregate, and
-              // `existing.{bought,sold}_tokens` may be a beat behind. Letting
-              // a single new_trade evict a row can falsely close a still-
-              // active position when buys/sells overlap. The authoritative
-              // drop happens via `position_update` (server-side aggregate)
-              // or the leading-edge fetchAll() that runs ~immediately after
-              // this handler — both of which honor the dust threshold.
+
+              // 100% sell guard: when a SELL drives remaining to <= DUST, the
+              // WS event is unambiguous — position closed. Drop the row
+              // immediately AND register the mint as authoritatively-removed
+              // so any subsequent fetchAll() that returns the pre-sell stale
+              // aggregate (indexer's wallet_holder_positions can lag the
+              // solana_trades insert by 2-5s) is filtered. This is the only
+              // place we proactively evict a row; partial sells and buys
+              // still keep the row alive for accuracy under concurrent trades.
+              if (!isBuy && newRemaining <= DUST) {
+                removedMintsRef.current.set(
+                  t.token_mint!,
+                  Date.now() + REMOVED_MINT_GUARD_MS,
+                );
+                const copy = prev.slice();
+                copy.splice(idx, 1);
+                return copy;
+              }
+
+              // Optimistic update for partial sells / buys — never *drops* a row
+              // here. The WS payload carries a single trade, not the full
+              // aggregate, and `existing.{bought,sold}_tokens` may be a beat
+              // behind. Letting a partial-sell new_trade evict a row can
+              // falsely close a still-active position when buys/sells overlap.
               const next: WalletPortfolioPosition = {
                 ...existing,
                 bought_tokens: newBoughtTokens,

@@ -182,11 +182,19 @@ export function sumWalletBalances(
 
   const selection = new Set((selectedWalletIds || []).filter(Boolean));
 
-  // If no wallets explicitly selected, use primary or first non-archived
+  // If no wallets explicitly selected, prefer the user's PRIMARY wallet.
+  // Fallback to first-non-archived only if no primary is flagged.
+  // Bug fix: previously used slice(0, 1) unconditionally, which picked the
+  // first wallet in the list even when the user had set a different one as
+  // primary — producing false "insufficient balance" errors when the primary
+  // wallet had funds but the first-listed wallet didn't.
+  const primaryWallet = walletList.find((w) => w.isPrimary && !w.isArchived);
   const walletsToCheck =
     selection.size > 0
       ? walletList.filter((w) => w.id && selection.has(w.id))
-      : walletList.filter((w) => !w.isArchived).slice(0, 1);
+      : primaryWallet
+        ? [primaryWallet]
+        : walletList.filter((w) => !w.isArchived).slice(0, 1);
 
   let total = 0;
   let foundCount = 0;

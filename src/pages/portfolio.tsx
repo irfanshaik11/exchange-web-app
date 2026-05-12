@@ -1601,11 +1601,15 @@ export default function PortfolioPage() {
       });
       setTop100Positions(sortedByUsdValue.slice(0, 100));
     } else {
-      // Reset values when no positions
+      // Reset values when no positions. Top 100 must also reset here —
+      // otherwise it retains its last-non-empty snapshot when the user sells
+      // their final position, causing the Top 100 tab to show stale rows
+      // (e.g., a just-sold token still appearing as the sole entry).
       setUnrealizedPnl(0);
       setUnrealizedPnlPercentage(0);
       setTotalPnl(0);
       setTotalPnlPercentage(0);
+      setTop100Positions([]);
     }
   }, [positions, solBalance, monBalance, currentChain, monPrice, livePrices, actualBalances]);
 
