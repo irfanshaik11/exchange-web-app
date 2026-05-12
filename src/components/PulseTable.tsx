@@ -6,7 +6,10 @@ import React, {
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import { defaultPulseFilters, type PulseFilters } from "~/contexts/PulseFiltersContext";
+import {
+  defaultPulseFilters,
+  type PulseFilters,
+} from "~/contexts/PulseFiltersContext";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
 import {
@@ -33,7 +36,7 @@ import {
   FaTelegram,
   FaRegUser,
   FaFire,
-	FaTimes,
+  FaTimes,
 } from "react-icons/fa";
 import { GiSeatedMouse } from "react-icons/gi";
 import {
@@ -102,7 +105,10 @@ import {
   clearMetadataFailureCache,
 } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
-import { preloadTokenImages, preloadMetadataImages } from "~/utils/imagePreloader";
+import {
+  preloadTokenImages,
+  preloadMetadataImages,
+} from "~/utils/imagePreloader";
 import {
   tradeBuy,
   createLimitOrder,
@@ -112,8 +118,14 @@ import {
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
-import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
-import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import {
+  broadcastTradeCompleted,
+  notifyTradePending,
+} from "~/utils/tradeEvents";
+import {
+  listenForTradeEvents,
+  transformToastToError,
+} from "~/utils/createSolanaToastHandler";
 import { hasActiveFilters as checkActiveFilters } from "~/utils/discoverFilterUtils";
 import { TokenAge } from "./TokenAge";
 import { TokenCountdown24h } from "./TokenCountdown24h";
@@ -133,7 +145,10 @@ import {
   executeSolanaMultiBuy,
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
-import { validateSolanaBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import {
+  validateSolanaBuy,
+  showTradeValidationError,
+} from "~/utils/preTradeValidation";
 import { checkAtaExists } from "~/utils/ataCheck";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
@@ -145,35 +160,62 @@ import { useBlacklist } from "~/hooks/useBlacklist";
 import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
+/* ---- JTX-style Dark Palette ---- */
 const AX = {
-  bg: "#0b0c0e",
-  surface: "#16171C",
-  surface2: "#121317",
-  border: "#24252C",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mint: "#31e3ac", // Green - Monad brand color (matching MonadTable)
-  mintHover: "#28c896", // Darker green for hover (matching MonadTable)
-  sell: "#ed3a7a",
-  aiBlue: "#526fff", // Blue variant (matching MonadTable)
-  aiBlueHover: "#3f56d9", // Darker blue variant (matching MonadTable)
-  aiGreen: "#31e3ac", // Green for primary actions (matching MonadTable)
-  aiGreenHover: "#28c896", // Darker green for hover (matching MonadTable)
-  aiCyan: "#06B6D4", // Cyan variant (matching MonadTable)
-  aiCyanHover: "#0891B2", // Cyan hover (matching MonadTable)
-  glowBlue: "rgba(82, 111, 255, 0.3)", // Blue glow (matching MonadTable)
-  glowGreen: "rgba(49, 227, 172, 0.3)", // Green glow (matching MonadTable)
-  glowCyan: "rgba(6, 182, 212, 0.3)", // Cyan glow (matching MonadTable)
+  // Deep void backgrounds
+  bg: "#030304",
+  bgDeep: "#050608",
+  surface: "#08090c",
+  surface2: "#0c0e12",
+  surfaceHover: "#10131a",
+  card: "#141720",
+  
+  // Borders
+  border: "rgba(255,255,255,0.06)",
+  borderHover: "rgba(255,255,255,0.10)",
+  borderStrong: "rgba(255,255,255,0.14)",
+  
+  // Text hierarchy
+  text: "#f4f4f5",
+  textSecondary: "#a1a1aa",
+  muted: "#71717a",
+  textDim: "#52525b",
+  
+  // Accent colors - Emerald/Mint
+  mint: "#18c48c",
+  mintBright: "#22d99a",
+  mintHover: "#14a877",
+  mintGlow: "rgba(24, 196, 140, 0.15)",
+  mintGlowStrong: "rgba(24, 196, 140, 0.25)",
+  
+  // Status colors
+  success: "#22c55e",
+  sell: "#ef4444",
+  danger: "#ef4444",
+  warning: "#f59e0b",
+  
+  // Legacy compatibility
+  aiBlue: "#18c48c",
+  aiBlueHover: "#14a877",
+  aiGreen: "#22c55e",
+  aiGreenHover: "#16a34a",
+  aiCyan: "#06b6d4",
+  aiCyanHover: "#0891b2",
+  glowBlue: "rgba(24, 196, 140, 0.2)",
+  glowGreen: "rgba(34, 197, 94, 0.2)",
+  glowCyan: "rgba(6, 182, 212, 0.2)",
+  
   // Risk-based semantic colors
-  riskHigh: "#ef4444",        // Red - risky metrics
-  riskHighBg: "#2a1419",      // Dark red background
-  riskMedium: "#f59e0b",      // Orange/Yellow - caution metrics
-  riskMediumBg: "#2a2314",    // Dark orange background
-  riskLow: "#31e3ac",         // Green - safe metrics (same as mint)
-  riskLowBg: "#0f2419",       // Dark green background
+  riskHigh: "#ef4444",
+  riskHighBg: "rgba(239, 68, 68, 0.08)",
+  riskMedium: "#f59e0b",
+  riskMediumBg: "rgba(245, 158, 11, 0.08)",
+  riskLow: "#22c55e",
+  riskLowBg: "rgba(34, 197, 94, 0.08)",
+  
   // Badge backgrounds
-  badgeBg: "#1a1c23",         // Neutral badge background
-  twitterBlue: "#1DA1F2",     // Twitter brand color
+  badgeBg: "rgba(255,255,255,0.04)",
+  twitterBlue: "#1DA1F2",
 };
 
 interface PulseTableProps {
@@ -245,7 +287,7 @@ const _hadDataByTitle = new Map<string, boolean>();
 // Safe number parser - handles strings, NaN, Infinity
 const safeNum = (val: any): number => {
   if (val === null || val === undefined) return 0;
-  const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+  const num = typeof val === "string" ? parseFloat(val) : Number(val);
   return isFinite(num) ? num : 0;
 };
 
@@ -267,7 +309,10 @@ const getBuySellData = (token: Token): { buys: number; sells: number } => {
   if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
 
   // Finally try 24h
-  return { buys: safeNum(token.total_buys_24h), sells: safeNum(token.total_sells_24h) };
+  return {
+    buys: safeNum(token.total_buys_24h),
+    sells: safeNum(token.total_sells_24h),
+  };
 };
 
 // Format holder count (e.g., 1500 -> "1.5K")
@@ -483,7 +528,7 @@ const getTokenMarketCap = (token: any): number => {
   // Helper to safely parse value (handles strings, numbers, null, undefined)
   const parseValue = (val: any): number => {
     if (val === null || val === undefined) return 0;
-    const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+    const num = typeof val === "string" ? parseFloat(val) : Number(val);
     return isFinite(num) && num > 0 ? num : 0;
   };
 
@@ -695,11 +740,7 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
     };
   }, [value, duration]);
 
-  return (
-    <span className={className}>
-      {formatter(displayValue)}
-    </span>
-  );
+  return <span className={className}>{formatter(displayValue)}</span>;
 };
 
 // Simple number display - just shows the formatted value (no animation to avoid glitches)
@@ -1039,7 +1080,7 @@ function TwitterHandleDisplay({ token }: { token: Token }) {
         e.preventDefault();
         window.open(socialLinks.twitter, "_blank");
       }}
-      className="text-[10px] font-medium hover:underline whitespace-nowrap cursor-pointer"
+      className="cursor-pointer text-[10px] font-medium whitespace-nowrap hover:underline"
       style={{ color: "#1DA1F2" }}
     >
       @{handle}
@@ -1060,9 +1101,12 @@ const StatusPopupContent = React.memo(function StatusPopupContent({
   // Pre-compute status type once
   const titleLower = title.toLowerCase();
   const isNewPairs = titleLower.includes("new");
-  const isFinalStretch = titleLower.includes("final") || titleLower.includes("stretch");
+  const isFinalStretch =
+    titleLower.includes("final") || titleLower.includes("stretch");
   const isMigrated = titleLower.includes("migrated");
-  const launchpadProtocol = ((token as any).launchpad_protocol || "").toLowerCase();
+  const launchpadProtocol = (
+    (token as any).launchpad_protocol || ""
+  ).toLowerCase();
 
   // Compute bonding progress once
   const bondingProgress = useMemo(() => {
@@ -1198,25 +1242,28 @@ function SocialIconsWithMetadata({
           </button>
 
           {/* X Profile Preview Popup - PHASE 3: JS-based fixed positioning */}
-          {showXPreview && createPortal(
-          <div
-            className="fixed w-[280px] rounded-xl z-[9999] overflow-hidden"
-            style={{
-              left: `${previewPosition.left}px`,
-              top: `${previewPosition.top}px`,
-              backgroundColor: AX.surface,
-              border: `1px solid ${AX.border}`,
-            }}
-            onMouseEnter={() => { isOverXPreview.current = true; }}
-            onMouseLeave={() => {
-              isOverXPreview.current = false;
-              setTimeout(() => {
-                if (!isOverXPreview.current && !isOverXButton.current) {
-                  setShowXPreview(false);
-                }
-              }, 200);
-            }}
-          >
+          {showXPreview &&
+            createPortal(
+              <div
+                className="fixed z-[9999] w-[280px] overflow-hidden rounded-xl"
+                style={{
+                  left: `${previewPosition.left}px`,
+                  top: `${previewPosition.top}px`,
+                  backgroundColor: AX.surface,
+                  border: `1px solid ${AX.border}`,
+                }}
+                onMouseEnter={() => {
+                  isOverXPreview.current = true;
+                }}
+                onMouseLeave={() => {
+                  isOverXPreview.current = false;
+                  setTimeout(() => {
+                    if (!isOverXPreview.current && !isOverXButton.current) {
+                      setShowXPreview(false);
+                    }
+                  }, 200);
+                }}
+              >
                 {/* Header with X logo */}
                 <div className="flex items-center justify-between border-b border-[#2f3336] px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -1339,8 +1386,9 @@ function SocialIconsWithMetadata({
                     See Profile on X
                   </button>
                 </div>
-          </div>
-          , document.body)}
+              </div>,
+              document.body,
+            )}
         </div>
       )}
 
@@ -1400,21 +1448,26 @@ function SocialIconsWithMetadata({
                 transition: "opacity 150ms",
               }}
             >
-              <span className="text-xs" style={{ color: AX.muted }}>Website</span>
-              <p className="max-w-[200px] truncate text-sm font-medium" style={{ color: AX.text }}>
+              <span className="text-xs" style={{ color: AX.muted }}>
+                Website
+              </span>
+              <p
+                className="max-w-[200px] truncate text-sm font-medium"
+                style={{ color: AX.text }}
+              >
                 {socialLinks.website}
               </p>
             </div>,
-            document.body
+            document.body,
           )}
         </div>
       )}
 
       {/* Pump.fun pill - only for pump.fun launchpad tokens or Mayhem-mode tokens */}
       {(() => {
-        const proto = (token as any).launchpad_protocol?.toLowerCase() || '';
-        const mintAddr = (token.mint || '').toLowerCase();
-        const isPumpToken = proto.includes('pump') || mintAddr.endsWith('pump');
+        const proto = (token as any).launchpad_protocol?.toLowerCase() || "";
+        const mintAddr = (token.mint || "").toLowerCase();
+        const isPumpToken = proto.includes("pump") || mintAddr.endsWith("pump");
         const isMayhem = !!(token as any).is_mayhem_mode;
         if (!isPumpToken && !isMayhem) return null;
         return (
@@ -1424,7 +1477,8 @@ function SocialIconsWithMetadata({
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
-              if (token.mint) window.open(`https://pump.fun/coin/${token.mint}`, '_blank');
+              if (token.mint)
+                window.open(`https://pump.fun/coin/${token.mint}`, "_blank");
             }}
           >
             <LuPill size={12} className="text-neutral-400 hover:text-white" />
@@ -1469,107 +1523,118 @@ function SocialIconsWithMetadata({
         </button>
 
         {/* Search Dropdown Menu - PHASE 3: JS-based fixed positioning */}
-        {showSearchMenu && createPortal(
-        <div
-          ref={searchMenuRef}
-          className="fixed min-w-[220px] rounded-lg py-1 z-[9999] overflow-hidden"
-          style={{
-            left: `${searchMenuPosition.left}px`,
-            top: `${searchMenuPosition.top}px`,
-            backgroundColor: AX.surface,
-            border: `1px solid ${AX.border}`,
-          }}
-          onMouseEnter={() => { isOverSearchMenu.current = true; }}
-          onMouseLeave={() => {
-            isOverSearchMenu.current = false;
-            setTimeout(() => {
-              if (!isOverSearchMenu.current && !isOverSearchButton.current) {
-                setShowSearchMenu(false);
-              }
-            }, 200);
-          }}
-        >
-          {/* X Search for Address */}
-          <button
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`;
-              window.open(url, "_blank");
-            }}
-          >
-            <FaXTwitter size={14} className="text-neutral-400" />
-            X Search for Address
-          </button>
-
-          {/* X Search for Name */}
-          <button
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              const searchQuery = `${token.symbol} ${token.name}`.trim();
-              const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-              window.open(url, "_blank");
-            }}
-          >
-            <FaXTwitter size={14} className="text-neutral-400" />
-            X Search for Name
-          </button>
-
-          {/* Divider - PHASE 3: Unified AX styling */}
-          <div className="my-1" style={{ borderTop: `1px solid ${AX.border}` }} />
-
-          {/* Google Search for Name */}
-          <button
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              const searchQuery = `${token.symbol} ${token.name} crypto`.trim();
-              const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
-              window.open(url, "_blank");
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              className="text-neutral-400"
+        {showSearchMenu &&
+          createPortal(
+            <div
+              ref={searchMenuRef}
+              className="fixed z-[9999] min-w-[220px] overflow-hidden rounded-lg py-1"
+              style={{
+                left: `${searchMenuPosition.left}px`,
+                top: `${searchMenuPosition.top}px`,
+                backgroundColor: AX.surface,
+                border: `1px solid ${AX.border}`,
+              }}
+              onMouseEnter={() => {
+                isOverSearchMenu.current = true;
+              }}
+              onMouseLeave={() => {
+                isOverSearchMenu.current = false;
+                setTimeout(() => {
+                  if (
+                    !isOverSearchMenu.current &&
+                    !isOverSearchButton.current
+                  ) {
+                    setShowSearchMenu(false);
+                  }
+                }, 200);
+              }}
             >
-              <path
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                fill="#4285F4"
-              />
-              <path
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                fill="#34A853"
-              />
-              <path
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                fill="#FBBC05"
-              />
-              <path
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                fill="#EA4335"
-              />
-            </svg>
-            Google Search for Name
-          </button>
+              {/* X Search for Address */}
+              <button
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const url = `https://twitter.com/search?q=${encodeURIComponent(token.mint)}`;
+                  window.open(url, "_blank");
+                }}
+              >
+                <FaXTwitter size={14} className="text-neutral-400" />X Search
+                for Address
+              </button>
 
-          {/* DexScreener Search */}
-          <button
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              const url = `https://dexscreener.com/solana/${token.mint}`;
-              window.open(url, "_blank");
-            }}
-          >
-            <LuSearch size={14} className="text-[#36d8ff]" />
-            DexScreener
-          </button>
-        </div>
-        , document.body)}
+              {/* X Search for Name */}
+              <button
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const searchQuery = `${token.symbol} ${token.name}`.trim();
+                  const url = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+                  window.open(url, "_blank");
+                }}
+              >
+                <FaXTwitter size={14} className="text-neutral-400" />X Search
+                for Name
+              </button>
+
+              {/* Divider - PHASE 3: Unified AX styling */}
+              <div
+                className="my-1"
+                style={{ borderTop: `1px solid ${AX.border}` }}
+              />
+
+              {/* Google Search for Name */}
+              <button
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const searchQuery =
+                    `${token.symbol} ${token.name} crypto`.trim();
+                  const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+                  window.open(url, "_blank");
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="text-neutral-400"
+                >
+                  <path
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    fill="#4285F4"
+                  />
+                  <path
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    fill="#34A853"
+                  />
+                  <path
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                    fill="#FBBC05"
+                  />
+                  <path
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    fill="#EA4335"
+                  />
+                </svg>
+                Google Search for Name
+              </button>
+
+              {/* DexScreener Search */}
+              <button
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const url = `https://dexscreener.com/solana/${token.mint}`;
+                  window.open(url, "_blank");
+                }}
+              >
+                <LuSearch size={14} className="text-[#36d8ff]" />
+                DexScreener
+              </button>
+            </div>,
+            document.body,
+          )}
       </div>
     </div>
   );
@@ -1616,8 +1681,8 @@ function TokenImage({
   const metadataCandidate = rawIsMetadata
     ? rawImageUrl
     : !rawImageUrl && tokenUri
-    ? tokenUri
-    : null;
+      ? tokenUri
+      : null;
 
   // Track whether the direct image URL (e.g. cdn.interstate.so/{mint}.webp)
   // exhausted its retries. When it does, we swap to the uri-based fallback —
@@ -1638,7 +1703,9 @@ function TokenImage({
   const uriFallbackActive =
     directImageFailed && !rawIsMetadata && tokenUri && isMetadataUrl(tokenUri);
   const effectiveDirectImageUrl = uriFallbackActive ? null : directImageUrl;
-  const effectiveMetadataCandidate = uriFallbackActive ? tokenUri : metadataCandidate;
+  const effectiveMetadataCandidate = uriFallbackActive
+    ? tokenUri
+    : metadataCandidate;
 
   // State holds ONLY the async-resolved metadata URL. Direct URLs are derived
   // from props in render so a virtualized-list shift (where the same component
@@ -1646,11 +1713,13 @@ function TokenImage({
   // direct URL — no stale-state render where FastImage briefly receives the
   // previous token's src and visibly swaps. This was the root cause of "all
   // already-loaded tokens flicker when a new token arrives."
-  const [resolvedMetadataUrl, setResolvedMetadataUrl] = useState<string | null>(() => {
-    if (!effectiveMetadataCandidate) return null;
-    const cached = getCachedResolvedImage(effectiveMetadataCandidate, true);
-    return cached || null;
-  });
+  const [resolvedMetadataUrl, setResolvedMetadataUrl] = useState<string | null>(
+    () => {
+      if (!effectiveMetadataCandidate) return null;
+      const cached = getCachedResolvedImage(effectiveMetadataCandidate, true);
+      return cached || null;
+    },
+  );
 
   // Sync the metadata-cache hit when the candidate changes (token shift). Reads
   // the cache synchronously in render so when the new token's metadata is
@@ -1681,17 +1750,20 @@ function TokenImage({
     setResolvedMetadataUrl(null);
 
     const attemptResolve = (isRetry: boolean) => {
-      if (isRetry && effectiveMetadataCandidate) clearMetadataFailureCache(effectiveMetadataCandidate);
-      resolveMetadataImage(effectiveMetadataCandidate, true).then((resolved) => {
-        if (cancelled) return;
-        if (resolved) {
-          setResolvedMetadataUrl(resolved);
-        } else if (retryCount < MAX_RETRIES) {
-          retryCount++;
-          const delay = retryCount === 1 ? 2000 : 5000;
-          retryTimer = setTimeout(() => attemptResolve(true), delay);
-        }
-      });
+      if (isRetry && effectiveMetadataCandidate)
+        clearMetadataFailureCache(effectiveMetadataCandidate);
+      resolveMetadataImage(effectiveMetadataCandidate, true).then(
+        (resolved) => {
+          if (cancelled) return;
+          if (resolved) {
+            setResolvedMetadataUrl(resolved);
+          } else if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            const delay = retryCount === 1 ? 2000 : 5000;
+            retryTimer = setTimeout(() => attemptResolve(true), delay);
+          }
+        },
+      );
     };
     attemptResolve(false);
 
@@ -1705,14 +1777,20 @@ function TokenImage({
   // props, fall back to the synchronously-checked metadata cache, then to the
   // async-resolved state. No stale render — token-shift gives the new URL
   // immediately, FastImage's memo bail-out keeps cached images stable.
-  const imageUrl = effectiveDirectImageUrl || cachedMetadataUrl || resolvedMetadataUrl;
+  const imageUrl =
+    effectiveDirectImageUrl || cachedMetadataUrl || resolvedMetadataUrl;
 
   // Blacklist: extract twitter handle and dev wallet for action buttons
   const { meta: blMeta } = useTokenMetadata(token.uri);
   const blSocialLinks = extractSocialLinks(token, blMeta);
-  const blTwitterHandle = blSocialLinks.twitter ? extractTwitterHandle(blSocialLinks.twitter) : null;
+  const blTwitterHandle = blSocialLinks.twitter
+    ? extractTwitterHandle(blSocialLinks.twitter)
+    : null;
   if (blTwitterHandle && token.mint) {
-    twitterHandleCache.set(token.mint.toLowerCase(), blTwitterHandle.toLowerCase());
+    twitterHandleCache.set(
+      token.mint.toLowerCase(),
+      blTwitterHandle.toLowerCase(),
+    );
   }
   const blDevWallet = token.dev_wallet || token.creator_wallet || null;
 
@@ -1819,7 +1897,11 @@ function TokenImage({
     }
 
     // Pumpswap / Pump AMM - always yellow
-    if (launchpadProtocol.includes("pumpswap") || launchpadProtocol === "pump_amm" || launchpadProtocol === "pumpamm") {
+    if (
+      launchpadProtocol.includes("pumpswap") ||
+      launchpadProtocol === "pump_amm" ||
+      launchpadProtocol === "pumpamm"
+    ) {
       return "#eab308";
     }
 
@@ -1864,7 +1946,11 @@ function TokenImage({
     }
 
     // Bonk detection: protocol includes "bonk" or "launchlab", OR mint ends in "bonk"
-    if (launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk")) {
+    if (
+      launchpadProtocol.includes("bonk") ||
+      launchpadProtocol.includes("launchlab") ||
+      mintAddress.endsWith("bonk")
+    ) {
       return protocolColorMap["bonk"];
     }
 
@@ -1924,7 +2010,11 @@ function TokenImage({
     }
 
     // Bonk/LaunchLab detection: protocol includes "bonk" or "launchlab", OR mint ends in "bonk"
-    if (launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddress.endsWith("bonk")) {
+    if (
+      launchpadProtocol.includes("bonk") ||
+      launchpadProtocol.includes("launchlab") ||
+      mintAddress.endsWith("bonk")
+    ) {
       return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
     }
 
@@ -1942,12 +2032,27 @@ function TokenImage({
     const mint = (t.mint || "").toLowerCase();
     if (mint.includes("bags")) return "Bags";
     if (!protocol) return "Pump";
-    if (protocol.includes("pump")) return protocol.includes("pump_amm") || protocol.includes("pumpamm") || protocol.includes("pumpswap") ? "Pump AMM" : "Pump";
+    if (protocol.includes("pump"))
+      return protocol.includes("pump_amm") ||
+        protocol.includes("pumpamm") ||
+        protocol.includes("pumpswap")
+        ? "Pump AMM"
+        : "Pump";
     if (protocol.includes("meteora")) return "Meteora AMM";
     if (protocol.includes("raydium")) return "Raydium";
     if (protocol.includes("boop")) return "Boop";
-    if (protocol.includes("moonit") || protocol.includes("moonshot") || protocol.includes("moonshoot")) return "Moonit";
-    if (protocol.includes("bonk") || protocol.includes("launchlab") || mint.endsWith("bonk")) return protocol.includes("launchlab") ? "LaunchLab" : "Bonk";
+    if (
+      protocol.includes("moonit") ||
+      protocol.includes("moonshot") ||
+      protocol.includes("moonshoot")
+    )
+      return "Moonit";
+    if (
+      protocol.includes("bonk") ||
+      protocol.includes("launchlab") ||
+      mint.endsWith("bonk")
+    )
+      return protocol.includes("launchlab") ? "LaunchLab" : "Bonk";
     if (protocol.includes("bags")) return "Bags";
     return "Pump";
   };
@@ -1962,7 +2067,10 @@ function TokenImage({
   const mintAddressLower = token.mint?.toLowerCase() || "";
   const isMeteora = launchpadProtocol.includes("meteora");
   // Check both launchpad_protocol AND mint address suffix for bonk (mint ends in "bonk")
-  const isBonk = launchpadProtocol.includes("bonk") || launchpadProtocol.includes("launchlab") || mintAddressLower.endsWith("bonk");
+  const isBonk =
+    launchpadProtocol.includes("bonk") ||
+    launchpadProtocol.includes("launchlab") ||
+    mintAddressLower.endsWith("bonk");
   // Check both launchpad_protocol AND mint address for bags
   const isBags =
     launchpadProtocol.includes("bags") || mintAddressLower.includes("bags");
@@ -2016,7 +2124,8 @@ function TokenImage({
   const handleMouseLeave = () => {
     setShowPreview(false);
     setShowImagePreview(false);
-    const inner = imageContainerRef.current?.firstElementChild as HTMLDivElement | null;
+    const inner = imageContainerRef.current
+      ?.firstElementChild as HTMLDivElement | null;
     if (inner) {
       inner.style.boxShadow = "none";
       inner.style.transform = "scale(1)";
@@ -2025,7 +2134,8 @@ function TokenImage({
 
   const handleImageEnter = () => {
     setShowImagePreview(true);
-    const inner = imageContainerRef.current?.firstElementChild as HTMLDivElement | null;
+    const inner = imageContainerRef.current
+      ?.firstElementChild as HTMLDivElement | null;
     if (inner) {
       inner.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
       inner.style.transform = "scale(1.08)";
@@ -2041,7 +2151,8 @@ function TokenImage({
 
   const handleImageLeave = () => {
     setShowImagePreview(false);
-    const inner = imageContainerRef.current?.firstElementChild as HTMLDivElement | null;
+    const inner = imageContainerRef.current
+      ?.firstElementChild as HTMLDivElement | null;
     if (inner) {
       inner.style.boxShadow = "none";
       inner.style.transform = "scale(1)";
@@ -2144,18 +2255,28 @@ function TokenImage({
                 priority={priority}
                 showBubble={false}
                 onLoadFailed={handleDirectImageFailed}
+                stableId={token.mint || token.pair_address || undefined}
               />
               {/* Dark dim overlay on hover */}
               <div
                 className="pointer-events-none absolute inset-0 rounded-md bg-black/60"
-                style={{ opacity: showImagePreview ? 1 : 0, transition: "opacity 150ms" }}
+                style={{
+                  opacity: showImagePreview ? 1 : 0,
+                  transition: "opacity 150ms",
+                }}
               />
               {/* Camera icon overlay on hover */}
               <div
                 className="pointer-events-none absolute inset-0 flex items-center justify-center"
-                style={{ opacity: showImagePreview ? 1 : 0, transition: "opacity 150ms" }}
+                style={{
+                  opacity: showImagePreview ? 1 : 0,
+                  transition: "opacity 150ms",
+                }}
               >
-                <CiCamera size={20} style={{ color: "rgba(255,255,255,0.8)" }} />
+                <CiCamera
+                  size={20}
+                  style={{ color: "rgba(255,255,255,0.8)" }}
+                />
               </div>
             </div>
           </div>
@@ -2186,7 +2307,9 @@ function TokenImage({
                 // Mayhem Mode hijacks the launchpad-color progress arc and paints it
                 // brand red instead, so the image-loading ring matches the row's red
                 // identity (outline glow, protocol bubble, fire countdown badge).
-                stroke={(token as any).is_mayhem_mode ? "#c83c51" : protocolColor}
+                stroke={
+                  (token as any).is_mayhem_mode ? "#c83c51" : protocolColor
+                }
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -2209,8 +2332,20 @@ function TokenImage({
             border: `1px solid ${(token as any).is_mayhem_mode ? "#c83c51" : protocolColor}`,
             boxShadow: `0 0 4px ${(token as any).is_mayhem_mode ? "#c83c5160" : `${protocolColor}60`}`,
           }}
-          onMouseEnter={(e) => { const tip = ammBubbleTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.left + r.width / 2}px`; tip.style.top = `${r.top - 6}px`; tip.style.transform = "translate(-50%, -100%)"; tip.style.opacity = "1"; } }}
-          onMouseLeave={() => { const tip = ammBubbleTipRef.current; if (tip) tip.style.opacity = "0"; }}
+          onMouseEnter={(e) => {
+            const tip = ammBubbleTipRef.current;
+            if (tip) {
+              const r = e.currentTarget.getBoundingClientRect();
+              tip.style.left = `${r.left + r.width / 2}px`;
+              tip.style.top = `${r.top - 6}px`;
+              tip.style.transform = "translate(-50%, -100%)";
+              tip.style.opacity = "1";
+            }
+          }}
+          onMouseLeave={() => {
+            const tip = ammBubbleTipRef.current;
+            if (tip) tip.style.opacity = "0";
+          }}
         >
           {(token as any).is_mayhem_mode ? (
             // Mayhem Mode → swap the protocol logo entirely for the dedicated
@@ -2241,14 +2376,22 @@ function TokenImage({
           <div
             ref={ammBubbleTipRef}
             className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-            style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+            style={{
+              backgroundColor: "rgba(31, 41, 55, 0.95)",
+              color: "#e5e7eb",
+              border: "1px solid rgba(107, 114, 128, 0.3)",
+              opacity: 0,
+              transition: "opacity 150ms",
+            }}
           >
             {/* When the bubble is showing the Mayhem.webp icon, label it "Mayhem"
                 so the tooltip matches what the user sees rather than the
                 underlying launchpad (which is still PumpFun/Bonk/etc. underneath). */}
-            {(token as any).is_mayhem_mode ? "Mayhem" : getAmmDisplayName(token)}
+            {(token as any).is_mayhem_mode
+              ? "Mayhem"
+              : getAmmDisplayName(token)}
           </div>,
-          document.body
+          document.body,
         )}
         {/* Blacklist action buttons — top-left, outside image */}
         <div
@@ -2262,10 +2405,30 @@ function TokenImage({
           {/* Hide Token (by CA) */}
           <button
             className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
-            style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
-            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistCA?.(token.mint); }}
-            onMouseEnter={(e) => { const tip = hideTokenTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
-            onMouseLeave={() => { const tip = hideTokenTipRef.current; if (tip) tip.style.opacity = "0"; }}
+            style={{
+              backgroundColor: "rgba(31, 41, 55, 0.9)",
+              pointerEvents: "auto",
+              cursor: "pointer",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onBlacklistCA?.(token.mint);
+            }}
+            onMouseEnter={(e) => {
+              const tip = hideTokenTipRef.current;
+              if (tip) {
+                const r = e.currentTarget.getBoundingClientRect();
+                tip.style.left = `${r.right + 6}px`;
+                tip.style.top = `${r.top + r.height / 2}px`;
+                tip.style.transform = "translateY(-50%)";
+                tip.style.opacity = "1";
+              }
+            }}
+            onMouseLeave={() => {
+              const tip = hideTokenTipRef.current;
+              if (tip) tip.style.opacity = "0";
+            }}
           >
             <FaRegEyeSlash size={13} style={{ color: "#e5e7eb" }} />
           </button>
@@ -2273,21 +2436,47 @@ function TokenImage({
             <div
               ref={hideTokenTipRef}
               className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-              style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+              style={{
+                backgroundColor: "rgba(31, 41, 55, 0.95)",
+                color: "#e5e7eb",
+                border: "1px solid rgba(107, 114, 128, 0.3)",
+                opacity: 0,
+                transition: "opacity 150ms",
+              }}
             >
               Hide Token
             </div>,
-            document.body
+            document.body,
           )}
           {/* Blacklist Twitter Handle */}
           {blTwitterHandle && (
             <>
               <button
                 className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30"
-                style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onBlacklistTwitter?.(blTwitterHandle); }}
-                onMouseEnter={(e) => { const tip = blacklistTwitterTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
-                onMouseLeave={() => { const tip = blacklistTwitterTipRef.current; if (tip) tip.style.opacity = "0"; }}
+                style={{
+                  backgroundColor: "rgba(31, 41, 55, 0.9)",
+                  pointerEvents: "auto",
+                  cursor: "pointer",
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onBlacklistTwitter?.(blTwitterHandle);
+                }}
+                onMouseEnter={(e) => {
+                  const tip = blacklistTwitterTipRef.current;
+                  if (tip) {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    tip.style.left = `${r.right + 6}px`;
+                    tip.style.top = `${r.top + r.height / 2}px`;
+                    tip.style.transform = "translateY(-50%)";
+                    tip.style.opacity = "1";
+                  }
+                }}
+                onMouseLeave={() => {
+                  const tip = blacklistTwitterTipRef.current;
+                  if (tip) tip.style.opacity = "0";
+                }}
               >
                 <LuAtSign size={13} style={{ color: "#e5e7eb" }} />
               </button>
@@ -2295,26 +2484,48 @@ function TokenImage({
                 <div
                   ref={blacklistTwitterTipRef}
                   className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-                  style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+                  style={{
+                    backgroundColor: "rgba(31, 41, 55, 0.95)",
+                    color: "#e5e7eb",
+                    border: "1px solid rgba(107, 114, 128, 0.3)",
+                    opacity: 0,
+                    transition: "opacity 150ms",
+                  }}
                 >
                   Blacklist @{blTwitterHandle}
                 </div>,
-                document.body
+                document.body,
               )}
             </>
           )}
           {/* Blacklist Dev Wallet — always shown on hover; disabled visual when no dev wallet is known */}
           <button
             className="flex h-6 w-6 items-center justify-center rounded-sm transition-colors hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ backgroundColor: "rgba(31, 41, 55, 0.9)", pointerEvents: "auto", cursor: "pointer" }}
+            style={{
+              backgroundColor: "rgba(31, 41, 55, 0.9)",
+              pointerEvents: "auto",
+              cursor: "pointer",
+            }}
             disabled={!blDevWallet}
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
               if (blDevWallet) onBlacklistDev?.(blDevWallet);
             }}
-            onMouseEnter={(e) => { const tip = blacklistDevTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.right + 6}px`; tip.style.top = `${r.top + r.height / 2}px`; tip.style.transform = "translateY(-50%)"; tip.style.opacity = "1"; } }}
-            onMouseLeave={() => { const tip = blacklistDevTipRef.current; if (tip) tip.style.opacity = "0"; }}
+            onMouseEnter={(e) => {
+              const tip = blacklistDevTipRef.current;
+              if (tip) {
+                const r = e.currentTarget.getBoundingClientRect();
+                tip.style.left = `${r.right + 6}px`;
+                tip.style.top = `${r.top + r.height / 2}px`;
+                tip.style.transform = "translateY(-50%)";
+                tip.style.opacity = "1";
+              }
+            }}
+            onMouseLeave={() => {
+              const tip = blacklistDevTipRef.current;
+              if (tip) tip.style.opacity = "0";
+            }}
           >
             <FaRegEyeSlash size={13} style={{ color: "#e5e7eb" }} />
           </button>
@@ -2322,11 +2533,17 @@ function TokenImage({
             <div
               ref={blacklistDevTipRef}
               className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-              style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+              style={{
+                backgroundColor: "rgba(31, 41, 55, 0.95)",
+                color: "#e5e7eb",
+                border: "1px solid rgba(107, 114, 128, 0.3)",
+                opacity: 0,
+                transition: "opacity 150ms",
+              }}
             >
               {blDevWallet ? "Blacklist dev" : "Dev wallet unknown"}
             </div>,
-            document.body
+            document.body,
           )}
         </div>
 
@@ -2345,70 +2562,73 @@ function TokenImage({
         </div>
       </div>
       {/* Image Preview Window */}
-      {showImagePreview && createPortal(
-        <div
-          className="pointer-events-none fixed z-[9999]"
-          style={{
-            top: `${previewPosition.top}px`,
-            left: `${previewPosition.left}px`,
-          }}
-        >
-          <div className="relative">
-            {/* Main preview container */}
-            <div
-              className="relative overflow-hidden rounded-xl border"
-              style={{
-                width: "225px",
-                height: "225px",
-                backgroundColor: AX.surface,
-                borderColor: "rgba(107, 114, 128, 0.3)",
-                borderWidth: "1px",
-                boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
-              }}
-            >
-              <FastImage
-                src={imageUrl}
-                alt={token.name || token.symbol || ""}
-                symbol={token.symbol}
-                name={token.name}
-                width={225}
-                height={225}
-                className="h-full w-full object-cover"
-                priority={priority}
-              />
-            </div>
-            {/* Migration progress tooltip - only for New Pairs */}
-            {isNewPairs && (
+      {showImagePreview &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-[9999]"
+            style={{
+              top: `${previewPosition.top}px`,
+              left: `${previewPosition.left}px`,
+            }}
+          >
+            <div className="relative">
+              {/* Main preview container */}
               <div
-                className="absolute -top-10 left-1/2 z-50 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
+                className="relative overflow-hidden rounded-xl border"
                 style={{
-                  backgroundColor: "rgba(0, 0, 0, 0.8)",
-                  color: "#31e3ac",
-                  border: "1px solid #31e3ac20",
-                  backdropFilter: "blur(4px)",
-                  opacity: showImagePreview ? 1 : 0,
-                  transition: "opacity 0.2s ease-out",
+                  width: "225px",
+                  height: "225px",
+                  backgroundColor: AX.surface,
+                  borderColor: "rgba(107, 114, 128, 0.3)",
+                  borderWidth: "1px",
+                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
                 }}
               >
-                Progress: {Math.round(scaledProgress * 100)}%
+                <FastImage
+                  src={imageUrl}
+                  alt={token.name || token.symbol || ""}
+                  symbol={token.symbol}
+                  name={token.name}
+                  width={225}
+                  height={225}
+                  className="h-full w-full object-cover"
+                  priority={priority}
+                  stableId={token.mint || token.pair_address || undefined}
+                />
               </div>
-            )}
+              {/* Migration progress tooltip - only for New Pairs */}
+              {isNewPairs && (
+                <div
+                  className="absolute -top-10 left-1/2 z-50 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
+                  style={{
+                    backgroundColor: "rgba(0, 0, 0, 0.8)",
+                    color: "#31e3ac",
+                    border: "1px solid #31e3ac20",
+                    backdropFilter: "blur(4px)",
+                    opacity: showImagePreview ? 1 : 0,
+                    transition: "opacity 0.2s ease-out",
+                  }}
+                >
+                  Progress: {Math.round(scaledProgress * 100)}%
+                </div>
+              )}
 
-            {/* Token info overlay */}
-            <div
-              className="absolute -bottom-8 left-1/2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
-              style={{
-                backgroundColor: AX.surface,
-                color: AX.text,
-                border: `1px solid ${AX.border}`,
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-              }}
-            >
-              {token.symbol} - {token.name}
+              {/* Token info overlay */}
+              <div
+                className="absolute -bottom-8 left-1/2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
+                style={{
+                  backgroundColor: AX.surface,
+                  color: AX.text,
+                  border: `1px solid ${AX.border}`,
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+                }}
+              >
+                {token.symbol} - {token.name}
+              </div>
             </div>
-          </div>
-        </div>
-      , document.body)}
+          </div>,
+          document.body,
+        )}
 
       {/* Global CSS to remove number input arrows */}
       <style
@@ -2864,24 +3084,34 @@ function PulseTable({
 
   // State for filtered tokens from API
   const [filteredTokens, setFilteredTokens] = useState<Token[]>(() => {
-    if (typeof window === 'undefined') return [];
+    if (typeof window === "undefined") return [];
     try {
       const lowerTitle = title.toLowerCase();
-      const cacheKey = `pulse_protocol_cache_${lowerTitle.replace(/\s+/g, '_')}`;
+      const cacheKey = `pulse_protocol_cache_${lowerTitle.replace(/\s+/g, "_")}`;
       const cached = sessionStorage.getItem(cacheKey);
       if (!cached) return [];
       const parsed = JSON.parse(cached);
       // Verify cache matches current protocol filters
-      const filterKey = lowerTitle.includes('final') ? 'pulse_filters_final_stretch'
-        : lowerTitle.includes('migrated') ? 'pulse_filters_migrated'
-        : lowerTitle.includes('new') ? 'pulse_filters_new_pairs'
-        : `pulse_filters_${lowerTitle.replace(/\s+/g, '_')}`;
+      const filterKey = lowerTitle.includes("final")
+        ? "pulse_filters_final_stretch"
+        : lowerTitle.includes("migrated")
+          ? "pulse_filters_migrated"
+          : lowerTitle.includes("new")
+            ? "pulse_filters_new_pairs"
+            : `pulse_filters_${lowerTitle.replace(/\s+/g, "_")}`;
       const filterRaw = localStorage.getItem(filterKey);
-      const currentProtos: string[] = filterRaw ? (JSON.parse(filterRaw).protocols || []) : [];
-      const hasSpecific = currentProtos.length > 0 && !currentProtos.includes('All');
-      if (hasSpecific && parsed.protocols &&
-          JSON.stringify([...parsed.protocols].sort()) === JSON.stringify([...currentProtos].sort()) &&
-          parsed.data?.length > 0) {
+      const currentProtos: string[] = filterRaw
+        ? JSON.parse(filterRaw).protocols || []
+        : [];
+      const hasSpecific =
+        currentProtos.length > 0 && !currentProtos.includes("All");
+      if (
+        hasSpecific &&
+        parsed.protocols &&
+        JSON.stringify([...parsed.protocols].sort()) ===
+          JSON.stringify([...currentProtos].sort()) &&
+        parsed.data?.length > 0
+      ) {
         return parsed.data; // Already normalized when cached
       }
     } catch {}
@@ -2894,12 +3124,23 @@ function PulseTable({
   // Helper to normalize HTTP token data for consistent filtering
   // Ensures all filter-relevant fields have default values with both field name variants
   const normalizeHttpToken = useCallback((rawToken: any): Token => {
-    const holderValue = rawToken.holder_count ?? rawToken.holders ?? rawToken.unique_wallets_24h ?? 0;
+    const holderValue =
+      rawToken.holder_count ??
+      rawToken.holders ??
+      rawToken.unique_wallets_24h ??
+      0;
     // Backend already sends percent values in 0-100 format, no conversion needed
-    const devPercentValue = rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
-    const sniperPercentValue = rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
-    const insiderPercentValue = rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
-    const bundlePercentValue = rawToken.bundle_percent ?? rawToken.bundled_percentage ?? rawToken.bundler_held_percentage ?? 0;
+    const devPercentValue =
+      rawToken.dev_percent ?? rawToken.dev_held_percentage ?? 0;
+    const sniperPercentValue =
+      rawToken.sniper_percent ?? rawToken.sniper_held_percentage ?? 0;
+    const insiderPercentValue =
+      rawToken.insider_percent ?? rawToken.insider_held_percentage ?? 0;
+    const bundlePercentValue =
+      rawToken.bundle_percent ??
+      rawToken.bundled_percentage ??
+      rawToken.bundler_held_percentage ??
+      0;
 
     return {
       ...rawToken,
@@ -2932,15 +3173,22 @@ function PulseTable({
       bundled_percentage: bundlePercentValue,
       bundler_held_percentage: bundlePercentValue,
       bundle_wallet_count: rawToken.bundle_wallet_count ?? 0,
-      bundler_count: rawToken.bundle_wallet_count ?? rawToken.bundler_count ?? 0,
+      bundler_count:
+        rawToken.bundle_wallet_count ?? rawToken.bundler_count ?? 0,
       // Top holders
-      top10_holders_pct: rawToken.top10_holders_pct ?? rawToken.top_10_holders_percent ?? 0,
+      top10_holders_pct:
+        rawToken.top10_holders_pct ?? rawToken.top_10_holders_percent ?? 0,
       // Dev activity
       dev_tokens_created: rawToken.dev_tokens_created ?? 0,
       dev_tokens_migrated: rawToken.dev_tokens_migrated ?? 0,
       // Market metrics
-      market_cap_usd: rawToken.market_cap_usd ?? rawToken.fully_diluted_value ?? rawToken.fdv ?? 0,
-      liquidity_usd: rawToken.liquidity_usd ?? rawToken.total_liquidity_usd ?? 0,
+      market_cap_usd:
+        rawToken.market_cap_usd ??
+        rawToken.fully_diluted_value ??
+        rawToken.fdv ??
+        0,
+      liquidity_usd:
+        rawToken.liquidity_usd ?? rawToken.total_liquidity_usd ?? 0,
       volume_24h: rawToken.volume_24h ?? 0,
       // Total fees in lamports
       total_fees_lamports: rawToken.total_fees_lamports ?? 0,
@@ -2950,7 +3198,7 @@ function PulseTable({
   // Local copy of tokens prop that can receive price updates
   // This solves the issue where price_update events couldn't modify the tokens prop
   const [baseTokens, setBaseTokens] = useState<Token[]>(() =>
-    tokens.map(normalizeHttpToken)
+    tokens.map(normalizeHttpToken),
   );
 
   // Sync baseTokens with tokens prop when it changes (initial load or parent refresh)
@@ -3032,14 +3280,17 @@ function PulseTable({
   }, [title]);
 
   // Default filters for this column type
-  const getDefaultFilters = useCallback((): PulseFilters => ({
-    ...defaultPulseFilters,
-    sortBy:
-      isNewPairs || title.toLowerCase().includes("migrated")
-        ? "timestamp"
-        : "marketCap",
-    sortOrder: "desc",
-  }), [isNewPairs, title]);
+  const getDefaultFilters = useCallback(
+    (): PulseFilters => ({
+      ...defaultPulseFilters,
+      sortBy:
+        isNewPairs || title.toLowerCase().includes("migrated")
+          ? "timestamp"
+          : "marketCap",
+      sortOrder: "desc",
+    }),
+    [isNewPairs, title],
+  );
 
   // Local filters state - each column has independent filters
   // Initialize from localStorage if available
@@ -3059,7 +3310,10 @@ function PulseTable({
   });
 
   // Check if any non-default filters are active — single source of truth from discoverFilterUtils
-  const hasActiveFilters = useMemo(() => checkActiveFilters(filters), [filters]);
+  const hasActiveFilters = useMemo(
+    () => checkActiveFilters(filters),
+    [filters],
+  );
 
   // Persist filters to localStorage whenever they change
   useEffect(() => {
@@ -3170,7 +3424,7 @@ function PulseTable({
         setFilteredTokens([]);
         // Clear protocol cache
         try {
-          const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, '_')}`;
+          const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, "_")}`;
           sessionStorage.removeItem(cacheKey);
         } catch {}
         return;
@@ -3201,15 +3455,21 @@ function PulseTable({
           // Normalize HTTP tokens for consistent filtering (same as WebSocket tokens)
           const normalizedTokens = rawTokens.map(normalizeHttpToken);
           // Skip liquidity filtering for New Pairs and Migrated
-          const tokensToSet = (isNewPairs || isMigrated) ? normalizedTokens : filterNonZeroLiquidity(normalizedTokens);
+          const tokensToSet =
+            isNewPairs || isMigrated
+              ? normalizedTokens
+              : filterNonZeroLiquidity(normalizedTokens);
           setFilteredTokens(tokensToSet);
           // Cache protocol-filtered results for instant restoration on navigation back
           try {
-            const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, '_')}`;
-            sessionStorage.setItem(cacheKey, JSON.stringify({
-              data: tokensToSet.slice(0, 50),
-              protocols: protocols,
-            }));
+            const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, "_")}`;
+            sessionStorage.setItem(
+              cacheKey,
+              JSON.stringify({
+                data: tokensToSet.slice(0, 50),
+                protocols: protocols,
+              }),
+            );
           } catch {}
         } else {
           console.error("Failed to fetch filtered tokens:", response.status);
@@ -3252,18 +3512,20 @@ function PulseTable({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const hasSpecificProtocols =
-      (filters.onlyMayhemMode && filters.protocols.length === 0
+      filters.onlyMayhemMode && filters.protocols.length === 0
         ? false
-        : !filters.protocols.includes("All"));
+        : !filters.protocols.includes("All");
     if (hasSpecificProtocols) return;
 
     // Select the right direct tokens based on channel
-    const directTokensForChannel = (
-      channel === 'new' ? directNewTokens :
-      channel === 'final_stretch' ? directFinalStretchTokens :
-      channel === 'migrated' ? directMigratedTokens :
-      []
-    );
+    const directTokensForChannel =
+      channel === "new"
+        ? directNewTokens
+        : channel === "final_stretch"
+          ? directFinalStretchTokens
+          : channel === "migrated"
+            ? directMigratedTokens
+            : [];
 
     // Only cache if we have data
     if (directTokensForChannel.length === 0) return;
@@ -3286,20 +3548,27 @@ function PulseTable({
       }
     };
 
-    if ('requestIdleCallback' in window) {
+    if ("requestIdleCallback" in window) {
       (window as any).requestIdleCallback(writeCache, { timeout: 2000 });
     } else {
       setTimeout(writeCache, 100);
     }
-  }, [channel, directNewTokens, directFinalStretchTokens, directMigratedTokens, wsCacheStorageKey, filters.protocols]);
+  }, [
+    channel,
+    directNewTokens,
+    directFinalStretchTokens,
+    directMigratedTokens,
+    wsCacheStorageKey,
+    filters.protocols,
+  ]);
 
   // Fetch filtered tokens when protocols change
   useEffect(() => {
     // Treat ['All'] the same as no filter - don't fetch filtered data
     const hasSpecificProtocols =
-      (filters.onlyMayhemMode && filters.protocols.length === 0
+      filters.onlyMayhemMode && filters.protocols.length === 0
         ? false
-        : !filters.protocols.includes("All"));
+        : !filters.protocols.includes("All");
 
     if (hasSpecificProtocols) {
       fetchFilteredTokens(filters.protocols);
@@ -3347,7 +3616,7 @@ function PulseTable({
     }
     // Also clear protocol cache
     try {
-      const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, '_')}`;
+      const cacheKey = `pulse_protocol_cache_${title.toLowerCase().replace(/\s+/g, "_")}`;
       sessionStorage.removeItem(cacheKey);
     } catch {}
   };
@@ -3424,8 +3693,8 @@ function PulseTable({
   // Use shared WebSocket context for instant txHash notifications
   // This eliminates duplicate connections - single connection shared via context
   const { connected: solanaWsConnected } = useTxHashCallback(
-    'pulse-table',
-    handleSolanaQuickBuyWsTxHash
+    "pulse-table",
+    handleSolanaQuickBuyWsTxHash,
   );
 
   useEffect(() => {
@@ -3490,10 +3759,25 @@ function PulseTable({
     const isMultiWallet = walletsWithBalance > 1;
 
     // Pre-validate before showing toast
-    const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
-    const validation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
+    const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(
+      () => null,
+    );
+    const validation = validateSolanaBuy(
+      buyAmount,
+      allocations,
+      walletBalances,
+      walletList,
+      selectedWalletIds?.sol || [],
+      settings.priority,
+      settings.bribe,
+      ataExists,
+    );
     if (!validation.valid) {
-      showTradeValidationError(validation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
+      showTradeValidationError(
+        validation.error,
+        getResolvedTokenImage(token),
+        token.symbol || token.name || "Token",
+      );
       return;
     }
 
@@ -3526,7 +3810,9 @@ function PulseTable({
               src={tokenImage}
               alt={tokenName}
               className="h-6 w-6 flex-shrink-0 rounded-full"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
           )}
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -3542,7 +3828,9 @@ function PulseTable({
             <span
               id={`check-${uniqueToastId}`}
               className="flex-shrink-0 text-green-400"
-              style={{ display: timerFinished && !tradeErrored ? "inline" : "none" }}
+              style={{
+                display: timerFinished && !tradeErrored ? "inline" : "none",
+              }}
             >
               ✓
             </span>
@@ -3626,7 +3914,14 @@ function PulseTable({
       totalSelectedWallets: walletsWithBalance,
     };
 
-    const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
+    const cleanupTradeListener = listenForTradeEvents(
+      token.mint || "",
+      uniqueToastId,
+      (v) => {
+        tradeErrored = v;
+      },
+      "solana",
+    );
 
     // Optimistic chart marker — declared outside try so catch can roll back.
     let __markId = "";
@@ -3637,13 +3932,19 @@ function PulseTable({
 
       __markId = insertOptimisticMarker({
         mint: baseMint,
-        walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+        walletAddress:
+          walletList?.find((w) => w.isPrimary)?.solanaAddress ??
+          walletList?.[0]?.solanaAddress,
         side: "buy",
         amountSol: buyAmount,
         priceUsd: token.usd_price,
       }).id;
 
-      notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
+      notifyTradePending({
+        tokenAddress: baseMint,
+        tradeType: "buy",
+        chain: "sol",
+      });
       const multiResult = await executeSolanaMultiBuy({
         poolAddress,
         baseMint,
@@ -3660,7 +3961,7 @@ function PulseTable({
         rpc: settings.rpc,
         tokenName: token.name,
         tokenSymbol: token.symbol,
-        imageUrl: await resolveTokenImage(token) || undefined,
+        imageUrl: (await resolveTokenImage(token)) || undefined,
         authToken: user.bearerToken,
         walletList,
         walletBalances,
@@ -3677,7 +3978,16 @@ function PulseTable({
               linkEl.className = "";
             }
             // Fire early so Portfolio refetches immediately when Solscan link appears
-            broadcastTradeCompleted({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol', txHash, tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
+            broadcastTradeCompleted({
+              tokenAddress: baseMint,
+              tradeType: "buy",
+              chain: "sol",
+              txHash,
+              tokenName: token.name,
+              tokenSymbol: token.symbol,
+              imageUrl: tokenImage,
+              solAmountSpent: buyAmount,
+            });
           }
         },
       });
@@ -3714,8 +4024,16 @@ function PulseTable({
           }),
         );
       }
-      dispatchBalanceRefresh('sol');
-      broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol', tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage, solAmountSpent: buyAmount });
+      dispatchBalanceRefresh("sol");
+      broadcastTradeCompleted({
+        tokenAddress: token.mint,
+        tradeType: "buy",
+        chain: "sol",
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        imageUrl: tokenImage,
+        solAmountSpent: buyAmount,
+      });
 
       return { success: true };
     } catch (error: any) {
@@ -3730,7 +4048,12 @@ function PulseTable({
       // Transform pending toast to error in-place
       console.error("❌ Quick Buy failed:", error);
       if (pendingSolanaQuickBuyToastRef.current) {
-        transformToastToError(pendingSolanaQuickBuyToastRef.current.id, mapTradeErrorMessage(error), tokenImage, tokenName);
+        transformToastToError(
+          pendingSolanaQuickBuyToastRef.current.id,
+          mapTradeErrorMessage(error),
+          tokenImage,
+          tokenName,
+        );
         pendingSolanaQuickBuyToastRef.current = null;
       }
 
@@ -3963,7 +4286,6 @@ function PulseTable({
   const filteredAndSortedTokens = useMemo(() => {
     const isNewPairs = title.toLowerCase().includes("new");
 
-
     // ═══════════════════════════════════════════════════════════════════════════
     // ULTRA-FAST PATH FOR NEW PAIRS: Skip ALL filtering when no custom filters set
     // This ensures WebSocket tokens render instantly without any processing delay
@@ -4030,18 +4352,22 @@ function PulseTable({
     // Priority: HTTP shows immediately → WebSocket merges on top → IndexedDB caches both
     // ═══════════════════════════════════════════════════════════════════════════
     if (hasNoCustomFilters) {
-      const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
+      const isFinalStretch =
+        title.toLowerCase().includes("final") ||
+        title.toLowerCase().includes("stretch");
       const isMigrated = title.toLowerCase().includes("migrated");
 
       // 1. Start with HTTP data as the BASE (shows immediately on page load)
-      const httpSource = filteredTokens.length > 0 ? filteredTokens : baseTokens;
+      const httpSource =
+        filteredTokens.length > 0 ? filteredTokens : baseTokens;
 
       // 2. Get WebSocket tokens for this column
       let wsSource: typeof directNewTokens = [];
       if (isNewPairs) {
         wsSource = directNewTokens.length > 0 ? directNewTokens : [];
       } else if (isFinalStretch) {
-        wsSource = directFinalStretchTokens.length > 0 ? directFinalStretchTokens : [];
+        wsSource =
+          directFinalStretchTokens.length > 0 ? directFinalStretchTokens : [];
       } else if (isMigrated) {
         wsSource = directMigratedTokens.length > 0 ? directMigratedTokens : [];
       }
@@ -4080,15 +4406,29 @@ function PulseTable({
       }
 
       // Blacklist filter (O(1) Set lookups) — fast path
-      if (blacklistCASet.size > 0 || blacklistDevSet.size > 0 || blacklistTwitterSet.size > 0) {
+      if (
+        blacklistCASet.size > 0 ||
+        blacklistDevSet.size > 0 ||
+        blacklistTwitterSet.size > 0
+      ) {
         const beforeLen = merged.length;
-        const filtered = merged.filter(token => {
+        const filtered = merged.filter((token) => {
           if (blacklistCASet.has(token.mint?.toLowerCase())) return false;
           const dw = token.dev_wallet || token.creator_wallet;
           if (dw && blacklistDevSet.has(dw.toLowerCase())) return false;
-          let tw = (token as any).twitter || (token as any).twitter_url || (token as any).x || '';
+          let tw =
+            (token as any).twitter ||
+            (token as any).twitter_url ||
+            (token as any).x ||
+            "";
           if (!tw && token.links) {
-            try { const p = typeof token.links === 'string' ? JSON.parse(token.links) : token.links; tw = (p as any)?.twitter || ''; } catch {}
+            try {
+              const p =
+                typeof token.links === "string"
+                  ? JSON.parse(token.links)
+                  : token.links;
+              tw = (p as any)?.twitter || "";
+            } catch {}
           }
           if (tw && blacklistTwitterSet.size > 0) {
             const h = extractTwitterHandle(tw);
@@ -4096,8 +4436,11 @@ function PulseTable({
           }
           // Fallback: check metadata-derived handle cache (populated by TokenImage)
           if (blacklistTwitterSet.size > 0) {
-            const cachedHandle = twitterHandleCache.get(token.mint?.toLowerCase());
-            if (cachedHandle && blacklistTwitterSet.has(cachedHandle)) return false;
+            const cachedHandle = twitterHandleCache.get(
+              token.mint?.toLowerCase(),
+            );
+            if (cachedHandle && blacklistTwitterSet.has(cachedHandle))
+              return false;
           }
           return true;
         });
@@ -4140,9 +4483,9 @@ function PulseTable({
     // 3. Original tokens prop (fallback)
     let filtered: Token[];
     const hasSpecificProtocols =
-      (filters.onlyMayhemMode && filters.protocols.length === 0
+      filters.onlyMayhemMode && filters.protocols.length === 0
         ? false
-        : !filters.protocols.includes("All"));
+        : !filters.protocols.includes("All");
 
     // Merge WebSocket tokens with HTTP API tokens (deduplicate by mint)
     const mergedMap = new Map<string, Token>();
@@ -4160,13 +4503,28 @@ function PulseTable({
       if (!protocol) return "Pump"; // Default like icon logic
 
       // Check in same order as getTokenIcon
-      if (protocol.includes("pump")) return protocol.includes("pump_amm") || protocol.includes("pumpamm") || protocol.includes("pumpswap") ? "Pump AMM" : "Pump";
+      if (protocol.includes("pump"))
+        return protocol.includes("pump_amm") ||
+          protocol.includes("pumpamm") ||
+          protocol.includes("pumpswap")
+          ? "Pump AMM"
+          : "Pump";
       if (protocol.includes("meteora")) return "Meteora AMM"; // V1 and V2 both show same icon
       if (protocol.includes("raydium")) return "Raydium";
       if (protocol.includes("boop")) return "Boop";
-      if (protocol.includes("moonit") || protocol.includes("moonshot") || protocol.includes("moonshoot")) return "Moonit";
+      if (
+        protocol.includes("moonit") ||
+        protocol.includes("moonshot") ||
+        protocol.includes("moonshoot")
+      )
+        return "Moonit";
       // Bonk detection: protocol includes "bonk" or "launchlab", OR mint ends in "bonk"
-      if (protocol.includes("bonk") || protocol.includes("launchlab") || mint.endsWith("bonk")) return "Bonk";
+      if (
+        protocol.includes("bonk") ||
+        protocol.includes("launchlab") ||
+        mint.endsWith("bonk")
+      )
+        return "Bonk";
       if (protocol.includes("bags")) return "Bags";
 
       return "Pump"; // Default fallback
@@ -4175,13 +4533,19 @@ function PulseTable({
     // Helper to check if token matches selected filters
     const tokenMatchesFilters = (token: Token): boolean => {
       const tokenCategory = getTokenFilterCategory(token);
-      return filters.protocols.some(selectedFilter => {
+      return filters.protocols.some((selectedFilter) => {
         if (selectedFilter === tokenCategory) return true;
         // Meteora AMM V2 filter should also match Meteora AMM tokens
-        if (selectedFilter === "Meteora AMM V2" && tokenCategory === "Meteora AMM") return true;
+        if (
+          selectedFilter === "Meteora AMM V2" &&
+          tokenCategory === "Meteora AMM"
+        )
+          return true;
         // LaunchLab and Bonk are the same ecosystem — selecting either should show both
-        if (selectedFilter === "LaunchLab" && tokenCategory === "Bonk") return true;
-        if (selectedFilter === "Bonk" && tokenCategory === "LaunchLab") return true;
+        if (selectedFilter === "LaunchLab" && tokenCategory === "Bonk")
+          return true;
+        if (selectedFilter === "Bonk" && tokenCategory === "LaunchLab")
+          return true;
         return false;
       });
     };
@@ -4208,12 +4572,13 @@ function PulseTable({
     // This tells us at the data layer whether any Meteora-Mayhem tokens exist
     // at all, separately from the merge/filter logic.
     if (filters.onlyMayhemMode) {
-      const wsForLog = (
-        channel === 'new' ? directNewTokens :
-        channel === 'final_stretch' ? directFinalStretchTokens :
-        channel === 'migrated' ? directMigratedTokens :
-        []
-      ) as unknown as Token[];
+      const wsForLog = (channel === "new"
+        ? directNewTokens
+        : channel === "final_stretch"
+          ? directFinalStretchTokens
+          : channel === "migrated"
+            ? directMigratedTokens
+            : []) as unknown as Token[];
       const summarize = (arr: Token[], label: string) => {
         const total = arr.length;
         const mayhem = arr.filter((t) => !!(t as any).is_mayhem_mode);
@@ -4222,14 +4587,22 @@ function PulseTable({
           acc[p] = (acc[p] || 0) + 1;
           return acc;
         }, {});
-        return { label, total, mayhemCount: mayhem.length, mayhemByProtocol: protoCounts };
+        return {
+          label,
+          total,
+          mayhemCount: mayhem.length,
+          mayhemByProtocol: protoCounts,
+        };
       };
       // eslint-disable-next-line no-console
       console.log("[Mayhem source check]", {
         column: title,
         protocolsFilter: filters.protocols,
         sources: [
-          summarize(filteredTokens as Token[], "filteredTokens (REST protocol-filtered)"),
+          summarize(
+            filteredTokens as Token[],
+            "filteredTokens (REST protocol-filtered)",
+          ),
           summarize(baseTokens, "baseTokens (REST all-protocol)"),
           summarize(wsForLog, "wsDirect (WebSocket)"),
         ],
@@ -4251,15 +4624,17 @@ function PulseTable({
     // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
     // IMPORTANT: Use direct bridge tokens instead of wsTokens state for instant updates
     // This eliminates the state copy that was causing progressive latency
-    const directTokensForChannel = (
-      channel === 'new' ? directNewTokens :
-      channel === 'final_stretch' ? directFinalStretchTokens :
-      channel === 'migrated' ? directMigratedTokens :
-      []
-    ) as unknown as Token[];
+    const directTokensForChannel = (channel === "new"
+      ? directNewTokens
+      : channel === "final_stretch"
+        ? directFinalStretchTokens
+        : channel === "migrated"
+          ? directMigratedTokens
+          : []) as unknown as Token[];
 
     // Use direct tokens if available, fall back to wsTokens cache (initial load only)
-    const wsSource = directTokensForChannel.length > 0 ? directTokensForChannel : wsTokens;
+    const wsSource =
+      directTokensForChannel.length > 0 ? directTokensForChannel : wsTokens;
 
     if (hasSpecificProtocols) {
       wsSource.forEach((token) => {
@@ -4286,14 +4661,28 @@ function PulseTable({
     }
 
     // Blacklist filter (O(1) Set lookups) — full filter path
-    if (blacklistCASet.size > 0 || blacklistDevSet.size > 0 || blacklistTwitterSet.size > 0) {
-      filtered = filtered.filter(token => {
+    if (
+      blacklistCASet.size > 0 ||
+      blacklistDevSet.size > 0 ||
+      blacklistTwitterSet.size > 0
+    ) {
+      filtered = filtered.filter((token) => {
         if (blacklistCASet.has(token.mint?.toLowerCase())) return false;
         const dw = token.dev_wallet || token.creator_wallet;
         if (dw && blacklistDevSet.has(dw.toLowerCase())) return false;
-        let tw = (token as any).twitter || (token as any).twitter_url || (token as any).x || '';
+        let tw =
+          (token as any).twitter ||
+          (token as any).twitter_url ||
+          (token as any).x ||
+          "";
         if (!tw && token.links) {
-          try { const p = typeof token.links === 'string' ? JSON.parse(token.links) : token.links; tw = (p as any)?.twitter || ''; } catch {}
+          try {
+            const p =
+              typeof token.links === "string"
+                ? JSON.parse(token.links)
+                : token.links;
+            tw = (p as any)?.twitter || "";
+          } catch {}
         }
         if (tw && blacklistTwitterSet.size > 0) {
           const h = extractTwitterHandle(tw);
@@ -4364,14 +4753,21 @@ function PulseTable({
     // - Everything else → SOL (default)
     if (filters.quoteTokens.length > 0) {
       filtered = filtered.filter((token) => {
-        const protocol = ((token as any).launchpad_protocol || "").toLowerCase();
+        const protocol = (
+          (token as any).launchpad_protocol || ""
+        ).toLowerCase();
         const mint = (token.mint || "").toLowerCase();
 
         // Determine the quote token for this token based on protocol
         let tokenQuote = "SOL"; // Default for unknown protocols
 
         // USD1 protocols: Bonk (including launchlab and mint ending in "bonk"), Raydium
-        if (protocol.includes("bonk") || protocol.includes("launchlab") || protocol.includes("raydium") || mint.endsWith("bonk")) {
+        if (
+          protocol.includes("bonk") ||
+          protocol.includes("launchlab") ||
+          protocol.includes("raydium") ||
+          mint.endsWith("bonk")
+        ) {
           tokenQuote = "USD1";
         }
         // USDC protocols: Meteora
@@ -4382,7 +4778,9 @@ function PulseTable({
         else if (
           protocol.includes("pump") ||
           protocol.includes("bags") ||
-          protocol.includes("moonit") || protocol.includes("moonshot") || protocol.includes("moonshoot") ||
+          protocol.includes("moonit") ||
+          protocol.includes("moonshot") ||
+          protocol.includes("moonshoot") ||
           protocol.includes("boop")
         ) {
           tokenQuote = "SOL";
@@ -4438,9 +4836,19 @@ function PulseTable({
     }
 
     // Apply top 10 holders percent filter (min/max, user input is 0-100)
-    if (filters.top10HoldersPercentMin || filters.top10HoldersPercentMax || filters.top10HoldersPercent) {
-      const minPct = filters.top10HoldersPercentMin ? parseFloat(filters.top10HoldersPercentMin) : NaN;
-      const maxPct = filters.top10HoldersPercentMax ? parseFloat(filters.top10HoldersPercentMax) : (filters.top10HoldersPercent ? parseFloat(filters.top10HoldersPercent) : NaN);
+    if (
+      filters.top10HoldersPercentMin ||
+      filters.top10HoldersPercentMax ||
+      filters.top10HoldersPercent
+    ) {
+      const minPct = filters.top10HoldersPercentMin
+        ? parseFloat(filters.top10HoldersPercentMin)
+        : NaN;
+      const maxPct = filters.top10HoldersPercentMax
+        ? parseFloat(filters.top10HoldersPercentMax)
+        : filters.top10HoldersPercent
+          ? parseFloat(filters.top10HoldersPercent)
+          : NaN;
       filtered = filtered.filter((token) => {
         const pct = (token as any).top10_holders_pct ?? 0;
         if (!isNaN(minPct) && pct < minPct) return false;
@@ -4492,7 +4900,10 @@ function PulseTable({
     if (filters.minLiquidity) {
       const minLiq = parseFloat(filters.minLiquidity);
       filtered = filtered.filter((token) => {
-        const liquidity = (token as any).total_liquidity_usd ?? (token as any).liquidity_usd ?? 0;
+        const liquidity =
+          (token as any).total_liquidity_usd ??
+          (token as any).liquidity_usd ??
+          0;
         return liquidity >= minLiq;
       });
     }
@@ -4500,7 +4911,10 @@ function PulseTable({
     if (filters.maxLiquidity) {
       const maxLiq = parseFloat(filters.maxLiquidity);
       filtered = filtered.filter((token) => {
-        const liquidity = (token as any).total_liquidity_usd ?? (token as any).liquidity_usd ?? 0;
+        const liquidity =
+          (token as any).total_liquidity_usd ??
+          (token as any).liquidity_usd ??
+          0;
         return liquidity <= maxLiq;
       });
     }
@@ -4581,7 +4995,11 @@ function PulseTable({
     if (filters.holdersMin) {
       const minHolders = parseFloat(filters.holdersMin);
       filtered = filtered.filter((token) => {
-        const holders = (token as any).holder_count ?? (token as any).holders ?? (token as any).unique_wallets_24h ?? 0;
+        const holders =
+          (token as any).holder_count ??
+          (token as any).holders ??
+          (token as any).unique_wallets_24h ??
+          0;
         return holders >= minHolders;
       });
     }
@@ -4589,7 +5007,11 @@ function PulseTable({
     if (filters.holdersMax) {
       const maxHolders = parseFloat(filters.holdersMax);
       filtered = filtered.filter((token) => {
-        const holders = (token as any).holder_count ?? (token as any).holders ?? (token as any).unique_wallets_24h ?? 0;
+        const holders =
+          (token as any).holder_count ??
+          (token as any).holders ??
+          (token as any).unique_wallets_24h ??
+          0;
         return holders <= maxHolders;
       });
     }
@@ -4613,10 +5035,15 @@ function PulseTable({
 
     // Apply dev holding percent filters (user input is 0-100)
     if (filters.devHoldingPercentMin || filters.devHoldingPercentMax) {
-      const minPct = filters.devHoldingPercentMin ? parseFloat(filters.devHoldingPercentMin) : NaN;
-      const maxPct = filters.devHoldingPercentMax ? parseFloat(filters.devHoldingPercentMax) : NaN;
+      const minPct = filters.devHoldingPercentMin
+        ? parseFloat(filters.devHoldingPercentMin)
+        : NaN;
+      const maxPct = filters.devHoldingPercentMax
+        ? parseFloat(filters.devHoldingPercentMax)
+        : NaN;
       filtered = filtered.filter((token) => {
-        const pct = (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
+        const pct =
+          (token as any).dev_percent ?? (token as any).dev_held_percentage ?? 0;
         if (!isNaN(minPct) && pct < minPct) return false;
         if (!isNaN(maxPct) && pct > maxPct) return false;
         return true;
@@ -4625,10 +5052,17 @@ function PulseTable({
 
     // Apply sniper percent filters (user input is 0-100)
     if (filters.snipersPercentMin || filters.snipersPercentMax) {
-      const minPct = filters.snipersPercentMin ? parseFloat(filters.snipersPercentMin) : NaN;
-      const maxPct = filters.snipersPercentMax ? parseFloat(filters.snipersPercentMax) : NaN;
+      const minPct = filters.snipersPercentMin
+        ? parseFloat(filters.snipersPercentMin)
+        : NaN;
+      const maxPct = filters.snipersPercentMax
+        ? parseFloat(filters.snipersPercentMax)
+        : NaN;
       filtered = filtered.filter((token) => {
-        const pct = (token as any).sniper_percent ?? (token as any).sniper_held_percentage ?? 0;
+        const pct =
+          (token as any).sniper_percent ??
+          (token as any).sniper_held_percentage ??
+          0;
         if (!isNaN(minPct) && pct < minPct) return false;
         if (!isNaN(maxPct) && pct > maxPct) return false;
         return true;
@@ -4637,10 +5071,17 @@ function PulseTable({
 
     // Apply insider percent filters (user input is 0-100)
     if (filters.insidersPercentMin || filters.insidersPercentMax) {
-      const minPct = filters.insidersPercentMin ? parseFloat(filters.insidersPercentMin) : NaN;
-      const maxPct = filters.insidersPercentMax ? parseFloat(filters.insidersPercentMax) : NaN;
+      const minPct = filters.insidersPercentMin
+        ? parseFloat(filters.insidersPercentMin)
+        : NaN;
+      const maxPct = filters.insidersPercentMax
+        ? parseFloat(filters.insidersPercentMax)
+        : NaN;
       filtered = filtered.filter((token) => {
-        const pct = (token as any).insider_percent ?? (token as any).insider_held_percentage ?? 0;
+        const pct =
+          (token as any).insider_percent ??
+          (token as any).insider_held_percentage ??
+          0;
         if (!isNaN(minPct) && pct < minPct) return false;
         if (!isNaN(maxPct) && pct > maxPct) return false;
         return true;
@@ -4683,10 +5124,18 @@ function PulseTable({
 
     // Apply bundle percent filter (user input is 0-100, data is 0-100)
     if (filters.bundlePercentMin || filters.bundlePercentMax) {
-      const minPct = filters.bundlePercentMin ? parseFloat(filters.bundlePercentMin) : NaN;
-      const maxPct = filters.bundlePercentMax ? parseFloat(filters.bundlePercentMax) : NaN;
+      const minPct = filters.bundlePercentMin
+        ? parseFloat(filters.bundlePercentMin)
+        : NaN;
+      const maxPct = filters.bundlePercentMax
+        ? parseFloat(filters.bundlePercentMax)
+        : NaN;
       filtered = filtered.filter((token) => {
-        const pct = (token as any).bundle_percent ?? (token as any).bundled_percentage ?? (token as any).bundler_held_percentage ?? 0;
+        const pct =
+          (token as any).bundle_percent ??
+          (token as any).bundled_percentage ??
+          (token as any).bundler_held_percentage ??
+          0;
         if (!isNaN(minPct) && pct < minPct) return false;
         if (!isNaN(maxPct) && pct > maxPct) return false;
         return true;
@@ -4695,10 +5144,18 @@ function PulseTable({
 
     // Apply pro traders filter (count, not percentage)
     if (filters.proTradersMin || filters.proTradersMax) {
-      const minPro = filters.proTradersMin ? parseFloat(filters.proTradersMin) : NaN;
-      const maxPro = filters.proTradersMax ? parseFloat(filters.proTradersMax) : NaN;
+      const minPro = filters.proTradersMin
+        ? parseFloat(filters.proTradersMin)
+        : NaN;
+      const maxPro = filters.proTradersMax
+        ? parseFloat(filters.proTradersMax)
+        : NaN;
       filtered = filtered.filter((token) => {
-        const pro = (token as any).pro_traders_count ?? (token as any).pro_traders ?? (token as any).smart_money_count ?? 0;
+        const pro =
+          (token as any).pro_traders_count ??
+          (token as any).pro_traders ??
+          (token as any).smart_money_count ??
+          0;
         if (!isNaN(minPro) && pro < minPro) return false;
         if (!isNaN(maxPro) && pro > maxPro) return false;
         return true;
@@ -4709,7 +5166,8 @@ function PulseTable({
     if (filters.globalFeesPaidMin) {
       const minFees = parseFloat(filters.globalFeesPaidMin);
       filtered = filtered.filter((token) => {
-        let feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
+        let feesPaid =
+          (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
         if (feesPaid === 0) {
           const lamports = (token as any).total_fees_lamports ?? 0;
           if (lamports > 0) feesPaid = lamports / 1_000_000_000;
@@ -4721,7 +5179,8 @@ function PulseTable({
     if (filters.globalFeesPaidMax) {
       const maxFees = parseFloat(filters.globalFeesPaidMax);
       filtered = filtered.filter((token) => {
-        let feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
+        let feesPaid =
+          (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? 0;
         if (feesPaid === 0) {
           const lamports = (token as any).total_fees_lamports ?? 0;
           if (lamports > 0) feesPaid = lamports / 1_000_000_000;
@@ -4734,7 +5193,11 @@ function PulseTable({
     if (filters.twitterReusesMin) {
       const minReuses = parseFloat(filters.twitterReusesMin);
       filtered = filtered.filter((token) => {
-        const reuses = (token as any).twitter_reuses ?? (token as any).twitterReuses ?? (token as any).twitter_reuse_count ?? 0;
+        const reuses =
+          (token as any).twitter_reuses ??
+          (token as any).twitterReuses ??
+          (token as any).twitter_reuse_count ??
+          0;
         return reuses >= minReuses;
       });
     }
@@ -4742,7 +5205,11 @@ function PulseTable({
     if (filters.twitterReusesMax) {
       const maxReuses = parseFloat(filters.twitterReusesMax);
       filtered = filtered.filter((token) => {
-        const reuses = (token as any).twitter_reuses ?? (token as any).twitterReuses ?? (token as any).twitter_reuse_count ?? 0;
+        const reuses =
+          (token as any).twitter_reuses ??
+          (token as any).twitterReuses ??
+          (token as any).twitter_reuse_count ??
+          0;
         return reuses <= maxReuses;
       });
     }
@@ -4750,7 +5217,10 @@ function PulseTable({
     // Apply tweet age filter
     if (filters.tweetAgeMin || filters.tweetAgeMax) {
       filtered = filtered.filter((token) => {
-        const tweetTimestamp = (token as any).tweet_created_at ?? (token as any).tweetCreatedAt ?? (token as any).twitter_created_at;
+        const tweetTimestamp =
+          (token as any).tweet_created_at ??
+          (token as any).tweetCreatedAt ??
+          (token as any).twitter_created_at;
         if (!tweetTimestamp) return true; // If no tweet timestamp, don't filter out
 
         const tweetDate = new Date(tweetTimestamp).getTime();
@@ -4770,8 +5240,12 @@ function PulseTable({
             tweetAgeInUnit = tweetAgeMs / (1000 * 60); // minutes
         }
 
-        const minAge = filters.tweetAgeMin ? parseFloat(filters.tweetAgeMin) : 0;
-        const maxAge = filters.tweetAgeMax ? parseFloat(filters.tweetAgeMax) : Infinity;
+        const minAge = filters.tweetAgeMin
+          ? parseFloat(filters.tweetAgeMin)
+          : 0;
+        const maxAge = filters.tweetAgeMax
+          ? parseFloat(filters.tweetAgeMax)
+          : Infinity;
 
         return tweetAgeInUnit >= minAge && tweetAgeInUnit <= maxAge;
       });
@@ -4856,7 +5330,8 @@ function PulseTable({
         column: title,
         protocols: filters.protocols,
         beforeFilter: filtered.length,
-        withMayhemFlag: filtered.filter((t) => !!(t as any).is_mayhem_mode).length,
+        withMayhemFlag: filtered.filter((t) => !!(t as any).is_mayhem_mode)
+          .length,
         mayhemTokenProtocols: filtered
           .filter((t) => !!(t as any).is_mayhem_mode)
           .map((t) => (t as any).launchpad_protocol)
@@ -4871,16 +5346,12 @@ function PulseTable({
           is_mayhem_mode: (t as any).is_mayhem_mode,
         })),
       });
-      filtered = filtered.filter(
-        (token) => !!(token as any).is_mayhem_mode,
-      );
+      filtered = filtered.filter((token) => !!(token as any).is_mayhem_mode);
     } else if (
       !filters.protocols.includes("All") &&
       filters.protocols.length > 0
     ) {
-      filtered = filtered.filter(
-        (token) => !(token as any).is_mayhem_mode,
-      );
+      filtered = filtered.filter((token) => !(token as any).is_mayhem_mode);
     }
 
     // Sort tokens
@@ -4983,9 +5454,11 @@ function PulseTable({
     // DEBUG: Check if specific Meteora token bypasses filter (temporary)
     if (hasSpecificProtocols && title.toLowerCase().includes("final")) {
       const DEBUG_MINT = "G6VuahbXzNDc9xeQL8VpRF5AbuRJQF4WSxhmHwWsaEDg";
-      const badToken = filtered.find(t => t.mint === DEBUG_MINT);
+      const badToken = filtered.find((t) => t.mint === DEBUG_MINT);
       if (badToken) {
-        console.error(`[FILTER BUG] Token ${badToken.symbol} (${DEBUG_MINT}) in Final Stretch despite filter: ${filters.protocols.join(",")}. Protocol: ${(badToken as any).launchpad_protocol || "NONE"}`);
+        console.error(
+          `[FILTER BUG] Token ${badToken.symbol} (${DEBUG_MINT}) in Final Stretch despite filter: ${filters.protocols.join(",")}. Protocol: ${(badToken as any).launchpad_protocol || "NONE"}`,
+        );
       }
     }
 
@@ -5109,9 +5582,11 @@ function PulseTable({
   // Add wave animation for Meteora tokens with bonding_pct > 98.6% in Final Stretch ONLY
   // PERFORMANCE: Skip this effect entirely for New Pairs and Migrated columns
   const waveTokensRef = useRef<Set<number>>(new Set());
-  const isFinalStretch = useMemo(() =>
-    title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch"),
-    [title]
+  const isFinalStretch = useMemo(
+    () =>
+      title.toLowerCase().includes("final") ||
+      title.toLowerCase().includes("stretch"),
+    [title],
   );
 
   useEffect(() => {
@@ -5131,7 +5606,8 @@ function PulseTable({
 
     for (let idx = 0; idx < len; idx++) {
       const token = tokens[idx];
-      const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || "";
+      const launchpadProtocol =
+        (token as any).launchpad_protocol?.toLowerCase() || "";
       const isMeteora = launchpadProtocol.includes("meteora");
       const bondingPct = (token as any).bonding_pct ?? 0;
 
@@ -5407,7 +5883,7 @@ function PulseTable({
   };
   return (
     <div
-      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-[300px] gap-2`}
+      className={`num flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden lg:min-w-[300px]`}
     >
       <div
         className="group relative flex items-center justify-between rounded-lg px-2.5 py-1 text-sm font-medium"
@@ -5447,7 +5923,11 @@ function PulseTable({
           </span>
           {/* Pause indicator — shown when the user hovers the column and the live feed is frozen */}
           {frozenTokens !== null && (
-            <FaPause size={11} style={{ color: "#199F72" }} aria-label="Feed paused" />
+            <FaPause
+              size={11}
+              style={{ color: "#199F72" }}
+              aria-label="Feed paused"
+            />
           )}
         </div>
 
@@ -5530,7 +6010,7 @@ function PulseTable({
 
           {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
           <div
-            className="w-[84px] h-[26px] relative hidden sm:flex flex-shrink-0 items-center justify-center gap-1 rounded-md border px-2 py-1 bg-[#1a1c20]"
+            className="relative hidden h-[26px] w-[84px] flex-shrink-0 items-center justify-center gap-1 rounded-md border bg-[#1a1c20] px-2 py-1 sm:flex"
             style={{
               borderColor: AX.border,
             }}
@@ -5548,7 +6028,8 @@ function PulseTable({
                   }`}
                   style={{
                     color: selectedPill === pill ? "#31e3ac" : AX.muted,
-                    transition: "background-color 100ms ease-out, color 100ms ease-out",
+                    transition:
+                      "background-color 100ms ease-out, color 100ms ease-out",
                   }}
                   onClick={() => {
                     // Update local preset selection for this column only
@@ -5660,23 +6141,30 @@ function PulseTable({
             ))}
           </div>
 
-
           {/* Filter Controls */}
-          <div className="filter-dropdown relative flex-shrink-0  z-[9999]">
+          <div className="filter-dropdown relative z-[9999] flex-shrink-0">
             <button
-              className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out z-[9999]"
+              className="relative z-[9999] flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
               style={{
                 backgroundColor: "transparent",
-                color: showFilters ? AX.aiBlue : hasActiveFilters ? "#31e3ac" : AX.muted,
+                color: showFilters
+                  ? AX.aiBlue
+                  : hasActiveFilters
+                    ? "#31e3ac"
+                    : AX.muted,
               }}
               onMouseEnter={(e) => {
                 if (!showFilters) {
-                  e.currentTarget.style.color = hasActiveFilters ? "#5eead4" : "#E6E7EA";
+                  e.currentTarget.style.color = hasActiveFilters
+                    ? "#5eead4"
+                    : "#E6E7EA";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!showFilters) {
-                  e.currentTarget.style.color = hasActiveFilters ? "#31e3ac" : AX.muted;
+                  e.currentTarget.style.color = hasActiveFilters
+                    ? "#31e3ac"
+                    : AX.muted;
                 }
               }}
               onClick={() => setShowFilters(!showFilters)}
@@ -5719,31 +6207,31 @@ function PulseTable({
                       zIndex: 10000001,
                     }}
                   >
-                  {/* Header */}
-                  <div
-                    className="flex items-center justify-between border-b p-4"
-                    style={{ borderColor: AX.border }}
-                  >
-                    <h3
-                      className="text-lg"
-                      style={{
-                        color: AX.text,
-                        fontWeight: "300",
-                        letterSpacing: "0.5px",
-                      }}
+                    {/* Header */}
+                    <div
+                      className="flex items-center justify-between border-b p-4"
+                      style={{ borderColor: AX.border }}
                     >
-                      Filters
-                    </h3>
-                    <button
-                      onClick={() => setShowFilters(false)}
-                      className="cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
-                    >
-                      <FaTimes size={16} className="font-normal" />
-                    </button>
-                  </div>
+                      <h3
+                        className="text-lg"
+                        style={{
+                          color: AX.text,
+                          fontWeight: "300",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        Filters
+                      </h3>
+                      <button
+                        onClick={() => setShowFilters(false)}
+                        className="cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
+                      >
+                        <FaTimes size={16} className="font-normal" />
+                      </button>
+                    </div>
 
-                  {/* Filter Tabs */}
-                  {/* <div className="flex border-b items-center justify-between" style={{ borderColor: AX.border }}>
+                    {/* Filter Tabs */}
+                    {/* <div className="flex border-b items-center justify-between" style={{ borderColor: AX.border }}>
                 <div className="flex">
                 {['New Pairs', 'Final Stretch', 'Migrated'].map((tab) => (
                   <button
@@ -5761,490 +6249,520 @@ function PulseTable({
                   </button>
                 ))}
                 </div> */}
-                  <div
-                    className="flex items-center justify-end border-b p-1"
-                    style={{ borderColor: AX.border }}
-                  >
-                    <button
-                      className="mr-2 cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
-                      onClick={handleResetFilters}
-                      title={hasActiveFilters ? "Clear all filters" : "No active filters"}
+                    <div
+                      className="flex items-center justify-end border-b p-1"
+                      style={{ borderColor: AX.border }}
                     >
-                      <BiRefresh
-                        className="h-4 w-4"
-                        style={{ color: hasActiveFilters ? "#ef4444" : AX.muted }}
-                      />
-                    </button>
-                  </div>
-                  <div
-                    className="max-h-[500px] overflow-y-auto p-4"
-                    style={{ backgroundColor: AX.surface }}
-                  >
-                    {/* Protocols */}
-                    <div className="mb-4">
-                      <div className="mb-2 flex items-center justify-between">
-                        <h4
-                          className="text-sm font-medium"
-                          style={{ color: AX.text }}
-                        >
-                          Protocols
-                        </h4>
-                        <button
-                          className="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all duration-300 ease-out"
+                      <button
+                        className="mr-2 cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
+                        onClick={handleResetFilters}
+                        title={
+                          hasActiveFilters
+                            ? "Clear all filters"
+                            : "No active filters"
+                        }
+                      >
+                        <BiRefresh
+                          className="h-4 w-4"
                           style={{
-                            backgroundColor: AX.aiBlue,
-                            color: "#000000",
-                            borderRadius: "20px",
+                            color: hasActiveFilters ? "#ef4444" : AX.muted,
                           }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "#2563eb";
-                            e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
-                            e.currentTarget.style.transform = "scale(1.05)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = AX.aiBlue;
-                            e.currentTarget.style.boxShadow = "none";
-                            e.currentTarget.style.transform = "scale(1)";
-                          }}
-                          onClick={() => {
-                            // "Select All" semantically means "show everything,
-                            // no restrictions." Mayhem is a filter that *narrows*
-                            // the result set, so even though it's a visible chip,
-                            // Select All should switch it OFF (any active filter
-                            // would contradict "show everything").
-                            //
-                            // Toggle on  → protocols=["All"] (all protocol chips
-                            //              lit) + onlyMayhemMode=false (Mayhem
-                            //              chip dim) → unrestricted view.
-                            // Toggle off → protocols=[] (every chip dim) +
-                            //              onlyMayhemMode=false → column empty.
-                            handlePendingFilterChange((prev) => {
-                              const isAllOn =
-                                prev.protocols.includes("All") &&
-                                !prev.onlyMayhemMode;
-                              return {
-                                ...prev,
-                                protocols: isAllOn ? [] : ["All"],
-                                onlyMayhemMode: false,
-                              };
-                            });
-                          }}
-                        >
-                          Select All
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {protocols.map((protocol) => {
-                          // "All" mode lights up every chip in its own brand color.
-                          // Specific selection mode (`protocols: ["Pump"]`) only lights
-                          // up the chips listed. The hover style only kicks in when the
-                          // chip is NOT in active state, regardless of whether "active"
-                          // came from a specific listing or from "All".
-                          const isAllMode = pendingFilters.protocols.includes("All");
-                          const isExplicit = pendingFilters.protocols.includes(protocol.name);
-                          const isActive = isAllMode || isExplicit;
-                          return (
+                        />
+                      </button>
+                    </div>
+                    <div
+                      className="max-h-[500px] overflow-y-auto p-4"
+                      style={{ backgroundColor: AX.surface }}
+                    >
+                      {/* Protocols */}
+                      <div className="mb-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <h4
+                            className="text-sm font-medium"
+                            style={{ color: AX.text }}
+                          >
+                            Protocols
+                          </h4>
                           <button
-                            key={protocol.name}
-                            className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out"
+                            className="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all duration-300 ease-out"
                             style={{
-                              backgroundColor: isActive
-                                ? protocol.color
-                                : "transparent",
-                              borderColor: isActive
-                                ? protocol.color
-                                : "transparent",
-                              border: isActive
-                                ? "2px solid"
-                                : "none",
-                              color: isActive
-                                ? "#000000"
-                                : AX.text,
+                              backgroundColor: AX.aiBlue,
+                              color: "#000000",
                               borderRadius: "20px",
-                              boxShadow: isActive
-                                ? `0 0 12px ${protocol.color}40, 0 0 24px ${protocol.color}20`
-                                : "none",
-                              transform: isActive
-                                ? "scale(1.02)"
-                                : "scale(1)",
                             }}
                             onMouseEnter={(e) => {
-                              if (!isActive) {
-                                e.currentTarget.style.backgroundColor =
-                                  protocol.color + "10";
-                                e.currentTarget.style.borderColor =
-                                  protocol.color;
-                                e.currentTarget.style.border = "1px solid";
-                                e.currentTarget.style.color = protocol.color;
-                                e.currentTarget.style.boxShadow = `0 0 8px ${protocol.color}30`;
-                                e.currentTarget.style.transform = "scale(1.05)";
-                              }
+                              e.currentTarget.style.backgroundColor = "#2563eb";
+                              e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
+                              e.currentTarget.style.transform = "scale(1.05)";
                             }}
                             onMouseLeave={(e) => {
-                              if (!isActive) {
-                                e.currentTarget.style.backgroundColor =
-                                  "transparent";
-                                e.currentTarget.style.borderColor =
-                                  "transparent";
-                                e.currentTarget.style.border = "none";
-                                e.currentTarget.style.color = AX.text;
-                                e.currentTarget.style.boxShadow = "none";
-                                e.currentTarget.style.transform = "scale(1)";
-                              }
+                              e.currentTarget.style.backgroundColor = AX.aiBlue;
+                              e.currentTarget.style.boxShadow = "none";
+                              e.currentTarget.style.transform = "scale(1)";
                             }}
                             onClick={() => {
+                              // "Select All" semantically means "show everything,
+                              // no restrictions." Mayhem is a filter that *narrows*
+                              // the result set, so even though it's a visible chip,
+                              // Select All should switch it OFF (any active filter
+                              // would contradict "show everything").
+                              //
+                              // Toggle on  → protocols=["All"] (all protocol chips
+                              //              lit) + onlyMayhemMode=false (Mayhem
+                              //              chip dim) → unrestricted view.
+                              // Toggle off → protocols=[] (every chip dim) +
+                              //              onlyMayhemMode=false → column empty.
                               handlePendingFilterChange((prev) => {
-                                const currentProtocols = prev.protocols;
-                                const clickedProtocol = protocol.name;
-
-                                // Clicking "All" snaps to all-protocols + clears
-                                // Mayhem — "All" means "show everything, no
-                                // narrowing filters." (This branch is currently
-                                // unreachable since the "All" chip was removed
-                                // from the row, but kept as a defensive default.)
-                                if (clickedProtocol === "All") {
-                                  return {
-                                    ...prev,
-                                    protocols: ["All"],
-                                    onlyMayhemMode: false,
-                                  };
-                                }
-
-                                // Toggle a specific protocol. Mayhem state is
-                                // preserved across protocol clicks so users can
-                                // compose Pump + Mayhem (or Mayhem + a series of
-                                // protocols) without the Mayhem chip auto-clearing.
-                                if (
-                                  currentProtocols.includes(clickedProtocol)
-                                ) {
-                                  const remaining = currentProtocols.filter(
-                                    (p) => p !== clickedProtocol && p !== "All",
-                                  );
-                                  return {
-                                    ...prev,
-                                    protocols: remaining,
-                                  };
-                                } else {
-                                  const withoutAll = currentProtocols.filter(
-                                    (p) => p !== "All",
-                                  );
-                                  return {
-                                    ...prev,
-                                    protocols: [...withoutAll, clickedProtocol],
-                                  };
-                                }
+                                const isAllOn =
+                                  prev.protocols.includes("All") &&
+                                  !prev.onlyMayhemMode;
+                                return {
+                                  ...prev,
+                                  protocols: isAllOn ? [] : ["All"],
+                                  onlyMayhemMode: false,
+                                };
                               });
                             }}
                           >
-                            <span
-                              className="text-sm"
-                              style={{ color: "inherit" }}
-                            >
-                              {protocol.icon}
-                            </span>
-                            <span
-                              className="truncate font-semibold"
-                              style={{ color: "inherit" }}
-                            >
-                              {protocol.name}
-                            </span>
+                            Select All
                           </button>
-                          );
-                        })}
-                        {/* Mayhem Mode chip — visually mirrors the protocol chips
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {protocols.map((protocol) => {
+                            // "All" mode lights up every chip in its own brand color.
+                            // Specific selection mode (`protocols: ["Pump"]`) only lights
+                            // up the chips listed. The hover style only kicks in when the
+                            // chip is NOT in active state, regardless of whether "active"
+                            // came from a specific listing or from "All".
+                            const isAllMode =
+                              pendingFilters.protocols.includes("All");
+                            const isExplicit =
+                              pendingFilters.protocols.includes(protocol.name);
+                            const isActive = isAllMode || isExplicit;
+                            return (
+                              <button
+                                key={protocol.name}
+                                className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out"
+                                style={{
+                                  backgroundColor: isActive
+                                    ? protocol.color
+                                    : "transparent",
+                                  borderColor: isActive
+                                    ? protocol.color
+                                    : "transparent",
+                                  border: isActive ? "2px solid" : "none",
+                                  color: isActive ? "#000000" : AX.text,
+                                  borderRadius: "20px",
+                                  boxShadow: isActive
+                                    ? `0 0 12px ${protocol.color}40, 0 0 24px ${protocol.color}20`
+                                    : "none",
+                                  transform: isActive
+                                    ? "scale(1.02)"
+                                    : "scale(1)",
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.backgroundColor =
+                                      protocol.color + "10";
+                                    e.currentTarget.style.borderColor =
+                                      protocol.color;
+                                    e.currentTarget.style.border = "1px solid";
+                                    e.currentTarget.style.color =
+                                      protocol.color;
+                                    e.currentTarget.style.boxShadow = `0 0 8px ${protocol.color}30`;
+                                    e.currentTarget.style.transform =
+                                      "scale(1.05)";
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.backgroundColor =
+                                      "transparent";
+                                    e.currentTarget.style.borderColor =
+                                      "transparent";
+                                    e.currentTarget.style.border = "none";
+                                    e.currentTarget.style.color = AX.text;
+                                    e.currentTarget.style.boxShadow = "none";
+                                    e.currentTarget.style.transform =
+                                      "scale(1)";
+                                  }
+                                }}
+                                onClick={() => {
+                                  handlePendingFilterChange((prev) => {
+                                    const currentProtocols = prev.protocols;
+                                    const clickedProtocol = protocol.name;
+
+                                    // Clicking "All" snaps to all-protocols + clears
+                                    // Mayhem — "All" means "show everything, no
+                                    // narrowing filters." (This branch is currently
+                                    // unreachable since the "All" chip was removed
+                                    // from the row, but kept as a defensive default.)
+                                    if (clickedProtocol === "All") {
+                                      return {
+                                        ...prev,
+                                        protocols: ["All"],
+                                        onlyMayhemMode: false,
+                                      };
+                                    }
+
+                                    // Toggle a specific protocol. Mayhem state is
+                                    // preserved across protocol clicks so users can
+                                    // compose Pump + Mayhem (or Mayhem + a series of
+                                    // protocols) without the Mayhem chip auto-clearing.
+                                    if (
+                                      currentProtocols.includes(clickedProtocol)
+                                    ) {
+                                      const remaining = currentProtocols.filter(
+                                        (p) =>
+                                          p !== clickedProtocol && p !== "All",
+                                      );
+                                      return {
+                                        ...prev,
+                                        protocols: remaining,
+                                      };
+                                    } else {
+                                      const withoutAll =
+                                        currentProtocols.filter(
+                                          (p) => p !== "All",
+                                        );
+                                      return {
+                                        ...prev,
+                                        protocols: [
+                                          ...withoutAll,
+                                          clickedProtocol,
+                                        ],
+                                      };
+                                    }
+                                  });
+                                }}
+                              >
+                                <span
+                                  className="text-sm"
+                                  style={{ color: "inherit" }}
+                                >
+                                  {protocol.icon}
+                                </span>
+                                <span
+                                  className="truncate font-semibold"
+                                  style={{ color: "inherit" }}
+                                >
+                                  {protocol.name}
+                                </span>
+                              </button>
+                            );
+                          })}
+                          {/* Mayhem Mode chip — visually mirrors the protocol chips
                             (same shape, hover treatment, scale-up on select), but
                             toggles the `onlyMayhemMode` boolean filter rather than
                             joining the protocols list. Brand red #c83c51 + fire
                             icon match the row treatment so users see the same
                             visual identity here as on a flagged token row. */}
-                        {(() => {
-                          // Visual lit when EITHER the user is filtering to Mayhem
-                          // (onlyMayhemMode) OR they're in "Select All" / All-mode
-                          // — so Select All lights up Mayhem alongside the protocol
-                          // chips. The actual data filter at line ~4700 still keys
-                          // strictly off onlyMayhemMode, so the chip can be lit
-                          // cosmetically without restricting the result set.
-                          const isAllModeAndMayhemOff =
-                            pendingFilters.protocols.includes("All") &&
-                            !pendingFilters.onlyMayhemMode;
-                          const isMayhemActive = pendingFilters.onlyMayhemMode || isAllModeAndMayhemOff;
-                          return (
-                        <button
-                          key="__mayhem_mode_chip"
-                          className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out"
-                          style={{
-                            backgroundColor: isMayhemActive
-                              ? "#c83c51"
-                              : "transparent",
-                            border: isMayhemActive
-                              ? "2px solid #c83c51"
-                              : "none",
-                            color: isMayhemActive
-                              ? "#000000"
-                              : AX.text,
-                            borderRadius: "20px",
-                            boxShadow: isMayhemActive
-                              ? "0 0 12px #c83c5140, 0 0 24px #c83c5120"
-                              : "none",
-                            transform: isMayhemActive
-                              ? "scale(1.02)"
-                              : "scale(1)",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isMayhemActive) {
-                              e.currentTarget.style.backgroundColor = "#c83c5110";
-                              e.currentTarget.style.border = "1px solid #c83c51";
-                              e.currentTarget.style.color = "#c83c51";
-                              e.currentTarget.style.boxShadow = "0 0 8px #c83c5130";
-                              e.currentTarget.style.transform = "scale(1.05)";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isMayhemActive) {
-                              e.currentTarget.style.backgroundColor = "transparent";
-                              e.currentTarget.style.border = "none";
-                              e.currentTarget.style.color = AX.text;
-                              e.currentTarget.style.boxShadow = "none";
-                              e.currentTarget.style.transform = "scale(1)";
-                            }
-                          }}
-                          onClick={() => {
-                            handlePendingFilterChange((prev) => {
-                              // If the chip looks lit only because we're in "All"
-                              // mode (purely cosmetic), clicking it should narrow
-                              // to Mayhem-only — exit All-mode and turn Mayhem on.
-                              const cosmeticLitFromAll =
-                                prev.protocols.includes("All") && !prev.onlyMayhemMode;
-                              if (cosmeticLitFromAll) {
-                                return {
-                                  ...prev,
-                                  protocols: [],
-                                  onlyMayhemMode: true,
-                                };
-                              }
-                              return {
-                                ...prev,
-                                onlyMayhemMode: !prev.onlyMayhemMode,
-                              };
-                            });
-                          }}
-                        >
-                          {/* Branded Mayhem artwork from public/Mayhem.webp.
+                          {(() => {
+                            // Visual lit when EITHER the user is filtering to Mayhem
+                            // (onlyMayhemMode) OR they're in "Select All" / All-mode
+                            // — so Select All lights up Mayhem alongside the protocol
+                            // chips. The actual data filter at line ~4700 still keys
+                            // strictly off onlyMayhemMode, so the chip can be lit
+                            // cosmetically without restricting the result set.
+                            const isAllModeAndMayhemOff =
+                              pendingFilters.protocols.includes("All") &&
+                              !pendingFilters.onlyMayhemMode;
+                            const isMayhemActive =
+                              pendingFilters.onlyMayhemMode ||
+                              isAllModeAndMayhemOff;
+                            return (
+                              <button
+                                key="__mayhem_mode_chip"
+                                className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out"
+                                style={{
+                                  backgroundColor: isMayhemActive
+                                    ? "#c83c51"
+                                    : "transparent",
+                                  border: isMayhemActive
+                                    ? "2px solid #c83c51"
+                                    : "none",
+                                  color: isMayhemActive ? "#000000" : AX.text,
+                                  borderRadius: "20px",
+                                  boxShadow: isMayhemActive
+                                    ? "0 0 12px #c83c5140, 0 0 24px #c83c5120"
+                                    : "none",
+                                  transform: isMayhemActive
+                                    ? "scale(1.02)"
+                                    : "scale(1)",
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isMayhemActive) {
+                                    e.currentTarget.style.backgroundColor =
+                                      "#c83c5110";
+                                    e.currentTarget.style.border =
+                                      "1px solid #c83c51";
+                                    e.currentTarget.style.color = "#c83c51";
+                                    e.currentTarget.style.boxShadow =
+                                      "0 0 8px #c83c5130";
+                                    e.currentTarget.style.transform =
+                                      "scale(1.05)";
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isMayhemActive) {
+                                    e.currentTarget.style.backgroundColor =
+                                      "transparent";
+                                    e.currentTarget.style.border = "none";
+                                    e.currentTarget.style.color = AX.text;
+                                    e.currentTarget.style.boxShadow = "none";
+                                    e.currentTarget.style.transform =
+                                      "scale(1)";
+                                  }
+                                }}
+                                onClick={() => {
+                                  handlePendingFilterChange((prev) => {
+                                    // If the chip looks lit only because we're in "All"
+                                    // mode (purely cosmetic), clicking it should narrow
+                                    // to Mayhem-only — exit All-mode and turn Mayhem on.
+                                    const cosmeticLitFromAll =
+                                      prev.protocols.includes("All") &&
+                                      !prev.onlyMayhemMode;
+                                    if (cosmeticLitFromAll) {
+                                      return {
+                                        ...prev,
+                                        protocols: [],
+                                        onlyMayhemMode: true,
+                                      };
+                                    }
+                                    return {
+                                      ...prev,
+                                      onlyMayhemMode: !prev.onlyMayhemMode,
+                                    };
+                                  });
+                                }}
+                              >
+                                {/* Branded Mayhem artwork from public/Mayhem.webp.
                               Sized to ~16px (h-4 w-4) to read at the chip's height,
                               with `rounded-full` matching the protocol-icon bubble
                               treatment elsewhere in the app. */}
-                          <img
-                            src="/Mayhem.webp"
-                            alt="Mayhem"
-                            className="pointer-events-none h-4 w-4 rounded-full object-cover"
-                          />
-                          <span
-                            className="truncate font-semibold"
-                            style={{ color: "inherit" }}
-                          >
-                            Mayhem
-                          </span>
-                        </button>
-                          );
-                        })()}
+                                <img
+                                  src="/Mayhem.webp"
+                                  alt="Mayhem"
+                                  className="pointer-events-none h-4 w-4 rounded-full object-cover"
+                                />
+                                <span
+                                  className="truncate font-semibold"
+                                  style={{ color: "inherit" }}
+                                >
+                                  Mayhem
+                                </span>
+                              </button>
+                            );
+                          })()}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Quote Tokens */}
-                    <div className="mb-4">
-                      <h4
-                        className="mb-2 text-sm font-medium"
-                        style={{ color: AX.text }}
-                      >
-                        Quote Tokens
-                      </h4>
-                      <div className="flex gap-3">
-                        {quoteTokens.map((token) => (
-                          <button
-                            key={token.name}
-                            className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
-                            style={{
-                              backgroundColor:
-                                pendingFilters.quoteTokens.includes(token.name)
-                                  ? token.color
-                                  : "transparent",
-                              borderColor: pendingFilters.quoteTokens.includes(
-                                token.name,
-                              )
-                                ? token.color
-                                : "transparent",
-                              border: pendingFilters.quoteTokens.includes(
-                                token.name,
-                              )
-                                ? "2px solid"
-                                : "none",
-                              color: pendingFilters.quoteTokens.includes(
-                                token.name,
-                              )
-                                ? "#000000"
-                                : AX.text,
-                              borderRadius: "20px",
-                              boxShadow: pendingFilters.quoteTokens.includes(
-                                token.name,
-                              )
-                                ? `0 0 12px ${token.color}40, 0 0 24px ${token.color}20`
-                                : "none",
-                              transform: pendingFilters.quoteTokens.includes(
-                                token.name,
-                              )
-                                ? "scale(1.02)"
-                                : "scale(1)",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (
-                                !pendingFilters.quoteTokens.includes(token.name)
-                              ) {
-                                e.currentTarget.style.backgroundColor =
-                                  token.color + "10";
-                                e.currentTarget.style.borderColor = token.color;
-                                e.currentTarget.style.border = "1px solid";
-                                e.currentTarget.style.color = token.color;
-                                e.currentTarget.style.boxShadow = `0 0 8px ${token.color}30`;
-                                e.currentTarget.style.transform = "scale(1.05)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (
-                                !pendingFilters.quoteTokens.includes(token.name)
-                              ) {
-                                e.currentTarget.style.backgroundColor =
-                                  "transparent";
-                                e.currentTarget.style.borderColor =
-                                  "transparent";
-                                e.currentTarget.style.border = "none";
-                                e.currentTarget.style.color = AX.text;
-                                e.currentTarget.style.boxShadow = "none";
-                                e.currentTarget.style.transform = "scale(1)";
-                              }
-                            }}
-                            onClick={() => {
-                              handlePendingFilterChange((prev) => ({
-                                ...prev,
-                                quoteTokens: prev.quoteTokens.includes(
+                      {/* Quote Tokens */}
+                      <div className="mb-4">
+                        <h4
+                          className="mb-2 text-sm font-medium"
+                          style={{ color: AX.text }}
+                        >
+                          Quote Tokens
+                        </h4>
+                        <div className="flex gap-3">
+                          {quoteTokens.map((token) => (
+                            <button
+                              key={token.name}
+                              className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
+                              style={{
+                                backgroundColor:
+                                  pendingFilters.quoteTokens.includes(
+                                    token.name,
+                                  )
+                                    ? token.color
+                                    : "transparent",
+                                borderColor:
+                                  pendingFilters.quoteTokens.includes(
+                                    token.name,
+                                  )
+                                    ? token.color
+                                    : "transparent",
+                                border: pendingFilters.quoteTokens.includes(
                                   token.name,
                                 )
-                                  ? prev.quoteTokens.filter(
-                                      (t) => t !== token.name,
-                                    )
-                                  : [...prev.quoteTokens, token.name],
-                              }));
-                            }}
-                          >
-                            <span
-                              className="text-base"
-                              style={{ color: "inherit" }}
+                                  ? "2px solid"
+                                  : "none",
+                                color: pendingFilters.quoteTokens.includes(
+                                  token.name,
+                                )
+                                  ? "#000000"
+                                  : AX.text,
+                                borderRadius: "20px",
+                                boxShadow: pendingFilters.quoteTokens.includes(
+                                  token.name,
+                                )
+                                  ? `0 0 12px ${token.color}40, 0 0 24px ${token.color}20`
+                                  : "none",
+                                transform: pendingFilters.quoteTokens.includes(
+                                  token.name,
+                                )
+                                  ? "scale(1.02)"
+                                  : "scale(1)",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (
+                                  !pendingFilters.quoteTokens.includes(
+                                    token.name,
+                                  )
+                                ) {
+                                  e.currentTarget.style.backgroundColor =
+                                    token.color + "10";
+                                  e.currentTarget.style.borderColor =
+                                    token.color;
+                                  e.currentTarget.style.border = "1px solid";
+                                  e.currentTarget.style.color = token.color;
+                                  e.currentTarget.style.boxShadow = `0 0 8px ${token.color}30`;
+                                  e.currentTarget.style.transform =
+                                    "scale(1.05)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (
+                                  !pendingFilters.quoteTokens.includes(
+                                    token.name,
+                                  )
+                                ) {
+                                  e.currentTarget.style.backgroundColor =
+                                    "transparent";
+                                  e.currentTarget.style.borderColor =
+                                    "transparent";
+                                  e.currentTarget.style.border = "none";
+                                  e.currentTarget.style.color = AX.text;
+                                  e.currentTarget.style.boxShadow = "none";
+                                  e.currentTarget.style.transform = "scale(1)";
+                                }
+                              }}
+                              onClick={() => {
+                                handlePendingFilterChange((prev) => ({
+                                  ...prev,
+                                  quoteTokens: prev.quoteTokens.includes(
+                                    token.name,
+                                  )
+                                    ? prev.quoteTokens.filter(
+                                        (t) => t !== token.name,
+                                      )
+                                    : [...prev.quoteTokens, token.name],
+                                }));
+                              }}
                             >
-                              {token.icon}
-                            </span>
-                            <span className="font-bold">{token.name}</span>
+                              <span
+                                className="text-base"
+                                style={{ color: "inherit" }}
+                              >
+                                {token.icon}
+                              </span>
+                              <span className="font-bold">{token.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Keywords */}
+                      <div className="mb-6">
+                        <h4
+                          className="mb-2 text-sm font-medium"
+                          style={{ color: AX.text }}
+                        >
+                          Search Keywords
+                        </h4>
+                        <input
+                          type="text"
+                          placeholder="keyword1, keyword2..."
+                          value={pendingFilters.searchKeywords}
+                          onChange={(e) =>
+                            handlePendingFilterChange((prev) => ({
+                              ...prev,
+                              searchKeywords: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded border px-3 py-2 text-sm"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: "none",
+                            MozAppearance: "textfield",
+                            outline: "none",
+                            boxShadow: "none",
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = "none";
+                            e.target.style.boxShadow = "none";
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <h4
+                          className="mt-3 mb-2 text-sm font-medium"
+                          style={{ color: AX.text }}
+                        >
+                          Exclude Keywords
+                        </h4>
+                        <input
+                          type="text"
+                          placeholder="keyword1, keyword2..."
+                          value={pendingFilters.excludeKeywords}
+                          onChange={(e) =>
+                            handlePendingFilterChange((prev) => ({
+                              ...prev,
+                              excludeKeywords: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded border px-3 py-2 text-sm"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: "none",
+                            MozAppearance: "textfield",
+                            outline: "none",
+                            boxShadow: "none",
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = "none";
+                            e.target.style.boxShadow = "none";
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+
+                      {/* Category Tabs */}
+                      <div
+                        className="mb-4 flex border-b"
+                        style={{ borderColor: AX.border }}
+                      >
+                        {["Audit", "$ Metrics", "Socials"].map((tab) => (
+                          <button
+                            key={tab}
+                            className={`cursor-pointer px-3 py-2 text-sm font-medium transition-colors ${
+                              activeCategoryTab === tab ? "border-b-2" : ""
+                            }`}
+                            style={{
+                              color:
+                                activeCategoryTab === tab
+                                  ? AX.aiBlue
+                                  : AX.muted,
+                              borderBottomColor:
+                                activeCategoryTab === tab
+                                  ? AX.aiBlue
+                                  : "transparent",
+                            }}
+                            onClick={() => setActiveCategoryTab(tab)}
+                          >
+                            {tab}
                           </button>
                         ))}
                       </div>
-                    </div>
-                    {/* Keywords */}
-                    <div className="mb-6">
-                      <h4
-                        className="mb-2 text-sm font-medium"
-                        style={{ color: AX.text }}
-                      >
-                        Search Keywords
-                      </h4>
-                      <input
-                        type="text"
-                        placeholder="keyword1, keyword2..."
-                        value={pendingFilters.searchKeywords}
-                        onChange={(e) =>
-                          handlePendingFilterChange((prev) => ({
-                            ...prev,
-                            searchKeywords: e.target.value,
-                          }))
-                        }
-                        className="w-full rounded border px-3 py-2 text-sm"
-                        style={{
-                          backgroundColor: AX.surface,
-                          borderColor: AX.border,
-                          color: AX.text,
-                          WebkitAppearance: "none",
-                          MozAppearance: "textfield",
-                          outline: "none",
-                          boxShadow: "none",
-                        }}
-                        onFocus={(e) => {
-                          e.target.style.outline = "none";
-                          e.target.style.boxShadow = "none";
-                          e.target.style.borderColor = AX.border;
-                        }}
-                      />
-                      <h4
-                        className="mt-3 mb-2 text-sm font-medium"
-                        style={{ color: AX.text }}
-                      >
-                        Exclude Keywords
-                      </h4>
-                      <input
-                        type="text"
-                        placeholder="keyword1, keyword2..."
-                        value={pendingFilters.excludeKeywords}
-                        onChange={(e) =>
-                          handlePendingFilterChange((prev) => ({
-                            ...prev,
-                            excludeKeywords: e.target.value,
-                          }))
-                        }
-                        className="w-full rounded border px-3 py-2 text-sm"
-                        style={{
-                          backgroundColor: AX.surface,
-                          borderColor: AX.border,
-                          color: AX.text,
-                          WebkitAppearance: "none",
-                          MozAppearance: "textfield",
-                          outline: "none",
-                          boxShadow: "none",
-                        }}
-                        onFocus={(e) => {
-                          e.target.style.outline = "none";
-                          e.target.style.boxShadow = "none";
-                          e.target.style.borderColor = AX.border;
-                        }}
-                      />
-                    </div>
-
-                    {/* Category Tabs */}
-                    <div
-                      className="mb-4 flex border-b"
-                      style={{ borderColor: AX.border }}
-                    >
-                      {["Audit", "$ Metrics", "Socials"].map((tab) => (
-                        <button
-                          key={tab}
-                          className={`cursor-pointer px-3 py-2 text-sm font-medium transition-colors ${
-                            activeCategoryTab === tab ? "border-b-2" : ""
-                          }`}
-                          style={{
-                            color:
-                              activeCategoryTab === tab ? AX.aiBlue : AX.muted,
-                            borderBottomColor:
-                              activeCategoryTab === tab
-                                ? AX.aiBlue
-                                : "transparent",
-                          }}
-                          onClick={() => setActiveCategoryTab(tab)}
-                        >
-                          {tab}
-                        </button>
-                      ))}
-                    </div>
-                    {/* Category Content */}
-                    {activeCategoryTab === "Audit" && (
-                      <div className="space-y-3">
-                        {/* Existing checkboxes */}
-                        {/* Dex Paid - COMMENTED OUT: Filter not implemented (always returns true) */}
-                        {/* <div className="flex items-center gap-2">
+                      {/* Category Content */}
+                      {activeCategoryTab === "Audit" && (
+                        <div className="space-y-3">
+                          {/* Existing checkboxes */}
+                          {/* Dex Paid - COMMENTED OUT: Filter not implemented (always returns true) */}
+                          {/* <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         id="dexPaid"
@@ -6254,8 +6772,8 @@ function PulseTable({
                       />
                       <label htmlFor="dexPaid" className="text-sm" style={{ color: AX.text }}>Dex Paid</label>
                     </div> */}
-                        {/* CA ends in 'pump' - COMMENTED OUT: Rarely useful filter */}
-                        {/* <div className="flex items-center gap-2">
+                          {/* CA ends in 'pump' - COMMENTED OUT: Rarely useful filter */}
+                          {/* <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         id="caEndsInPump"
@@ -6266,1605 +6784,1691 @@ function PulseTable({
                       <label htmlFor="caEndsInPump" className="text-sm" style={{ color: AX.text }}>CA ends in 'pump'</label>
                     </div> */}
 
-                        {/* Dev Holding % */}
-                        <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Holding %</label>
-                      <div className="flex gap-1">
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          value={pendingFilters.devHoldingPercentMin}
-                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, devHoldingPercentMin: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded text-sm border"
-                          style={{
-                            backgroundColor: AX.surface,
-                            borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                          }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          value={pendingFilters.devHoldingPercentMax}
-                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, devHoldingPercentMax: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded text-sm border"
-                          style={{
-                            backgroundColor: AX.surface,
-                            borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                        {/* Snipers % */}
-                        <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Snipers %</label>
-                      <div className="flex gap-1">
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          value={pendingFilters.snipersPercentMin}
-                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, snipersPercentMin: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded text-sm border"
-                          style={{
-                            backgroundColor: AX.surface,
-                            borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                          }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          value={pendingFilters.snipersPercentMax}
-                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, snipersPercentMax: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded text-sm border"
-                          style={{
-                            backgroundColor: AX.surface,
-                            borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                          }}
-                        />
-                      </div>
-                    </div>
-                        {/* Insiders % */}
-                        <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Insiders %</label>
-                      <div className="flex gap-1">
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          value={pendingFilters.insidersPercentMin}
-                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, insidersPercentMin: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded text-sm border"
-                          style={{
-                            backgroundColor: AX.surface,
-                            borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                          }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          value={pendingFilters.insidersPercentMax}
-                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, insidersPercentMax: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded text-sm border"
-                          style={{
-                            backgroundColor: AX.surface,
-                            borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                        {/* Bundle % */}
-                        <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Bundle %</label>
-                      <div className="flex gap-1">
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          value={pendingFilters.bundlePercentMin}
-                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, bundlePercentMin: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded text-sm border"
-                          style={{
-                            backgroundColor: AX.surface,
-                            borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                          }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          value={pendingFilters.bundlePercentMax}
-                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, bundlePercentMax: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded text-sm border"
-                          style={{
-                            backgroundColor: AX.surface,
-                            borderColor: AX.border,
-                            color: AX.text,
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'textfield',
-                            outline: 'none',
-                            boxShadow: 'none'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
-                            e.target.style.borderColor = AX.border;
-                          }}
-                        />
-                      </div>
-                    </div>
-                        {/* Holders */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Holders
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.holdersMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  holdersMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.holdersMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  holdersMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Pro Traders */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Pro Traders
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.proTradersMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  proTradersMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.proTradersMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  proTradersMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {/* Dev Migrations */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Dev Migrations
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.devMigrationsMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  devMigrationsMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.devMigrationsMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  devMigrationsMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {/* Dev Pairs Created */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Dev Pairs Created
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.devPairsCreatedMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  devPairsCreatedMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.devPairsCreatedMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  devPairsCreatedMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {/* KOL Count */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            KOL Count
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.kolCountMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  kolCountMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.kolCountMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  kolCountMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {/* Age (existing) */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Age
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.minAge}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  minAge: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <select
-                              value={pendingFilters.ageUnit}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  ageUnit: e.target.value,
-                                }))
-                              }
-                              className="rounded border px-2 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                              }}
-                            >
-                              <option value="m">m</option>
-                              <option value="h">h</option>
-                              <option value="d">d</option>
-                            </select>
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.maxAge}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  maxAge: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <select
-                              value={pendingFilters.ageUnit}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  ageUnit: e.target.value,
-                                }))
-                              }
-                              className="rounded border px-2 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                              }}
-                            >
-                              <option value="m">m</option>
-                              <option value="h">h</option>
-                              <option value="d">d</option>
-                            </select>
-                          </div>
-                        </div>
-                        {/* Top 10 Holders % */}
-                        {/* Top 10 Holders % */}
-                        <div>
-                          <label className="mb-2 block text-sm font-medium" style={{ color: AX.text }}>Top 10 Holders %</label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.top10HoldersPercentMin}
-                              onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercentMin: e.target.value }))}
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: 'none',
-                                MozAppearance: 'textfield',
-                                outline: 'none',
-                                boxShadow: 'none'
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = 'none';
-                                e.target.style.boxShadow = 'none';
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.top10HoldersPercentMax}
-                              onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercentMax: e.target.value }))}
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: 'none',
-                                MozAppearance: 'textfield',
-                                outline: 'none',
-                                boxShadow: 'none'
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = 'none';
-                                e.target.style.boxShadow = 'none';
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {activeCategoryTab === "$ Metrics" && (
-                      <div className="space-y-3">
-                        {/* Liquidity */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Liquidity ($)
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.minLiquidity}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  minLiquidity: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.maxLiquidity}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  maxLiquidity: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Volume */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Volume ($)
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.minVolume}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  minVolume: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.maxVolume}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  maxVolume: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Market Cap */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Market Cap ($)
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.minMarketCap}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  minMarketCap: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.maxMarketCap}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  maxMarketCap: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* B. curve %} */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            B. curve %
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.bCurvePercentMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  bCurvePercentMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.bCurvePercentMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  bCurvePercentMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {/* Global Fees Paid (SOL) */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Global Fees Paid (SOL)
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.globalFeesPaidMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  globalFeesPaidMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.globalFeesPaidMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  globalFeesPaidMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Txns */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Txns
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.txnsMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  txnsMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.txnsMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  txnsMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Num Buys */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Num Buys
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.numBuysMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  numBuysMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.numBuysMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  numBuysMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Num Sells */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Num Sells
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.numSellsMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  numSellsMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.numSellsMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  numSellsMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {activeCategoryTab === "Socials" && (
-                      <div className="space-y-3">
-                        {/* Twitter Reuses */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            X Reuses
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.twitterReusesMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  twitterReusesMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.twitterReusesMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  twitterReusesMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Tweet Age */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Tweet Age
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.tweetAgeMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  tweetAgeMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <select
-                              value={pendingFilters.tweetAgeUnit}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  tweetAgeUnit: e.target.value,
-                                }))
-                              }
-                              className="rounded border px-2 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            >
-                              <option value="m">m</option>
-                              <option value="h">h</option>
-                              <option value="d">d</option>
-                            </select>
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.tweetAgeMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  tweetAgeMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <select
-                              value={pendingFilters.tweetAgeUnit}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  tweetAgeUnit: e.target.value,
-                                }))
-                              }
-                              className="rounded border px-2 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            >
-                              <option value="m">m</option>
-                              <option value="h">h</option>
-                              <option value="d">d</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Checkboxes */}
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={pendingFilters.hasTwitter}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  hasTwitter: e.target.checked,
-                                }))
-                              }
-                              className="cursor-pointer rounded"
-                              style={{
-                                accentColor: AX.aiBlue,
-                              }}
-                            />
-                            <span
-                              className="text-sm"
+                          {/* Dev Holding % */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
                               style={{ color: AX.text }}
                             >
-                              Has X (Twitter)
-                            </span>
-                          </label>
-
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={pendingFilters.hasWebsite}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  hasWebsite: e.target.checked,
-                                }))
-                              }
-                              className="cursor-pointer rounded"
-                              style={{
-                                accentColor: AX.aiBlue,
-                              }}
-                            />
-                            <span
-                              className="text-sm"
-                              style={{ color: AX.text }}
-                            >
-                              Website
-                            </span>
-                          </label>
-
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={pendingFilters.hasTelegram}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  hasTelegram: e.target.checked,
-                                }))
-                              }
-                              className="cursor-pointer rounded"
-                              style={{
-                                accentColor: AX.aiBlue,
-                              }}
-                            />
-                            <span
-                              className="text-sm"
-                              style={{ color: AX.text }}
-                            >
-                              Telegram
-                            </span>
-                          </label>
-
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={pendingFilters.atLeastOneSocial}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  atLeastOneSocial: e.target.checked,
-                                }))
-                              }
-                              className="cursor-pointer rounded"
-                              style={{
-                                accentColor: AX.aiBlue,
-                              }}
-                            />
-                            <span
-                              className="text-sm"
-                              style={{ color: AX.text }}
-                            >
-                              At Least One Social
-                            </span>
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={pendingFilters.onlyPumpLive}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  onlyPumpLive: e.target.checked,
-                                }))
-                              }
-                              className="cursor-pointer rounded"
-                              style={{
-                                accentColor: AX.aiBlue,
-                              }}
-                            />
-                            <span
-                              className="text-sm"
-                              style={{ color: AX.text }}
-                            >
-                              Only Pump Live
-                            </span>
-                          </label>
-                        </div>
-                      </div>
-                    )}
-                    {/* END OF SOCIALS TAB COMMENT */}
-                  </div>
-                  {/* Footer */}
-                  <div
-                    className="flex items-center justify-between border-t p-4"
-                    style={{ borderColor: AX.border }}
-                  >
-                    <div className="flex gap-2">
-                      <button
-                        className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                        style={{ backgroundColor: AX.border, color: AX.text }}
-                        onClick={() => {
-                          // Import functionality
-                          const input = document.createElement("input");
-                          input.type = "file";
-                          input.accept = ".json";
-                          input.onchange = (e) => {
-                            const file = (e.target as HTMLInputElement)
-                              .files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
-                                try {
-                                  const importedFilters = JSON.parse(
-                                    event.target?.result as string,
-                                  ) as PulseFilters;
-                                  // Merge with defaults to ensure all fields exist
-                                  const mergedFilters = { ...getDefaultFilters(), ...importedFilters };
-                                  setFilters(mergedFilters);
-                                  setPendingFilters(mergedFilters);
-                                  setHasPendingChanges(false);
-                                } catch (error) {
-                                  console.error(
-                                    "Error importing filters:",
-                                    error,
-                                  );
+                              Dev Holding %
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.devHoldingPercentMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    devHoldingPercentMin: e.target.value,
+                                  }))
                                 }
-                              };
-                              reader.readAsText(file);
-                            }
-                          };
-                          input.click();
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.devHoldingPercentMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    devHoldingPercentMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Snipers % */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Snipers %
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.snipersPercentMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    snipersPercentMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.snipersPercentMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    snipersPercentMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                          {/* Insiders % */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Insiders %
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.insidersPercentMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    insidersPercentMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.insidersPercentMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    insidersPercentMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.currentTarget.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Bundle % */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Bundle %
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.bundlePercentMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    bundlePercentMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.bundlePercentMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    bundlePercentMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                          {/* Holders */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Holders
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.holdersMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    holdersMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.holdersMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    holdersMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Pro Traders */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Pro Traders
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.proTradersMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    proTradersMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.proTradersMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    proTradersMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                          {/* Dev Migrations */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Dev Migrations
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.devMigrationsMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    devMigrationsMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.devMigrationsMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    devMigrationsMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                          {/* Dev Pairs Created */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Dev Pairs Created
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.devPairsCreatedMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    devPairsCreatedMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.devPairsCreatedMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    devPairsCreatedMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                          {/* KOL Count */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              KOL Count
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.kolCountMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    kolCountMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.kolCountMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    kolCountMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                          {/* Age (existing) */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Age
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.minAge}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    minAge: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <select
+                                value={pendingFilters.ageUnit}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    ageUnit: e.target.value,
+                                  }))
+                                }
+                                className="rounded border px-2 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                }}
+                              >
+                                <option value="m">m</option>
+                                <option value="h">h</option>
+                                <option value="d">d</option>
+                              </select>
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.maxAge}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    maxAge: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <select
+                                value={pendingFilters.ageUnit}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    ageUnit: e.target.value,
+                                  }))
+                                }
+                                className="rounded border px-2 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                }}
+                              >
+                                <option value="m">m</option>
+                                <option value="h">h</option>
+                                <option value="d">d</option>
+                              </select>
+                            </div>
+                          </div>
+                          {/* Top 10 Holders % */}
+                          {/* Top 10 Holders % */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Top 10 Holders %
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.top10HoldersPercentMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    top10HoldersPercentMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.top10HoldersPercentMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    top10HoldersPercentMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {activeCategoryTab === "$ Metrics" && (
+                        <div className="space-y-3">
+                          {/* Liquidity */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Liquidity ($)
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.minLiquidity}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    minLiquidity: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.maxLiquidity}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    maxLiquidity: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Volume */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Volume ($)
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.minVolume}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    minVolume: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.maxVolume}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    maxVolume: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Market Cap */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Market Cap ($)
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.minMarketCap}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    minMarketCap: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.maxMarketCap}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    maxMarketCap: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* B. curve %} */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              B. curve %
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.bCurvePercentMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    bCurvePercentMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.bCurvePercentMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    bCurvePercentMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                          {/* Global Fees Paid (SOL) */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Global Fees Paid (SOL)
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.globalFeesPaidMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    globalFeesPaidMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.globalFeesPaidMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    globalFeesPaidMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Txns */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Txns
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.txnsMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    txnsMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.txnsMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    txnsMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Num Buys */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Num Buys
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.numBuysMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    numBuysMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.numBuysMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    numBuysMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Num Sells */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Num Sells
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.numSellsMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    numSellsMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.numSellsMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    numSellsMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {activeCategoryTab === "Socials" && (
+                        <div className="space-y-3">
+                          {/* Twitter Reuses */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              X Reuses
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.twitterReusesMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    twitterReusesMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.twitterReusesMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    twitterReusesMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Tweet Age */}
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-medium"
+                              style={{ color: AX.text }}
+                            >
+                              Tweet Age
+                            </label>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={pendingFilters.tweetAgeMin}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    tweetAgeMin: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <select
+                                value={pendingFilters.tweetAgeUnit}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    tweetAgeUnit: e.target.value,
+                                  }))
+                                }
+                                className="rounded border px-2 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              >
+                                <option value="m">m</option>
+                                <option value="h">h</option>
+                                <option value="d">d</option>
+                              </select>
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={pendingFilters.tweetAgeMax}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    tweetAgeMax: e.target.value,
+                                  }))
+                                }
+                                className="flex-1 rounded border px-3 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  WebkitAppearance: "none",
+                                  MozAppearance: "textfield",
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              />
+                              <select
+                                value={pendingFilters.tweetAgeUnit}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    tweetAgeUnit: e.target.value,
+                                  }))
+                                }
+                                className="rounded border px-2 py-2 text-sm"
+                                style={{
+                                  backgroundColor: AX.surface,
+                                  borderColor: AX.border,
+                                  color: AX.text,
+                                  outline: "none",
+                                  boxShadow: "none",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.outline = "none";
+                                  e.target.style.boxShadow = "none";
+                                  e.target.style.borderColor = AX.border;
+                                }}
+                              >
+                                <option value="m">m</option>
+                                <option value="h">h</option>
+                                <option value="d">d</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Checkboxes */}
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={pendingFilters.hasTwitter}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    hasTwitter: e.target.checked,
+                                  }))
+                                }
+                                className="cursor-pointer rounded"
+                                style={{
+                                  accentColor: AX.aiBlue,
+                                }}
+                              />
+                              <span
+                                className="text-sm"
+                                style={{ color: AX.text }}
+                              >
+                                Has X (Twitter)
+                              </span>
+                            </label>
+
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={pendingFilters.hasWebsite}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    hasWebsite: e.target.checked,
+                                  }))
+                                }
+                                className="cursor-pointer rounded"
+                                style={{
+                                  accentColor: AX.aiBlue,
+                                }}
+                              />
+                              <span
+                                className="text-sm"
+                                style={{ color: AX.text }}
+                              >
+                                Website
+                              </span>
+                            </label>
+
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={pendingFilters.hasTelegram}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    hasTelegram: e.target.checked,
+                                  }))
+                                }
+                                className="cursor-pointer rounded"
+                                style={{
+                                  accentColor: AX.aiBlue,
+                                }}
+                              />
+                              <span
+                                className="text-sm"
+                                style={{ color: AX.text }}
+                              >
+                                Telegram
+                              </span>
+                            </label>
+
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={pendingFilters.atLeastOneSocial}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    atLeastOneSocial: e.target.checked,
+                                  }))
+                                }
+                                className="cursor-pointer rounded"
+                                style={{
+                                  accentColor: AX.aiBlue,
+                                }}
+                              />
+                              <span
+                                className="text-sm"
+                                style={{ color: AX.text }}
+                              >
+                                At Least One Social
+                              </span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={pendingFilters.onlyPumpLive}
+                                onChange={(e) =>
+                                  handlePendingFilterChange((prev) => ({
+                                    ...prev,
+                                    onlyPumpLive: e.target.checked,
+                                  }))
+                                }
+                                className="cursor-pointer rounded"
+                                style={{
+                                  accentColor: AX.aiBlue,
+                                }}
+                              />
+                              <span
+                                className="text-sm"
+                                style={{ color: AX.text }}
+                              >
+                                Only Pump Live
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                      {/* END OF SOCIALS TAB COMMENT */}
+                    </div>
+                    {/* Footer */}
+                    <div
+                      className="flex items-center justify-between border-t p-4"
+                      style={{ borderColor: AX.border }}
+                    >
+                      <div className="flex gap-2">
+                        <button
+                          className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                          style={{ backgroundColor: AX.border, color: AX.text }}
+                          onClick={() => {
+                            // Import functionality
+                            const input = document.createElement("input");
+                            input.type = "file";
+                            input.accept = ".json";
+                            input.onchange = (e) => {
+                              const file = (e.target as HTMLInputElement)
+                                .files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  try {
+                                    const importedFilters = JSON.parse(
+                                      event.target?.result as string,
+                                    ) as PulseFilters;
+                                    // Merge with defaults to ensure all fields exist
+                                    const mergedFilters = {
+                                      ...getDefaultFilters(),
+                                      ...importedFilters,
+                                    };
+                                    setFilters(mergedFilters);
+                                    setPendingFilters(mergedFilters);
+                                    setHasPendingChanges(false);
+                                  } catch (error) {
+                                    console.error(
+                                      "Error importing filters:",
+                                      error,
+                                    );
+                                  }
+                                };
+                                reader.readAsText(file);
+                              }
+                            };
+                            input.click();
+                          }}
+                        >
+                          Import
+                        </button>
+                        <button
+                          className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                          style={{ backgroundColor: AX.border, color: AX.text }}
+                          onClick={() => {
+                            // Export functionality
+                            const dataStr = JSON.stringify(filters, null, 2);
+                            const dataBlob = new Blob([dataStr], {
+                              type: "application/json",
+                            });
+                            const url = URL.createObjectURL(dataBlob);
+                            const link = document.createElement("a");
+                            link.href = url;
+                            link.download = "pulse-filters.json";
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          Export
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleResetFilters}
+                        className="mr-2 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
+                        style={{
+                          backgroundColor: hasActiveFilters
+                            ? "rgba(239, 68, 68, 0.1)"
+                            : AX.surface,
+                          color: hasActiveFilters ? "#ef4444" : AX.muted,
+                          border: `1px solid ${hasActiveFilters ? "rgba(239, 68, 68, 0.3)" : AX.border}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (hasActiveFilters) {
+                            e.currentTarget.style.backgroundColor =
+                              "rgba(239, 68, 68, 0.2)";
+                            e.currentTarget.style.color = "#f87171";
+                          } else {
+                            e.currentTarget.style.backgroundColor = AX.border;
+                            e.currentTarget.style.color = AX.text;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            hasActiveFilters
+                              ? "rgba(239, 68, 68, 0.1)"
+                              : AX.surface;
+                          e.currentTarget.style.color = hasActiveFilters
+                            ? "#ef4444"
+                            : AX.muted;
                         }}
                       >
-                        Import
+                        {hasActiveFilters ? "Clear All" : "Reset"}
                       </button>
                       <button
-                        className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                        style={{ backgroundColor: AX.border, color: AX.text }}
-                        onClick={() => {
-                          // Export functionality
-                          const dataStr = JSON.stringify(filters, null, 2);
-                          const dataBlob = new Blob([dataStr], {
-                            type: "application/json",
-                          });
-                          const url = URL.createObjectURL(dataBlob);
-                          const link = document.createElement("a");
-                          link.href = url;
-                          link.download = "pulse-filters.json";
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          URL.revokeObjectURL(url);
+                        className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
+                        style={{
+                          backgroundColor: hasPendingChanges
+                            ? AX.aiBlue
+                            : AX.surface,
+                          color: hasPendingChanges ? "#000000" : AX.muted,
+                          opacity: hasPendingChanges ? 1 : 0.5,
                         }}
+                        disabled={!hasPendingChanges}
+                        onMouseEnter={(e) => {
+                          if (hasPendingChanges) {
+                            e.currentTarget.style.backgroundColor = "#2563eb";
+                            e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (hasPendingChanges) {
+                            e.currentTarget.style.backgroundColor = AX.aiBlue;
+                            e.currentTarget.style.boxShadow = "none";
+                          }
+                        }}
+                        onClick={handleApplyFilters}
                       >
-                        Export
+                        Apply All
                       </button>
                     </div>
-                    <button
-                      onClick={handleResetFilters}
-                      className="mr-2 cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
-                      style={{
-                        backgroundColor: hasActiveFilters ? "rgba(239, 68, 68, 0.1)" : AX.surface,
-                        color: hasActiveFilters ? "#ef4444" : AX.muted,
-                        border: `1px solid ${hasActiveFilters ? "rgba(239, 68, 68, 0.3)" : AX.border}`,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (hasActiveFilters) {
-                          e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.2)";
-                          e.currentTarget.style.color = "#f87171";
-                        } else {
-                          e.currentTarget.style.backgroundColor = AX.border;
-                          e.currentTarget.style.color = AX.text;
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = hasActiveFilters ? "rgba(239, 68, 68, 0.1)" : AX.surface;
-                        e.currentTarget.style.color = hasActiveFilters ? "#ef4444" : AX.muted;
-                      }}
-                    >
-                      {hasActiveFilters ? "Clear All" : "Reset"}
-                    </button>
-                    <button
-                      className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
-                      style={{
-                        backgroundColor: hasPendingChanges
-                          ? AX.aiBlue
-                          : AX.surface,
-                        color: hasPendingChanges ? "#000000" : AX.muted,
-                        opacity: hasPendingChanges ? 1 : 0.5,
-                      }}
-                      disabled={!hasPendingChanges}
-                      onMouseEnter={(e) => {
-                        if (hasPendingChanges) {
-                          e.currentTarget.style.backgroundColor = "#2563eb";
-                          e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (hasPendingChanges) {
-                          e.currentTarget.style.backgroundColor = AX.aiBlue;
-                          e.currentTarget.style.boxShadow = "none";
-                        }
-                      }}
-                      onClick={handleApplyFilters}
-                    >
-                      Apply All
-                    </button>
                   </div>
-                </div>
-              </>,
-							document.body
-            )}
+                </>,
+                document.body,
+              )}
           </div>
         </div>
       </div>
@@ -7874,7 +8478,10 @@ function PulseTable({
             <div
               key={idx}
               className="flex shrink-0 animate-pulse flex-row items-start rounded-lg p-2"
-              style={{ backgroundColor: "#13151b", border: "1px solid #1e2028" }}
+              style={{
+                backgroundColor: "#13151b",
+                border: "1px solid #1e2028",
+              }}
             >
               {/* Profile Picture & Address skeleton */}
               <div className="mr-2 flex w-20 flex-col items-center">
@@ -7966,13 +8573,16 @@ function PulseTable({
             </div>
           ))}
         </div>
-      ) : (filteredTokensForDisplay.length === 0 && isFetchingFiltered) ? (
+      ) : filteredTokensForDisplay.length === 0 && isFetchingFiltered ? (
         <div className="custom-scrollbar flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-scroll">
           {Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
               key={idx}
               className="flex shrink-0 animate-pulse flex-row items-start rounded-lg p-2"
-              style={{ backgroundColor: "#13151b", border: "1px solid #1e2028" }}
+              style={{
+                backgroundColor: "#13151b",
+                border: "1px solid #1e2028",
+              }}
             >
               <div className="mr-2 flex w-20 flex-col items-center">
                 <div
@@ -8074,10 +8684,14 @@ function PulseTable({
           onMouseEnter={handleListMouseEnter}
           onMouseLeave={handleListMouseLeave}
         >
-        <VirtualizedTokenList
-          items={displayTokensForList}
-          itemSize={PULSE_ROW_HEIGHT}
-          renderRow={(token: any, idx: number, style: React.CSSProperties) => {
+          <VirtualizedTokenList
+            items={displayTokensForList}
+            itemSize={PULSE_ROW_HEIGHT}
+            renderRow={(
+              token: any,
+              idx: number,
+              style: React.CSSProperties,
+            ) => {
               // Use mint directly in URL path for cleaner architecture
               // This allows WebSocket to connect immediately without pair_address resolution
               const tokenMint = (token as any)?.mint;
@@ -8097,313 +8711,366 @@ function PulseTable({
 
               return (
                 <div key={tokenMint} style={style}>
-                <div style={{ paddingBottom: '4px' }}>
-                <Link
-                  href={`/trade/${tokenMint}`}
-                  className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
-                  style={{
-                    color: AX.text,
-                    backgroundColor: "#13151b",
-                  }}
-                  onMouseEnter={(e) => {
-                    // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
-                    e.currentTarget.classList.add('row-hovered');
+                  <div style={{ paddingBottom: "4px" }}>
+                    <Link
+                      href={`/trade/${tokenMint}`}
+                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
+                      style={{
+                        color: AX.text,
+                        backgroundColor: "#13151b",
+                      }}
+                      onMouseEnter={(e) => {
+                        // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
+                        e.currentTarget.classList.add("row-hovered");
 
-                    // Show the status popup via CSS class
-                    const popup = e.currentTarget.querySelector(
-                      ".status-popup",
-                    ) as HTMLElement;
-                    if (popup) {
-                      popup.classList.add('popup-visible');
-                    }
+                        // Show the status popup via CSS class
+                        const popup = e.currentTarget.querySelector(
+                          ".status-popup",
+                        ) as HTMLElement;
+                        if (popup) {
+                          popup.classList.add("popup-visible");
+                        }
 
-                    // Full preload pipeline: WS + route + metadata + OHLC + trades
-                    preloadTradeChart(
-                      {
-                        mint: tokenMint,
-                        pairAddress,
-                        name: (token as any)?.name,
-                        symbol: (token as any)?.symbol,
-                        priceUsd: (token as any)?.price_usd || (token as any)?.priceUsd,
-                        marketCapUsd: (token as any)?.market_cap_usd || (token as any)?.marketCapUSD,
-                        image: extractTokenImage(token as any) || "",
-                        launchpadProtocol: (token as any)?.launchpad_protocol,
-                      },
-                      { router, tradeUrl: `/trade/${tokenMint}` }
-                    );
+                        // Full preload pipeline: WS + route + metadata + OHLC + trades
+                        preloadTradeChart(
+                          {
+                            mint: tokenMint,
+                            pairAddress,
+                            name: (token as any)?.name,
+                            symbol: (token as any)?.symbol,
+                            priceUsd:
+                              (token as any)?.price_usd ||
+                              (token as any)?.priceUsd,
+                            marketCapUsd:
+                              (token as any)?.market_cap_usd ||
+                              (token as any)?.marketCapUSD,
+                            image: extractTokenImage(token as any) || "",
+                            launchpadProtocol: (token as any)
+                              ?.launchpad_protocol,
+                          },
+                          { router, tradeUrl: `/trade/${tokenMint}` },
+                        );
 
-                    // Prefetch buy order so quick-buy click gets a cached order (<1ms vs ~700ms)
-                    if (tokenMint && thunderAmount) {
-                      prefetchBuyOrder({ baseMint: tokenMint, amount: parseFloat(thunderAmount) || 0.1, side: 'buy' });
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    // PHASE 3: Use CSS class instead of inline style
-                    e.currentTarget.classList.remove('row-hovered');
-                    // Hide the status popup via CSS class
-                    const popup = e.currentTarget.querySelector(
-                      ".status-popup",
-                    ) as HTMLElement;
-                    if (popup) {
-                      popup.classList.remove('popup-visible');
-                    }
-                  }}
-                >
-                  <div className="flex w-full max-w-full min-w-0 flex-col gap-2">
-                    <div className="flex w-full max-w-full flex-row gap-2">
-                      {/* Subtle wave animation for top 3 final stretch tokens */}
-                      {/* PHASE 3: Only animate if few tokens need it (performance optimization) */}
-                      {waveTokens.has(idx) && waveTokens.size <= 5 && memoizedTokens.length <= 50 && (
-                        <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
-                          <div
-                            className="absolute top-0 left-0 h-full w-full"
+                        // Prefetch buy order so quick-buy click gets a cached order (<1ms vs ~700ms)
+                        if (tokenMint && thunderAmount) {
+                          prefetchBuyOrder({
+                            baseMint: tokenMint,
+                            amount: parseFloat(thunderAmount) || 0.1,
+                            side: "buy",
+                          });
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        // PHASE 3: Use CSS class instead of inline style
+                        e.currentTarget.classList.remove("row-hovered");
+                        // Hide the status popup via CSS class
+                        const popup = e.currentTarget.querySelector(
+                          ".status-popup",
+                        ) as HTMLElement;
+                        if (popup) {
+                          popup.classList.remove("popup-visible");
+                        }
+                      }}
+                    >
+                      <div className="flex w-full max-w-full min-w-0 flex-col gap-2">
+                        <div className="flex w-full max-w-full flex-row gap-2">
+                          {/* Subtle wave animation for top 3 final stretch tokens */}
+                          {/* PHASE 3: Only animate if few tokens need it (performance optimization) */}
+                          {waveTokens.has(idx) &&
+                            waveTokens.size <= 5 &&
+                            memoizedTokens.length <= 50 && (
+                              <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
+                                <div
+                                  className="absolute top-0 left-0 h-full w-full"
+                                  style={{
+                                    background:
+                                      "linear-gradient(90deg, transparent, rgba(49, 227, 172, 0.2), rgba(49, 227, 172, 0.4), rgba(49, 227, 172, 0.2), transparent)",
+                                    animation:
+                                      "subtleWaveFlow 3s ease-in-out infinite",
+                                    filter: "blur(0.5px)",
+                                  }}
+                                ></div>
+                              </div>
+                            )}
+
+                          {/* Status popout on hover - PHASE 3: Uses memoized component */}
+                          <span
+                            className="status-popup absolute -top-8 left-1/2 -translate-x-1/2 border px-2 py-1 text-xs"
                             style={{
-                              background:
-                                "linear-gradient(90deg, transparent, rgba(49, 227, 172, 0.2), rgba(49, 227, 172, 0.4), rgba(49, 227, 172, 0.2), transparent)",
-                              animation:
-                                "subtleWaveFlow 3s ease-in-out infinite",
-                              filter: "blur(0.5px)",
+                              pointerEvents: "none",
+                              backgroundColor: AX.surface,
+                              borderColor: AX.border,
+                              color: AX.text,
+                              zIndex: 9999,
+                              borderRadius: "6px",
+                              fontSize: "11px",
+                              fontWeight: "500",
                             }}
-                          ></div>
-                        </div>
-                      )}
-
-                      {/* Status popout on hover - PHASE 3: Uses memoized component */}
-                      <span
-                        className="status-popup absolute -top-8 left-1/2 -translate-x-1/2 border px-2 py-1 text-xs"
-                        style={{
-                          pointerEvents: "none",
-                          backgroundColor: AX.surface,
-                          borderColor: AX.border,
-                          color: AX.text,
-                          zIndex: 9999,
-                          borderRadius: "6px",
-                          fontSize: "11px",
-                          fontWeight: "500",
-                        }}
-                      >
-                        <StatusPopupContent token={token} title={title} />
-                      </span>
-                      {/* Profile Picture & Address */}
-                      <div
-                        className="relative flex flex-shrink-0 flex-col items-center"
-                        style={{
-                          width: "70px",
-                          minWidth: "70px",
-                          maxWidth: "70px",
-                        }}
-                      >
-                        <TokenImage
-                          token={token}
-                          priority={title === "New Pairs"}
-                          isNewPairs={title === "New Pairs"}
-                          columnType={
-                            title.toLowerCase().includes("migrated")
-                              ? "migrated"
-                              : title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch")
-                                ? "final-stretch"
-                                : "new"
-                          }
-                          onBlacklistCA={(mint) => { addBlacklistItem('ca', mint); showEnhancedToast('info', `Hidden ${token.symbol}`); }}
-                          onBlacklistTwitter={(handle) => { addBlacklistItem('twitterHandle', handle); showEnhancedToast('info', `Blacklisted @${handle}`); }}
-                          onBlacklistDev={(wallet) => { addBlacklistItem('dev', wallet); showEnhancedToast('info', `Blacklisted dev`); }}
-                        />
-                        {/* Token Metrics */}
-                        {/* <div className="absolute bottom-16 -right-49">
+                          >
+                            <StatusPopupContent token={token} title={title} />
+                          </span>
+                          {/* Profile Picture & Address */}
+                          <div
+                            className="relative flex flex-shrink-0 flex-col items-center"
+                            style={{
+                              width: "70px",
+                              minWidth: "70px",
+                              maxWidth: "70px",
+                            }}
+                          >
+                            <TokenImage
+                              token={token}
+                              priority={title === "New Pairs" && idx < 8}
+                              isNewPairs={title === "New Pairs"}
+                              columnType={
+                                title.toLowerCase().includes("migrated")
+                                  ? "migrated"
+                                  : title.toLowerCase().includes("final") ||
+                                      title.toLowerCase().includes("stretch")
+                                    ? "final-stretch"
+                                    : "new"
+                              }
+                              onBlacklistCA={(mint) => {
+                                addBlacklistItem("ca", mint);
+                                showEnhancedToast(
+                                  "info",
+                                  `Hidden ${token.symbol}`,
+                                );
+                              }}
+                              onBlacklistTwitter={(handle) => {
+                                addBlacklistItem("twitterHandle", handle);
+                                showEnhancedToast(
+                                  "info",
+                                  `Blacklisted @${handle}`,
+                                );
+                              }}
+                              onBlacklistDev={(wallet) => {
+                                addBlacklistItem("dev", wallet);
+                                showEnhancedToast("info", `Blacklisted dev`);
+                              }}
+                            />
+                            {/* Token Metrics */}
+                            {/* <div className="absolute bottom-16 -right-49">
                     <TokenMetrics 
                       token={token} 
                       rank={idx + 1} 
                       totalTokens={memoizedTokens.length} 
                     />
                   </div> */}
-                        <button
-                          type="button"
-                          title="Copy address"
-                          className="mt-2 mb-1 max-w-[60px] cursor-pointer truncate font-mono text-[9px] transition-colors duration-200 hover:text-white lg:max-w-[70px] lg:text-[10px]"
-                          style={{ color: AX.muted, background: "none", border: "none", padding: 0 }}
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const fullAddress = (token as any)?.mint || (token as any)?.pair_address || (token as any)?.address || "";
-                            if (!fullAddress) return;
-                            const button = e.currentTarget as HTMLButtonElement;
-                            const flashSuccess = () => {
-                              if (button && button.style) {
-                                const originalColor = button.style.color || AX.muted;
-                                button.style.color = AX.aiGreen;
-                                setTimeout(() => {
+                            <button
+                              type="button"
+                              title="Copy address"
+                              className="mt-2 mb-1 max-w-[60px] cursor-pointer truncate font-mono text-[9px] transition-colors duration-200 hover:text-white lg:max-w-[70px] lg:text-[10px]"
+                              style={{
+                                color: AX.muted,
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                              }}
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const fullAddress =
+                                  (token as any)?.mint ||
+                                  (token as any)?.pair_address ||
+                                  (token as any)?.address ||
+                                  "";
+                                if (!fullAddress) return;
+                                const button =
+                                  e.currentTarget as HTMLButtonElement;
+                                const flashSuccess = () => {
                                   if (button && button.style) {
-                                    button.style.color = originalColor;
-                                  }
-                                }, 1000);
-                              }
-                            };
-                            try {
-                              await navigator.clipboard.writeText(fullAddress);
-                              showCenteredSuccessToast("Copied to clipboard");
-                              flashSuccess();
-                            } catch (err) {
-                              console.error("Failed to copy to clipboard:", err);
-                              const textArea = document.createElement("textarea");
-                              textArea.value = fullAddress;
-                              document.body.appendChild(textArea);
-                              textArea.select();
-                              try {
-                                document.execCommand("copy");
-                                showCenteredSuccessToast("Copied to clipboard");
-                                flashSuccess();
-                              } catch (fallbackErr) {
-                                console.error("Fallback copy failed:", fallbackErr);
-                              }
-                              document.body.removeChild(textArea);
-                            }
-                          }}
-                        >
-                          {shortAddr(token)}
-                        </button>
-                      </div>
-                      {/* Main Info Section */}
-                      <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        {/* Top Row */}
-                        <div className="flex flex-row justify-between gap-2">
-                          {/* Left: Token Info & Socials */}
-                          <div className="flex min-w-0 flex-col">
-                            <div className="flex min-w-0 items-center gap-1.5">
-                              <span
-                                className="flex-shrink-0 text-sm font-semibold"
-                                style={{ color: AX.text }}
-                              >
-                                {token.symbol}
-                              </span>
-                              <span
-                                className="truncate text-xs"
-                                style={{ color: AX.muted }}
-                              >
-                                {token.name}
-                              </span>
-                              <div className="relative">
-                                <button
-                                  className="transition-colors duration-200"
-                                  style={{ color: AX.muted }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.color = AX.aiBlue;
-                                    e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
-                                    const tooltip = document.getElementById(
-                                      `shared-copy-tooltip`,
-                                    ) as HTMLElement;
-                                    if (tooltip) {
-                                      const rect =
-                                        e.currentTarget.getBoundingClientRect();
-                                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                      tooltip.style.top = `${rect.top - 10}px`;
-                                      tooltip.style.opacity = "1";
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.color = AX.muted;
-                                    e.currentTarget.style.boxShadow = "none";
-                                    const tooltip = document.getElementById(
-                                      `shared-copy-tooltip`,
-                                    ) as HTMLElement;
-                                    if (tooltip) tooltip.style.opacity = "0";
-                                  }}
-                                  onClick={async (e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    try {
-                                      await navigator.clipboard.writeText(
-                                        token.mint,
-                                      );
-                                      showCenteredSuccessToast(
-                                        "Copied to clipboard",
-                                      );
-                                      // Show success feedback
-                                      const button =
-                                        e.currentTarget as HTMLButtonElement;
+                                    const originalColor =
+                                      button.style.color || AX.muted;
+                                    button.style.color = AX.aiGreen;
+                                    setTimeout(() => {
                                       if (button && button.style) {
-                                        const originalColor =
-                                          button.style.color || AX.muted;
-                                        button.style.color = AX.aiGreen;
-                                        setTimeout(() => {
-                                          if (button && button.style) {
-                                            button.style.color = originalColor;
-                                          }
-                                        }, 1000);
+                                        button.style.color = originalColor;
                                       }
-                                    } catch (err) {
-                                      console.error(
-                                        "Failed to copy to clipboard:",
-                                        err,
-                                      );
-                                      // Fallback for older browsers
-                                      const textArea =
-                                        document.createElement("textarea");
-                                      textArea.value = token.mint;
-                                      document.body.appendChild(textArea);
-                                      textArea.select();
-                                      try {
-                                        document.execCommand("copy");
-                                        showCenteredSuccessToast(
-                                          "Copied to clipboard",
-                                        );
-                                        const button =
-                                          e.currentTarget as HTMLButtonElement;
-                                        if (button && button.style) {
-                                          const originalColor =
-                                            button.style.color || AX.muted;
-                                          button.style.color = AX.aiGreen;
-                                          setTimeout(() => {
-                                            if (button && button.style) {
-                                              button.style.color =
-                                                originalColor;
-                                            }
-                                          }, 1000);
-                                        }
-                                      } catch (fallbackErr) {
-                                        console.error(
-                                          "Fallback copy failed:",
-                                          fallbackErr,
-                                        );
-                                      }
-                                      document.body.removeChild(textArea);
-                                    }
-                                  }}
-                                >
-                                  <FaRegCopy
-                                    size={10}
-                                    className="lg:h-3 lg:w-3"
-                                  />
-                                </button>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1 text-xs lg:gap-1.5">
-                              <span
-                                className="flex items-center gap-1 text-[10px] lg:gap-1"
-                                style={{ color: "#31e3ac" }}
-                              >
-                                <TokenAge
-                                  createdAt={
-                                    (token as any).launch_time ||
-                                    (token as any).created_at
+                                    }, 1000);
                                   }
-                                />
-                              </span>
-                              {/* Mayhem Mode 24h fire countdown — sits inline between
+                                };
+                                try {
+                                  await navigator.clipboard.writeText(
+                                    fullAddress,
+                                  );
+                                  showCenteredSuccessToast(
+                                    "Copied to clipboard",
+                                  );
+                                  flashSuccess();
+                                } catch (err) {
+                                  console.error(
+                                    "Failed to copy to clipboard:",
+                                    err,
+                                  );
+                                  const textArea =
+                                    document.createElement("textarea");
+                                  textArea.value = fullAddress;
+                                  document.body.appendChild(textArea);
+                                  textArea.select();
+                                  try {
+                                    document.execCommand("copy");
+                                    showCenteredSuccessToast(
+                                      "Copied to clipboard",
+                                    );
+                                    flashSuccess();
+                                  } catch (fallbackErr) {
+                                    console.error(
+                                      "Fallback copy failed:",
+                                      fallbackErr,
+                                    );
+                                  }
+                                  document.body.removeChild(textArea);
+                                }
+                              }}
+                            >
+                              {shortAddr(token)}
+                            </button>
+                          </div>
+                          {/* Main Info Section */}
+                          <div className="flex min-w-0 flex-1 flex-col gap-1">
+                            {/* Top Row */}
+                            <div className="flex flex-row justify-between gap-2">
+                              {/* Left: Token Info & Socials */}
+                              <div className="flex min-w-0 flex-col">
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <span
+                                    className="flex-shrink-0 text-sm font-semibold"
+                                    style={{ color: AX.text }}
+                                  >
+                                    {token.symbol}
+                                  </span>
+                                  <span
+                                    className="truncate text-xs"
+                                    style={{ color: AX.muted }}
+                                  >
+                                    {token.name}
+                                  </span>
+                                  <div className="relative">
+                                    <button
+                                      className="transition-colors duration-200"
+                                      style={{ color: AX.muted }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.color = AX.aiBlue;
+                                        e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
+                                        const tooltip = document.getElementById(
+                                          `shared-copy-tooltip`,
+                                        ) as HTMLElement;
+                                        if (tooltip) {
+                                          const rect =
+                                            e.currentTarget.getBoundingClientRect();
+                                          tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                          tooltip.style.top = `${rect.top - 10}px`;
+                                          tooltip.style.opacity = "1";
+                                        }
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.color = AX.muted;
+                                        e.currentTarget.style.boxShadow =
+                                          "none";
+                                        const tooltip = document.getElementById(
+                                          `shared-copy-tooltip`,
+                                        ) as HTMLElement;
+                                        if (tooltip)
+                                          tooltip.style.opacity = "0";
+                                      }}
+                                      onClick={async (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        try {
+                                          await navigator.clipboard.writeText(
+                                            token.mint,
+                                          );
+                                          showCenteredSuccessToast(
+                                            "Copied to clipboard",
+                                          );
+                                          // Show success feedback
+                                          const button =
+                                            e.currentTarget as HTMLButtonElement;
+                                          if (button && button.style) {
+                                            const originalColor =
+                                              button.style.color || AX.muted;
+                                            button.style.color = AX.aiGreen;
+                                            setTimeout(() => {
+                                              if (button && button.style) {
+                                                button.style.color =
+                                                  originalColor;
+                                              }
+                                            }, 1000);
+                                          }
+                                        } catch (err) {
+                                          console.error(
+                                            "Failed to copy to clipboard:",
+                                            err,
+                                          );
+                                          // Fallback for older browsers
+                                          const textArea =
+                                            document.createElement("textarea");
+                                          textArea.value = token.mint;
+                                          document.body.appendChild(textArea);
+                                          textArea.select();
+                                          try {
+                                            document.execCommand("copy");
+                                            showCenteredSuccessToast(
+                                              "Copied to clipboard",
+                                            );
+                                            const button =
+                                              e.currentTarget as HTMLButtonElement;
+                                            if (button && button.style) {
+                                              const originalColor =
+                                                button.style.color || AX.muted;
+                                              button.style.color = AX.aiGreen;
+                                              setTimeout(() => {
+                                                if (button && button.style) {
+                                                  button.style.color =
+                                                    originalColor;
+                                                }
+                                              }, 1000);
+                                            }
+                                          } catch (fallbackErr) {
+                                            console.error(
+                                              "Fallback copy failed:",
+                                              fallbackErr,
+                                            );
+                                          }
+                                          document.body.removeChild(textArea);
+                                        }
+                                      }}
+                                    >
+                                      <FaRegCopy
+                                        size={10}
+                                        className="lg:h-3 lg:w-3"
+                                      />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 text-xs lg:gap-1.5">
+                                  <span
+                                    className="flex items-center gap-1 text-[10px] lg:gap-1"
+                                    style={{ color: "#31e3ac" }}
+                                  >
+                                    <TokenAge
+                                      createdAt={
+                                        (token as any).launch_time ||
+                                        (token as any).created_at
+                                      }
+                                    />
+                                  </span>
+                                  {/* Mayhem Mode 24h fire countdown — sits inline between
                                   the age and the socials icons. The component returns
                                   null after 24h so it self-removes when the window ends. */}
-                              {(token as any).is_mayhem_mode && (
-                                <TokenCountdown24h
-                                  startedAt={
-                                    (token as any).launch_time ||
-                                    (token as any).created_at
-                                  }
-                                />
-                              )}
-                              {/* Socials */}
-                              <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1.5">
-                                {/* Pump.fun Link - only show for pump tokens */}
-                                {/* {token.mint.slice(-4) === "pump" && (
+                                  {(token as any).is_mayhem_mode && (
+                                    <TokenCountdown24h
+                                      startedAt={
+                                        (token as any).launch_time ||
+                                        (token as any).created_at
+                                      }
+                                    />
+                                  )}
+                                  {/* Socials */}
+                                  <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1.5">
+                                    {/* Pump.fun Link - only show for pump tokens */}
+                                    {/* {token.mint.slice(-4) === "pump" && (
                               <Link
                                 target="_blank"
                                 href={`https://pump.fun/coin/${token.mint}`}
@@ -8430,218 +9097,290 @@ function PulseTable({
                               </Link>
                             )} */}
 
-                                {/* Social Icons with URI Metadata */}
-                                <SocialIconsWithMetadata
-                                  token={token}
-                                  idx={idx}
-                                  showSearchDropdown={showSearchDropdown}
-                                  setShowSearchDropdown={setShowSearchDropdown}
-                                />
+                                    {/* Social Icons with URI Metadata */}
+                                    <SocialIconsWithMetadata
+                                      token={token}
+                                      idx={idx}
+                                      showSearchDropdown={showSearchDropdown}
+                                      setShowSearchDropdown={
+                                        setShowSearchDropdown
+                                      }
+                                    />
 
-                                {/* OLD X Profile Preview Button - kept for reference */}
-                                {false && (
-                                  <div className="relative">
-                                    <button
-                                      className="flex items-center justify-center rounded transition-colors duration-200"
-                                      onMouseEnter={(e) => {
-                                        const tooltip = document.getElementById(
-                                          `shared-profile-tooltip`,
-                                        ) as HTMLElement;
-                                        if (tooltip) {
-                                          const rect =
-                                            e.currentTarget.getBoundingClientRect();
-                                          tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                          tooltip.style.top = `${rect.top - 10}px`;
-                                          tooltip.style.opacity = "1";
-                                        }
-                                        // Show X profile preview
-                                        setShowXPreview(idx);
-                                        // Store button position for popup positioning
-                                        const buttonRect =
-                                          e.currentTarget.getBoundingClientRect();
-                                        setButtonPosition({
-                                          left:
-                                            buttonRect.left +
-                                            buttonRect.width / 2,
-                                          top: buttonRect.top - 20,
-                                        });
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        const tooltip = document.getElementById(
-                                          `shared-profile-tooltip`,
-                                        ) as HTMLElement;
-                                        if (tooltip)
-                                          tooltip.style.opacity = "0";
-                                      }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        e.preventDefault(); // Prevent Link navigation
-                                        // Open X profile in new tab
-                                        const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                                        window.open(profileUrl, "_blank");
-                                      }}
-                                    >
-                                      <FaXTwitter
-                                        size={12}
-                                        className="text-neutral-400"
-                                      />
-                                    </button>
+                                    {/* OLD X Profile Preview Button - kept for reference */}
+                                    {false && (
+                                      <div className="relative">
+                                        <button
+                                          className="flex items-center justify-center rounded transition-colors duration-200"
+                                          onMouseEnter={(e) => {
+                                            const tooltip =
+                                              document.getElementById(
+                                                `shared-profile-tooltip`,
+                                              ) as HTMLElement;
+                                            if (tooltip) {
+                                              const rect =
+                                                e.currentTarget.getBoundingClientRect();
+                                              tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                              tooltip.style.top = `${rect.top - 10}px`;
+                                              tooltip.style.opacity = "1";
+                                            }
+                                            // Show X profile preview
+                                            setShowXPreview(idx);
+                                            // Store button position for popup positioning
+                                            const buttonRect =
+                                              e.currentTarget.getBoundingClientRect();
+                                            setButtonPosition({
+                                              left:
+                                                buttonRect.left +
+                                                buttonRect.width / 2,
+                                              top: buttonRect.top - 20,
+                                            });
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            const tooltip =
+                                              document.getElementById(
+                                                `shared-profile-tooltip`,
+                                              ) as HTMLElement;
+                                            if (tooltip)
+                                              tooltip.style.opacity = "0";
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault(); // Prevent Link navigation
+                                            // Open X profile in new tab
+                                            const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                                            window.open(profileUrl, "_blank");
+                                          }}
+                                        >
+                                          <FaXTwitter
+                                            size={12}
+                                            className="text-neutral-400"
+                                          />
+                                        </button>
 
-                                    {/* Small X Profile Preview - positioned near token */}
-                                    {/* {showXPreview === idx && buttonPosition && (
+                                        {/* Small X Profile Preview - positioned near token */}
+                                        {/* {showXPreview === idx && buttonPosition && (
                                       <TokenXProfile
                                         token={token}
                                         setShowXPreview={setShowXPreview}
                                       />
                                     )} */}
-                                  </div>
-                                )}
+                                      </div>
+                                    )}
 
-                                <div className="ml-1 flex flex-row gap-1.5 font-light">
-                                  {/* Crown Icon - Dev Migration Stats */}
-                                  <div
-                                    className="relative flex items-center gap-0.5 cursor-pointer"
-                                    onMouseEnter={(e) => {
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      const tip = document.getElementById(`dev-tip-${token.mint}`);
-                                      if (tip) {
-                                        tip.style.left = `${rect.left}px`;
-                                        tip.style.top = `${rect.bottom + 6}px`;
-                                        tip.style.opacity = "1";
-                                      }
-                                    }}
-                                    onMouseLeave={() => {
-                                      const tip = document.getElementById(`dev-tip-${token.mint}`);
-                                      if (tip) tip.style.opacity = "0";
-                                    }}
-                                  >
-                                    <PiCrownSimpleLight
-                                      size={12}
-                                      style={{ color: "#dcc13c" }}
-                                    />
-                                    <span className="text-[10px] text-white">
-                                      {token.dev_tokens_migrated ?? 0}/{token.dev_tokens_created ?? 0}
-                                    </span>
-                                    {/* Dev Migration Tooltip */}
-                                    {createPortal(
+                                    <div className="ml-1 flex flex-row gap-1.5 font-light">
+                                      {/* Crown Icon - Dev Migration Stats */}
                                       <div
-                                        id={`dev-tip-${token.mint}`}
-                                        data-tooltip="dev"
-                                        className="pointer-events-none fixed z-[9999] min-w-[180px] rounded-lg opacity-0 transition-opacity duration-200 overflow-hidden"
-                                        style={{
-                                          backgroundColor: AX.surface,
-                                          border: `1px solid ${AX.border}`,
+                                        className="relative flex cursor-pointer items-center gap-0.5"
+                                        onMouseEnter={(e) => {
+                                          const rect =
+                                            e.currentTarget.getBoundingClientRect();
+                                          const tip = document.getElementById(
+                                            `dev-tip-${token.mint}`,
+                                          );
+                                          if (tip) {
+                                            tip.style.left = `${rect.left}px`;
+                                            tip.style.top = `${rect.bottom + 6}px`;
+                                            tip.style.opacity = "1";
+                                          }
+                                        }}
+                                        onMouseLeave={() => {
+                                          const tip = document.getElementById(
+                                            `dev-tip-${token.mint}`,
+                                          );
+                                          if (tip) tip.style.opacity = "0";
                                         }}
                                       >
-                                        <div className="px-3 py-2 space-y-1.5">
-                                          <div className="flex justify-between items-center">
-                                            <span className="text-sm" style={{ color: AX.muted }}>Dev Migrated</span>
-                                            <span className="text-sm font-medium" style={{ color: AX.text }}>{token.dev_tokens_migrated ?? 0}</span>
-                                          </div>
-                                          <div className="flex justify-between items-center">
-                                            <span className="text-sm" style={{ color: AX.muted }}>Dev Launched</span>
-                                            <span className="text-sm font-medium" style={{ color: AX.text }}>{token.dev_tokens_created ?? 0}</span>
-                                          </div>
-                                          <div className="flex justify-between items-center">
-                                            <span className="text-sm" style={{ color: AX.muted }}>Migrated</span>
-                                            <span className="text-sm font-medium" style={{ color: AX.text }}>
-                                              {token.dev_tokens_created && token.dev_tokens_created > 0
-                                                ? `${Math.round((token.dev_tokens_migrated ?? 0) / token.dev_tokens_created * 100)}%`
-                                                : '0%'}
+                                        <PiCrownSimpleLight
+                                          size={12}
+                                          style={{ color: "#dcc13c" }}
+                                        />
+                                        <span className="text-[10px] text-white">
+                                          {token.dev_tokens_migrated ?? 0}/
+                                          {token.dev_tokens_created ?? 0}
+                                        </span>
+                                        {/* Dev Migration Tooltip */}
+                                        {createPortal(
+                                          <div
+                                            id={`dev-tip-${token.mint}`}
+                                            data-tooltip="dev"
+                                            className="pointer-events-none fixed z-[9999] min-w-[180px] overflow-hidden rounded-lg opacity-0 transition-opacity duration-200"
+                                            style={{
+                                              backgroundColor: AX.surface,
+                                              border: `1px solid ${AX.border}`,
+                                            }}
+                                          >
+                                            <div className="space-y-1.5 px-3 py-2">
+                                              <div className="flex items-center justify-between">
+                                                <span
+                                                  className="text-sm"
+                                                  style={{ color: AX.muted }}
+                                                >
+                                                  Dev Migrated
+                                                </span>
+                                                <span
+                                                  className="text-sm font-medium"
+                                                  style={{ color: AX.text }}
+                                                >
+                                                  {token.dev_tokens_migrated ??
+                                                    0}
+                                                </span>
+                                              </div>
+                                              <div className="flex items-center justify-between">
+                                                <span
+                                                  className="text-sm"
+                                                  style={{ color: AX.muted }}
+                                                >
+                                                  Dev Launched
+                                                </span>
+                                                <span
+                                                  className="text-sm font-medium"
+                                                  style={{ color: AX.text }}
+                                                >
+                                                  {token.dev_tokens_created ??
+                                                    0}
+                                                </span>
+                                              </div>
+                                              <div className="flex items-center justify-between">
+                                                <span
+                                                  className="text-sm"
+                                                  style={{ color: AX.muted }}
+                                                >
+                                                  Migrated
+                                                </span>
+                                                <span
+                                                  className="text-sm font-medium"
+                                                  style={{ color: AX.text }}
+                                                >
+                                                  {token.dev_tokens_created &&
+                                                  token.dev_tokens_created > 0
+                                                    ? `${Math.round(((token.dev_tokens_migrated ?? 0) / token.dev_tokens_created) * 100)}%`
+                                                    : "0%"}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>,
+                                          document.body,
+                                        )}
+                                      </div>
+
+                                      {/* KOL Count - Trophy Icon */}
+                                      <div
+                                        className="relative flex items-center gap-0.5 text-violet-200"
+                                        onMouseEnter={(e) => {
+                                          const rect =
+                                            e.currentTarget.getBoundingClientRect();
+                                          const tip = document.getElementById(
+                                            `kol-tip-${token.mint}`,
+                                          );
+                                          if (tip) {
+                                            tip.style.left = `${rect.left}px`;
+                                            tip.style.top = `${rect.bottom + 6}px`;
+                                            tip.style.opacity = "1";
+                                          }
+                                        }}
+                                        onMouseLeave={() => {
+                                          const tip = document.getElementById(
+                                            `kol-tip-${token.mint}`,
+                                          );
+                                          if (tip) tip.style.opacity = "0";
+                                        }}
+                                      >
+                                        <CiTrophy size={12} />
+                                        <span className="text-[10px] text-white">
+                                          {token.kol_count ?? 0}
+                                        </span>
+                                        {/* KOL Count Tooltip */}
+                                        {createPortal(
+                                          <div
+                                            id={`kol-tip-${token.mint}`}
+                                            data-tooltip="kol"
+                                            className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                            style={{
+                                              backgroundColor: AX.surface,
+                                              border: `1px solid ${AX.border}`,
+                                            }}
+                                          >
+                                            <span
+                                              className="text-sm font-medium"
+                                              style={{ color: AX.text }}
+                                            >
+                                              KOL Count
                                             </span>
-                                          </div>
-                                        </div>
-                                      </div>,
-                                      document.body
-                                    )}
-                                  </div>
+                                            <p
+                                              className="mt-0.5 text-xs"
+                                              style={{ color: AX.muted }}
+                                            >
+                                              Key Opinion Leaders holding this
+                                              token
+                                            </p>
+                                          </div>,
+                                          document.body,
+                                        )}
+                                      </div>
 
-                                  {/* KOL Count - Trophy Icon */}
-                                  <div
-                                    className="relative flex items-center gap-0.5 text-violet-200"
-                                    onMouseEnter={(e) => {
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      const tip = document.getElementById(`kol-tip-${token.mint}`);
-                                      if (tip) {
-                                        tip.style.left = `${rect.left}px`;
-                                        tip.style.top = `${rect.bottom + 6}px`;
-                                        tip.style.opacity = "1";
-                                      }
-                                    }}
-                                    onMouseLeave={() => {
-                                      const tip = document.getElementById(`kol-tip-${token.mint}`);
-                                      if (tip) tip.style.opacity = "0";
-                                    }}
-                                  >
-                                    <CiTrophy size={12} />
-                                    <span className="text-[10px] text-white">
-                                      {token.kol_count ?? 0}
-                                    </span>
-                                    {/* KOL Count Tooltip */}
-                                    {createPortal(
+                                      {/* People Icon - Total Holders */}
                                       <div
-                                        id={`kol-tip-${token.mint}`}
-                                        data-tooltip="kol"
-                                        className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200"
-                                        style={{
-                                          backgroundColor: AX.surface,
-                                          border: `1px solid ${AX.border}`,
+                                        className="relative flex items-center gap-0.5"
+                                        onMouseEnter={(e) => {
+                                          const rect =
+                                            e.currentTarget.getBoundingClientRect();
+                                          const tip = document.getElementById(
+                                            `holder-tip-${token.mint}`,
+                                          );
+                                          if (tip) {
+                                            tip.style.left = `${rect.left}px`;
+                                            tip.style.top = `${rect.bottom + 6}px`;
+                                            tip.style.opacity = "1";
+                                          }
+                                        }}
+                                        onMouseLeave={() => {
+                                          const tip = document.getElementById(
+                                            `holder-tip-${token.mint}`,
+                                          );
+                                          if (tip) tip.style.opacity = "0";
                                         }}
                                       >
-                                        <span className="text-sm font-medium" style={{ color: AX.text }}>KOL Count</span>
-                                        <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>Key Opinion Leaders holding this token</p>
-                                      </div>,
-                                      document.body
-                                    )}
-                                  </div>
-
-                                  {/* People Icon - Total Holders */}
-                                  <div
-                                    className="relative flex items-center gap-0.5"
-                                    onMouseEnter={(e) => {
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      const tip = document.getElementById(`holder-tip-${token.mint}`);
-                                      if (tip) {
-                                        tip.style.left = `${rect.left}px`;
-                                        tip.style.top = `${rect.bottom + 6}px`;
-                                        tip.style.opacity = "1";
-                                      }
-                                    }}
-                                    onMouseLeave={() => {
-                                      const tip = document.getElementById(`holder-tip-${token.mint}`);
-                                      if (tip) tip.style.opacity = "0";
-                                    }}
-                                  >
-                                    <GoPeople
-                                      size={12}
-                                      style={{ color: "#36d8ff" }}
-                                    />
-                                    <span className="text-[10px] text-white">
-                                      {formatHolderCount(
-                                        token.holder_count ??
-                                        token.total_holders ??
-                                        token.unique_wallets_24h ??
-                                        0
-                                      )}
-                                    </span>
-                                    {/* Holder Count Tooltip */}
-                                    {createPortal(
-                                      <div
-                                        id={`holder-tip-${token.mint}`}
-                                        data-tooltip="holder"
-                                        className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200"
-                                        style={{
-                                          backgroundColor: AX.surface,
-                                          border: `1px solid ${AX.border}`,
-                                        }}
-                                      >
-                                        <span className="text-sm font-medium" style={{ color: AX.text }}>Holder Count</span>
-                                        <p className="mt-0.5 text-xs" style={{ color: AX.muted }}>Total wallets holding this token</p>
-                                      </div>,
-                                      document.body
-                                    )}
-                                  </div>
-                                  {/* Robot icon - commented out for now
+                                        <GoPeople
+                                          size={12}
+                                          style={{ color: "#36d8ff" }}
+                                        />
+                                        <span className="text-[10px] text-white">
+                                          {formatHolderCount(
+                                            token.holder_count ??
+                                              token.total_holders ??
+                                              token.unique_wallets_24h ??
+                                              0,
+                                          )}
+                                        </span>
+                                        {/* Holder Count Tooltip */}
+                                        {createPortal(
+                                          <div
+                                            id={`holder-tip-${token.mint}`}
+                                            data-tooltip="holder"
+                                            className="pointer-events-none fixed z-[9999] rounded-lg px-3 py-2 whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                            style={{
+                                              backgroundColor: AX.surface,
+                                              border: `1px solid ${AX.border}`,
+                                            }}
+                                          >
+                                            <span
+                                              className="text-sm font-medium"
+                                              style={{ color: AX.text }}
+                                            >
+                                              Holder Count
+                                            </span>
+                                            <p
+                                              className="mt-0.5 text-xs"
+                                              style={{ color: AX.muted }}
+                                            >
+                                              Total wallets holding this token
+                                            </p>
+                                          </div>,
+                                          document.body,
+                                        )}
+                                      </div>
+                                      {/* Robot icon - commented out for now
                                   <div className="flex items-center gap-1 text-violet-200">
                                     <PiRobotLight size={16} />
                                     <span className="text-sm text-white">
@@ -8649,316 +9388,380 @@ function PulseTable({
                                     </span>
                                   </div>
                                   */}
-                                </div>
+                                    </div>
 
-                                {/* Pump.fun Tooltip */}
+                                    {/* Pump.fun Tooltip */}
 
-                                {token.mint?.slice(-4) === "pump" && (
-                                  <div
-                                    className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                                    style={{
-                                      zIndex: 9999,
-                                      backgroundColor: AX.surface,
-                                      color: AX.text,
-                                      border: `1px solid ${AX.border}`,
-                                      boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-                                    }}
-                                  >
-                                    View on Pump.fun
-                                    {/* Tooltip arrow */}
-                                    <div
-                                      className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                                      style={{ borderTopColor: AX.surface }}
-                                    ></div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            {/* Twitter Handle - below icons */}
-                            <TwitterHandleDisplay token={token} />
-                          </div>
-                          {/* Right: MC, V, F, TX */}
-                          <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-0.5 text-right lg:min-w-[130px]">
-                            <div
-                              className={"justify-right flex flex-col text-xs"}
-                            >
-                              <div
-                                className="flex items-end gap-1"
-                                style={{ color: AX.muted }}
-                              >
-                                <span className="mb-[2px] text-xs">MC </span>
-                                {/* PHASE 4 (C1): Replaced SmoothNumber with static span - eliminates RAF animations */}
-                                {(() => {
-                                  const isFinalStretchColumn =
-                                    title.toLowerCase().includes("final") ||
-                                    title.toLowerCase().includes("stretch");
-                                  const lp = (
-                                    (token as any).launchpad_protocol || ""
-                                  ).toLowerCase();
-                                  const bonding =
-                                    (token as any).bonding_pct ?? 0;
-                                  const hasGreenWave =
-                                    isFinalStretchColumn &&
-                                    lp.includes("meteora") &&
-                                    bonding > 98.6;
-                                  const mcVal = getTokenMarketCap(token);
-                                  if (hasGreenWave) {
-                                    return (
-                                      <span
-                                        className="number-font text-sm font-medium"
-                                        style={{ color: "#31e3ac" }}
+                                    {token.mint?.slice(-4) === "pump" && (
+                                      <div
+                                        className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                        style={{
+                                          zIndex: 9999,
+                                          backgroundColor: AX.surface,
+                                          color: AX.text,
+                                          border: `1px solid ${AX.border}`,
+                                          boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+                                        }}
                                       >
-                                        {formatMarketCap(mcVal)}
-                                      </span>
-                                    );
+                                        View on Pump.fun
+                                        {/* Tooltip arrow */}
+                                        <div
+                                          className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                                          style={{ borderTopColor: AX.surface }}
+                                        ></div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Twitter Handle - below icons */}
+                                <TwitterHandleDisplay token={token} />
+                              </div>
+                              {/* Right: MC, V, F, TX */}
+                              <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-0.5 text-right lg:min-w-[130px]">
+                                <div
+                                  className={
+                                    "justify-right flex flex-col text-xs"
                                   }
-                                  return (
-                                    <SmartColor
-                                      token={token}
-                                      metricType="marketCap"
-                                      className="number-font text-sm font-medium"
-                                    >
-                                      ${formatMarketCap(mcVal)}
-                                    </SmartColor>
-                                  );
-                                })()}
-                              </div>
-                              <div
-                                style={{ color: AX.muted }}
-                                className="flex items-end gap-1"
-                              >
-                                <span className="mb-[1px] ml-auto text-xs">
-                                  V
-                                </span>{" "}
-                                {/* PHASE 4 (C1): Replaced SmoothNumber with static span */}
-                                <span
-                                  className="number-font text-xs font-medium"
-                                  style={{
-                                    color: "#ffffff",
-                                  }}
                                 >
-                                  {formatVolumeDisplay(calculateVolumeUsd(token, solPrice))}
-                                </span>
-                              </div>
-                            </div>
-                              <div className="flex items-center justify-end gap-2 text-xs">
-                                {/* Total Fees in SOL */}
-                                <InterstateTooltip label="Global Fees Paid">
                                   <div
-                                    className="flex cursor-default flex-row items-center gap-1"
+                                    className="flex items-end gap-1"
                                     style={{ color: AX.muted }}
                                   >
-                                    <span className="text-xs">F</span>
-                                    <img
-                                      src="/solana.png"
-                                      alt="SOL"
-                                      className="h-3 w-3"
-                                    />
+                                    <span className="mb-[2px] text-xs">
+                                      MC{" "}
+                                    </span>
+                                    {/* PHASE 4 (C1): Replaced SmoothNumber with static span - eliminates RAF animations */}
                                     {(() => {
-                                      // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
-                                      const lamports = (token as any).total_fees_lamports ?? 0;
-                                      const sol = isFinite(lamports) ? lamports / 1_000_000_000 : 0;
-
-                                      if (sol === 0) {
+                                      const isFinalStretchColumn =
+                                        title.toLowerCase().includes("final") ||
+                                        title.toLowerCase().includes("stretch");
+                                      const lp = (
+                                        (token as any).launchpad_protocol || ""
+                                      ).toLowerCase();
+                                      const bonding =
+                                        (token as any).bonding_pct ?? 0;
+                                      const hasGreenWave =
+                                        isFinalStretchColumn &&
+                                        lp.includes("meteora") &&
+                                        bonding > 98.6;
+                                      const mcVal = getTokenMarketCap(token);
+                                      if (hasGreenWave) {
                                         return (
-                                          <span className="number-font text-xs font-medium" style={{ color: "#ffffff" }}>
-                                            0
+                                          <span
+                                            className="number-font text-sm font-medium"
+                                            style={{ color: "#31e3ac" }}
+                                          >
+                                            {formatMarketCap(mcVal)}
                                           </span>
                                         );
                                       }
+                                      return (
+                                        <SmartColor
+                                          token={token}
+                                          metricType="marketCap"
+                                          className="number-font text-sm font-medium"
+                                        >
+                                          ${formatMarketCap(mcVal)}
+                                        </SmartColor>
+                                      );
+                                    })()}
+                                  </div>
+                                  <div
+                                    style={{ color: AX.muted }}
+                                    className="flex items-end gap-1"
+                                  >
+                                    <span className="mb-[1px] ml-auto text-xs">
+                                      V
+                                    </span>{" "}
+                                    {/* PHASE 4 (C1): Replaced SmoothNumber with static span */}
+                                    <span
+                                      className="number-font text-xs font-medium"
+                                      style={{
+                                        color: "#ffffff",
+                                      }}
+                                    >
+                                      {formatVolumeDisplay(
+                                        calculateVolumeUsd(token, solPrice),
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-end gap-2 text-xs">
+                                  {/* Total Fees in SOL */}
+                                  <InterstateTooltip label="Global Fees Paid">
+                                    <div
+                                      className="flex cursor-default flex-row items-center gap-1"
+                                      style={{ color: AX.muted }}
+                                    >
+                                      <span className="text-xs">F</span>
+                                      <img
+                                        src="/solana.png"
+                                        alt="SOL"
+                                        className="h-3 w-3"
+                                      />
+                                      {(() => {
+                                        // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
+                                        const lamports =
+                                          (token as any).total_fees_lamports ??
+                                          0;
+                                        const sol = isFinite(lamports)
+                                          ? lamports / 1_000_000_000
+                                          : 0;
 
-                                      if (sol >= 0.001) {
-                                        // Normal display - use SimpleNumber for calendar-style digit animation
-                                        return (
-                                          <span className="number-font text-xs font-medium" style={{ color: "#ffffff" }}>
-                                            <SimpleNumber
-                                              value={sol}
-                                              formatter={(val) => val.toFixed(3).replace(/\.?0+$/, "")}
-                                            />
-                                          </span>
-                                        );
-                                      }
+                                        if (sol === 0) {
+                                          return (
+                                            <span
+                                              className="number-font text-xs font-medium"
+                                              style={{ color: "#ffffff" }}
+                                            >
+                                              0
+                                            </span>
+                                          );
+                                        }
 
-                                      // For very small values, use subscript notation
-                                      // e.g., 0.00003 → 0.0₄3 (1 digit after subscript)
-                                      const str = sol.toFixed(10);
-                                      const match = str.match(/^0\.(0+)(\d+)/);
-                                      if (match) {
-                                        const zeroCount = match[1].length;
-                                        const significantDigit = match[2].slice(0, 1); // Only 1 digit after subscript
+                                        if (sol >= 0.001) {
+                                          // Normal display - use SimpleNumber for calendar-style digit animation
+                                          return (
+                                            <span
+                                              className="number-font text-xs font-medium"
+                                              style={{ color: "#ffffff" }}
+                                            >
+                                              <SimpleNumber
+                                                value={sol}
+                                                formatter={(val) =>
+                                                  val
+                                                    .toFixed(3)
+                                                    .replace(/\.?0+$/, "")
+                                                }
+                                              />
+                                            </span>
+                                          );
+                                        }
+
+                                        // For very small values, use subscript notation
+                                        // e.g., 0.00003 → 0.0₄3 (1 digit after subscript)
+                                        const str = sol.toFixed(10);
+                                        const match =
+                                          str.match(/^0\.(0+)(\d+)/);
+                                        if (match) {
+                                          const zeroCount = match[1].length;
+                                          const significantDigit =
+                                            match[2].slice(0, 1); // Only 1 digit after subscript
+                                          return (
+                                            <span
+                                              className="number-font text-xs font-medium"
+                                              style={{ color: "#ffffff" }}
+                                            >
+                                              0.0
+                                              <sub
+                                                style={{
+                                                  fontSize: "0.6em",
+                                                  verticalAlign: "sub",
+                                                }}
+                                              >
+                                                {zeroCount}
+                                              </sub>
+                                              <SimpleNumber
+                                                value={parseInt(
+                                                  significantDigit,
+                                                  10,
+                                                )}
+                                                formatter={(val) =>
+                                                  val.toString()
+                                                }
+                                              />
+                                            </span>
+                                          );
+                                        }
                                         return (
                                           <span
                                             className="number-font text-xs font-medium"
                                             style={{ color: "#ffffff" }}
                                           >
-                                            0.0<sub style={{ fontSize: "0.6em", verticalAlign: "sub" }}>{zeroCount}</sub>
                                             <SimpleNumber
-                                              value={parseInt(significantDigit, 10)}
-                                              formatter={(val) => val.toString()}
+                                              value={sol}
+                                              formatter={(val) =>
+                                                val
+                                                  .toFixed(3)
+                                                  .replace(/\.?0+$/, "")
+                                              }
                                             />
                                           </span>
                                         );
-                                      }
+                                      })()}
+                                    </div>
+                                  </InterstateTooltip>
+                                  <div
+                                    className="flex flex-row items-center gap-1"
+                                    style={{ color: AX.muted }}
+                                  >
+                                    {/* PHASE 4 (C2): Replaced IIFEs with module-level helpers */}
+                                    {(() => {
+                                      const { buys, sells } =
+                                        getBuySellData(token);
+                                      const total = buys + sells;
+                                      const displayTotal = Math.max(1, total);
+                                      const buyPercent = Math.min(
+                                        100,
+                                        Math.max(
+                                          0,
+                                          (buys / displayTotal) * 100,
+                                        ),
+                                      );
+                                      const sellPercent = Math.min(
+                                        100,
+                                        Math.max(
+                                          0,
+                                          (sells / displayTotal) * 100,
+                                        ),
+                                      );
                                       return (
-                                        <span className="number-font text-xs font-medium" style={{ color: "#ffffff" }}>
-                                          <SimpleNumber
-                                            value={sol}
-                                            formatter={(val) => val.toFixed(3).replace(/\.?0+$/, "")}
-                                          />
-                                        </span>
+                                        <>
+                                          <span className="text-xs">TX</span>{" "}
+                                          <span
+                                            className="number-font text-xs font-medium"
+                                            style={{ color: "#ffffff" }}
+                                          >
+                                            {Math.round(total)}
+                                          </span>
+                                          <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
+                                            <div
+                                              className="h-full"
+                                              style={{
+                                                backgroundColor: "#31e3ac",
+                                                width: `${buyPercent}%`,
+                                              }}
+                                            ></div>
+                                            <div
+                                              className="h-full"
+                                              style={{
+                                                backgroundColor: "#d11f3a",
+                                                width: `${sellPercent}%`,
+                                              }}
+                                            ></div>
+                                          </div>
+                                        </>
                                       );
                                     })()}
                                   </div>
-                                </InterstateTooltip>
-                                <div
-                                  className="flex flex-row items-center gap-1"
-                                  style={{ color: AX.muted }}
-                                >
-                                  {/* PHASE 4 (C2): Replaced IIFEs with module-level helpers */}
-                                  {(() => {
-                                    const { buys, sells } = getBuySellData(token);
-                                    const total = buys + sells;
-                                    const displayTotal = Math.max(1, total);
-                                    const buyPercent = Math.min(100, Math.max(0, (buys / displayTotal) * 100));
-                                    const sellPercent = Math.min(100, Math.max(0, (sells / displayTotal) * 100));
-                                    return (
-                                      <>
-                                        <span className="text-xs">TX</span>{" "}
-                                        <span
-                                          className="number-font text-xs font-medium"
-                                          style={{ color: "#ffffff" }}
-                                        >
-                                          {Math.round(total)}
-                                        </span>
-                                        <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
-                                          <div
-                                            className="h-full"
-                                            style={{
-                                              backgroundColor: "#31e3ac",
-                                              width: `${buyPercent}%`,
-                                            }}
-                                          ></div>
-                                          <div
-                                            className="h-full"
-                                            style={{
-                                              backgroundColor: "#d11f3a",
-                                              width: `${sellPercent}%`,
-                                            }}
-                                          ></div>
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
                                 </div>
+
+                                {/* Buy button */}
+                                <button
+                                  className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold opacity-0 transition-all duration-150 ease-out group-hover:opacity-100"
+                                  style={{
+                                    backgroundColor: "#1a1b1f",
+                                    color: "#86efac",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor =
+                                      "#86efac";
+                                    e.currentTarget.style.color = "#000000";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor =
+                                      "#1a1b1f";
+                                    e.currentTarget.style.color = "#86efac";
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault(); // Prevent Link navigation
+                                    // For migrated column, don't check bonding/snipe logic - just quick buy
+                                    const isMigratedColumn = title
+                                      .toLowerCase()
+                                      .includes("migrated");
+
+                                    if (isMigratedColumn) {
+                                      handleQuickBuy(token);
+                                    } else {
+                                      // For other columns, check for high bonding Meteora tokens
+                                      const launchpadProtocol =
+                                        (
+                                          token as any
+                                        ).launchpad_protocol?.toLowerCase() ||
+                                        "";
+                                      const isMeteora =
+                                        launchpadProtocol.includes("meteora");
+                                      const bondingPct =
+                                        (token as any).bonding_pct ?? 0;
+                                      const isHighBondingMeteora =
+                                        isMeteora && bondingPct > 98.6;
+
+                                      if (isHighBondingMeteora) {
+                                        setSelectedToken(token);
+                                        setShowSnipeModal(true);
+                                      } else {
+                                        handleQuickBuy(token);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <HiLightningBolt
+                                    className="buy-icon"
+                                    size={14}
+                                    style={{ color: "inherit" }}
+                                  />
+                                  <span className="number-font">
+                                    {thunderAmount || "0"}
+                                  </span>
+                                  <span>Buy</span>
+                                </button>
                               </div>
+                            </div>
+                          </div>
+                          {/* Bottom Row */}
 
-                            {/* Buy button */}
-                            <button
-                              className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold opacity-0 transition-all duration-150 ease-out group-hover:opacity-100"
+                          <div className="absolute bottom-2 left-24 flex hidden flex-row items-center gap-1">
+                            {/* Buyers percentage - Green */}
+                            <span
+                              className="number-font flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"
                               style={{
-                                backgroundColor: "#1a1b1f",
-                                color: "#86efac",
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "#86efac";
-                                e.currentTarget.style.color = "#000000";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = "#1a1b1f";
-                                e.currentTarget.style.color = "#86efac";
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault(); // Prevent Link navigation
-                                // For migrated column, don't check bonding/snipe logic - just quick buy
-                                const isMigratedColumn = title
-                                  .toLowerCase()
-                                  .includes("migrated");
-
-                                if (isMigratedColumn) {
-                                  handleQuickBuy(token);
-                                } else {
-                                  // For other columns, check for high bonding Meteora tokens
-                                  const launchpadProtocol =
-                                    (
-                                      token as any
-                                    ).launchpad_protocol?.toLowerCase() || "";
-                                  const isMeteora =
-                                    launchpadProtocol.includes("meteora");
-                                  const bondingPct =
-                                    (token as any).bonding_pct ?? 0;
-                                  const isHighBondingMeteora =
-                                    isMeteora && bondingPct > 98.6;
-
-                                  if (isHighBondingMeteora) {
-                                    setSelectedToken(token);
-                                    setShowSnipeModal(true);
-                                  } else {
-                                    handleQuickBuy(token);
-                                  }
-                                }
+                                color: AX.aiGreen,
+                                fontSize: "11px",
+                                fontWeight: "600",
+                                borderColor: "rgba(107, 114, 128, 0.1)",
+                                backgroundColor: "transparent",
                               }}
                             >
-                              <HiLightningBolt className="buy-icon" size={14} style={{ color: "inherit" }} />
-                              <span className="number-font">{thunderAmount || "0"}</span>
-                              <span>Buy</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                      {/* Bottom Row */}
+                              <BsPersonGear size={13} />{" "}
+                              <span className="number-font">
+                                {Math.round(
+                                  ((token.total_buyers_5m ?? 0) /
+                                    Math.max(
+                                      1,
+                                      (token.total_buyers_5m ?? 0) +
+                                        (token.total_sellers_5m ?? 0),
+                                    )) *
+                                    100,
+                                )}
+                                %
+                              </span>
+                            </span>
 
-                      <div className="absolute bottom-2 left-24 flex hidden flex-row items-center gap-1">
-                        {/* Buyers percentage - Green */}
-                        <span
-                          className="number-font flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"
-                          style={{
-                            color: AX.aiGreen,
-                            fontSize: "11px",
-                            fontWeight: "600",
-                            borderColor: "rgba(107, 114, 128, 0.1)",
-                            backgroundColor: "transparent",
-                          }}
-                        >
-                          <BsPersonGear size={13} />{" "}
-                          <span className="number-font">
-                            {Math.round(
-                              ((token.total_buyers_5m ?? 0) /
-                                Math.max(
-                                  1,
-                                  (token.total_buyers_5m ?? 0) +
-                                    (token.total_sellers_5m ?? 0),
-                                )) *
-                                100,
-                            )}
-                            %
-                          </span>
-                        </span>
+                            {/* DS indicator - Blue with time */}
+                            <span
+                              className="flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"
+                              style={{
+                                color: "#3B82F6",
+                                fontSize: "11px",
+                                fontWeight: "500",
+                                borderColor: "rgba(107, 114, 128, 0.1)",
+                                backgroundColor: "transparent",
+                              }}
+                            >
+                              <LuChefHat size={13} /> DS{" "}
+                              <span style={{ color: "#f0f5f5" }}>
+                                <TokenAge
+                                  createdAt={
+                                    (token as any).created_at ||
+                                    (token as any).launch_time
+                                  }
+                                />
+                              </span>
+                            </span>
 
-                        {/* DS indicator - Blue with time */}
-                        <span
-                          className="flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"
-                          style={{
-                            color: "#3B82F6",
-                            fontSize: "11px",
-                            fontWeight: "500",
-                            borderColor: "rgba(107, 114, 128, 0.1)",
-                            backgroundColor: "transparent",
-                          }}
-                        >
-                          <LuChefHat size={13} /> DS{" "}
-                          <span style={{ color: "#f0f5f5" }}>
-                            <TokenAge
-                              createdAt={
-                                (token as any).created_at ||
-                                (token as any).launch_time
-                              }
-                            />
-                          </span>
-                        </span>
-
-                        {/* Snipe percentage - Red */}
-                        {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                            {/* Snipe percentage - Red */}
+                            {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: '#d11f3a',
                           fontSize: '11px',
@@ -8999,8 +9802,8 @@ function PulseTable({
                     })()}
                   </span> */}
 
-                        {/* Ghost percentage (Insider Holdings) - Green */}
-                        {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                            {/* Ghost percentage (Insider Holdings) - Green */}
+                            {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -9012,8 +9815,8 @@ function PulseTable({
                     <span className="text-xs text-gray-500">-</span>
                   </span> */}
 
-                        {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
-                        {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                            {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
+                            {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -9024,162 +9827,165 @@ function PulseTable({
                     <FaDice size={13} />
                     <span className="text-xs text-gray-500">-</span>
                   </span> */}
-                      </div>
+                          </div>
 
-                      {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
-                      {(() => {
-                        const launchpadProtocol =
-                          (token as any).launchpad_protocol?.toLowerCase() ||
-                          "";
-                        const isMeteora = launchpadProtocol.includes("meteora");
-                        const bondingPct = (token as any).bonding_pct ?? 0;
-                        const isFinalStretch =
-                          title.toLowerCase().includes("final") ||
-                          title.toLowerCase().includes("stretch");
-                        const isMigratedColumn = title
-                          .toLowerCase()
-                          .includes("migrated");
-                        const isHighBondingMeteora =
-                          isFinalStretch &&
-                          !isMigratedColumn &&
-                          isMeteora &&
-                          bondingPct > 98.6;
+                          {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
+                          {(() => {
+                            const launchpadProtocol =
+                              (
+                                token as any
+                              ).launchpad_protocol?.toLowerCase() || "";
+                            const isMeteora =
+                              launchpadProtocol.includes("meteora");
+                            const bondingPct = (token as any).bonding_pct ?? 0;
+                            const isFinalStretch =
+                              title.toLowerCase().includes("final") ||
+                              title.toLowerCase().includes("stretch");
+                            const isMigratedColumn = title
+                              .toLowerCase()
+                              .includes("migrated");
+                            const isHighBondingMeteora =
+                              isFinalStretch &&
+                              !isMigratedColumn &&
+                              isMeteora &&
+                              bondingPct > 98.6;
 
-                        if (isHighBondingMeteora) {
-                          return (
-                            <div className="absolute right-2 bottom-4 z-0 flex items-center gap-0.5">
-                              {/* Red Meteora Logo (left) */}
-                              <div
-                                className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
-                                style={{
-                                  border: "0.5px solid #d11f3a",
-                                  backgroundColor: "transparent",
-                                }}
-                              >
-                                <img
-                                  src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
-                                  alt="Meteora"
-                                  className="h-full w-full object-cover"
-                                />
-                              </div>
+                            if (isHighBondingMeteora) {
+                              return (
+                                <div className="absolute right-2 bottom-4 z-0 flex items-center gap-0.5">
+                                  {/* Red Meteora Logo (left) */}
+                                  <div
+                                    className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
+                                    style={{
+                                      border: "0.5px solid #d11f3a",
+                                      backgroundColor: "transparent",
+                                    }}
+                                  >
+                                    <img
+                                      src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
+                                      alt="Meteora"
+                                      className="h-full w-full object-cover"
+                                    />
+                                  </div>
 
-                              {/* 3 Green Chevron Arrows */}
-                              {[0, 1, 2].map((i) => (
-                                <svg
-                                  key={i}
-                                  width="3"
-                                  height="4"
-                                  viewBox="0 0 3 4"
-                                  fill="none"
-                                  className="animate-pulse"
-                                  style={{
-                                    animationDelay: `${i * 0.2}s`,
-                                    animationDuration: "1s",
-                                  }}
-                                >
-                                  <path
-                                    d="M0.5 0.5L2.5 2L0.5 3.5"
-                                    stroke="#31e3ac"
-                                    strokeWidth="1"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                              ))}
+                                  {/* 3 Green Chevron Arrows */}
+                                  {[0, 1, 2].map((i) => (
+                                    <svg
+                                      key={i}
+                                      width="3"
+                                      height="4"
+                                      viewBox="0 0 3 4"
+                                      fill="none"
+                                      className="animate-pulse"
+                                      style={{
+                                        animationDelay: `${i * 0.2}s`,
+                                        animationDuration: "1s",
+                                      }}
+                                    >
+                                      <path
+                                        d="M0.5 0.5L2.5 2L0.5 3.5"
+                                        stroke="#31e3ac"
+                                        strokeWidth="1"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                    </svg>
+                                  ))}
 
-                              {/* Yellow Meteora Logo (right) */}
-                              <div
-                                className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
-                                style={{
-                                  border: "0.5px solid #fbbf24",
-                                  backgroundColor: "transparent",
-                                }}
-                              >
-                                <img
-                                  src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
-                                  alt="Meteora"
-                                  className="h-full w-full object-cover"
-                                  style={{
-                                    filter:
-                                      "sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)",
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </div>
-                    <div className="badges-scroll absolute bottom-1 left-[76px] flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto overflow-y-hidden">
-                      <BottomCardInfoHolder
-                        PassedIcon={BsPersonGear}
-                        token={token}
-                        wsField="top10_holders_pct"
-                        httpField="top10_holders_pct"
-                        iconColor={AX.aiGreen}
-                        tooltip="Top 10 Holders %"
-                      />
-                      <BottomCardInfoHolder
-                        PassedIcon={LuChefHat}
-                        token={token}
-                        wsField="dev_percent"
-                        httpField="dev_held_percentage"
-                        iconColor="#566cdc"
-                        tooltip="Dev Holding"
-                      />
-                      <BottomCardInfoHolder
-                        PassedIcon={RiGhostLine}
-                        token={token}
-                        wsField="insider_percent"
-                        httpField="insider_held_percentage"
-                        tooltip="Insider Holding"
-                        count={(token as any).insider_count ?? undefined}
-                      />
-                      <BottomCardInfoHolder
-                        PassedIcon={SnipperIcon}
-                        token={token}
-                        wsField="sniper_percent"
-                        httpField="sniper_held_percentage"
-                        green={false}
-                        tooltip="Sniper Holding"
-                        count={(token as any).sniper_count ?? undefined}
-                      />
-                      <BottomCardInfoHolder
-                        PassedIcon={GoStack}
-                        value={(() => {
-                          const val = (token as any).bundler_held_percentage;
-                          const num =
-                            typeof val === "string"
-                              ? parseFloat(val)
-                              : (val ?? 0);
-                          return isNaN(num) ? 0 : num;
-                        })().toFixed(2)}
-                        tooltip="Bundler Holdings"
-                        count={(token as any).bundler_count ?? undefined}
-                      />
-                      {/* Fish icon - commented out
+                                  {/* Yellow Meteora Logo (right) */}
+                                  <div
+                                    className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
+                                    style={{
+                                      border: "0.5px solid #fbbf24",
+                                      backgroundColor: "transparent",
+                                    }}
+                                  >
+                                    <img
+                                      src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
+                                      alt="Meteora"
+                                      className="h-full w-full object-cover"
+                                      style={{
+                                        filter:
+                                          "sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)",
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                        <div className="badges-scroll absolute bottom-1 left-[76px] flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto overflow-y-hidden">
+                          <BottomCardInfoHolder
+                            PassedIcon={BsPersonGear}
+                            token={token}
+                            wsField="top10_holders_pct"
+                            httpField="top10_holders_pct"
+                            iconColor={AX.aiGreen}
+                            tooltip="Top 10 Holders %"
+                          />
+                          <BottomCardInfoHolder
+                            PassedIcon={LuChefHat}
+                            token={token}
+                            wsField="dev_percent"
+                            httpField="dev_held_percentage"
+                            iconColor="#566cdc"
+                            tooltip="Dev Holding"
+                          />
+                          <BottomCardInfoHolder
+                            PassedIcon={RiGhostLine}
+                            token={token}
+                            wsField="insider_percent"
+                            httpField="insider_held_percentage"
+                            tooltip="Insider Holding"
+                            count={(token as any).insider_count ?? undefined}
+                          />
+                          <BottomCardInfoHolder
+                            PassedIcon={SnipperIcon}
+                            token={token}
+                            wsField="sniper_percent"
+                            httpField="sniper_held_percentage"
+                            green={false}
+                            tooltip="Sniper Holding"
+                            count={(token as any).sniper_count ?? undefined}
+                          />
+                          <BottomCardInfoHolder
+                            PassedIcon={GoStack}
+                            value={(() => {
+                              const val = (token as any)
+                                .bundler_held_percentage;
+                              const num =
+                                typeof val === "string"
+                                  ? parseFloat(val)
+                                  : (val ?? 0);
+                              return isNaN(num) ? 0 : num;
+                            })().toFixed(2)}
+                            tooltip="Bundler Holdings"
+                            count={(token as any).bundler_count ?? undefined}
+                          />
+                          {/* Fish icon - commented out
                       <BottomCardInfoHolder
                         PassedIcon={PiFishSimpleLight}
                         value={0.2}
                         tooltip="Phishing Hold"
                       />
                       */}
-                      {/* Leaf icon - commented out
+                          {/* Leaf icon - commented out
                       <BottomCardInfoHolder
                         PassedIcon={PiLeafLight}
                         value={0.2}
                         tooltip="Fresh Hold"
                       />
                       */}
-                    </div>
+                        </div>
+                      </div>
+                    </Link>
                   </div>
-                </Link>
-                </div>
                 </div>
               );
             }}
-        />
+          />
         </div>
       )}
       {/* Shared singleton tooltips (only 3 divs instead of N*3) */}
@@ -9430,7 +10236,6 @@ function PulseTable({
           </div>
         </InterstatePopout>
       )}
-
     </div>
   );
 }

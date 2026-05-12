@@ -203,6 +203,49 @@ export function buildFetchCandidates(parsed: URL): string[] {
   return candidates;
 }
 
+// Hard cap on bytes we will pull from any upstream. Without this an attacker
+// who controls a token's metadata URL (or a token whose JSON metadata points
+// at a huge file) could OOM the serverless function. 20 MB is generous for a
+// raw avatar — typical inputs are 50-500 KB; the proxy resizes anyway.
+const MAX_UPSTREAM_BYTES = 20 * 1024 * 1024;
+
+async function readBodyWithCap(response: Response): Promise<Buffer> {
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) {
+    const declared = parseInt(contentLength, 10);
+    if (Number.isFinite(declared) && declared > MAX_UPSTREAM_BYTES) {
+      throw new Error(`upstream too large: ${declared} bytes (cap ${MAX_UPSTREAM_BYTES})`);
+    }
+  }
+
+  // Stream into a byte counter so a missing/lying Content-Length still gets caught.
+  const reader = response.body?.getReader();
+  if (!reader) {
+    // Fall back to arrayBuffer when streaming isn't available, but keep a post-hoc cap.
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.length > MAX_UPSTREAM_BYTES) {
+      throw new Error(`upstream too large: ${buf.length} bytes (cap ${MAX_UPSTREAM_BYTES})`);
+    }
+    return buf;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.byteLength;
+      if (total > MAX_UPSTREAM_BYTES) {
+        try { await reader.cancel(); } catch { /* ignore */ }
+        throw new Error(`upstream too large: ${total} bytes (cap ${MAX_UPSTREAM_BYTES})`);
+      }
+      chunks.push(value);
+    }
+  }
+  return Buffer.concat(chunks, total);
+}
+
 /**
  * Fetch image from candidates in parallel. Returns { body, contentType } or throws.
  */
@@ -235,14 +278,14 @@ export async function fetchImageFromCandidates(
 
   if (!upstream) {
     if (lastNonOk) {
-      const buf = Buffer.from(await lastNonOk.resp.arrayBuffer());
+      const buf = await readBodyWithCap(lastNonOk.resp);
       const ct = lastNonOk.resp.headers.get('content-type') || 'application/octet-stream';
       return { body: buf, contentType: ct, status: lastNonOk.resp.status };
     }
     throw new Error('Failed to fetch image from all candidates');
   }
 
-  const body = Buffer.from(await upstream.arrayBuffer());
+  const body = await readBodyWithCap(upstream);
   const ct = upstream.headers.get('content-type') || 'application/octet-stream';
   return { body, contentType: ct, status: 200 };
 }
@@ -284,7 +327,7 @@ export async function resolveJsonMetadataImage(
       clearTimeout(imgTimeout);
 
       if (imgResponse.ok) {
-        const imgBody = Buffer.from(await imgResponse.arrayBuffer());
+        const imgBody = await readBodyWithCap(imgResponse);
         const imgContentType = imgResponse.headers.get('content-type')?.split(';')[0].trim().toLowerCase() || '';
         let finalType = imgContentType;
         if (!isValidImageMimeType(finalType)) {
@@ -306,13 +349,16 @@ export async function resolveJsonMetadataImage(
 export function resolveFinalContentType(headerContentType: string, body: Buffer): string {
   let contentType = headerContentType.split(';')[0].trim().toLowerCase();
 
-  if (!isValidImageMimeType(contentType)) {
-    const inferredType = inferImageMimeType(body);
-    if (inferredType) {
-      contentType = inferredType;
-    } else {
-      contentType = contentType || 'application/octet-stream';
-    }
+  // Always sniff magic bytes first. Trusting the upstream Content-Type alone
+  // lets a malicious upstream return SVG/GIF bytes under an `image/png` header,
+  // which would bypass shouldSkipResize and feed unsupported bytes into sharp.
+  // Magic bytes are the source of truth; fall back to header only when bytes
+  // give us nothing useful.
+  const inferredType = inferImageMimeType(body);
+  if (inferredType) {
+    contentType = inferredType;
+  } else if (!isValidImageMimeType(contentType)) {
+    contentType = contentType || 'application/octet-stream';
   }
 
   return contentType.split(';')[0].trim() || 'application/octet-stream';

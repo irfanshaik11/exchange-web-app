@@ -1,6 +1,6 @@
 "use client";
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/router";
@@ -13,6 +13,7 @@ import ImportExportWalletModal from "./ImportExportWalletModal";
 import {
   getTrackedWallets,
   addTrackedWallet,
+  WalletTrackerAuthError,
   type WatchWallet,
   type WalletEvent,
   type TradeEvent,
@@ -121,6 +122,11 @@ export default function WalletTrackerContent() {
       setWallets(walletList);
       // Balances are handled by WalletTrackerContext's fetchBatchBalances()
     } catch (error) {
+      if (error instanceof WalletTrackerAuthError) {
+        // Auth surface is owned by WalletTrackerContext (toast + state).
+        // Skip the local console.error to avoid noisy duplicates.
+        return;
+      }
       console.error("Failed to load wallets:", error);
     }
   };
@@ -148,10 +154,11 @@ export default function WalletTrackerContent() {
           .filter((w) => w.chain !== "monad")
           .map((w) => w.address);
 
-        isDev && console.log("[walletTracker:lastActive] fetching timestamps:", {
-          monad: monadWallets.length,
-          sol: solWallets.length,
-        });
+        isDev &&
+          console.log("[walletTracker:lastActive] fetching timestamps:", {
+            monad: monadWallets.length,
+            sol: solWallets.length,
+          });
 
         const map: Record<string, number | null> = {};
 
@@ -199,15 +206,19 @@ export default function WalletTrackerContent() {
                 const newestRaw = payload?.result?.data?.[0]?.timestamp;
                 const newest = ensureMs(newestRaw);
 
-                isDev && console.log("[walletTracker:lastActive] Monad wallet result", {
-                  address,
-                  newestRaw,
-                  newest,
-                  newestIso: newest ? new Date(newest).toISOString() : null,
-                  txCount: Array.isArray(payload?.result?.data)
-                    ? payload.result.data.length
-                    : 0,
-                });
+                isDev &&
+                  console.log(
+                    "[walletTracker:lastActive] Monad wallet result",
+                    {
+                      address,
+                      newestRaw,
+                      newest,
+                      newestIso: newest ? new Date(newest).toISOString() : null,
+                      txCount: Array.isArray(payload?.result?.data)
+                        ? payload.result.data.length
+                        : 0,
+                    },
+                  );
 
                 return { address, lastActive: newest };
               }),
@@ -294,9 +305,10 @@ export default function WalletTrackerContent() {
             chunks.push(solWallets.slice(i, i + CHUNK_SIZE));
           }
 
-          isDev && console.log(
-            `[walletTracker:lastActive] fetching ${solWallets.length} Solana wallets in ${chunks.length} chunks of ${CHUNK_SIZE}`,
-          );
+          isDev &&
+            console.log(
+              `[walletTracker:lastActive] fetching ${solWallets.length} Solana wallets in ${chunks.length} chunks of ${CHUNK_SIZE}`,
+            );
 
           // Merge Monad results (already in map) immediately so they show up
           if (!cancelled && Object.keys(map).length > 0) {
@@ -646,7 +658,7 @@ export default function WalletTrackerContent() {
         <div className="flex min-w-0 flex-1 justify-start">
           <input
             type="text"
-            placeholder="Search by address"
+            placeholder="Search by name or address"
             className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-3 py-1 text-[10px] text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none sm:px-4 sm:text-xs"
             disabled={activeTab === 1}
             value={searchTerm}

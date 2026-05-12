@@ -25,6 +25,9 @@ interface UseUnifiedPredictionMarketsOptions {
   search?: string;
   status?: 'all' | 'active' | 'closed' | 'finalized';
   refreshInterval?: number;
+  // Forwarded to usePolymarketMarkets. Default true — backend returns
+  // pre-transformed cards so the client skips a 500× parse loop.
+  polymarketSlim?: boolean;
 }
 
 interface UseUnifiedPredictionMarketsResult {
@@ -53,6 +56,7 @@ export default function useUnifiedPredictionMarkets(
     search,
     status = 'active',
     refreshInterval,
+    polymarketSlim = true,
   } = options;
 
   // Fetch from dFlow (only if source is 'all' or 'dflow')
@@ -87,6 +91,7 @@ export default function useUnifiedPredictionMarkets(
     limit,
     category,
     refreshInterval: refreshInterval || 60000,
+    slim: polymarketSlim,
   });
 
   // Combine and sort markets

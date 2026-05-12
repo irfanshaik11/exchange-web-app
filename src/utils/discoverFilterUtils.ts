@@ -417,6 +417,81 @@ export function countActiveFilters(filters: PulseFilters): number {
   return count;
 }
 
+// Fields the badge UX cares about for "user has changed something". Boolean
+// + string entries that defaultPulseFilters initialises to "" / false / [].
+// Keep in sync with the body of hasActiveFilters / countActiveFilters.
+const TRACKED_FILTER_FIELDS: ReadonlyArray<keyof PulseFilters> = [
+  'searchKeywords', 'excludeKeywords',
+  'minMarketCap', 'maxMarketCap',
+  'minVolume', 'maxVolume',
+  'minLiquidity', 'maxLiquidity',
+  'holdersMin', 'holdersMax',
+  'minAge', 'maxAge',
+  'devMigrationsMin', 'devMigrationsMax',
+  'devPairsCreatedMin', 'devPairsCreatedMax',
+  'kolCountMin', 'kolCountMax',
+  'bCurvePercentMin', 'bCurvePercentMax',
+  'txnsMin', 'txnsMax',
+  'numBuysMin', 'numBuysMax',
+  'numSellsMin', 'numSellsMax',
+  'top10HoldersPercent', 'top10HoldersPercentMin', 'top10HoldersPercentMax',
+  'devHoldingPercentMin', 'devHoldingPercentMax',
+  'snipersPercentMin', 'snipersPercentMax',
+  'insidersPercentMin', 'insidersPercentMax',
+  'bundlePercentMin', 'bundlePercentMax',
+  'proTradersMin', 'proTradersMax',
+  'globalFeesPaidMin', 'globalFeesPaidMax',
+  'twitterReusesMin', 'twitterReusesMax',
+  'hasTwitter', 'hasWebsite', 'hasTelegram', 'atLeastOneSocial',
+  'onlyPumpLive', 'onlyMayhemMode',
+];
+
+/**
+ * Returns true if `filters` differs from `baseline` on any tracked field.
+ * Used by tabs that ship non-empty default filter sets (e.g. Gainers, which
+ * defaults to min liq $10k + min holders 50 + top-10 < 50%) so the "active
+ * filter" badge only lights up when the USER has changed something — not
+ * just because the tab's baseline is non-empty.
+ */
+export function hasActiveFiltersAgainst(
+  filters: PulseFilters,
+  baseline: PulseFilters,
+): boolean {
+  // Protocol/quote-token arrays compared by content.
+  const protoChanged =
+    filters.protocols.length !== baseline.protocols.length ||
+    filters.protocols.some((p, i) => p !== baseline.protocols[i]);
+  if (protoChanged) return true;
+  const quoteChanged =
+    filters.quoteTokens.length !== baseline.quoteTokens.length ||
+    filters.quoteTokens.some((q, i) => q !== baseline.quoteTokens[i]);
+  if (quoteChanged) return true;
+  for (const key of TRACKED_FILTER_FIELDS) {
+    if (filters[key] !== baseline[key]) return true;
+  }
+  return false;
+}
+
+/** Per-bucket-aware count for the badge number. */
+export function countActiveFiltersAgainst(
+  filters: PulseFilters,
+  baseline: PulseFilters,
+): number {
+  let count = 0;
+  if (
+    filters.protocols.length !== baseline.protocols.length ||
+    filters.protocols.some((p, i) => p !== baseline.protocols[i])
+  ) count++;
+  if (
+    filters.quoteTokens.length !== baseline.quoteTokens.length ||
+    filters.quoteTokens.some((q, i) => q !== baseline.quoteTokens[i])
+  ) count++;
+  for (const key of TRACKED_FILTER_FIELDS) {
+    if (filters[key] !== baseline[key]) count++;
+  }
+  return count;
+}
+
 /** Quick check if any filter deviates from defaults. */
 export function hasActiveFilters(filters: PulseFilters): boolean {
   return (

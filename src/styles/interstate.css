@@ -1,3 +1,11 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE.CSS - Component-level styles and utilities
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OVERLAY/POPOUT BASE STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .interstate-overlay {
   position: fixed;
   top: 0;
@@ -34,4 +42,662 @@
 
 .interstate-overlay.align-top-right .interstate-content.visible {
   transform: translateY(0) scale(1);
-} 
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE BUTTON VARIANTS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md, 0.5rem);
+  cursor: pointer;
+  transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  border: none;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.interstate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Primary - Filled emerald/mint */
+.interstate-btn-primary {
+  background: linear-gradient(135deg, var(--accent-primary, #18c48c) 0%, var(--accent-primary-dim, #14a877) 100%);
+  color: #030304;
+  font-weight: 600;
+  box-shadow: 0 0 20px rgba(24, 196, 140, 0.2);
+}
+
+.interstate-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-primary-bright, #22d99a) 0%, var(--accent-primary, #18c48c) 100%);
+  box-shadow: 0 0 30px rgba(24, 196, 140, 0.35);
+  transform: translateY(-1px);
+}
+
+.interstate-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 0 15px rgba(24, 196, 140, 0.2);
+}
+
+/* Secondary - Subtle background */
+.interstate-btn-secondary {
+  background: var(--bg-elevated, #0c0e12);
+  color: var(--text-primary, #f4f4f5);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+}
+
+.interstate-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover, #1a1e28);
+  border-color: var(--border-strong, rgba(255, 255, 255, 0.12));
+}
+
+/* Ghost - Transparent */
+.interstate-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary, #a1a1aa);
+}
+
+.interstate-btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover, #1a1e28);
+  color: var(--text-primary, #f4f4f5);
+}
+
+/* Outline - Border only */
+.interstate-btn-outline {
+  background: transparent;
+  color: var(--accent-primary, #18c48c);
+  border: 1px solid var(--accent-primary, #18c48c);
+}
+
+.interstate-btn-outline:hover:not(:disabled) {
+  background: rgba(24, 196, 140, 0.1);
+  box-shadow: 0 0 20px rgba(24, 196, 140, 0.15);
+}
+
+/* Danger - Red */
+.interstate-btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  font-weight: 600;
+}
+
+.interstate-btn-danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.35);
+  transform: translateY(-1px);
+}
+
+/* Icon button - Square */
+.interstate-btn-icon {
+  padding: 0.5rem;
+  aspect-ratio: 1;
+}
+
+/* Size variants */
+.interstate-btn-sm {
+  font-size: 0.75rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.interstate-btn-lg {
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE TABLE STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.interstate-table-header {
+  background: var(--bg-elevated, #0c0e12);
+  border-bottom: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+}
+
+.interstate-table-header th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary, #71717a);
+}
+
+.interstate-table-row {
+  background: transparent;
+  transition: background-color 150ms ease;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
+}
+
+.interstate-table-row:hover {
+  background: var(--bg-hover, #1a1e28);
+}
+
+.interstate-table-row td {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text-primary, #f4f4f5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE CARD STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-card {
+  background: var(--bg-card, #141720);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-lg, 0.75rem);
+  overflow: hidden;
+  transition: all 200ms ease;
+}
+
+.interstate-card:hover {
+  border-color: var(--border-strong, rgba(255, 255, 255, 0.12));
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.5));
+}
+
+.interstate-card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.interstate-card-body {
+  padding: 1.25rem;
+}
+
+.interstate-card-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
+  background: var(--bg-surface, #10131a);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE INPUT STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  background: var(--bg-base, #08090c);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md, 0.5rem);
+  color: var(--text-primary, #f4f4f5);
+  outline: none;
+  transition: all 150ms ease;
+}
+
+.interstate-input::placeholder {
+  color: var(--text-muted, #52525b);
+}
+
+.interstate-input:hover {
+  border-color: var(--border-strong, rgba(255, 255, 255, 0.12));
+}
+
+.interstate-input:focus {
+  border-color: var(--accent-primary, #18c48c);
+  box-shadow: 0 0 0 3px rgba(24, 196, 140, 0.15);
+}
+
+/* Search input with icon */
+.interstate-search {
+  position: relative;
+}
+
+.interstate-search-icon {
+  position: absolute;
+  left: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted, #52525b);
+  pointer-events: none;
+}
+
+.interstate-search input {
+  padding-left: 2.5rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE TAB STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--bg-elevated, #0c0e12);
+  border-radius: var(--radius-lg, 0.75rem);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
+}
+
+.interstate-tab {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary, #a1a1aa);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md, 0.5rem);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.interstate-tab:hover:not(.active) {
+  color: var(--text-primary, #f4f4f5);
+  background: var(--bg-hover, #1a1e28);
+}
+
+.interstate-tab.active {
+  color: var(--accent-primary, #18c48c);
+  background: rgba(24, 196, 140, 0.1);
+}
+
+/* Underline variant */
+.interstate-tabs-underline {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.interstate-tabs-underline .interstate-tab {
+  border-radius: 0;
+  padding: 0.75rem 1.25rem;
+  position: relative;
+}
+
+.interstate-tabs-underline .interstate-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-primary, #18c48c);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.interstate-tabs-underline .interstate-tab.active::after {
+  opacity: 1;
+}
+
+.interstate-tabs-underline .interstate-tab.active {
+  background: transparent;
+  color: var(--accent-primary, #18c48c);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE DROPDOWN/SELECT STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.interstate-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  background: var(--bg-elevated, #0c0e12);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md, 0.5rem);
+  color: var(--text-primary, #f4f4f5);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.interstate-dropdown-trigger:hover {
+  background: var(--bg-hover, #1a1e28);
+  border-color: var(--border-strong, rgba(255, 255, 255, 0.12));
+}
+
+.interstate-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  min-width: 200px;
+  padding: 0.375rem;
+  background: var(--bg-card, #141720);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-lg, 0.75rem);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.6));
+  z-index: 50;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: all 150ms ease;
+}
+
+.interstate-dropdown.open .interstate-dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.interstate-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #a1a1aa);
+  border-radius: var(--radius-sm, 0.375rem);
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.interstate-dropdown-item:hover {
+  background: var(--bg-hover, #1a1e28);
+  color: var(--text-primary, #f4f4f5);
+}
+
+.interstate-dropdown-item.active {
+  color: var(--accent-primary, #18c48c);
+  background: rgba(24, 196, 140, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE TOOLTIP STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-tooltip {
+  position: relative;
+}
+
+.interstate-tooltip-content {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  background: var(--bg-card, #141720);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md, 0.5rem);
+  color: var(--text-primary, #f4f4f5);
+  white-space: nowrap;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.5));
+  opacity: 0;
+  visibility: hidden;
+  transition: all 150ms ease;
+  z-index: 50;
+}
+
+.interstate-tooltip:hover .interstate-tooltip-content {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE MODAL STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 200ms ease;
+}
+
+.interstate-modal-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.interstate-modal {
+  background: var(--bg-card, #141720);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-xl, 1rem);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.6)), 0 0 60px rgba(24, 196, 140, 0.1);
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow: hidden;
+  transform: scale(0.95) translateY(10px);
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.interstate-modal-backdrop.open .interstate-modal {
+  transform: scale(1) translateY(0);
+}
+
+.interstate-modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.interstate-modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary, #f4f4f5);
+}
+
+.interstate-modal-close {
+  padding: 0.375rem;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary, #71717a);
+  cursor: pointer;
+  border-radius: var(--radius-sm, 0.375rem);
+  transition: all 100ms ease;
+}
+
+.interstate-modal-close:hover {
+  background: var(--bg-hover, #1a1e28);
+  color: var(--text-primary, #f4f4f5);
+}
+
+.interstate-modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: calc(85vh - 140px);
+}
+
+.interstate-modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
+  background: var(--bg-surface, #10131a);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE SKELETON/LOADING STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface, #10131a) 0%,
+    var(--bg-hover, #1a1e28) 50%,
+    var(--bg-surface, #10131a) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm, 0.375rem);
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE AVATAR STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--bg-elevated, #0c0e12);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.interstate-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.interstate-avatar-sm {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.interstate-avatar-lg {
+  width: 3rem;
+  height: 3rem;
+}
+
+.interstate-avatar-xl {
+  width: 4rem;
+  height: 4rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE PRICE/VALUE STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-price {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+.interstate-price-up {
+  color: var(--color-success, #22c55e);
+}
+
+.interstate-price-down {
+  color: var(--color-danger, #ef4444);
+}
+
+.interstate-price-neutral {
+  color: var(--text-secondary, #a1a1aa);
+}
+
+/* Change pill */
+.interstate-change-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius-full, 9999px);
+  font-variant-numeric: tabular-nums;
+}
+
+.interstate-change-pill-up {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-success, #22c55e);
+}
+
+.interstate-change-pill-down {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger, #ef4444);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE PROGRESS BAR STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-elevated, #0c0e12);
+  border-radius: var(--radius-full, 9999px);
+  overflow: hidden;
+}
+
+.interstate-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary, #18c48c), var(--accent-primary-bright, #22d99a));
+  border-radius: var(--radius-full, 9999px);
+  transition: width 300ms ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERSTATE SWITCH/TOGGLE STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.interstate-switch {
+  position: relative;
+  width: 2.75rem;
+  height: 1.5rem;
+  background: var(--bg-elevated, #0c0e12);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-full, 9999px);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.interstate-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.125rem;
+  height: 1.125rem;
+  background: var(--text-secondary, #a1a1aa);
+  border-radius: var(--radius-full, 9999px);
+  transition: all 150ms ease;
+}
+
+.interstate-switch.active {
+  background: var(--accent-primary, #18c48c);
+  border-color: var(--accent-primary, #18c48c);
+}
+
+.interstate-switch.active::after {
+  left: calc(100% - 1.25rem);
+  background: var(--bg-void, #030304);
+}

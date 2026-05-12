@@ -12,7 +12,7 @@ export default function TableHeader({ sortKey, sortDirection, onSort, isTrending
   return (
     <thead>
       <tr className="bg-neutral-800/80">
-        <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => onSort('name')}>
+        <th className="px-3 py-4 text-left text-[0.9625rem] sm:text-[1.1rem] lg:text-[1.375rem] font-medium leading-tight text-white cursor-pointer" onClick={() => onSort('name')}>
           Pair Info {sortKey === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
         </th>
         <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => onSort('fully_diluted_value')}>

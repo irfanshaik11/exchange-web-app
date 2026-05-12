@@ -1,6 +1,6 @@
 const isDev = process.env.NODE_ENV !== 'production';
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import type { Wallet, TradeRow } from "~/utils/functions";
 import {
   formatSmartNumber,
@@ -11,20 +11,13 @@ import InterstatePopout from "./InterstatePopout";
 import {
   FaRegCopy,
   FaCheck,
-  FaStar,
-  FaSearch,
   FaRegChartBar,
-  FaBell,
   FaExternalLinkAlt,
   FaArrowUp,
   FaArrowDown,
-  FaRegCalendar,
 } from "react-icons/fa";
 import { FiExternalLink } from "react-icons/fi";
 import type { Token } from "~/utils/db";
-import { AiOutlineCalendar } from "react-icons/ai";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
 import { batchFetchChainTokenMetadata } from "~/utils/tokenMetadata";
 import {
   getWalletSolBalance,
@@ -36,13 +29,31 @@ import {
 import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
 import { useSolPrice } from "./SolPriceContext";
+import RealizedPnlChart, {
+  type PnlChartDataPoint,
+} from "./charts/RealizedPnlChart";
+import FastImage from "./FastImage";
+import useDevTokensByWallet from "../hooks/useDevTokensByWallet";
+import { IoIosCloseCircleOutline } from "react-icons/io";
+import { getProtocolBranding } from "~/utils/protocolBranding";
+import Image from "next/image";
+import { useImagePreloader } from "~/hooks/useImagePreloader";
+import { extractTokenImage } from "~/utils/images";
 
 interface WalletScanPanelProps {
   wallet: Wallet;
   onClose: () => void;
 }
 
-const TABS = ["Active Positions", "History", "Top 100", "Activity"];
+const TABS = ["Active Positions", "History", "Top 100", "Dev Tokens", "Activity"];
+
+const MAX_TOKEN_NAME_LENGTH = 10;
+const truncateTokenName = (name: string | null | undefined): string => {
+  if (!name) return "";
+  return name.length > MAX_TOKEN_NAME_LENGTH
+    ? `${name.slice(0, MAX_TOKEN_NAME_LENGTH)}…`
+    : name;
+};
 
 // Helper to format timestamp as relative time (like "5m", "3h", "2d")
 function formatTimeAgo(timestamp: string | number | Date): string {
@@ -90,6 +101,26 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 }) => {
   // Get latest trades from context (same as Live Trades)
   const { latestTrades } = useWalletTracker();
+
+  const {
+    tokens: devTokens,
+    isLoading: devTokensLoading,
+  } = useDevTokensByWallet(wallet?.address);
+
+  // Only re-fetch history when the count of trades for THIS wallet changes,
+  // not on every unrelated trade from other tracked wallets.
+  const walletTradeCount = useMemo(
+    () => latestTrades.filter(t => t.wallet.toLowerCase() === wallet.address.toLowerCase()).length,
+    [latestTrades, wallet.address]
+  );
+
+  // Track the previous wallet address so we can distinguish a wallet change
+  // (needs full reload + loading state) from a new-trade update (silent refresh).
+  const prevWalletAddressRef = useRef<string | null>(null);
+
+  // Track which mints have already had metadata fetched to prevent re-fetch loops.
+  const fetchedMetadataMintsRef = useRef<Set<string>>(new Set());
+
   // Get SOL price from context
   const { solPrice } = useSolPrice();
   // Use SOL price with fallback if not available
@@ -137,7 +168,16 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     closedAt: number; // Timestamp of the sell (when position was closed)
   }
   const [tokenMetadata, setTokenMetadata] = useState<
-    Map<string, { symbol?: string | null; name?: string | null }>
+    Map<
+      string,
+      {
+        symbol?: string | null;
+        name?: string | null;
+        imageUrl?: string | null;
+        protocol?: string | null;
+        launchpad?: string | null;
+      }
+    >
   >(new Map());
   const [token, setToken] = useState<Token | null>(null);
   const [tokenLoading, setTokenLoading] = useState(true);
@@ -147,15 +187,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [tokenBalanceError, setTokenBalanceError] = useState<string | null>(
     null,
   );
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [notify, setNotify] = useState(false);
   const [selectedRange, setSelectedRange] = useState("Max");
   const timeRanges = ["1d", "7d", "30d", "Max"];
   const [toast, setToast] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currency, setCurrency] = useState<"USD" | "SOL">("USD");
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Calculate closed orders from history (only completed positions)
   const closedOrders = useMemo((): ClosedOrder[] => {
@@ -354,6 +388,89 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       categoryCounts,
       progressPercentage,
     };
+  }, [closedOrders, selectedRange]);
+
+  // Build per-trade Realized PnL chart data, scoped to selectedRange
+  const pnlChartData = useMemo((): PnlChartDataPoint[] => {
+    if (!closedOrders || closedOrders.length === 0) return [];
+
+    const now = Date.now();
+    let scoped = closedOrders;
+    if (selectedRange !== "Max") {
+      const windowMs =
+        selectedRange === "1d"
+          ? 24 * 60 * 60 * 1000
+          : selectedRange === "7d"
+            ? 7 * 24 * 60 * 60 * 1000
+            : 30 * 24 * 60 * 60 * 1000;
+      const cutoff = now - windowMs;
+      scoped = closedOrders.filter((o) => o.closedAt >= cutoff);
+    }
+
+    if (scoped.length === 0) return [];
+
+    const ordered = [...scoped].sort((a, b) => a.closedAt - b.closedAt);
+
+    const formatTime = (ts: number) =>
+      new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const formatDate = (ts: number) =>
+      new Date(ts).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+    const points: PnlChartDataPoint[] = [
+      {
+        time: formatTime(ordered[0].closedAt),
+        date: formatDate(ordered[0].closedAt),
+        cumulativePnl: 0,
+        tradePnl: 0,
+        tokenSymbol: "",
+        tokenName: "",
+        index: 0,
+      },
+    ];
+
+    let cum = 0;
+    ordered.forEach((order, i) => {
+      cum += order.pnl;
+      points.push({
+        time: formatTime(order.closedAt),
+        date: formatDate(order.closedAt),
+        cumulativePnl: cum,
+        tradePnl: order.pnl,
+        tokenSymbol: order.sellTrade.symbol || order.buyTrade.symbol || "",
+        tokenName: order.sellTrade.name || order.buyTrade.name || "",
+        index: i + 1,
+      });
+    });
+
+    return points;
+  }, [closedOrders, selectedRange]);
+
+  const realizedPnlPercentage = useMemo(() => {
+    if (!closedOrders || closedOrders.length === 0) return 0;
+
+    const now = Date.now();
+    let scoped = closedOrders;
+    if (selectedRange !== "Max") {
+      const windowMs =
+        selectedRange === "1d"
+          ? 24 * 60 * 60 * 1000
+          : selectedRange === "7d"
+            ? 7 * 24 * 60 * 60 * 1000
+            : 30 * 24 * 60 * 60 * 1000;
+      const cutoff = now - windowMs;
+      scoped = closedOrders.filter((o) => o.closedAt >= cutoff);
+    }
+
+    const totalCostBasis = scoped.reduce((sum, o) => sum + o.boughtValue, 0);
+    if (totalCostBasis <= 0) return 0;
+    const totalPnl = scoped.reduce((sum, o) => sum + o.pnl, 0);
+    return (totalPnl / totalCostBasis) * 100;
   }, [closedOrders, selectedRange]);
 
   // Convert TradeEvent to TradeRow format for Activity component
@@ -637,9 +754,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     unrealizedPnl: number; // Estimated PnL from remaining (0 for now, could fetch current price)
     totalPnl: number; // Realized + Unrealized
     pnlPercentage: number; // PnL as percentage of cost basis
+    isOpen: boolean; // Whether the position still has remaining tokens above dust
   }
 
-  const aggregatedPositions = useMemo((): AggregatedPosition[] => {
+  const allAggregatedPositions = useMemo((): AggregatedPosition[] => {
     if (!history || history.length === 0) return [];
 
     // Group trades by mint (token) to calculate aggregated positions
@@ -721,7 +839,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       const totalSoldValue = position.sells.reduce((sum, s) => sum + s.revenue, 0);
 
       // Calculate remaining using FIFO matching
-      let remainingBuys = [...position.buys];
+      // Use copies that track remaining amount AND remaining cost per buy independently,
+      // so costPerUnit stays correct when a buy is partially consumed by multiple sells.
+      let remainingBuys = position.buys.map(b => ({ amount: b.amount, cost: b.cost }));
       let remainingAmount = totalBoughtAmount;
       let remainingCost = totalBoughtValue;
       let realizedCost = 0; // Cost basis of sold tokens
@@ -737,6 +857,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           const matchedCost = matchedAmount * costPerUnit;
 
           buy.amount -= matchedAmount;
+          buy.cost -= matchedCost;
           remainingSellAmount -= matchedAmount;
           remainingAmount -= matchedAmount;
           remainingCost -= matchedCost;
@@ -748,42 +869,52 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         }
       }
 
-      // Only include positions with remaining amount > 0 (active positions)
-      if (remainingAmount > 0 && remainingCost > 0) {
-        // Calculate realized PnL (from sold portion)
-        const realizedPnl = totalSoldValue - realizedCost;
-        
-        // Unrealized PnL (for now, assume 0 - could fetch current price later)
-        const unrealizedPnl = 0; // remainingValue - remainingCost (if we had current price)
-        
-        // Total PnL = realized + unrealized
-        const totalPnl = realizedPnl + unrealizedPnl;
-        
-        // PnL percentage based on cost basis
-        const costBasis = totalBoughtValue;
-        const pnlPercentage = costBasis > 0 ? (totalPnl / costBasis) * 100 : 0;
+      // Calculate realized PnL (from sold portion)
+      const realizedPnl = totalSoldValue - realizedCost;
 
-        aggregated.push({
-          mint,
-          tokenName: position.tokenName,
-          tokenSymbol: position.tokenSymbol,
-          boughtAmount: totalBoughtAmount,
-          boughtValue: totalBoughtValue,
-          soldAmount: totalSoldAmount,
-          soldValue: totalSoldValue,
-          remainingAmount,
-          remainingValue: remainingCost, // Cost basis of remaining
-          realizedPnl,
-          unrealizedPnl,
-          totalPnl,
-          pnlPercentage,
-        });
-      }
+      // Unrealized PnL (for now, assume 0 - could fetch current price later)
+      const unrealizedPnl = 0; // remainingValue - remainingCost (if we had current price)
+
+      // Total PnL = realized + unrealized
+      const totalPnl = realizedPnl + unrealizedPnl;
+
+      // PnL percentage based on cost basis
+      const costBasis = totalBoughtValue;
+      const pnlPercentage = costBasis > 0 ? (totalPnl / costBasis) * 100 : 0;
+
+      // Only include positions above dust thresholds — FIFO float subtraction
+      // can leave ~1e-14 residuals on fully-exited positions.
+      const DUST_USD = 0.01;
+      const dustAmount = totalBoughtAmount * 1e-9;
+      const isOpen = remainingAmount > dustAmount && remainingCost > DUST_USD;
+
+      aggregated.push({
+        mint,
+        tokenName: position.tokenName,
+        tokenSymbol: position.tokenSymbol,
+        boughtAmount: totalBoughtAmount,
+        boughtValue: totalBoughtValue,
+        soldAmount: totalSoldAmount,
+        soldValue: totalSoldValue,
+        remainingAmount: isOpen ? remainingAmount : 0,
+        remainingValue: isOpen ? remainingCost : 0, // Cost basis of remaining
+        realizedPnl,
+        unrealizedPnl,
+        totalPnl,
+        pnlPercentage,
+        isOpen,
+      });
     });
 
     // Sort by total PnL (highest first)
     return aggregated.sort((a, b) => b.totalPnl - a.totalPnl);
   }, [history, currentSolPrice]);
+
+  // Active positions: only open (not fully exited)
+  const aggregatedPositions = useMemo(
+    () => allAggregatedPositions.filter((p) => p.isOpen),
+    [allAggregatedPositions],
+  );
 
   // Calculate total portfolio value and unrealized PnL
   const portfolioMetrics = useMemo(() => {
@@ -819,12 +950,13 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     };
   }, [aggregatedPositions, walletBalance, currentSolPrice]);
 
-  // Calculate top 100 positions by PnL
-  const top100Positions = useMemo((): AggregatedPosition[] => {
-    // aggregatedPositions is already sorted by PnL (highest first)
-    // Just take the top 100
-    return aggregatedPositions.slice(0, 100);
-  }, [aggregatedPositions]);
+  // Top 100 positions by PnL — open positions always shown first (so Activity
+  // tab tokens are always visible), then closed positions fill remaining slots.
+  const top100Positions = useMemo(() => {
+    const open = allAggregatedPositions.filter(p => p.isOpen);
+    const closed = allAggregatedPositions.filter(p => !p.isOpen);
+    return [...open, ...closed].slice(0, 100);
+  }, [allAggregatedPositions]);
 
   // Update activity data when openPositionTransactions changes (depends on history)
   // Activity tab shows each individual transaction (buy or sell) that is part of an open position
@@ -834,22 +966,24 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       return;
     }
     
-    // If history is still loading, show loading state
+    // If history is still loading (initial wallet load), show loading state
     if (historyLoading) {
       setActivityLoading(true);
       setActivityError(null);
       return;
     }
-    
-    setActivityLoading(true);
+
+    // Only show loading spinner when there's no existing data yet (initial load).
+    // Background refreshes (new real-time trades) update silently.
+    if (openPositionTransactions.length === 0) {
+      setActivityLoading(true);
+    }
     setActivityError(null);
-    
+
     // Convert each open position transaction to TradeRow format
+    // (synchronous transform — no async delay needed)
     const updateActivity = async () => {
       try {
-        // Add a small delay to ensure loading state is visible
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
         const activityRows: TradeRow[] = openPositionTransactions.map((openTx, idx) => {
           const trade = openTx.trade;
           
@@ -896,6 +1030,18 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // Use void to explicitly mark promise as intentionally not awaited
     void updateActivity();
   }, [wallet?.address, openPositionTransactions, historyLoading]); // Removed tab dependency - update when data changes
+
+  // Preload token images from activity rows as soon as data arrives
+  const { preloadImages } = useImagePreloader();
+  useEffect(() => {
+    if (!activityData || activityData.length === 0) return;
+    const imageSources = activityData
+      .map((trade: any) => extractTokenImage(trade))
+      .filter(Boolean);
+    if (imageSources.length > 0) {
+      preloadImages(imageSources, { priority: true, timeout: 2000 });
+    }
+  }, [activityData, preloadImages]);
 
   useEffect(() => {
     if (!wallet.address) return;
@@ -947,10 +1093,19 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     if (!wallet?.address) {
       setHistory([]);
       setHistoryLoading(false);
+      prevWalletAddressRef.current = null;
       return;
     }
 
-    setHistoryLoading(true);
+    // Only show the loading spinner when the wallet itself changes.
+    // When walletTradeCount increases (new real-time trade), we silently
+    // refresh in the background so the popup doesn't flicker.
+    const isWalletChange = prevWalletAddressRef.current !== wallet.address;
+    prevWalletAddressRef.current = wallet.address;
+
+    if (isWalletChange) {
+      setHistoryLoading(true);
+    }
     setHistoryError(null);
 
     // Get real-time trades from context filtered by wallet address
@@ -958,15 +1113,25 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       (trade) => trade.wallet.toLowerCase() === wallet.address.toLowerCase(),
     );
 
+    // Compute window based on selected range; omit windowMs for Max to get all data
+    const rangeWindowMs =
+      selectedRange === "1d"
+        ? 1 * 24 * 60 * 60 * 1000
+        : selectedRange === "7d"
+          ? 7 * 24 * 60 * 60 * 1000
+          : selectedRange === "30d"
+            ? 30 * 24 * 60 * 60 * 1000
+            : undefined; // Max — no limit
+
     // Fetch historical data using the same function as Live Trades
     const fetchHistory = async () => {
       try {
         // Add a small delay to prevent race conditions
         await new Promise(resolve => setTimeout(resolve, 50));
-        
+
         const historicalTrades = await getWalletTradeHistory([wallet.address], {
-          limit: 200,
-          windowMs: 7 * 24 * 60 * 60 * 1000, // 7 days, same as Live Trades
+          limit: 500,
+          ...(rangeWindowMs !== undefined ? { windowMs: rangeWindowMs } : {}),
         });
 
         // Merge real-time and historical trades, removing duplicates by tx
@@ -1018,31 +1183,40 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     // Use void to explicitly mark promise as intentionally not awaited
     void fetchHistory();
-  }, [wallet?.address, latestTrades]); // Removed tab dependency - fetch when wallet changes
+  }, [wallet?.address, walletTradeCount, selectedRange]); // Re-fetch when wallet, trade count, or time range changes
 
-  // Fetch token metadata for all mints in closed orders and active positions
+  // Reset fetched-metadata tracking when wallet changes so new wallet's tokens are fetched fresh.
+  useEffect(() => {
+    fetchedMetadataMintsRef.current = new Set();
+  }, [wallet.address]);
+
+  // Fetch token metadata for all mints in closed orders and active positions.
+  // Uses a ref (fetchedMetadataMintsRef) to track already-fetched mints so that
+  // calling setTokenMetadata does NOT re-trigger this effect — previously
+  // including `tokenMetadata` in deps caused an infinite ~3s refresh loop.
   useEffect(() => {
     // Combine mints from both closed orders and active positions
     const allMints = new Set<string>();
-    
+
     closedOrders.forEach((order) => {
       if (order.mint) allMints.add(order.mint);
     });
-    
+
     aggregatedPositions.forEach((position) => {
       if (position.mint) allMints.add(position.mint);
     });
 
     if (allMints.size === 0) return;
 
-    // Extract unique mints that don't have symbol/name
-    const mintsToFetch = Array.from(allMints).filter((mint) => {
-      // Check if we already have metadata for this mint
-      const metadata = tokenMetadata.get(mint);
-      return !metadata?.symbol || !metadata?.name;
-    });
+    // Only fetch mints we haven't fetched yet for this wallet session
+    const mintsToFetch = Array.from(allMints).filter(
+      (mint) => !fetchedMetadataMintsRef.current.has(mint),
+    );
 
     if (mintsToFetch.length === 0) return;
+
+    // Mark as fetching immediately to prevent concurrent duplicate fetches
+    mintsToFetch.forEach((mint) => fetchedMetadataMintsRef.current.add(mint));
 
     isDev && console.log(
       "[WalletScan] Fetching metadata for",
@@ -1053,12 +1227,19 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     batchFetchChainTokenMetadata(mintsToFetch)
       .then((metadata) => {
         isDev && console.log("[WalletScan] Fetched token metadata:", metadata);
-        setTokenMetadata(metadata);
+        if (metadata.size === 0) return;
+        setTokenMetadata((prev) => {
+          const next = new Map(prev);
+          metadata.forEach((value, key) => next.set(key, value));
+          return next;
+        });
       })
       .catch((err) => {
         console.error("[WalletScan] Error fetching token metadata:", err);
+        // On error, unmark so they can be retried on next data change
+        mintsToFetch.forEach((mint) => fetchedMetadataMintsRef.current.delete(mint));
       });
-  }, [closedOrders, aggregatedPositions, tokenMetadata]);
+  }, [closedOrders, aggregatedPositions]); // tokenMetadata intentionally excluded — see comment above
 
   const handleCopy = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -1111,51 +1292,30 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               {copied && (
                 <span className="ml-1 text-xs text-emerald-400">Copied!</span>
               )}
-              <span className="mx-2 text-neutral-500">|</span>
-              {tokenBalanceLoading || tokenLoading ? (
-                <span className="animate-pulse text-neutral-500">—</span>
-              ) : tokenBalanceError ? (
-                <span className="text-red-400">Error</span>
+              {tokenBalanceLoading || tokenLoading ? null : tokenBalanceError ? (
+                <>
+                  <span className="mx-2 text-neutral-500">|</span>
+                  <span className="text-red-400">Error</span>
+                </>
               ) : tokenBalance !== null && token ? (
-                <span className="text-neutral-300">
-                  {tokenBalance} {token.symbol}
-                </span>
+                <>
+                  <span className="mx-2 text-neutral-500">|</span>
+                  <span className="text-neutral-300">
+                    {tokenBalance} {token.symbol}
+                  </span>
+                </>
               ) : (
-                <span className="text-red-400">No balance</span>
+                <>
+                  <span className="mx-2 text-neutral-500">|</span>
+                  <span className="text-red-400">No balance</span>
+                </>
               )}
             </span>
           </div>
           <div className="absolute top-1/2 right-16 flex -translate-y-1/2 items-center gap-4">
-            <FaStar
-              className={`cursor-pointer text-base transition-colors ${isFavorite ? "text-yellow-400" : "text-neutral-500 hover:text-yellow-400"}`}
-              title="Track Wallet"
-              onClick={() => {
-                setIsFavorite((fav) => !fav);
-                setToast("Wallet updated successfully");
-              }}
-            />
-            <FaBell
-              className={`cursor-pointer text-base transition-colors ${notify ? "text-blue-400" : "text-neutral-500 hover:text-blue-400"}`}
-              title="Notify"
-              onClick={() => {
-                setNotify((n) => !n);
-                setToast("Wallet updated successfully");
-              }}
-            />
             <FaExternalLinkAlt
               className="cursor-pointer text-base text-neutral-500 hover:text-blue-400"
               title="Open in Solscan"
-              onClick={() => {
-                window.open(
-                  `https://solscan.io/account/${wallet.address}`,
-                  "_blank",
-                );
-                setToast("Wallet updated successfully");
-              }}
-            />
-            <FaSearch
-              className="cursor-pointer text-base text-neutral-500 hover:text-blue-400"
-              title="Search on Solscan"
               onClick={() => {
                 window.open(
                   `https://solscan.io/account/${wallet.address}`,
@@ -1241,48 +1401,41 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 )}
               </div>
             </div>
-            {/* PNL with TradingView Chart */}
-            <div className="flex min-w-[180px] flex-1 flex-col justify-between">
-              <div className="flex w-full flex-row items-start justify-between">
-                <div className="mt-1 mb-1 w-full pl-2 text-left text-xs text-neutral-400">
-                  PNL
-                </div>
-                <div className="relative mt-1 mr-2">
-                  <button
-                    className="rounded p-1 text-neutral-400 transition-colors hover:text-blue-400"
-                    title={
-                      selectedDate
-                        ? `Selected: ${selectedDate.toLocaleDateString()}`
-                        : "Select date"
-                    }
-                    onClick={() => setShowDatePicker((v) => !v)}
-                  >
-                    <AiOutlineCalendar className="text-lg" />
-                  </button>
-                  {showDatePicker && (
-                    <div className="absolute top-8 right-0 z-50">
-                      <DatePicker
-                        selected={selectedDate}
-                        onChange={(date: Date | null) => {
-                          setSelectedDate(date);
-                          setShowDatePicker(false);
-                        }}
-                        inline
-                        showMonthDropdown
-                        showYearDropdown
-                        dropdownMode="select"
-                        calendarClassName="bg-neutral-900 text-white border border-neutral-700 rounded shadow-lg dark-datepicker"
-                      />
-                    </div>
-                  )}
-                </div>
+            {/* Realized PNL with chart */}
+            <div className="flex min-w-[260px] flex-[2] flex-col">
+              <div className="mb-1 flex items-center gap-2 text-xs text-neutral-400">
+                Realized PNL
+                <span
+                  className="text-[10px] text-neutral-500"
+                  title="Cumulative realized PnL from closed positions over the selected time range. Bars show per-trade PnL; the line shows running total."
+                >
+                  (i)
+                </span>
               </div>
-              <div className="flex flex-1 flex-col items-center justify-center">
-                <div className="mb-2 font-mono text-4xl text-neutral-300">
-                  {performanceMetrics.totalPnl >= 0 ? "+" : ""}
-                  ${formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
-                </div>
-                <div className="h-1 w-2/3 rounded-full bg-neutral-700" />
+              <div
+                className={`text-3xl font-bold ${performanceMetrics.totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}
+              >
+                {performanceMetrics.totalPnl >= 0 ? "+" : "-"}$
+                {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
+              </div>
+              <div
+                className={`text-sm font-semibold ${realizedPnlPercentage >= 0 ? "text-emerald-400/80" : "text-red-400/80"}`}
+              >
+                {realizedPnlPercentage >= 0 ? "+" : ""}
+                {realizedPnlPercentage.toFixed(2)}%
+              </div>
+              <div className="mt-2 h-[180px] w-full">
+                {historyLoading ? (
+                  <div className="flex h-full items-center justify-center text-xs text-neutral-500">
+                    Loading chart...
+                  </div>
+                ) : pnlChartData.length <= 1 ? (
+                  <div className="flex h-full items-center justify-center text-xs text-neutral-500">
+                    No closed trades in this range
+                  </div>
+                ) : (
+                  <RealizedPnlChart data={pnlChartData} />
+                )}
               </div>
             </div>
             {/* Performance */}
@@ -1373,37 +1526,19 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           {/* Tabs */}
           <div className="mt-2 flex items-center justify-between border-b border-neutral-800 px-8">
             <div className="mt-2 flex flex-row gap-10 text-sm">
-              {TABS.map((t) => (
-                <button
-                  key={t}
-                  className={`border-b-2 py-2 transition-colors duration-200 ${tab === t ? "border-blue-400 font-semibold text-blue-400" : "border-transparent text-neutral-400 hover:text-white"}`}
-                  onClick={() => setTab(t)}
-                >
-                  {t}
-                </button>
-              ))}
+              {TABS.map((t) => {
+                const label = t === "Dev Tokens" ? `Dev Tokens (${devTokens.length})` : t;
+                return (
+                  <button
+                    key={t}
+                    className={`border-b-2 py-2 transition-colors duration-200 ${tab === t ? "border-blue-400 font-semibold text-blue-400" : "border-transparent text-neutral-400 hover:text-white"}`}
+                    onClick={() => setTab(t)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
-            {tab !== "Activity" && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search..."
-                  className="rounded-full border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-white focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                  style={{ minWidth: 120 }}
-                />
-                <button
-                  className={`border border-neutral-700 px-3 py-1 text-xs font-semibold ${currency === "USD" ? "bg-blue-500 text-white" : "bg-neutral-800 text-neutral-300"} rounded-full transition-colors`}
-                  onClick={() =>
-                    setCurrency(currency === "USD" ? "SOL" : "USD")
-                  }
-                  style={{ minWidth: 56 }}
-                >
-                  {currency === "USD" ? "USD" : "SOL"}
-                </button>
-              </div>
-            )}
           </div>
           {/* Tab Content Area */}
           <div className="flex-1 overflow-auto px-8">
@@ -1451,21 +1586,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
                       {closedOrders
-                        .filter((order) => {
-                          if (!searchTerm) return true;
-                          const term = searchTerm.toLowerCase();
-                          const metadata = tokenMetadata.get(order.mint);
-                          return (
-                            order.buyTrade.symbol?.toLowerCase().includes(term) ||
-                            order.buyTrade.name?.toLowerCase().includes(term) ||
-                            order.sellTrade.symbol?.toLowerCase().includes(term) ||
-                            order.sellTrade.name?.toLowerCase().includes(term) ||
-                            metadata?.symbol?.toLowerCase().includes(term) ||
-                            metadata?.name?.toLowerCase().includes(term) ||
-                            order.mint?.toLowerCase().includes(term) ||
-                            order.sellTrade.tx?.toLowerCase().includes(term)
-                          );
-                        })
                         .map((order, idx) => {
                           // Format time - when the position was closed (sell time)
                           const timeAgo = formatTimeAgo(order.closedAt);
@@ -1491,23 +1611,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             order.mint?.slice(0, 8) + "..." ||
                             "Unknown";
 
-                          // Format bought/sold amounts
-                          const boughtDisplay = currency === "USD"
-                            ? `$${formatSmartNumber(order.boughtValue)}`
-                            : (
-                                <span className="flex items-center justify-end">
-                                  <img 
-                                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png" 
-                                    alt="SOL" 
-                                    className="w-5 h-5 inline-block"
-                                  />
-                                  {formatSmartNumber(order.boughtAmount)}
-                                </span>
-                              );
-
-                          const soldDisplay = currency === "USD"
-                            ? `$${formatSmartNumber(order.soldValue)}`
-                            : formatSmartNumber(order.soldAmount);
+                          const boughtDisplay = `$${formatSmartNumber(order.boughtValue)}`;
+                          const soldDisplay = `$${formatSmartNumber(order.soldValue)}`;
 
                           // Format PnL
                           const pnlDisplay = `${order.pnl >= 0 ? "+" : ""}$${formatSmartNumber(Math.abs(order.pnl))}`;
@@ -1524,29 +1629,102 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <div className="flex flex-col">
-                                  <span
-                                    className="font-semibold text-white"
-                                    title={order.mint || undefined}
-                                  >
-                                    {displayName || displaySymbol}
-                                  </span>
-                                  {displayName &&
-                                    displaySymbol &&
-                                    displayName !== displaySymbol && (
-                                      <span className="text-[10px] text-neutral-500">
-                                        {displaySymbol}
-                                      </span>
-                                    )}
-                                  {!displayName &&
-                                    !displaySymbol &&
-                                    order.mint && (
-                                      <span className="font-mono text-[10px] text-neutral-500">
-                                        {order.mint.slice(0, 4)}...
-                                        {order.mint.slice(-4)}
-                                      </span>
-                                    )}
-                                </div>
+                                {(() => {
+                                  const protocolSource =
+                                    metadata?.protocol ||
+                                    metadata?.launchpad ||
+                                    (order.mint?.toLowerCase().endsWith("pump")
+                                      ? "pumpfun"
+                                      : "");
+                                  const branding = getProtocolBranding(
+                                    protocolSource || "",
+                                  );
+                                  const protocolColor = branding.color;
+                                  const tokenIcon = branding.iconUrl;
+                                  const isFullCircleImage = branding.isFullCircle;
+                                  const shortAddress = order.mint
+                                    ? `${order.mint.slice(0, 4)}...${order.mint.slice(-4)}`
+                                    : "";
+                                  return (
+                                    <div className="flex items-center gap-3">
+                                      <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
+                                        <div
+                                          className="relative rounded-lg transition-all duration-300 ease-out"
+                                          style={{
+                                            border: protocolSource
+                                              ? `1px solid ${protocolColor}`
+                                              : "1px solid rgba(128, 128, 128, 0.3)",
+                                            padding: "2px",
+                                          }}
+                                        >
+                                          <div
+                                            className="relative rounded-lg"
+                                            style={{
+                                              border: "1px solid rgba(192, 192, 192, 0.5)",
+                                              padding: "2px",
+                                            }}
+                                          >
+                                            <div className="relative h-10 w-10 overflow-hidden rounded-lg">
+                                              <FastImage
+                                                src={metadata?.imageUrl || ""}
+                                                alt={
+                                                  displayName ||
+                                                  displaySymbol ||
+                                                  "Token"
+                                                }
+                                                symbol={displaySymbol || undefined}
+                                                name={displayName || undefined}
+                                                width={40}
+                                                height={40}
+                                                className="h-full w-full object-cover"
+                                                showBubble={false}
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {protocolSource && tokenIcon && (
+                                          <div
+                                            className="absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full bg-white"
+                                            style={{
+                                              width: 18,
+                                              height: 18,
+                                              border: `2px solid ${protocolColor}`,
+                                              boxShadow: `0 0 4px ${protocolColor}60`,
+                                            }}
+                                          >
+                                            <Image
+                                              src={tokenIcon}
+                                              alt={`${protocolSource} logo`}
+                                              width={14}
+                                              height={14}
+                                              className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex min-w-0 flex-col">
+                                        <span
+                                          className="truncate text-sm font-medium text-neutral-100"
+                                          title={order.mint || undefined}
+                                        >
+                                          {truncateTokenName(
+                                            displayName ||
+                                              displaySymbol ||
+                                              shortAddress,
+                                          )}
+                                        </span>
+                                        {shortAddress && (
+                                          <span
+                                            className="truncate font-mono text-xs text-neutral-400"
+                                            title={order.mint || undefined}
+                                          >
+                                            {shortAddress}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="px-4 py-3 text-right text-neutral-300">
                                 {boughtDisplay}
@@ -1630,15 +1808,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
                       {aggregatedPositions
-                        .filter((position) => {
-                          if (!searchTerm) return true;
-                          const term = searchTerm.toLowerCase();
-                          return (
-                            position.tokenSymbol?.toLowerCase().includes(term) ||
-                            position.tokenName?.toLowerCase().includes(term) ||
-                            position.mint?.toLowerCase().includes(term)
-                          );
-                        })
                         .map((position, idx) => {
                           const metadata = tokenMetadata.get(position.mint);
                           const displayName =
@@ -1721,22 +1890,23 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             <tr
                               key={position.mint || idx}
                               className="transition-colors hover:bg-neutral-800"
-                              onClick={() => {
-                                // Navigate to token page using mint (faster WebSocket connection)
-                                const trade = history.find(t => t.mint === position.mint);
-                                const addr = position.mint || trade?.pair_address;
-                                if (addr) {
-                                  window.open(`/trade/${addr}`, '_blank');
-                                }
-                              }}
                             >
-                              <td className="px-4 py-3">
+                              <td
+                                className="cursor-pointer px-4 py-3"
+                                onClick={() => {
+                                  const trade = history.find(t => t.mint === position.mint);
+                                  const addr = position.mint || trade?.pair_address;
+                                  if (addr) {
+                                    window.open(`/trade/${addr}`, '_blank');
+                                  }
+                                }}
+                              >
                                 <div className="flex flex-col">
                                   <span
-                                    className="font-semibold text-white"
+                                    className="font-semibold text-white hover:text-blue-400"
                                     title={position.mint || undefined}
                                   >
-                                    {displayName || displaySymbol}
+                                    {truncateTokenName(displayName || displaySymbol)}
                                   </span>
                                   {displayName &&
                                     displaySymbol &&
@@ -1792,9 +1962,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead className="sticky top-0 border-b border-neutral-800 bg-black">
                       <tr className="text-xs text-neutral-400 uppercase">
                         <th className="px-4 py-3 text-left font-semibold">
-                          Rank
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold">
                           Token
                         </th>
                         <th className="px-4 py-3 text-right font-semibold">
@@ -1804,27 +1971,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                           Sold
                         </th>
                         <th className="px-4 py-3 text-right font-semibold">
-                          Remaining
+                          PNL ↑
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
-                          PnL
-                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">$</th>
+                        <th className="px-4 py-3 text-right font-semibold"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
                       {top100Positions
-                        .filter((position) => {
-                          if (!searchTerm) return true;
-                          const term = searchTerm.toLowerCase();
-                          const metadata = tokenMetadata.get(position.mint);
-                          return (
-                            position.tokenSymbol?.toLowerCase().includes(term) ||
-                            position.tokenName?.toLowerCase().includes(term) ||
-                            metadata?.symbol?.toLowerCase().includes(term) ||
-                            metadata?.name?.toLowerCase().includes(term) ||
-                            position.mint?.toLowerCase().includes(term)
-                          );
-                        })
                         .map((position, idx) => {
                           const metadata = tokenMetadata.get(position.mint);
                           const displayName =
@@ -1840,126 +1994,109 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             metadata?.name ||
                             position.mint?.slice(0, 8) + "..." ||
                             "Unknown";
-
-                          // Format bought
-                          const boughtDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-emerald-400 font-semibold">
-                                ${formatSmartNumber(position.boughtValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.boughtAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format sold
-                          const soldDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-red-400 font-semibold">
-                                ${formatSmartNumber(position.soldValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.soldAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format remaining
-                          const remainingDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span className="text-white font-semibold">
-                                ${formatSmartNumber(position.remainingValue)}
-                              </span>
-                              <span className="text-xs text-neutral-500">
-                                {formatSmartNumber(position.remainingAmount)} {displaySymbol}
-                              </span>
-                            </div>
-                          );
-
-                          // Format PnL
-                          const pnlDisplay = (
-                            <div className="flex flex-col items-end">
-                              <span
-                                className={`font-semibold ${
-                                  position.totalPnl >= 0
-                                    ? "text-emerald-400"
-                                    : "text-red-400"
-                                }`}
-                              >
-                                {position.totalPnl >= 0 ? "+" : ""}
-                                ${formatSmartNumber(Math.abs(position.totalPnl))}
-                              </span>
-                              <span
-                                className={`text-xs ${
-                                  position.pnlPercentage >= 0
-                                    ? "text-emerald-400/70"
-                                    : "text-red-400/70"
-                                }`}
-                              >
-                                {position.pnlPercentage >= 0 ? "+" : ""}
-                                {position.pnlPercentage.toFixed(2)}%
-                              </span>
-                            </div>
-                          );
-
-                          // Calculate rank (1-indexed)
-                          const rank = idx + 1;
+                          const imageUrl = metadata?.imageUrl || "";
 
                           return (
                             <tr
                               key={position.mint || idx}
-                              className="transition-colors hover:bg-neutral-800 cursor-pointer"
-                              onClick={() => {
-                                // Navigate to token page using mint (faster WebSocket connection)
-                                const trade = history.find(t => t.mint === position.mint);
-                                const addr = position.mint || trade?.pair_address;
-                                if (addr) {
-                                  window.open(`/trade/${addr}`, '_blank');
-                                }
-                              }}
+                              className="transition-colors hover:bg-neutral-800/60"
                             >
-                              <td className="px-4 py-3 text-neutral-400">
-                                <div className="font-mono text-sm">
-                                  #{rank}
+                              <td
+                                className="cursor-pointer px-4 py-2"
+                                onClick={() => {
+                                  const trade = history.find(t => t.mint === position.mint);
+                                  const addr = position.mint || trade?.pair_address;
+                                  if (addr) {
+                                    window.open(`/trade/${addr}`, '_blank');
+                                  }
+                                }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
+                                    <FastImage
+                                      src={imageUrl}
+                                      alt={displayName || displaySymbol || "Token"}
+                                      symbol={displaySymbol || undefined}
+                                      name={displayName || undefined}
+                                      width={32}
+                                      height={32}
+                                      className="h-full w-full object-cover"
+                                      showBubble={false}
+                                    />
+                                  </div>
+                                  <div className="flex min-w-0 flex-col">
+                                    <span
+                                      className="truncate text-sm font-semibold text-white hover:text-blue-400"
+                                      title={position.mint || undefined}
+                                    >
+                                      {truncateTokenName(displayName || displaySymbol)}
+                                    </span>
+                                    <span className="truncate text-[11px] text-neutral-500">
+                                      {displaySymbol}
+                                    </span>
+                                  </div>
                                 </div>
                               </td>
-                              <td className="px-4 py-3">
-                                <div className="flex flex-col">
-                                  <span
-                                    className="font-semibold text-white"
-                                    title={position.mint || undefined}
-                                  >
-                                    {displayName || displaySymbol}
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold text-neutral-100">
+                                    ${formatSmartNumber(position.boughtValue)}
                                   </span>
-                                  {displayName &&
-                                    displaySymbol &&
-                                    displayName !== displaySymbol && (
-                                      <span className="text-[10px] text-neutral-500">
-                                        {displaySymbol}
-                                      </span>
-                                    )}
-                                  {!displayName &&
-                                    !displaySymbol &&
-                                    position.mint && (
-                                      <span className="font-mono text-[10px] text-neutral-500">
-                                        {position.mint.slice(0, 4)}...
-                                        {position.mint.slice(-4)}
-                                      </span>
-                                    )}
+                                  <span className="text-xs text-neutral-500">
+                                    {formatSmartNumber(position.boughtAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {boughtDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold text-neutral-100">
+                                    ${formatSmartNumber(position.soldValue)}
+                                  </span>
+                                  <span className="text-xs text-neutral-500">
+                                    {formatSmartNumber(position.soldAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {soldDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <span
+                                  className={`font-semibold ${
+                                    position.pnlPercentage >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                  }`}
+                                >
+                                  {position.pnlPercentage >= 0 ? "+" : ""}
+                                  {position.pnlPercentage.toFixed(1)}%
+                                </span>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {remainingDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <span
+                                  className={`font-semibold ${
+                                    position.totalPnl >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                  }`}
+                                >
+                                  {position.totalPnl >= 0 ? "+" : ""}$
+                                  {formatSmartNumber(Math.abs(position.totalPnl))}
+                                </span>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                {pnlDisplay}
+                              <td className="px-4 py-2 text-right">
+                                <button
+                                  className="text-neutral-400 hover:text-white transition-colors"
+                                  onClick={() => {
+                                    const trade = history.find(t => t.mint === position.mint);
+                                    const addr = position.mint || trade?.pair_address;
+                                    if (addr) {
+                                      window.open(`/trade/${addr}`, '_blank');
+                                    }
+                                  }}
+                                  title="Open trade"
+                                >
+                                  <FiExternalLink size={14} />
+                                </button>
                               </td>
                             </tr>
                           );
@@ -1991,8 +2128,115 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                       trades={activityData}
                       loading={false}
                       tokenMetadataCache={{}}
+                      maxTokenNameLength={10}
                     />
                   </div>
+                )}
+              </div>
+            )}
+            {tab === "Dev Tokens" && (
+              <div className="h-full w-full">
+                {devTokensLoading ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="animate-pulse text-neutral-400">
+                      Loading dev tokens...
+                    </div>
+                  </div>
+                ) : devTokens.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="text-neutral-500">
+                      No tokens launched by this wallet
+                    </div>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 border-b border-neutral-800 bg-black text-xs text-neutral-400">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold">
+                          Token
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold">
+                          Migrated
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Market Cap
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Liquidity
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800">
+                      {devTokens.map((dt) => {
+                        const isMigrated = !!dt.token.migrated_pool_address;
+                        const ageSec = Math.max(
+                          0,
+                          Math.floor(Date.now() / 1000 - dt.token.createdAt),
+                        );
+                        const age =
+                          ageSec >= 86400
+                            ? `${Math.floor(ageSec / 86400)}d`
+                            : ageSec >= 3600
+                              ? `${Math.floor(ageSec / 3600)}h`
+                              : ageSec >= 60
+                                ? `${Math.floor(ageSec / 60)}m`
+                                : `${ageSec}s`;
+                        const formatUsdShort = (raw: string) => {
+                          const n = parseFloat(raw);
+                          if (!Number.isFinite(n)) return "$0";
+                          if (n >= 1_000_000)
+                            return `$${(n / 1_000_000).toFixed(1)}M`;
+                          if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+                          return `$${n.toFixed(0)}`;
+                        };
+                        return (
+                          <tr
+                            key={dt.token.address}
+                            className="cursor-pointer transition-colors hover:bg-neutral-800"
+                            onClick={() =>
+                              window.open(
+                                `/trade/${dt.token.address}`,
+                                "_blank",
+                              )
+                            }
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col">
+                                <span
+                                  className="font-semibold text-white"
+                                  title={dt.token.address}
+                                >
+                                  {truncateTokenName(
+                                    dt.token.symbol ||
+                                      dt.token.name ||
+                                      `${dt.token.address.slice(0, 4)}...${dt.token.address.slice(-4)}`,
+                                  )}
+                                </span>
+                                <span className="text-xs text-neutral-500">
+                                  {age} ago
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {isMigrated ? (
+                                <span className="text-emerald-400">✓</span>
+                              ) : (
+                                <span className="text-rose-400">
+                                  <IoIosCloseCircleOutline size={16} />
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right text-neutral-300">
+                              {formatUsdShort(dt.marketCap)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-neutral-300">
+                              {formatUsdShort(dt.liquidity)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
             )}

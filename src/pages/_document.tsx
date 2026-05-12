@@ -4,12 +4,34 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
+        {/* Preconnect for token-image origins we hit directly from the client.
+             Warms TLS so the first image fetch on Pulse / New Pairs / Trending
+             skips DNS + handshake (~150-300 ms savings on cold tabs). Browsers
+             cap useful preconnects at ~6 — keep this list to the highest-hit
+             origins only. crossOrigin only on origins that actually serve CORS
+             headers (cdn.interstate.so) — for IPFS/Arweave gateways without
+             CORS, the anonymous-credential socket would be discarded. Other
+             origins go through /api/img on the server side, so dns-prefetch
+             alone is enough on the client. */}
+        <link
+          rel="preconnect"
+          href="https://cdn.interstate.so"
+          crossOrigin="anonymous"
+        />
+        <link rel="dns-prefetch" href="https://cdn.interstate.so" />
+        <link rel="dns-prefetch" href="https://arweave.net" />
+        <link rel="dns-prefetch" href="https://gateway.irys.xyz" />
+        <link rel="dns-prefetch" href="https://pump.mypinata.cloud" />
+        <link rel="dns-prefetch" href="https://cloudflare-ipfs.com" />
+        <link rel="dns-prefetch" href="https://ipfs.io" />
+        <link rel="dns-prefetch" href="https://dweb.link" />
         {/* Chunk load error recovery — production only.
              In dev mode, Turbopack handles its own HMR error recovery.
              SPA navigation errors are handled by _app.tsx routeChangeError instead. */}
-        {process.env.NODE_ENV === 'production' && <script
-          dangerouslySetInnerHTML={{
-            __html: `
+        {process.env.NODE_ENV === "production" && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
 (function(){
   var KEY='__chunk_retry',MAX=3,DELAYS=[500,2000,5000],handled=false,recovering=false,count=0;
   var STALE_MS=30000;
@@ -132,8 +154,9 @@ export default function Document() {
   },true);
 })();
             `,
-          }}
-        />}
+            }}
+          />
+        )}
       </Head>
       <body>
         <Main />
