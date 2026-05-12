@@ -172,10 +172,13 @@ function NotificationToastWithMuteButton({
   toastId,
   customContent,
   onMute,
+  borderColor,
 }: {
   toastId: string;
   customContent: React.ReactNode;
   onMute: (toastId: string) => Promise<void>;
+  /** When set, paints the outer toast border (used for buy/sell tint). */
+  borderColor?: string;
 }) {
   const [isMuting, setIsMuting] = useState(false);
   const handleClick = async (e: React.MouseEvent) => {
@@ -191,7 +194,8 @@ function NotificationToastWithMuteButton({
   return (
     <div
       onClick={() => toast.remove(toastId)}
-      className="flex max-w-[380px] min-w-[320px] cursor-pointer items-center gap-2 rounded-xl border border-white/[0.06] bg-[#1a1b1f] px-4 py-2 shadow-lg"
+      className="flex max-w-[380px] min-w-[320px] cursor-pointer items-center gap-2 rounded-xl border bg-[#1a1b1f] px-4 py-2 shadow-lg"
+      style={{ borderColor: borderColor ?? "rgba(255,255,255,0.06)" }}
     >
       {customContent}
       <button
@@ -261,6 +265,11 @@ export function WalletTrackerProvider({
   );
   const TOKEN_METADATA_MAX = 500;
   const SHOWN_TOAST_TXS_MAX = 500;
+  /** Max trade-event toasts visible at once. Mirrors the GMGN / Axiom
+   *  pattern: bounded FIFO queue — when a new toast pushes the count
+   *  over the cap, the oldest is dismissed so the stack stays compact
+   *  instead of covering the screen. */
+  const MAX_VISIBLE_TRADE_TOASTS = 7;
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
     () =>
@@ -288,6 +297,7 @@ export function WalletTrackerProvider({
   const hydrationRef = useRef(false);
   const initialHistoryFetchedRef = useRef(false);
   const shownToastTxsRef = useRef<Set<string>>(new Set());
+  const activeTradeToastIdsRef = useRef<string[]>([]);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -330,6 +340,10 @@ export function WalletTrackerProvider({
       watchedWalletsRef.current = [];
       subscribedWalletsRef.current = [];
       initialHistoryFetchedRef.current = false;
+      // Clear any in-flight trade toasts so logout doesn't leave a
+      // half-stack visible on the login screen.
+      for (const id of activeTradeToastIdsRef.current) toast.dismiss(id);
+      activeTradeToastIdsRef.current = [];
       // Clear notifications from localStorage on logout
       if (typeof window !== "undefined") {
         try {
@@ -789,10 +803,6 @@ export function WalletTrackerProvider({
         const customContent = (
           <div
             className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-0.5"
-            style={{
-              borderLeft: `3px solid ${sideColor}`,
-              paddingLeft: "10px",
-            }}
             onClick={() => {
               router.push(tradeUrl);
             }}
@@ -900,16 +910,31 @@ export function WalletTrackerProvider({
           );
         };
 
-        toast.custom(
+        const TRADE_TOAST_DURATION_MS = 5000;
+        const newToastId = toast.custom(
           (t) => (
             <NotificationToastWithMuteButton
               toastId={t.id}
               customContent={customContent}
               onMute={performMuteToast}
+              borderColor={sideColor}
             />
           ),
-          { duration: 5000 },
+          { duration: TRADE_TOAST_DURATION_MS },
         );
+        // Bounded FIFO queue: drop the oldest visible trade toasts when
+        // the cap is exceeded so a busy feed never carpets the screen.
+        activeTradeToastIdsRef.current.push(newToastId);
+        while (activeTradeToastIdsRef.current.length > MAX_VISIBLE_TRADE_TOASTS) {
+          const oldest = activeTradeToastIdsRef.current.shift();
+          if (oldest) toast.dismiss(oldest);
+        }
+        // Remove the id from the active list once the toast self-expires
+        // so future pushes only count toasts that are still on screen.
+        setTimeout(() => {
+          const idx = activeTradeToastIdsRef.current.indexOf(newToastId);
+          if (idx !== -1) activeTradeToastIdsRef.current.splice(idx, 1);
+        }, TRADE_TOAST_DURATION_MS);
       }
     };
 
