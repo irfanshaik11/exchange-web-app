@@ -386,18 +386,21 @@ export default function WalletTrackerContent() {
     try {
       const { removeTrackedWallet } = await import("~/utils/walletTracking");
       if (address === "all") {
-        for (const wallet of watchedWallets) {
-          try {
-            await removeTrackedWallet(
+        await Promise.all(
+          watchedWallets.map((wallet) =>
+            removeTrackedWallet(
               wallet.address,
               user.id,
               undefined,
               user.bearerToken,
-            );
-          } catch (error) {
-            console.error(`Failed to remove wallet ${wallet.address}:`, error);
-          }
-        }
+            ).catch((error) =>
+              console.error(
+                `Failed to remove wallet ${wallet.address}:`,
+                error,
+              ),
+            ),
+          ),
+        );
       } else {
         await removeTrackedWallet(
           address,
