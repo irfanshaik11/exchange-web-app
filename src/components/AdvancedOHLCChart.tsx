@@ -644,7 +644,24 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       // multiplier. Use Date.now() for uniqueness.
       const trySetSymbol = (attempts: number): void => {
         const widget = widgetRef.current;
-        const chart = widget?.activeChart?.();
+        if (!widget) {
+          if (attempts > 0) {
+            setTimeout(() => trySetSymbol(attempts - 1), 100);
+          }
+          return;
+        }
+        // TradingView's `activeChart()` itself throws "Cannot read properties
+        // of undefined (reading 'activeChart')" when called before the chart
+        // is fully initialized — the optional chain protects against the
+        // method being undefined, but NOT against an internal throw inside
+        // the (defined) method body. Wrap in try/catch and treat the throw
+        // the same as "chart not ready yet" → retry.
+        let chart: any = null;
+        try {
+          chart = widget.activeChart?.();
+        } catch {
+          // swallow — handled by the retry path below
+        }
         if (chart?.setSymbol && chart?.symbol && chart?.resolution) {
           try {
             const rawSymbol = chart.symbol() || initialTokenId || "";
@@ -668,12 +685,16 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           return;
         }
         if (attempts > 0) {
-          // Widget not ready yet — retry on next frame. Caps at 20 frames
-          // (~330ms) so we never loop indefinitely if the widget never appears.
-          requestAnimationFrame(() => trySetSymbol(attempts - 1));
+          // 50 × 100ms = 5s budget. Covers slow chart bootstrap on first
+          // page load when the supply state change races ahead of widget
+          // initialization. Previous 20-frame (~330ms) budget could expire
+          // before TradingView finished mounting on cold loads, leaving
+          // the supply transition un-applied → bars stuck at sentinel
+          // multiplier → user sees near-zero MC on historical bars.
+          setTimeout(() => trySetSymbol(attempts - 1), 100);
         }
       };
-      trySetSymbol(20);
+      trySetSymbol(50);
     }
     // Suppress unused-var lint for prev — kept for debugging
     void prev;
