@@ -27,6 +27,11 @@ import { getMyLimitOrders } from "../../utils/api";
 import { creatorAddressCache } from "../../utils/preloadTradeChart";
 import { useKeepOrderFresh } from "../../hooks/usePrefetchOrder";
 import useTokenSupply from "../../hooks/useTokenSupply";
+// BANDAID: REST-driven holders count (token-service /v1/token/{mint}/holders).
+// Replaces WS holderSummary.total_holders for the TradeHeader people-icon, the
+// TradeActionPanel "Holders" tile, and the TradeTabs "Holders" tab badge until
+// the WS path is restored.
+import useHoldersRest from "../../hooks/useHoldersRest";
 // Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
 import AdvancedOHLCChart, { type AdvancedOHLCChartHandle } from "../../components/AdvancedOHLCChart";
 import { usePendingTradeMarkers } from "../../hooks/usePendingTradeMarkers";
@@ -716,13 +721,27 @@ export default function TradePage() {
     }
   }, [holderSummary?.dev_wallet, creatorAddress]);
 
-  // Set holdersCount from WebSocket snapshot (same source as TradeHeader/TradeActionPanel)
+  // BANDAID: WS-driven holdersCount disabled while we route through REST.
+  // To restore: delete the useHoldersRest call below + uncomment this block.
+  /*
   useEffect(() => {
     const wsHolders = holderSummary?.total_holders;
     if (wsHolders != null && wsHolders > 0) {
       setHoldersCount(wsHolders);
     }
   }, [holderSummary?.total_holders]);
+  */
+
+  // NEW (bandaid): REST-driven holders count + holder rows. limit=100 so
+  // HoldersTable can also consume `restHoldersData.holders` (top-N sliced
+  // server-side; client slices further if needed).
+  const restHoldersData = useHoldersRest(resolvedTokenMint, { limit: 100 });
+  const restHoldersCount = restHoldersData.totalHolders;
+  useEffect(() => {
+    if (restHoldersCount != null && restHoldersCount > 0) {
+      setHoldersCount(restHoldersCount);
+    }
+  }, [restHoldersCount]);
 
   // Get current pair address for caching
   const currentPairAddress = React.useMemo(() => {
@@ -1003,14 +1022,33 @@ export default function TradePage() {
   // Prevents one-frame flicker of previous token's MC when switching via watchlist ticker.
   const validChartMetrics = chartMetrics.forTokenId === idString ? chartMetrics : {};
 
-  // Coalesced live market cap for TradeActionPanel (same priority as chart header)
+  // Coalesced live market cap for the trade-page header + TradeActionPanel.
+  //
+  // Priority FLIPPED (was chart-first, now WS-first). Reason: the token-service
+  // OHLCV WebSocket only broadcasts live `candle` messages to clients whose
+  // subscribed `timeframe` matches the indexer's published interval (which is
+  // always "1s"; see redis-publisher.ts:75 in indexers — "higher timeframes
+  // via TimescaleDB aggregates"). So `validChartMetrics.lastMarketCapUsd`
+  // reflects the last candle CLOSE of the currently-displayed TF, which is:
+  //   - up-to-the-second on 1s (because 1s subscribers DO get live updates)
+  //   - frozen at the snapshot moment on 30m / 1h / 4h / 1d / 1w (because the
+  //     broadcaster's TF-equality filter blocks 1s updates from reaching them)
+  // Result: switching from 1s to 30m makes the header MC jump to a stale value.
+  //
+  // wsTokenInfo.market_cap_usd is updated by the SEPARATE token-info WebSocket
+  // (useSolanaTokenWebSocket → token_combined_websocket.go) on every trade
+  // event, regardless of which OHLCV TF the user is viewing. So it's the
+  // TF-independent "live price × supply" the header should reflect.
+  //
+  // The chart-derived value remains as a fallback for when WS hasn't connected
+  // yet or the wsTokenInfo payload doesn't include market_cap_usd.
   const liveMarketCapForPanel = React.useMemo(() => {
-    const chart = validChartMetrics.lastMarketCapUsd;
-    if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
     const ws = wsTokenInfo?.market_cap_usd;
     if (typeof ws === "number" && Number.isFinite(ws) && ws > 0) return ws;
+    const chart = validChartMetrics.lastMarketCapUsd;
+    if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
     return null;
-  }, [validChartMetrics.lastMarketCapUsd, wsTokenInfo?.market_cap_usd]);
+  }, [wsTokenInfo?.market_cap_usd, validChartMetrics.lastMarketCapUsd]);
 
   // Live browser tab title: "TOKEN ↑ $264K" with direction arrow
   const prevMcapRef = useRef<number | null>(null);
@@ -1316,6 +1354,8 @@ export default function TradePage() {
                   wsTokenInfo={wsTokenInfo}
                   wsVolume={wsVolume}
                   holderSummary={holderSummary}
+                  /* BANDAID: REST-driven holder count for the people icon. */
+                  restHoldersCount={restHoldersCount}
                   livePriceUsd={validChartMetrics.lastPriceUsd}
                   liveMarketCapUsd={validChartMetrics.lastMarketCapUsd}
                   onToggleRightPanel={() => setIsRightPanelVisible(!isRightPanelVisible)}
@@ -1531,6 +1571,8 @@ export default function TradePage() {
                   circulatingSupply={circulatingSupply}
                   firstBuyers={wsFirstBuyers}
                   firstBuyersSummary={wsFirstBuyersSummary}
+                  /* BANDAID: REST-driven Holders stat tile. */
+                  restHoldersCount={restHoldersCount}
                 />
               </div>
 
@@ -1610,6 +1652,8 @@ export default function TradePage() {
                 circulatingSupply={circulatingSupply}
                 firstBuyers={wsFirstBuyers}
                 firstBuyersSummary={wsFirstBuyersSummary}
+                /* BANDAID: REST-driven Holders stat tile (mobile). */
+                restHoldersCount={restHoldersCount}
               />
             </div>
           </div>
