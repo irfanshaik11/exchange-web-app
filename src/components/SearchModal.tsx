@@ -1651,7 +1651,34 @@ const SearchModalContent = React.memo(function SearchModalContent({
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
         } else if (address) {
-          const url = `/trade/${address}`;
+          // Build query params the same way Monad does above. Without
+          // these, optimisticToken on the trade page has no
+          // launchpad_protocol hint, so useTokenSupply can't fire the
+          // 1B fast-fallback at the right time and the chart briefly
+          // renders with multiplier=1B (wrong pricescale extent that
+          // doesn't auto-shrink even after real supply lands). The
+          // PulseTable navigation path passes these; SearchModal Solana
+          // was the only entry point missing them.
+          const queryParams = new URLSearchParams();
+          if (token.name) queryParams.set("_name", token.name);
+          if (token.symbol) queryParams.set("_symbol", token.symbol);
+          if (token.fully_diluted_value)
+            queryParams.set("_mcap", token.fully_diluted_value.toString());
+          if (token.uri || token.logo)
+            queryParams.set("_image", token.uri || token.logo || "");
+          queryParams.set("_mint", address);
+          if ((token as any).launchpad_protocol)
+            queryParams.set(
+              "_launchpad_protocol",
+              (token as any).launchpad_protocol,
+            );
+          if (token.created_at)
+            queryParams.set("_created_at", token.created_at);
+          if ((token as any).price_usd)
+            queryParams.set("_price", String((token as any).price_usd));
+          if (token.total_liquidity_usd)
+            queryParams.set("_liquidity", String(token.total_liquidity_usd));
+          const url = `/trade/${address}?${queryParams.toString()}`;
           isDev && console.log("Navigating to:", url);
           // router.push preserves in-memory caches (OHLC, WS prefetch).
           // [id].tsx useEffect([id]) resets state when address changes.
@@ -1686,7 +1713,30 @@ const SearchModalContent = React.memo(function SearchModalContent({
           const url = `/trade/monad/${address}?${queryParams.toString()}`;
           await router.push(url);
         } else if (address) {
-          const url = `/trade/${address}`;
+          // Same query-param build as the success path above; without
+          // these, optimisticToken on the trade page is missing
+          // launchpad_protocol and the chart's pricescale locks at the
+          // 1B-fallback extent during the supply-resolution race.
+          const queryParams = new URLSearchParams();
+          if (token.name) queryParams.set("_name", token.name);
+          if (token.symbol) queryParams.set("_symbol", token.symbol);
+          if (token.fully_diluted_value)
+            queryParams.set("_mcap", token.fully_diluted_value.toString());
+          if (token.uri || token.logo)
+            queryParams.set("_image", token.uri || token.logo || "");
+          queryParams.set("_mint", address);
+          if ((token as any).launchpad_protocol)
+            queryParams.set(
+              "_launchpad_protocol",
+              (token as any).launchpad_protocol,
+            );
+          if (token.created_at)
+            queryParams.set("_created_at", token.created_at);
+          if ((token as any).price_usd)
+            queryParams.set("_price", String((token as any).price_usd));
+          if (token.total_liquidity_usd)
+            queryParams.set("_liquidity", String(token.total_liquidity_usd));
+          const url = `/trade/${address}?${queryParams.toString()}`;
           isDev && console.log("Navigating to:", url);
           router.push(url);
         }
@@ -2934,6 +2984,7 @@ const TokenListItem = React.memo(
                 marketCapUsd: token.fully_diluted_value,
                 image: token.uri || token.logo || "",
                 createdAt: token.created_at,
+                launchpadProtocol: (token as any).launchpad_protocol,
               },
               { router: searchRouter, tradeUrl: resultTradeUrl },
             );

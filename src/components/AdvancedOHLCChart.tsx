@@ -673,6 +673,38 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             chart.setSymbol(newSymbol, currentResolution, () => {
               // After re-resolve completes, sync price lines at new scale
               requestPriceLineSync(50);
+              // CRITICAL: force pricescale auto-rescale so the Y-axis
+              // range adapts to the new multiplier's bar values.
+              //
+              // Without this, TradingView's price-scale auto-zoom keeps
+              // the extent from the previous multiplier. Example user
+              // bug: SearchModal entry on Goblin (pump.fun, 710M supply)
+              //   t=0    bars not yet rendered
+              //   t=500  fast-fallback fires → multiplier=1B → bars
+              //          rendered with MC ≈ $0.016 × 1B = $16M each
+              //   t=500  pricescale auto-zooms to fit $11M-$16M range
+              //   t=700  /v1/supply returns 710M → setCirculatingSupply
+              //   t=701  trySetSymbol fires → bars re-rendered with
+              //          multiplier=710M → MC ≈ $11.5M each
+              //   t=701  pricescale STAYS at $11M-$16M range (stale)
+              //   Result: Y-axis shows $16M upper bound, ~$4M of empty
+              //   space above the now-correct $11.5M bars.
+              //
+              // setAutoScale(true) tells TradingView to recompute the
+              // Y-axis bounds based on the currently-visible bars,
+              // which after re-resolve are the corrected ones.
+              try {
+                const ps =
+                  typeof chart.priceScale === "function"
+                    ? chart.priceScale()
+                    : null;
+                if (ps && typeof ps.setAutoScale === "function") {
+                  ps.setAutoScale(true);
+                }
+              } catch {
+                // Some TV versions / chart states don't expose priceScale;
+                // safe to skip — bars are still correctly rendered.
+              }
             });
           } catch {
             // Fall back to plain resetData if setSymbol throws — at least
