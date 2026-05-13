@@ -677,13 +677,40 @@ const Positions: React.FC<PositionsProps> = ({
           // Token already sold or transferred - remove from UI and refresh
           message = 'Token already sold or transferred.';
           setPositions((prev) => prev.filter((p) => getPositionKey(p) !== tokenKey));
-          // Immediately refresh to get accurate data
-          refreshPositions();
+          // Refresh: chain-derived mode (SOL primary with skipFetch=true) owns
+          // its data via useWalletPortfolio's WS + REST refetch, driven off of
+          // TRADE_COMPLETED_EVENT in portfolio.tsx. Calling refreshPositions()
+          // here would fetch the LEGACY user-aggregate from memecoin-backend
+          // and push it back via onPositionsChange, wiping cross-platform
+          // (Axiom/GMGN/etc.) positions that the chain endpoint correctly has.
+          // For chain-derived mode, broadcast the trade-completed event so
+          // portfolio.tsx's existing handler triggers wp.refetch() instead.
+          if (skipFetch) {
+            broadcastTradeCompleted({
+              tokenAddress: position.tokenAddress,
+              tradeType: 'sell',
+              chain: isMonad ? 'monad' : 'sol',
+              sellPercentage: percent,
+            });
+          } else {
+            refreshPositions();
+          }
         } else if (errorCode === 'NO_LIQUIDITY' || errorMessage?.includes('no liquidity across all')) {
           // Dead token — no liquidity anywhere. Backend already cleaned up DB position.
           message = 'No liquidity available. Position removed.';
           setPositions((prev) => prev.filter((p) => getPositionKey(p) !== tokenKey));
-          refreshPositions();
+          // Same chain-derived gate as NO_HOLDINGS above — avoid wiping chain
+          // state via the legacy user-aggregate fetch.
+          if (skipFetch) {
+            broadcastTradeCompleted({
+              tokenAddress: position.tokenAddress,
+              tradeType: 'sell',
+              chain: isMonad ? 'monad' : 'sol',
+              sellPercentage: percent,
+            });
+          } else {
+            refreshPositions();
+          }
         } else if (isMonad) {
           message = formatMonadError(errorMessage);
         } else {
