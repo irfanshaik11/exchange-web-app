@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import type { Wallet, TradeRow } from "~/utils/functions";
 import {
   formatSmartNumber,
+  fetchWalletBalance,
   scanWallet,
   transformWalletScanToTradeRows,
 } from "~/utils/functions";
@@ -533,68 +534,72 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     };
   };
 
+  // Fetch balance independently (fast: ~100-200ms)
   useEffect(() => {
     if (!wallet?.address) return;
 
     setLoading(true);
-    setScanLoading(true);
-    setError(null);
-    setScanError(null);
 
-    // Add a small delay to prevent race conditions on initial load
-    const loadData = async () => {
+    const loadBalance = async () => {
       try {
-        // Small delay to ensure component is fully mounted
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        // Call scan-wallet backend API (for balance and initial scan)
-        const data = await scanWallet(wallet.address, 100);
-        
-        // Set wallet balance from scan
+        const data = await fetchWalletBalance(wallet.address);
         if (data?.balance) {
           setWalletBalance(data.balance);
           setBalance(data.balance.sol);
         }
-
-        // Transform and set scan data (keep for backward compatibility)
-        if (data?.tokenActivity) {
-          const tradeRows = transformWalletScanToTradeRows(data);
-          setScanData(tradeRows);
-        } else {
-          setScanData([]);
-        }
-        setScanError(null); // Clear any previous errors
       } catch (err) {
-        // Silently handle errors - don't show runtime errors
-        console.warn("Error scanning wallet (handled gracefully):", err);
-        // Extract error message safely
-        const errorMessage = err instanceof Error 
-          ? err.message 
-          : typeof err === 'string' 
-            ? err 
-            : "Failed to scan wallet";
-        setScanError(errorMessage);
-        setScanData([]);
-
-        // Fallback to old method if scan fails
+        console.warn("Error fetching wallet balance (handled gracefully):", err);
+        // Fallback to old method
         try {
           const balance = await getWalletSolBalance(wallet.address);
           if (balance !== null) {
             setBalance(balance);
           }
         } catch (balanceErr) {
-          // Silently handle balance fetch errors too
           console.warn("Failed to get wallet balance (handled gracefully):", balanceErr);
           setBalance(null);
         }
       } finally {
         setLoading(false);
+      }
+    };
+
+    void loadBalance();
+  }, [wallet.address]);
+
+  // Fetch scan activity separately (slow: transaction parsing + metadata)
+  useEffect(() => {
+    if (!wallet?.address) return;
+
+    setScanLoading(true);
+    setScanError(null);
+
+    const loadScan = async () => {
+      try {
+        const data = await scanWallet(wallet.address, 100);
+
+        if (data?.tokenActivity) {
+          const tradeRows = transformWalletScanToTradeRows(data);
+          setScanData(tradeRows);
+        } else {
+          setScanData([]);
+        }
+        setScanError(null);
+      } catch (err) {
+        console.warn("Error scanning wallet (handled gracefully):", err);
+        const errorMessage = err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : "Failed to scan wallet";
+        setScanError(errorMessage);
+        setScanData([]);
+      } finally {
         setScanLoading(false);
       }
     };
 
-    // Use void to explicitly mark promise as intentionally not awaited
-    void loadData();
+    void loadScan();
   }, [wallet.address]);
 
   // Calculate transactions that are part of open positions (both buys and sells)
@@ -1379,7 +1384,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             <div className="min-w-[180px] flex-1">
               <div className="mb-1 text-xs text-neutral-400">Total Value</div>
               <div className="text-3xl font-bold text-white">
-                {historyLoading || scanLoading || loading ? (
+                {historyLoading || loading ? (
                   <span className="animate-pulse text-neutral-500">—</span>
                 ) : (
                   `$${formatSmartNumber(portfolioMetrics.totalValue)}`
@@ -1399,7 +1404,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 Available Balance
               </div>
               <div className="text-lg font-semibold text-white">
-                {scanLoading || loading ? (
+                {loading ? (
                   <span className="animate-pulse text-neutral-500">
                     Loading...
                   </span>

@@ -299,6 +299,37 @@ export interface WalletScanResponse {
   }>;
 }
 
+export interface WalletBalanceResponse {
+  wallet: string;
+  updatedAt: string;
+  balance: {
+    sol: number;
+    usd: number;
+    usdFormatted: string | null;
+  };
+}
+
+export async function fetchWalletBalance(
+  walletAddress: string,
+): Promise<WalletBalanceResponse> {
+  if (!walletAddress) throw new Error("walletAddress is required");
+  if (!env.NEXT_PUBLIC_BACKEND_URL) {
+    throw new Error("NEXT_PUBLIC_BACKEND_URL is not configured");
+  }
+
+  const params = new URLSearchParams({ walletAddress });
+
+  const res = await fetch(
+    `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/wallet_balance?${params.toString()}`,
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch wallet balance: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
 export async function scanWallet(
   walletAddress: string,
   limit?: number,
