@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useUser } from "./UserContext";
 import AddTwitterHandleModal from "./AddTwitterHandleModal";
 import TwitterAccountRow from "./TwitterAccountRow";
@@ -10,8 +10,10 @@ import {
   getTrackedTwitterAccounts,
   getTwitterFeed,
   getUserTweets,
+  createTwitterTrackerWebSocket,
   type TwitterAccount,
   type Tweet,
+  type TwitterTrackerWebSocket,
 } from "~/utils/twitterTracking";
 
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
@@ -42,6 +44,7 @@ export default function TwitterTrackerContent() {
   const loadTwitterFeed = async () => {
     if (twitterAccounts.length === 0) {
       setTwitterFeed([]);
+      setLoadingTwitterFeed(false);
       return;
     }
 
@@ -57,6 +60,7 @@ export default function TwitterTrackerContent() {
         // Load combined feed from all accounts
         const combinedFeed = await getTwitterFeed(
           twitterAccounts.map((acc) => acc.username),
+          user?.bearerToken ?? "",
           20,
         );
         feed = combinedFeed;
@@ -80,11 +84,121 @@ export default function TwitterTrackerContent() {
     loadTwitterAccounts();
   }, [user?.id]);
 
+  // Auto-retry while any tracked row is still un-enriched. TwitterAPI.io
+  // occasionally 429s; the backend then returns the bare DB row for that
+  // handle and kicks off a background re-prime. We poll every 4s for at
+  // most ~28s so the user doesn't have to manually refresh.
+  //
+  // The attempt counter has to live in a ref because every loadTwitterAccounts
+  // call sets a fresh `twitterAccounts` array reference, which would otherwise
+  // re-run this effect and reset a local counter on every tick — making the
+  // "cap" fictional. The signature ref restarts the counter only when the
+  // *set* of incomplete handles actually changes (e.g., user added a new one),
+  // so a stuck handle is dropped after the cap instead of polling forever.
+  const retryAttemptsRef = useRef(0);
+  const lastIncompleteSignatureRef = useRef<string>("");
+
   useEffect(() => {
-    if (twitterTab === 1 && twitterAccounts.length > 0) {
-      loadTwitterFeed();
+    if (!user || twitterAccounts.length === 0) return;
+
+    const incompleteSignature = twitterAccounts
+      .filter(
+        (a) =>
+          !Boolean(a.profileImageUrl) || typeof a.followers !== "number",
+      )
+      .map((a) => a.username.toLowerCase())
+      .sort()
+      .join(",");
+
+    if (!incompleteSignature) {
+      // All enriched — clean slate for whatever comes next.
+      retryAttemptsRef.current = 0;
+      lastIncompleteSignatureRef.current = "";
+      return;
     }
+
+    if (incompleteSignature !== lastIncompleteSignatureRef.current) {
+      // Different set than the last cycle (account added/removed/just-enriched)
+      // — restart the budget.
+      retryAttemptsRef.current = 0;
+      lastIncompleteSignatureRef.current = incompleteSignature;
+    }
+
+    // 3 × 10s = 30s budget. Wider per-tick gap (and fewer attempts) so a
+    // missing handle doesn't pile up TwitterAPI.io credit-spending calls
+    // when the backend's stale-while-revalidate fallback is already going
+    // to fill in the gap on the next refresh anyway.
+    if (retryAttemptsRef.current >= 3) return;
+
+    const id = setInterval(() => {
+      retryAttemptsRef.current++;
+      loadTwitterAccounts();
+      if (retryAttemptsRef.current >= 3) clearInterval(id);
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [user, twitterAccounts]);
+
+  useEffect(() => {
+    if (twitterTab !== 1) return;
+    if (twitterAccounts.length === 0) {
+      setTwitterFeed([]);
+      return;
+    }
+    loadTwitterFeed();
   }, [twitterTab, twitterAccounts, selectedTwitterUser]);
+
+  // Real-time tweet subscription. One WS connection, re-subscribed whenever
+  // the tracked-accounts set changes.
+  //
+  // The WS handler MUST stay pure (no reference to component state) — the
+  // creator block only runs on the first effect pass because `wsRef.current`
+  // is non-null after that, so any closure created here would capture stale
+  // state forever. The "showing tweets from @x" filter therefore runs at
+  // render time via the `visibleFeed` memo below.
+  const wsRef = useRef<TwitterTrackerWebSocket | null>(null);
+  const subscribedHandlesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) return;
+
+    if (!wsRef.current) {
+      wsRef.current = createTwitterTrackerWebSocket((tweet) => {
+        setTwitterFeed((prev) => {
+          if (prev.some((p) => p.id === tweet.id)) return prev;
+          return [tweet, ...prev].slice(0, 50);
+        });
+      });
+    }
+
+    const currentHandles = new Set(
+      twitterAccounts.map((a) => a.username.toLowerCase()),
+    );
+    const prevHandles = subscribedHandlesRef.current;
+
+    const toAdd = [...currentHandles].filter((h) => !prevHandles.has(h));
+    const toRemove = [...prevHandles].filter((h) => !currentHandles.has(h));
+    if (toAdd.length > 0) wsRef.current.subscribe(toAdd);
+    if (toRemove.length > 0) wsRef.current.unsubscribe(toRemove);
+    subscribedHandlesRef.current = currentHandles;
+  }, [user, twitterAccounts]);
+
+  // Render-time filter: applies the currently-selected handle to the live
+  // feed without coupling it to the WS handler closure.
+  const visibleFeed = useMemo(() => {
+    if (!selectedTwitterUser) return twitterFeed;
+    const target = selectedTwitterUser.toLowerCase();
+    return twitterFeed.filter(
+      (t) => (t.authorUsername || "").toLowerCase() === target,
+    );
+  }, [twitterFeed, selectedTwitterUser]);
+
+  useEffect(() => {
+    return () => {
+      wsRef.current?.close();
+      wsRef.current = null;
+      subscribedHandlesRef.current = new Set();
+    };
+  }, []);
 
   const handleAddTwitterAccount = async (username: string) => {
     try {
@@ -237,7 +351,7 @@ export default function TwitterTrackerContent() {
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-400 border-t-transparent" />
                 <span className="mt-4 text-neutral-400">Loading feed...</span>
               </div>
-            ) : twitterFeed.length === 0 ? (
+            ) : visibleFeed.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center py-8 text-center">
                 <span className="text-neutral-400">No tweets found</span>
               </div>
@@ -256,7 +370,7 @@ export default function TwitterTrackerContent() {
                     </button>
                   </div>
                 )}
-                {twitterFeed.map((tweet) => (
+                {visibleFeed.map((tweet) => (
                   <div
                     key={tweet.id}
                     className="rounded-lg border border-neutral-800/50 bg-neutral-900/40 p-4 shadow-lg transition-all duration-300 hover:border-neutral-700/60 hover:bg-neutral-900/60 hover:shadow-xl"

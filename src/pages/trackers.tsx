@@ -344,7 +344,7 @@ export default function TrackersPage() {
     "wallets",
   );
   const [socialPanelTab, setSocialPanelTab] = useState<"twitter" | "telegram">(
-    "telegram",
+    "twitter",
   );
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<
@@ -707,6 +707,56 @@ export default function TrackersPage() {
     loadTwitterAccounts();
   }, [user?.id]);
 
+  // Auto-retry while any tracked row is still un-enriched. TwitterAPI.io
+  // occasionally 429s; the backend then returns the bare DB row for that
+  // handle and kicks off a background re-prime. We poll every 4s for at
+  // most ~28s so the user doesn't have to manually refresh.
+  //
+  // The attempt counter lives in a ref because every loadTwitterAccounts
+  // call sets a fresh `twitterAccounts` array reference, which would otherwise
+  // re-run this effect and reset a local counter on every tick — making the
+  // "cap" fictional. The signature ref restarts the counter only when the
+  // *set* of incomplete handles actually changes (e.g., user added a new
+  // one), so a stuck handle is dropped after the cap instead of polling forever.
+  const twitterRetryAttemptsRef = useRef(0);
+  const twitterIncompleteSignatureRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!user?.id || twitterAccounts.length === 0) return;
+
+    const incompleteSignature = twitterAccounts
+      .filter(
+        (a) =>
+          !Boolean(a.profileImageUrl) || typeof a.followers !== "number",
+      )
+      .map((a) => a.username.toLowerCase())
+      .sort()
+      .join(",");
+
+    if (!incompleteSignature) {
+      twitterRetryAttemptsRef.current = 0;
+      twitterIncompleteSignatureRef.current = "";
+      return;
+    }
+
+    if (incompleteSignature !== twitterIncompleteSignatureRef.current) {
+      twitterRetryAttemptsRef.current = 0;
+      twitterIncompleteSignatureRef.current = incompleteSignature;
+    }
+
+    // 3 × 10s = 30s budget. Fewer attempts + wider gap so a missing handle
+    // doesn't pile up TwitterAPI.io credit-spending calls — the backend's
+    // stale-while-revalidate fallback fills in the gap on next refresh.
+    if (twitterRetryAttemptsRef.current >= 3) return;
+
+    const id = setInterval(() => {
+      twitterRetryAttemptsRef.current++;
+      loadTwitterAccounts();
+      if (twitterRetryAttemptsRef.current >= 3) clearInterval(id);
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [user?.id, twitterAccounts]);
+
   // Load Telegram channels on mount
   useEffect(() => {
     if (user?.bearerToken) loadTelegramChannels();
@@ -725,11 +775,16 @@ export default function TrackersPage() {
     }
   }, [telegramTab, user?.bearerToken, telegramChannels.length]);
 
-  // Load Twitter feed when tab, accounts, or selected user changes
+  // Load Twitter feed when tab, accounts, or selected user changes.
+  // We also reset the feed to [] when there are no accounts so removed handles
+  // don't keep showing on the X Feed tab.
   useEffect(() => {
-    if (twitterTab === 1 && twitterAccounts.length > 0) {
-      loadTwitterFeed();
+    if (twitterTab !== 1) return;
+    if (twitterAccounts.length === 0) {
+      setTwitterFeed([]);
+      return;
     }
+    loadTwitterFeed();
   }, [twitterTab, twitterAccounts, selectedTwitterUser]);
 
   // Load approved handles for Recommended Wallets tab
@@ -1638,6 +1693,13 @@ export default function TrackersPage() {
   };
 
   const loadTwitterFeed = async () => {
+    // No accounts → no feed. Keeps stale tweets from showing after the user
+    // removes the last tracked handle.
+    if (twitterAccounts.length === 0) {
+      setTwitterFeed([]);
+      setLoadingTwitterFeed(false);
+      return;
+    }
     setLoadingTwitterFeed(true);
     try {
       let tweets: Tweet[] = [];
@@ -1648,7 +1710,7 @@ export default function TrackersPage() {
       } else {
         // Load tweets from all tracked accounts
         const usernames = twitterAccounts.map((acc) => acc.username);
-        tweets = await getTwitterFeed(usernames, 20);
+        tweets = await getTwitterFeed(usernames, user?.bearerToken ?? "", 20);
       }
 
       setTwitterFeed(tweets);
@@ -2448,7 +2510,7 @@ export default function TrackersPage() {
                         {/* Top-level tabs: X Tracker / TG Tracker */}
                         <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pt-3.5 pb-2.5 sm:pt-4 sm:pb-3">
                           <div className="flex items-center gap-4 sm:gap-5">
-                            {/* <button
+                            <button
                             type="button"
                             onClick={() => setSocialPanelTab("twitter")}
                             className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
@@ -2458,7 +2520,7 @@ export default function TrackersPage() {
                             }`}
                           >
                             X Tracker
-                          </button> */}
+                          </button>
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("telegram")}
