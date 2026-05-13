@@ -207,14 +207,24 @@ export async function getApprovedTwitterHandles(): Promise<string[]> {
 
 export async function getTrackedTwitterAccountsDb(
   authToken: string,
+  options: { fresh?: boolean } = {},
 ): Promise<TwitterAccountDb[]> {
   try {
-    const url = `${WALLET_TRACKER_API_URL}/api/twitter`;
+    // Backend sets `Cache-Control: max-age=30` for normal refresh paths,
+    // which means an immediate refetch after a destructive action (add /
+    // remove) hits the browser cache and returns stale data. `fresh: true`
+    // bypasses both the HTTP cache (`cache: 'no-store'`) and any intermediate
+    // CDN by appending a cache-buster query param.
+    const cacheBust = options.fresh ? `?_=${Date.now()}` : "";
+    const url = `${WALLET_TRACKER_API_URL}/api/twitter${cacheBust}`;
     const headers: HeadersInit = {
       Authorization: `Bearer ${authToken}`,
     };
 
-    const response = await fetchWithTimeout(url, { headers });
+    const response = await fetchWithTimeout(url, {
+      headers,
+      cache: options.fresh ? "no-store" : "default",
+    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -242,8 +252,9 @@ export async function getTrackedTwitterAccountsDb(
  */
 export async function getTrackedTwitterAccounts(
   authToken: string,
+  options: { fresh?: boolean } = {},
 ): Promise<TwitterAccount[]> {
-  const rows = await getTrackedTwitterAccountsDb(authToken);
+  const rows = await getTrackedTwitterAccountsDb(authToken, options);
   return rows.map((row: any) => ({
     id: row.id,
     username: row.username,
@@ -265,7 +276,8 @@ export async function getTwitterUserInfo(
 ): Promise<TwitterAccount | null> {
   try {
     const response = await fetchWithTimeout(
-      `${WALLET_TRACKER_API_URL}/api/twitter/user-info?username=${encodeURIComponent(username)}`,
+      `${WALLET_TRACKER_API_URL}/api/twitter/user-info?username=${encodeURIComponent(username)}&_=${Date.now()}`,
+      { cache: "no-store" },
     );
 
     if (!response.ok) {
@@ -355,8 +367,15 @@ export async function getUserTweets(
   maxResults: number = 20,
 ): Promise<Tweet[]> {
   try {
+    // 35s timeout — backend cold-start does up to two upstream attempts
+    // (each ~14s through the 5.5s pacer) plus a short cache-poll fallback.
+    // `cache: no-store` + cache-bust query so a View-retry click always
+    // reaches the backend instead of hitting a cached empty response.
+    const cacheBust = `&_=${Date.now()}`;
     const response = await fetchWithTimeout(
-      `${WALLET_TRACKER_API_URL}/api/twitter/user-tweets?username=${encodeURIComponent(username)}&maxResults=${maxResults}`,
+      `${WALLET_TRACKER_API_URL}/api/twitter/user-tweets?username=${encodeURIComponent(username)}&maxResults=${maxResults}${cacheBust}`,
+      { cache: "no-store" },
+      35_000,
     );
 
     if (!response.ok) {
