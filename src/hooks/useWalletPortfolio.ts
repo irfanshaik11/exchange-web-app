@@ -139,6 +139,17 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
   const removedMintsRef = useRef<Map<string, number>>(new Map()); // mint -> expiresAt (ms)
   const REMOVED_MINT_GUARD_MS = 10_000;
 
+  // Mirror image of removedMintsRef for the BUY direction. When a WS new_trade
+  // BUY event synthesizes a brand-new position row, we mark the mint here.
+  // The indexer's aggregator + token-service L2 cache lag the solana_trades
+  // insert by 2-5s, so a fetchAll fired shortly after the buy may return
+  // positions WITHOUT the new mint — and setRawPositions(stale) would wipe
+  // the synthesized row, causing the "buy comes in then disappears" flicker
+  // until manual refresh. The guard retains the synthetic row in the fetchAll
+  // path if the API response doesn't yet include the just-bought mint.
+  const addedMintsRef = useRef<Map<string, number>>(new Map()); // mint -> expiresAt (ms)
+  const ADDED_MINT_GUARD_MS = 10_000;
+
   // ─── REST: initial fetch + refetch on demand ────────────────────────────────
   const fetchAll = useCallback(async (): Promise<void> => {
     if (!address) return;
@@ -166,13 +177,42 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
       for (const [mint, expiresAt] of removedMintsRef.current) {
         if (now >= expiresAt) removedMintsRef.current.delete(mint);
       }
+      for (const [mint, expiresAt] of addedMintsRef.current) {
+        if (now >= expiresAt) addedMintsRef.current.delete(mint);
+      }
+
+      // Step 1: drop API rows for mints we authoritatively removed
       const filtered = removedMintsRef.current.size === 0
         ? p.positions
         : p.positions.filter((pos) => {
             const expiresAt = removedMintsRef.current.get(pos.token_mint);
             return !(expiresAt && now < expiresAt);
           });
-      setRawPositions(filtered);
+
+      // Step 2: retain optimistically-synthesized buys that the API hasn't
+      // caught up on yet. For any mint in addedMintsRef that's missing from
+      // the API response, pull the synthetic row forward from the current
+      // local state so the row doesn't disappear before the aggregator
+      // converges.
+      let supplemented = filtered;
+      if (addedMintsRef.current.size > 0) {
+        const apiMints = new Set(filtered.map((pos) => pos.token_mint));
+        const retained: WalletPortfolioPosition[] = [];
+        for (const [mint, expiresAt] of addedMintsRef.current) {
+          if (now < expiresAt && !apiMints.has(mint)) {
+            const existing = positionsRef.current.find((p) => p.token_mint === mint);
+            if (existing) retained.push(existing);
+          }
+        }
+        if (retained.length > 0) {
+          // Prepend retained (newer-first) so they appear at the top of
+          // the resulting list — matches the natural newest-first ordering
+          // of the API response and the user's expectation for fresh buys.
+          supplemented = [...retained, ...filtered];
+        }
+      }
+
+      setRawPositions(supplemented);
     } catch (e: unknown) {
       if ((e as { name?: string })?.name !== "AbortError") {
         setError(e instanceof Error ? e.message : "Failed to load wallet");
@@ -197,11 +237,12 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
     setRawPositions([]);
     setSummary(null);
     setError(null);
-    // Clear the removed-mint guard on wallet switch — the guard is keyed by
-    // mint and scoped to "this wallet's recent sells." Carrying it across to
-    // a new wallet could incorrectly filter out a position the new wallet
-    // legitimately holds for the same mint.
+    // Clear both guards on wallet switch — they're keyed by mint and scoped
+    // to "this wallet's recent activity." Carrying them across to a new
+    // wallet could incorrectly filter or retain positions for the new
+    // wallet's data.
     removedMintsRef.current.clear();
+    addedMintsRef.current.clear();
     if (!address) {
       setLoading(false);
       return;
@@ -325,6 +366,17 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
           if (isBuy) {
             removedMintsRef.current.delete(t.token_mint);
           }
+          // Track new buys so the retention guard in fetchAll keeps the
+          // synthesized row alive even if an early refetch returns the
+          // pre-buy aggregate (indexer lag). The guard self-expires after
+          // ADDED_MINT_GUARD_MS so a stale row can't outlive the indexer
+          // catching up. Only set on buys — sells don't synthesize new rows.
+          if (isBuy) {
+            addedMintsRef.current.set(
+              t.token_mint,
+              Date.now() + ADDED_MINT_GUARD_MS,
+            );
+          }
 
           setRawPositions((prev) => {
             const idx = prev.findIndex((p) => p.token_mint === t.token_mint);
@@ -349,6 +401,9 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
                   t.token_mint!,
                   Date.now() + REMOVED_MINT_GUARD_MS,
                 );
+                // Clear the additive guard for this mint — the position is
+                // closed, no point retaining a synthetic row for it.
+                addedMintsRef.current.delete(t.token_mint!);
                 const copy = prev.slice();
                 copy.splice(idx, 1);
                 return copy;
