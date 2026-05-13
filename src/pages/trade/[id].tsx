@@ -1024,31 +1024,54 @@ export default function TradePage() {
 
   // Coalesced live market cap for the trade-page header + TradeActionPanel.
   //
-  // Priority FLIPPED (was chart-first, now WS-first). Reason: the token-service
-  // OHLCV WebSocket only broadcasts live `candle` messages to clients whose
-  // subscribed `timeframe` matches the indexer's published interval (which is
-  // always "1s"; see redis-publisher.ts:75 in indexers — "higher timeframes
-  // via TimescaleDB aggregates"). So `validChartMetrics.lastMarketCapUsd`
-  // reflects the last candle CLOSE of the currently-displayed TF, which is:
-  //   - up-to-the-second on 1s (because 1s subscribers DO get live updates)
-  //   - frozen at the snapshot moment on 30m / 1h / 4h / 1d / 1w (because the
-  //     broadcaster's TF-equality filter blocks 1s updates from reaching them)
-  // Result: switching from 1s to 30m makes the header MC jump to a stale value.
+  // Priority (revised after Goblin/TRUMP regression):
+  //   1. FE-computed: wsTokenInfo.price_usd × circulatingSupply (real)
+  //   2. wsTokenInfo.market_cap_usd (indexer-computed, may be wrong for
+  //      pump.fun)
+  //   3. validChartMetrics.lastMarketCapUsd (chart-derived, TF-dependent)
   //
-  // wsTokenInfo.market_cap_usd is updated by the SEPARATE token-info WebSocket
-  // (useSolanaTokenWebSocket → token_combined_websocket.go) on every trade
-  // event, regardless of which OHLCV TF the user is viewing. So it's the
-  // TF-independent "live price × supply" the header should reflect.
+  // Why (1) is now first: the indexer stores `tokens.market_cap_usd` as
+  // `price × 1_000_000_000` for pump.fun pre-graduation tokens (see the
+  // hardcoded 1B in indexer's lib/tokenSupply.ts). That's wrong for any
+  // pump.fun token with non-1B circulating supply — e.g. Goblin has
+  // 710.49M, so the indexer reports $16.32M when the real MC is $11.36M.
   //
-  // The chart-derived value remains as a fallback for when WS hasn't connected
-  // yet or the wsTokenInfo payload doesn't include market_cap_usd.
+  // The FE has both pieces independently:
+  //   - wsTokenInfo.price_usd: live price tick from the token-info WS
+  //     (useSolanaTokenWebSocket), TF-independent, fires on every trade
+  //   - circulatingSupply: real on-chain supply from useTokenSupply,
+  //     which RPCs the token-service /v1/supply endpoint (for pump.fun
+  //     this does the proper getTokenSupply minus reserve-wallet
+  //     subtraction)
+  //
+  // Multiplying these client-side is both TF-stable AND uses the correct
+  // supply, fixing the regression where the header showed 1B-multiplied
+  // values for pump.fun tokens whose real supply is anything other than 1B.
+  //
+  // Fallbacks remain for the brief window before useTokenSupply resolves
+  // (supply <= 1 sentinel) — fall through to indexer's value, then chart.
   const liveMarketCapForPanel = React.useMemo(() => {
+    const livePrice = wsTokenInfo?.price_usd;
+    if (
+      typeof livePrice === "number" &&
+      Number.isFinite(livePrice) &&
+      livePrice > 0 &&
+      typeof circulatingSupply === "number" &&
+      circulatingSupply > 1
+    ) {
+      return livePrice * circulatingSupply;
+    }
     const ws = wsTokenInfo?.market_cap_usd;
     if (typeof ws === "number" && Number.isFinite(ws) && ws > 0) return ws;
     const chart = validChartMetrics.lastMarketCapUsd;
     if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
     return null;
-  }, [wsTokenInfo?.market_cap_usd, validChartMetrics.lastMarketCapUsd]);
+  }, [
+    wsTokenInfo?.price_usd,
+    circulatingSupply,
+    wsTokenInfo?.market_cap_usd,
+    validChartMetrics.lastMarketCapUsd,
+  ]);
 
   // Live browser tab title: "TOKEN ↑ $264K" with direction arrow
   const prevMcapRef = useRef<number | null>(null);
