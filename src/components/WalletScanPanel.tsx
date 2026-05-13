@@ -103,7 +103,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   onClose,
 }) => {
   // Get latest trades from context (same as Live Trades)
-  const { latestTrades } = useWalletTracker();
+  const { latestTrades, walletBalances } = useWalletTracker();
 
   // User context for detecting own wallets and reading portfolio cache
   const { user, walletList } = useUser();
@@ -144,10 +144,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   // Use SOL price with fallback if not available
   const currentSolPrice = solPrice > 0 ? solPrice : 150;
 
-  // Live data state
-  const [balance, setBalance] = useState<number | null>(null);
+  // Live data state — hydrate from context batch balance for instant display
+  const contextBalance = walletBalances[wallet.address] ?? null;
+  const [balance, setBalance] = useState<number | null>(contextBalance);
   const [activity, setActivity] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(contextBalance === null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState("Activity");
@@ -535,10 +536,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   };
 
   // Fetch balance independently (fast: ~100-200ms)
+  // If we already have a context balance, show it instantly and refresh in background
   useEffect(() => {
     if (!wallet?.address) return;
 
-    setLoading(true);
+    // Only show loading spinner if we have no data at all (no context balance)
+    const hasContextBalance = walletBalances[wallet.address] != null;
+    if (!hasContextBalance) {
+      setLoading(true);
+    }
 
     const loadBalance = async () => {
       try {
@@ -557,7 +563,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           }
         } catch (balanceErr) {
           console.warn("Failed to get wallet balance (handled gracefully):", balanceErr);
-          setBalance(null);
+          if (!hasContextBalance) {
+            setBalance(null);
+          }
         }
       } finally {
         setLoading(false);
@@ -1160,9 +1168,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // Fetch historical data using the same function as Live Trades
     const fetchHistory = async () => {
       try {
-        // Add a small delay to prevent race conditions
-        await new Promise(resolve => setTimeout(resolve, 50));
-
         const historicalTrades = await getWalletTradeHistory([wallet.address], {
           limit: 500,
           ...(rangeWindowMs !== undefined ? { windowMs: rangeWindowMs } : {}),
@@ -1384,7 +1389,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             <div className="min-w-[180px] flex-1">
               <div className="mb-1 text-xs text-neutral-400">Total Value</div>
               <div className="text-3xl font-bold text-white">
-                {historyLoading || loading ? (
+                {loading ? (
                   <span className="animate-pulse text-neutral-500">—</span>
                 ) : (
                   `$${formatSmartNumber(portfolioMetrics.totalValue)}`
