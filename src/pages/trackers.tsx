@@ -619,6 +619,16 @@ export default function TrackersPage() {
   const [selectedTwitterUser, setSelectedTwitterUser] = useState<string | null>(
     null,
   );
+  // Bumps every time View is clicked. The per-user fetch effect depends on
+  // this so clicking View on the same handle a second time re-fetches —
+  // important when the first cold-start returned empty (e.g., API blip) and
+  // the user wants to retry without using the "Show All" round-trip.
+  const [viewRequestCount, setViewRequestCount] = useState(0);
+  // Tombstones — usernames the user just removed. See the matching render-
+  // time filters (`visibleTwitterAccounts`, `visibleTwitterFeed` below).
+  const [removedTwitterUsernames, setRemovedTwitterUsernames] = useState<
+    Set<string>
+  >(new Set());
   const [approvedHandles, setApprovedHandles] = useState<string[]>([]);
   const [approvedHandlesSearch, setApprovedHandlesSearch] = useState("");
   const [loadingApprovedHandles, setLoadingApprovedHandles] = useState(false);
@@ -744,15 +754,16 @@ export default function TrackersPage() {
       twitterIncompleteSignatureRef.current = incompleteSignature;
     }
 
-    // 3 × 10s = 30s budget. Fewer attempts + wider gap so a missing handle
-    // doesn't pile up TwitterAPI.io credit-spending calls — the backend's
-    // stale-while-revalidate fallback fills in the gap on next refresh.
-    if (twitterRetryAttemptsRef.current >= 3) return;
+    // 6 × 10s = 60s budget. The per-handle prime takes ~6.5s through the
+    // 5.5s global pacer; with 5 newly-added handles queued, the last one
+    // doesn't complete until ~30s. 60s gives the auto-retry time to catch
+    // every handle's enrichment without burning credits on stuck rows.
+    if (twitterRetryAttemptsRef.current >= 6) return;
 
     const id = setInterval(() => {
       twitterRetryAttemptsRef.current++;
-      loadTwitterAccounts();
-      if (twitterRetryAttemptsRef.current >= 3) clearInterval(id);
+      loadTwitterAccounts({ fresh: true });
+      if (twitterRetryAttemptsRef.current >= 6) clearInterval(id);
     }, 10_000);
     return () => clearInterval(id);
   }, [user?.id, twitterAccounts]);
@@ -775,9 +786,12 @@ export default function TrackersPage() {
     }
   }, [telegramTab, user?.bearerToken, telegramChannels.length]);
 
-  // Load Twitter feed when tab, accounts, or selected user changes.
-  // We also reset the feed to [] when there are no accounts so removed handles
-  // don't keep showing on the X Feed tab.
+  // Load Twitter feed when tab or accounts change. NOTE: `selectedTwitterUser`
+  // is intentionally excluded from the deps — the "show only @x" filter is
+  // applied client-side via the `visibleTwitterFeed` memo below. Refetching
+  // per-user on View used to overwrite the merged feed with an empty array
+  // whenever that user's per-user cache hadn't been hydrated yet, which is
+  // why clicking View showed "No tweets". Client-side filter can't drop data.
   useEffect(() => {
     if (twitterTab !== 1) return;
     if (twitterAccounts.length === 0) {
@@ -785,7 +799,64 @@ export default function TrackersPage() {
       return;
     }
     loadTwitterFeed();
-  }, [twitterTab, twitterAccounts, selectedTwitterUser]);
+  }, [twitterTab, twitterAccounts]);
+
+  // When a specific user is selected (via View), fetch their tweets and MERGE
+  // them into twitterFeed (never replace). The backend does a cold-start live
+  // fetch on cache miss, so this is what actually surfaces tweets for a
+  // handle the poller hasn't reached yet. Merging means an empty response can
+  // never wipe what we already have from the combined feed.
+  useEffect(() => {
+    if (!selectedTwitterUser) return;
+    if (twitterTab !== 1) return;
+    let cancelled = false;
+    setLoadingTwitterFeed(true);
+    (async () => {
+      try {
+        const tweets = await getUserTweets(selectedTwitterUser, 20);
+        if (cancelled) return;
+        if (tweets.length === 0) return;
+        setTwitterFeed((prev) => {
+          const seen = new Set(prev.map((t) => t.id));
+          const fresh = tweets.filter((t) => !seen.has(t.id));
+          if (fresh.length === 0) return prev;
+          const merged = [...fresh, ...prev];
+          merged.sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() -
+              new Date(a.createdAt).getTime(),
+          );
+          return merged.slice(0, 100);
+        });
+      } catch (err) {
+        console.error("Failed to fetch tweets for selected user:", err);
+      } finally {
+        if (!cancelled) setLoadingTwitterFeed(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // `viewRequestCount` is the retry trigger — bumping it from
+    // handleViewTwitterProfile re-runs this effect for the same selectedUser.
+  }, [selectedTwitterUser, twitterTab, viewRequestCount]);
+
+  // Render-time filter for the X Feed. Decouples the "Show only @x" toggle
+  // from data loading so toggling can never wipe tweets we already have.
+  // Also drops tweets from tombstoned (just-removed) authors so the X Feed
+  // doesn't keep showing a removed handle's tweets.
+  const visibleTwitterFeed = useMemo(() => {
+    const tombstoned = removedTwitterUsernames;
+    const userTarget = selectedTwitterUser
+      ? selectedTwitterUser.toLowerCase()
+      : null;
+    return twitterFeed.filter((t) => {
+      const author = (t.authorUsername || "").toLowerCase();
+      if (tombstoned.has(author)) return false;
+      if (userTarget && author !== userTarget) return false;
+      return true;
+    });
+  }, [twitterFeed, selectedTwitterUser, removedTwitterUsernames]);
 
   // Load approved handles for Recommended Wallets tab
   useEffect(() => {
@@ -1497,10 +1568,35 @@ export default function TrackersPage() {
       ? filteredLatestTrades
       : filteredCachedTrades;
 
-  // Twitter functions
-  const loadTwitterAccounts = async () => {
+  // Twitter functions. `fresh` bypasses the browser HTTP cache. Tombstones
+  // (declared above as `removedTwitterUsernames`) are applied via the
+  // `visibleTwitterAccounts` / `visibleTwitterFeed` memos at render time, so
+  // a deleted handle cannot appear on screen even if `twitterAccounts`
+  // contains it.
+  const loadTwitterAccounts = async (opts: { fresh?: boolean } = {}) => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || "");
+      const accounts = await getTrackedTwitterAccounts(
+        user?.bearerToken || "",
+        opts,
+      );
+      // Retire any tombstone the server confirms gone. The render-time
+      // filter below filters out the tombstoned ones regardless, but
+      // retiring them keeps the set from growing unboundedly.
+      const incomingSet = new Set(
+        accounts.map((a) => a.username.toLowerCase()),
+      );
+      setRemovedTwitterUsernames((prev) => {
+        if (prev.size === 0) return prev;
+        let changed = false;
+        const next = new Set(prev);
+        for (const t of prev) {
+          if (!incomingSet.has(t)) {
+            next.delete(t);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
       setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
@@ -1508,10 +1604,28 @@ export default function TrackersPage() {
     }
   };
 
+  // Render-time view of tracked accounts. Tombstoned usernames are filtered
+  // out client-side so a deleted row CANNOT reappear regardless of what's
+  // in `twitterAccounts`.
+  const visibleTwitterAccounts = useMemo(() => {
+    if (removedTwitterUsernames.size === 0) return twitterAccounts;
+    return twitterAccounts.filter(
+      (a) => !removedTwitterUsernames.has(a.username.toLowerCase()),
+    );
+  }, [twitterAccounts, removedTwitterUsernames]);
+
   const handleAddTwitterAccount = async (username: string) => {
     try {
       await addTrackedTwitterAccount(username, user?.bearerToken || "");
-      await loadTwitterAccounts();
+      // Re-adding clears any prior tombstone so the new row isn't shadowed.
+      const target = username.toLowerCase();
+      setRemovedTwitterUsernames((prev) => {
+        if (!prev.has(target)) return prev;
+        const next = new Set(prev);
+        next.delete(target);
+        return next;
+      });
+      await loadTwitterAccounts({ fresh: true });
       showEnhancedToast("success", `@${username} added to tracked accounts`, {
         duration: 3000,
       });
@@ -1530,7 +1644,32 @@ export default function TrackersPage() {
   const handleRemoveTwitterAccount = async (username: string) => {
     try {
       await removeTrackedTwitterAccount(username, user?.bearerToken || "");
-      await loadTwitterAccounts();
+      const target = username.toLowerCase();
+      // Tombstone via STATE. The render filter (visibleTwitterAccounts memo)
+      // applies this to the rendered list, so a removed row CANNOT appear on
+      // screen even if `twitterAccounts` itself still contains it. This is
+      // the bulletproof layer — independent of optimistic-update timing,
+      // refetch ordering, browser cache, and React batching.
+      setRemovedTwitterUsernames((prev) => {
+        if (prev.has(target)) return prev;
+        const next = new Set(prev);
+        next.add(target);
+        return next;
+      });
+      // Optimistic update on twitterAccounts too — instantly tidy.
+      setTwitterAccounts((prev) =>
+        prev.filter((a) => a.username.toLowerCase() !== target),
+      );
+      setTwitterFeed((prev) =>
+        prev.filter((t) => (t.authorUsername || "").toLowerCase() !== target),
+      );
+      if (selectedTwitterUser && selectedTwitterUser.toLowerCase() === target) {
+        setSelectedTwitterUser(null);
+      }
+      // Background reconcile. If this returns a stale list, the render
+      // filter still hides the tombstoned row. The loadTwitterAccounts
+      // implementation retires the tombstone once the server confirms.
+      await loadTwitterAccounts({ fresh: true });
       showEnhancedToast(
         "success",
         `@${username} removed from tracked accounts`,
@@ -1702,30 +1841,60 @@ export default function TrackersPage() {
     }
     setLoadingTwitterFeed(true);
     try {
-      let tweets: Tweet[] = [];
-
-      if (selectedTwitterUser) {
-        // Load tweets from specific user
-        tweets = await getUserTweets(selectedTwitterUser, 20);
-      } else {
-        // Load tweets from all tracked accounts
-        const usernames = twitterAccounts.map((acc) => acc.username);
-        tweets = await getTwitterFeed(usernames, user?.bearerToken ?? "", 20);
-      }
-
-      setTwitterFeed(tweets);
+      // Always load the merged feed; the per-user "View" filter is applied
+      // client-side via `visibleTwitterFeed`. MERGE into existing twitterFeed
+      // instead of replacing — this effect re-fires whenever twitterAccounts
+      // changes (incl. the auto-retry every 10s), and a naive replace would
+      // wipe out tweets the per-user fetch had just merged in for the
+      // currently-selected handle.
+      const usernames = twitterAccounts.map((acc) => acc.username);
+      const tweets = await getTwitterFeed(
+        usernames,
+        user?.bearerToken ?? "",
+        20,
+      );
+      const trackedSet = new Set(usernames.map((u) => u.toLowerCase()));
+      setTwitterFeed((prev) => {
+        const seen = new Set<string>();
+        const merged: Tweet[] = [];
+        for (const t of tweets) {
+          if (!trackedSet.has((t.authorUsername || "").toLowerCase())) continue;
+          if (seen.has(t.id)) continue;
+          seen.add(t.id);
+          merged.push(t);
+        }
+        for (const t of prev) {
+          if (!trackedSet.has((t.authorUsername || "").toLowerCase())) continue;
+          if (seen.has(t.id)) continue;
+          seen.add(t.id);
+          merged.push(t);
+        }
+        merged.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+        return merged.slice(0, 100);
+      });
     } catch (error) {
       console.error("Error loading Twitter feed:", error);
       setToast("Failed to load Twitter feed");
       setTimeout(() => setToast(""), 3000);
+      // Don't wipe twitterFeed on transient errors.
     } finally {
       setLoadingTwitterFeed(false);
     }
   };
 
   const handleViewTwitterProfile = (username: string) => {
-    setSelectedTwitterUser(username === selectedTwitterUser ? null : username);
-    setTwitterTab(1); // Switch to X Feed tab
+    // ALWAYS set, never toggle. The previous toggle-on-same-user behavior
+    // silently flipped the filter off when the user double-clicked View —
+    // which is exactly what's happening when "View on @pumpfun" suddenly
+    // showed @sama / @elonmusk. Use the dedicated "Show All" button to clear.
+    setSelectedTwitterUser(username.toLowerCase());
+    setTwitterTab(1);
+    // Bump so the per-user fetch effect re-runs on every click, enabling
+    // retry-via-re-click when the first attempt returned empty.
+    setViewRequestCount((c) => c + 1);
   };
 
   // Export: copy wallet data (name, emoji, and address) to clipboard as JSON
@@ -2864,7 +3033,7 @@ export default function TrackersPage() {
                                 </div>
                               ) : twitterTab === 0 ? (
                                 // Tracked Accounts Tab
-                                twitterAccounts.length === 0 ? (
+                                visibleTwitterAccounts.length === 0 ? (
                                   <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
                                     <FiAtSign className="mb-4 h-10 w-10 text-[#52525b]" />
                                     <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
@@ -2878,7 +3047,7 @@ export default function TrackersPage() {
                                   <div className="scrollbar-hide flex-1 overflow-auto">
                                     <table className="w-full min-w-[280px] text-[10px] sm:min-w-[320px] sm:text-xs">
                                       <tbody>
-                                        {twitterAccounts.map((account) => (
+                                        {visibleTwitterAccounts.map((account) => (
                                           <TwitterAccountRow
                                             key={account.username}
                                             account={account}
@@ -2907,19 +3076,23 @@ export default function TrackersPage() {
                                       Loading feed...
                                     </span>
                                   </div>
-                                ) : twitterFeed.length === 0 ? (
+                                ) : visibleTwitterFeed.length === 0 ? (
                                   <div className="flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
                                     <FiMessageCircle className="mb-4 h-10 w-10 text-[#52525b]" />
                                     <span className="text-sm font-semibold tracking-tight text-[#f4f4f5]">
-                                      No tweets yet
+                                      {selectedTwitterUser
+                                        ? `No tweets from @${selectedTwitterUser} yet`
+                                        : "No tweets yet"}
                                     </span>
                                     <span className="mt-1.5 text-xs text-[#71717a]">
-                                      Add accounts or check back later
+                                      {selectedTwitterUser
+                                        ? "They'll appear here when this account posts."
+                                        : "Add accounts or check back later"}
                                     </span>
                                   </div>
                                 ) : (
                                   <div className="scrollbar-hide flex-1 space-y-2 overflow-auto p-2">
-                                    {twitterFeed.map((tweet) => (
+                                    {visibleTwitterFeed.map((tweet) => (
                                       <a
                                         key={tweet.id}
                                         href={
