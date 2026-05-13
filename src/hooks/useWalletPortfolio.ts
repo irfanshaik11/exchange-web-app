@@ -44,7 +44,14 @@ export function toPositionRow(p: WalletPortfolioPosition): PositionRow {
   const boughtUsd = p.bought_usd_value || 0;
   const soldUsd = p.sold_usd_value || 0;
 
-  return {
+  // Carry the raw chain SOL amounts through as untyped extras on PositionRow.
+  // The portfolio enrichment effect (portfolio.tsx ~line 612) reads these via
+  // `(p as any).bought_sol` etc. to recompute USD-denominated cost basis +
+  // PnL percentages using live SOL price — the chain endpoint returns
+  // bought_usd_value/sold_usd_value as 0, so the enrichment is the only
+  // source of correct % math. Without these fields plumbed through, every
+  // pnl% renders as 0.0000%.
+  const row: PositionRow = {
     tokenAddress: p.token_mint,
     pairAddress: undefined,
     blockchain: "solana",
@@ -65,6 +72,10 @@ export function toPositionRow(p: WalletPortfolioPosition): PositionRow {
     avgBuyMarketCap: undefined,
     avgSellMarketCap: undefined,
   };
+  (row as any).bought_sol = p.bought_sol;
+  (row as any).sold_sol = p.sold_sol;
+  (row as any).realized_pnl_sol = p.realized_pnl_sol;
+  return row;
 }
 
 type WalletWsMessage =
