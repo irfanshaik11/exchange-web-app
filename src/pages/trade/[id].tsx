@@ -27,6 +27,11 @@ import { getMyLimitOrders } from "../../utils/api";
 import { creatorAddressCache } from "../../utils/preloadTradeChart";
 import { useKeepOrderFresh } from "../../hooks/usePrefetchOrder";
 import useTokenSupply from "../../hooks/useTokenSupply";
+// BANDAID: REST-driven holders count (token-service /v1/token/{mint}/holders).
+// Replaces WS holderSummary.total_holders for the TradeHeader people-icon, the
+// TradeActionPanel "Holders" tile, and the TradeTabs "Holders" tab badge until
+// the WS path is restored.
+import useHoldersRest from "../../hooks/useHoldersRest";
 // Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
 import AdvancedOHLCChart, { type AdvancedOHLCChartHandle } from "../../components/AdvancedOHLCChart";
 import { usePendingTradeMarkers } from "../../hooks/usePendingTradeMarkers";
@@ -408,8 +413,23 @@ export default function TradePage() {
     return undefined;
   }, [optimisticToken?.mint, _mint, id]);
 
-  // Fetch real circulating supply from token service (falls back to 1B)
-  const { circulatingSupply, refetch: refetchSupply } = useTokenSupply(resolvedTokenMint);
+  // Fetch real circulating supply from token service. The launchpad_protocol
+  // hint lets useTokenSupply apply the 1B last-resort fallback for known
+  // bonding-curve launchpads (pump.fun, bonk.fun, meteora, etc.) when every
+  // accurate path has failed. We compose the hint from every source available
+  // at this point in render: URL query param (instant, present when entered
+  // via PulseTable hover) OR correctTokenData from /v1/search (~100-500ms
+  // after mount, present even when URL is a bare paste from SearchModal).
+  // useTokenSupply mirrors this prop into a ref, so a late arrival from
+  // search re-arms the 1B fallback even after the initial 2s timer ran.
+  const launchpadProtocolHint =
+    optimisticToken?.launchpad_protocol ??
+    (correctTokenData as any)?.launchpad_protocol ??
+    undefined;
+  const { circulatingSupply, refetch: refetchSupply } = useTokenSupply(
+    resolvedTokenMint,
+    launchpadProtocolHint,
+  );
 
   // Prefetch is handled by TradeActionPanel when the user selects an amount.
   // The previous page-level prefetch used a hardcoded 0.1 SOL which spammed
@@ -701,13 +721,27 @@ export default function TradePage() {
     }
   }, [holderSummary?.dev_wallet, creatorAddress]);
 
-  // Set holdersCount from WebSocket snapshot (same source as TradeHeader/TradeActionPanel)
+  // BANDAID: WS-driven holdersCount disabled while we route through REST.
+  // To restore: delete the useHoldersRest call below + uncomment this block.
+  /*
   useEffect(() => {
     const wsHolders = holderSummary?.total_holders;
     if (wsHolders != null && wsHolders > 0) {
       setHoldersCount(wsHolders);
     }
   }, [holderSummary?.total_holders]);
+  */
+
+  // NEW (bandaid): REST-driven holders count + holder rows. limit=100 so
+  // HoldersTable can also consume `restHoldersData.holders` (top-N sliced
+  // server-side; client slices further if needed).
+  const restHoldersData = useHoldersRest(resolvedTokenMint, { limit: 100 });
+  const restHoldersCount = restHoldersData.totalHolders;
+  useEffect(() => {
+    if (restHoldersCount != null && restHoldersCount > 0) {
+      setHoldersCount(restHoldersCount);
+    }
+  }, [restHoldersCount]);
 
   // Get current pair address for caching
   const currentPairAddress = React.useMemo(() => {
@@ -988,14 +1022,56 @@ export default function TradePage() {
   // Prevents one-frame flicker of previous token's MC when switching via watchlist ticker.
   const validChartMetrics = chartMetrics.forTokenId === idString ? chartMetrics : {};
 
-  // Coalesced live market cap for TradeActionPanel (same priority as chart header)
+  // Coalesced live market cap for the trade-page header + TradeActionPanel.
+  //
+  // Priority (revised after Goblin/TRUMP regression):
+  //   1. FE-computed: wsTokenInfo.price_usd × circulatingSupply (real)
+  //   2. wsTokenInfo.market_cap_usd (indexer-computed, may be wrong for
+  //      pump.fun)
+  //   3. validChartMetrics.lastMarketCapUsd (chart-derived, TF-dependent)
+  //
+  // Why (1) is now first: the indexer stores `tokens.market_cap_usd` as
+  // `price × 1_000_000_000` for pump.fun pre-graduation tokens (see the
+  // hardcoded 1B in indexer's lib/tokenSupply.ts). That's wrong for any
+  // pump.fun token with non-1B circulating supply — e.g. Goblin has
+  // 710.49M, so the indexer reports $16.32M when the real MC is $11.36M.
+  //
+  // The FE has both pieces independently:
+  //   - wsTokenInfo.price_usd: live price tick from the token-info WS
+  //     (useSolanaTokenWebSocket), TF-independent, fires on every trade
+  //   - circulatingSupply: real on-chain supply from useTokenSupply,
+  //     which RPCs the token-service /v1/supply endpoint (for pump.fun
+  //     this does the proper getTokenSupply minus reserve-wallet
+  //     subtraction)
+  //
+  // Multiplying these client-side is both TF-stable AND uses the correct
+  // supply, fixing the regression where the header showed 1B-multiplied
+  // values for pump.fun tokens whose real supply is anything other than 1B.
+  //
+  // Fallbacks remain for the brief window before useTokenSupply resolves
+  // (supply <= 1 sentinel) — fall through to indexer's value, then chart.
   const liveMarketCapForPanel = React.useMemo(() => {
-    const chart = validChartMetrics.lastMarketCapUsd;
-    if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
+    const livePrice = wsTokenInfo?.price_usd;
+    if (
+      typeof livePrice === "number" &&
+      Number.isFinite(livePrice) &&
+      livePrice > 0 &&
+      typeof circulatingSupply === "number" &&
+      circulatingSupply > 1
+    ) {
+      return livePrice * circulatingSupply;
+    }
     const ws = wsTokenInfo?.market_cap_usd;
     if (typeof ws === "number" && Number.isFinite(ws) && ws > 0) return ws;
+    const chart = validChartMetrics.lastMarketCapUsd;
+    if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
     return null;
-  }, [validChartMetrics.lastMarketCapUsd, wsTokenInfo?.market_cap_usd]);
+  }, [
+    wsTokenInfo?.price_usd,
+    circulatingSupply,
+    wsTokenInfo?.market_cap_usd,
+    validChartMetrics.lastMarketCapUsd,
+  ]);
 
   // Live browser tab title: "TOKEN ↑ $264K" with direction arrow
   const prevMcapRef = useRef<number | null>(null);
@@ -1301,6 +1377,8 @@ export default function TradePage() {
                   wsTokenInfo={wsTokenInfo}
                   wsVolume={wsVolume}
                   holderSummary={holderSummary}
+                  /* BANDAID: REST-driven holder count for the people icon. */
+                  restHoldersCount={restHoldersCount}
                   livePriceUsd={validChartMetrics.lastPriceUsd}
                   liveMarketCapUsd={validChartMetrics.lastMarketCapUsd}
                   onToggleRightPanel={() => setIsRightPanelVisible(!isRightPanelVisible)}
@@ -1516,6 +1594,8 @@ export default function TradePage() {
                   circulatingSupply={circulatingSupply}
                   firstBuyers={wsFirstBuyers}
                   firstBuyersSummary={wsFirstBuyersSummary}
+                  /* BANDAID: REST-driven Holders stat tile. */
+                  restHoldersCount={restHoldersCount}
                 />
               </div>
 
@@ -1595,6 +1675,8 @@ export default function TradePage() {
                 circulatingSupply={circulatingSupply}
                 firstBuyers={wsFirstBuyers}
                 firstBuyersSummary={wsFirstBuyersSummary}
+                /* BANDAID: REST-driven Holders stat tile (mobile). */
+                restHoldersCount={restHoldersCount}
               />
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { env } from '~/env';
+import { setWsSupply } from '~/utils/wsSupplyCache';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -143,6 +144,12 @@ export default function useOHLCWebSocket({
             isDev && console.log('[useOHLCWebSocket] Snapshot received:', initialCandles.length, 'candles');
             setCandles(initialCandles.slice(-maxCandles));
             setLoading(false);
+
+            // Cache supply if backend included it on the snapshot.
+            // useTokenSupply will read this to skip the /v1/supply HTTP call.
+            if (message.supply && message.mint) {
+              setWsSupply(message.mint, message.supply);
+            }
           } else if (message.type === 'candle' && message.data) {
             // Real-time candle update
             const candle: OHLCVCandle = message.data;

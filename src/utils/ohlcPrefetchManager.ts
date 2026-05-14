@@ -7,6 +7,7 @@
  */
 
 import { globalOHLCCache } from '~/hooks/useBackgroundOHLCPreload';
+import { setWsSupply } from '~/utils/wsSupplyCache';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -159,6 +160,15 @@ export function prefetchViaWS(mint: string, snapshotTimeframe?: string): void {
             // Bridge: write into globalOHLCCache so useBackgroundOHLCPreload picks it up
             if (snapshotData.length > 0) {
               writeToGlobalCache(mint, snapshotData);
+            }
+
+            // Token-service piggybacks circulating_supply onto the snapshot
+            // when the indexer has populated `tokens.circulating_supply`.
+            // Cache it so `useTokenSupply` can skip the /v1/supply HTTP call.
+            // No-op when `message.supply` is absent (pre-deploy clients, or
+            // pump.fun tokens that always fall back to HTTP/RPC).
+            if (message.supply) {
+              setWsSupply(mint, message.supply);
             }
 
             isDev && console.log(
