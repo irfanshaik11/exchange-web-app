@@ -855,7 +855,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   const isLoading =
     chain === "sol"
       ? // BANDAID: REST is primary; treat its loading state as primary too.
-        restLoading || (!useRestData && wsLoading) || (!useRestData && !useWebSocketData && codexLoading)
+        // The `!restError` guards prevent falling through to wsLoading / codexLoading
+        // once REST has failed — otherwise the "Loading holders..." UI stays up
+        // forever for tokens where REST 504s and WS never publishes holders
+        // (observed: 6p6xgHyF7AeE... returns HTTP 504 stream timeout from the
+        // GCP load balancer when Helius DAS is slow for that mint).
+        restLoading || (!useRestData && !restError && wsLoading) || (!useRestData && !restError && !useWebSocketData && codexLoading)
       : monadLoading;
   const error =
     chain === "sol"
