@@ -20,6 +20,10 @@ import {
   type SolanaTopTrader,
 } from "../../contexts/SolanaTokenWebSocketContext";
 import useMonadHolders, { type MonadHolder } from "../../hooks/useMonadHolders";
+// BANDAID: REST-driven Solana holders. Primary path while the WS approach is
+// disabled. The WS + Codex branches stay intact (commented in normalizedHolders)
+// so we can flip back by uncommenting and removing the REST branch.
+import useHoldersRest, { type RestHolder } from "../../hooks/useHoldersRest";
 import { getWalletSolBalance } from "../../utils/walletTracking";
 import { useSolPrice } from "../SolPriceContext";
 import { formatSmartNumber, type Token } from "~/utils/db";
@@ -819,18 +823,54 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
     error: codexError,
   } = useCodexHolders(chain === "sol" ? token?.mint : undefined);
 
+  // BANDAID: REST-driven holders (primary path for Solana). Mirrors the WS
+  // snapshot so the table maps with minimal changes. Falls back to WS / Codex
+  // if the REST endpoint is unavailable.
+  const {
+    holders: restHolders,
+    // BANDAID: total_holders from the endpoint is the TRUE on-chain count,
+    // NOT the (limit-capped) length of the holders array. Used below to
+    // report the right number to onTotalCountChange.
+    totalHolders: restTotalHolders,
+    isLoading: restLoading,
+    error: restError,
+  } = useHoldersRest(chain === "sol" ? token?.mint : undefined, { limit: 100 });
+
+  // BANDAID: Prefer REST holders for Solana; WS/Codex remain as safety nets.
+  // Restore previous behaviour by deleting the `useRestData` branch in
+  // normalizedHolders and removing this useRestData flag.
+  const useRestData =
+    chain === "sol" && !restLoading && restHolders && restHolders.length > 0;
+
   // Prefer WebSocket holders, fall back to Codex (Solana only)
   // Only use WebSocket data if it's not loading AND has data
   const wsFinished = !wsLoading;
   const useWebSocketData =
     chain === "sol" && wsFinished && wsHolders && wsHolders.length > 0;
-  // Loading state based on chain
+  // Loading state based on chain. NOTE: useHoldersRest only flips its own
+  // isLoading on the FIRST fetch per mint (stale-while-revalidate), so
+  // background polls do not propagate up. The `!useRestData` guards mean we
+  // never show "loading" once REST has data, even if wsLoading/codexLoading
+  // are still settling.
   const isLoading =
     chain === "sol"
-      ? wsLoading || (!useWebSocketData && codexLoading)
+      ? // BANDAID: REST is primary; treat its loading state as primary too.
+        // The `!restError` guards prevent falling through to wsLoading / codexLoading
+        // once REST has failed — otherwise the "Loading holders..." UI stays up
+        // forever for tokens where REST 504s and WS never publishes holders
+        // (observed: 6p6xgHyF7AeE... returns HTTP 504 stream timeout from the
+        // GCP load balancer when Helius DAS is slow for that mint).
+        restLoading || (!useRestData && !restError && wsLoading) || (!useRestData && !restError && !useWebSocketData && codexLoading)
       : monadLoading;
   const error =
-    chain === "sol" ? (useWebSocketData ? null : codexError) : monadError;
+    chain === "sol"
+      ? // BANDAID: surface REST error only when no fallback has data.
+        useRestData
+        ? null
+        : useWebSocketData
+          ? null
+          : restError || codexError
+      : monadError;
 
   const [holdersWithBalances, setHoldersWithBalances] = useState<
     HolderWithBalance[]
@@ -961,6 +1001,61 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         buys30d: h.buy_count || 0,
         sells30d: h.sell_count || 0,
       }));
+    } else if (useRestData && restHolders) {
+      // BANDAID: REST-driven Solana holders (primary path). Restore the WS branch
+      // by deleting this `else if` block and uncommenting the WS branch below.
+      return restHolders.map((h: RestHolder) => {
+        const lastActivityUnix = h.last_activity_at
+          ? Math.floor(new Date(h.last_activity_at).getTime() / 1000)
+          : 0;
+        // BANDAID PERF FIX: treat the endpoint's sol_balance_lamports as
+        // authoritative (incl. 0). The previous mapping flagged 0 as "unknown"
+        // and triggered the client-side RPC fallback at line ~1100 — which
+        // batches 5-at-a-time with 200ms delays. For big tokens like TRUMP/JUP
+        // where most top-100 holders are indexer-stale, that meant ~10s of
+        // background RPC calls per token switch. The WS branch (commented below)
+        // never did this; it trusted 0 as 0. Matching that behaviour here.
+        const solBalance = (h.sol_balance_lamports ?? 0) / 1e9;
+        // Map the boolean badges to the holderType discriminant used by the table.
+        // Priority matches the WS path: dev > sniper > bundler > generic holder.
+        const holderType: "dev" | "sniper" | "bundler" | "holder" = h.is_dev
+          ? "dev"
+          : h.is_sniper
+            ? "sniper"
+            : h.is_bundler
+              ? "bundler"
+              : "holder";
+        return {
+          address: h.wallet_address,
+          lastTransactionAt: lastActivityUnix,
+          // BANDAID PERF FIX: solBalance is always defined (lamports/1e9, with
+          // 0 meaning "indexer hasn't recorded a balance for this wallet").
+          // isLoadingBalance is permanently false on the REST path so the row's
+          // SOL Bal cell renders immediately and the RPC fallback never fires.
+          // The cost: some indexer-stale wallets display 0 SOL when their real
+          // balance is higher. The benefit: 5-10s perceived speed-up on big
+          // tokens (TRUMP, JUP, etc.) where 80%+ of holders are indexer-stale.
+          solBalance,
+          isLoadingBalance: false,
+          // Use live SOL price (chainPrice) rather than the endpoint's hard-coded
+          // $200 sol_price_usd. Keeps USD columns in sync with the live feed.
+          amountBoughtUsd30d: String(h.total_bought_sol * chainPrice),
+          amountSoldUsd30d: String(h.total_sold_sol * chainPrice),
+          tokenAmountBought30d: String(h.total_bought_tokens),
+          tokenAmountSold30d: String(h.total_sold_tokens),
+          tokenAcquisitionCostUsd: String(h.total_bought_sol * chainPrice),
+          tokenBalance: String(h.token_balance),
+          buys30d: h.buy_count,
+          sells30d: h.sell_count,
+          holderType,
+        };
+      });
+    /* BANDAID: WS Solana holders branch disabled. Restore by:
+     *   1. Removing the `useRestData` branch above.
+     *   2. Uncommenting this `else if` and the closing brace below.
+     *   3. Optionally removing `useHoldersRest` import + call.
+     */
+    /*
     } else if (useWebSocketData && wsHolders) {
       // Use Solana WebSocket holders data
       return wsHolders.map((h: SolanaTokenHolder) => ({
@@ -983,6 +1078,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         sells30d: h.sell_count,
         holderType: h.holder_type,
       }));
+    */
     } else if (chain === "sol" && codexHolders && codexHolders.length > 0) {
       // Use Codex holders data (Solana fallback)
       return codexHolders.map((h) => ({
@@ -1001,14 +1097,24 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
       }));
     }
     return [];
-  }, [chain, monadHolders, useWebSocketData, wsHolders, codexHolders, chainPrice]);
+  // BANDAID: useRestData + restHolders added; useWebSocketData + wsHolders
+  // kept for the commented WS fallback branch (no-op until uncommented).
+  }, [chain, monadHolders, useRestData, restHolders, useWebSocketData, wsHolders, codexHolders, chainPrice]);
 
-  // Notify parent of total count changes
+  // Notify parent of total count changes.
+  // BANDAID: When REST is active, send the TRUE on-chain total (top-level
+  // `total_holders`) rather than the limit-capped array length. Otherwise the
+  // tab badge briefly flashes "100" on first load (the limit we request) before
+  // the parent's separate useHoldersRest hook overwrites it with the real count
+  // — that was the observed prod bug.
   useEffect(() => {
-    if (onTotalCountChange) {
-      onTotalCountChange(normalizedHolders.length);
-    }
-  }, [normalizedHolders.length, onTotalCountChange]);
+    if (!onTotalCountChange) return;
+    const count =
+      useRestData && typeof restTotalHolders === "number"
+        ? restTotalHolders
+        : normalizedHolders.length;
+    onTotalCountChange(count);
+  }, [normalizedHolders.length, onTotalCountChange, useRestData, restTotalHolders]);
 
   // Fetch SOL balances for holders (only for Solana chain and only if not provided by WebSocket)
   useEffect(() => {
@@ -1017,8 +1123,22 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
       return;
     }
 
-    // Initialize with holders data
-    setHoldersWithBalances(normalizedHolders);
+    // BANDAID: merge new normalized rows with previously-cached state instead
+    // of replacing the array outright. This preserves RPC-fetched solBalance
+    // values across the 15s REST refetch, so the SOL Bal column doesn't
+    // flicker back to "loading" on every poll for indexer-stale wallets.
+    setHoldersWithBalances((prev) => {
+      const prevByAddr = new Map(prev.map((h) => [h.address, h]));
+      return normalizedHolders.map((h) => {
+        const cached = prevByAddr.get(h.address);
+        // Carry over an RPC-resolved balance when the fresh row is still
+        // missing one. Endpoint-provided balances always win when present.
+        if (h.solBalance == null && cached && cached.solBalance != null) {
+          return { ...h, solBalance: cached.solBalance, isLoadingBalance: false };
+        }
+        return h;
+      });
+    });
 
     // Skip balance fetching for Monad (already included in data)
     if (chain === "monad") {
@@ -1517,7 +1637,10 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
             </tr>
           </thead>
           <tbody className='text-[13px]'>
-            {isLoading ? (
+            {/* BANDAID: stale-while-revalidate — only show the loading row when
+                there are genuinely no rows yet. If we have rows, keep them on
+                screen during background polls. Prevents the 15s flicker. */}
+            {isLoading && sortedAndFilteredHolders.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center">
                   <div className="animate-pulse">

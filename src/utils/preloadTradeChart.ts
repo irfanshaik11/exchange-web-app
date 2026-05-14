@@ -5,6 +5,35 @@ import { preloadImage } from "~/utils/imagePreloader";
 import { computeHashImageUrl } from "~/utils/imageHash";
 import type { NextRouter } from "next/router";
 
+// Module-level dedup so we don't fire the supply RPC twice for the same mint
+// in quick succession. The browser HTTP cache also helps, but a dedupe Set
+// short-circuits before the network call.
+const supplyPrefetchedMints = new Set<string>();
+
+/**
+ * Fire /v1/supply/{mint} in the background. Result lands in the browser HTTP
+ * cache (or in-flight request dedupe), so `useTokenSupply` on the trade page
+ * gets a near-instant resolve instead of a fresh 200-500ms RPC.
+ *
+ * Required because SearchModal's click-time preload gives the OHLC WS a
+ * ~150ms head start over the trade-page's supply fetch, causing the chart's
+ * first bars to render at DEFAULT_SUPPLY before the real supply is known.
+ * Without this, switching to MC mode showed a vertical disconnect for
+ * non-1B-supply tokens (Jupiter at 6.86B was the clearest case).
+ */
+function prefetchSupply(mint: string, chain: "sol" | "monad"): void {
+  if (chain === "monad") return; // Monad path doesn't use /v1/supply
+  if (!mint || supplyPrefetchedMints.has(mint)) return;
+  supplyPrefetchedMints.add(mint);
+  const base = process.env.NEXT_PUBLIC_GO_SERVICE_URL || "";
+  if (!base) return;
+  // Fire-and-forget. If it fails the trade page falls back to a fresh fetch.
+  fetch(`${base}/v1/supply/${mint}`, { cache: "default" }).catch(() => {
+    // Don't pin a failure into the dedup Set forever — let the trade page retry
+    supplyPrefetchedMints.delete(mint);
+  });
+}
+
 /**
  * Normalized token info for preloading — each caller maps its own shape to this.
  */
@@ -59,6 +88,15 @@ export function preloadTradeChart(
   // Step 1: WS prefetch — immediate (Solana only)
   if (!skipWs) {
     prefetchViaWS(mint);
+  }
+
+  // Step 1.5: Supply prefetch — fires in parallel with WS prefetch so that by
+  // the time the trade page mounts and useTokenSupply runs, the /v1/supply
+  // response is already cached. Without this, the WS snapshot arrives BEFORE
+  // supply resolves and the chart renders bars at DEFAULT_SUPPLY (vertical
+  // MC disconnect for non-1B-supply tokens like JUP @ 6.86B).
+  if (!skipWs) {
+    prefetchSupply(mint, chain);
   }
 
   // Step 2: Route prefetch — immediate (critical for cache-hit on router.push)
