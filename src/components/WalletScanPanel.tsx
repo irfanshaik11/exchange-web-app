@@ -12,9 +12,6 @@ import {
 } from "react-icons/fa";
 import { FiExternalLink } from "react-icons/fi";
 import type { Token } from "~/utils/db";
-import {
-  getWalletSolBalance,
-} from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
 import { useSolPrice } from "./SolPriceContext";
@@ -346,17 +343,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         }
       } catch (err) {
         console.warn("Error fetching wallet balance (handled gracefully):", err);
-        // Fallback to old method
-        try {
-          const balance = await getWalletSolBalance(wallet.address);
-          if (balance !== null) {
-            setBalance(balance);
-          }
-        } catch (balanceErr) {
-          console.warn("Failed to get wallet balance (handled gracefully):", balanceErr);
-          if (!hasContextBalance) {
-            setBalance(null);
-          }
+        if (!hasContextBalance) {
+          setBalance(null);
         }
       } finally {
         setLoading(false);
@@ -460,32 +448,18 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       .finally(() => setTokenLoading(false));
   }, [wallet.address]);
 
-  // Fetch SPL token balance
+  // Derive SPL token balance from Go service positions (already fetched by useWalletScan)
   useEffect(() => {
     if (!wallet.address || !token || !token.pair_address) return;
     setTokenBalanceLoading(true);
     setTokenBalanceError(null);
 
-    // Get token accounts by owner via secure backend endpoint
-    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || "";
-
-    fetch(
-      `${backendUrl}/api/token-accounts/${encodeURIComponent(wallet.address)}?mint=${encodeURIComponent(token.pair_address)}`,
-    )
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.ok || !data.accounts || data.accounts.length === 0) {
-          setTokenBalance(0);
-          return;
-        }
-        // Use the first account (most users have one)
-        const amount =
-          data.accounts[0]?.account?.data?.parsed?.info?.tokenAmount?.uiAmount;
-        setTokenBalance(typeof amount === "number" ? amount : 0);
-      })
-      .catch(() => setTokenBalanceError("Failed to fetch token balance"))
-      .finally(() => setTokenBalanceLoading(false));
-  }, [wallet.address, token && token.pair_address]);
+    const position = goPositions.find(
+      (p) => p.token_mint === token.pair_address,
+    );
+    setTokenBalance(position ? position.remaining_tokens : 0);
+    setTokenBalanceLoading(false);
+  }, [wallet.address, token && token.pair_address, goPositions]);
 
   const handleCopy = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
