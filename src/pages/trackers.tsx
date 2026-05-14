@@ -624,6 +624,15 @@ export default function TrackersPage() {
   // important when the first cold-start returned empty (e.g., API blip) and
   // the user wants to retry without using the "Show All" round-trip.
   const [viewRequestCount, setViewRequestCount] = useState(0);
+  // Counter of in-flight per-user cold-start fetches. The merged-feed loader
+  // (loadTwitterFeed) toggles the same `loadingTwitterFeed` flag, so without
+  // this we get a loader race on View: the merged fetch finishes in ~50ms
+  // and clears loading=false while the per-user cold-start is still polling
+  // upstream for 10-18s. Result: spinner flashes, then "No tweets yet" shows
+  // until the cold-start eventually resolves. Tracking the per-user count
+  // here lets loadTwitterFeed's finally skip the clear when a cold-start is
+  // still running.
+  const perUserFetchInFlight = useRef(0);
   // Tombstones — usernames the user just removed. See the matching render-
   // time filters (`visibleTwitterAccounts`, `visibleTwitterFeed` below).
   const [removedTwitterUsernames, setRemovedTwitterUsernames] = useState<
@@ -811,11 +820,28 @@ export default function TrackersPage() {
     if (twitterTab !== 1) return;
     let cancelled = false;
     let attempts = 0;
-    const MAX_ATTEMPTS = 5;
-    const RETRY_MS = 8_000;
+    // 2 retries × 4s = ~8s ceiling. Enough to catch a slow backend prime
+    // landing tweets a few seconds after the first request, but short
+    // enough that a permanently-unavailable upstream doesn't keep the user
+    // staring at a spinner. They can click View again to try harder.
+    const MAX_ATTEMPTS = 2;
+    const RETRY_MS = 4_000;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    perUserFetchInFlight.current += 1;
     setLoadingTwitterFeed(true);
+    // `counted` guards the per-user counter against double-decrement when
+    // both `finish()` and the effect's cleanup run for the same fetch.
+    let counted = true;
+    const decrement = () => {
+      if (!counted) return;
+      counted = false;
+      perUserFetchInFlight.current = Math.max(0, perUserFetchInFlight.current - 1);
+    };
+    const finish = () => {
+      decrement();
+      setLoadingTwitterFeed(false);
+    };
 
     const tryOnce = async () => {
       if (cancelled) return;
@@ -836,20 +862,20 @@ export default function TrackersPage() {
             );
             return merged.slice(0, 100);
           });
-          setLoadingTwitterFeed(false);
+          finish();
           return;
         }
         if (attempts < MAX_ATTEMPTS) {
           retryTimer = setTimeout(tryOnce, RETRY_MS);
         } else {
-          setLoadingTwitterFeed(false);
+          finish();
         }
       } catch (err) {
         console.error("Failed to fetch tweets for selected user:", err);
         if (!cancelled && attempts < MAX_ATTEMPTS) {
           retryTimer = setTimeout(tryOnce, RETRY_MS);
         } else if (!cancelled) {
-          setLoadingTwitterFeed(false);
+          finish();
         }
       }
     };
@@ -858,6 +884,9 @@ export default function TrackersPage() {
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
+      // We may unmount or re-fire before tryOnce settled — decrement so the
+      // merged-feed loader doesn't get stuck thinking we're still loading.
+      decrement();
     };
     // `viewRequestCount` is the retry trigger — bumping it from
     // handleViewTwitterProfile re-runs this effect for the same selectedUser.
@@ -1858,10 +1887,14 @@ export default function TrackersPage() {
     // removes the last tracked handle.
     if (twitterAccounts.length === 0) {
       setTwitterFeed([]);
-      setLoadingTwitterFeed(false);
+      if (perUserFetchInFlight.current === 0) setLoadingTwitterFeed(false);
       return;
     }
-    setLoadingTwitterFeed(true);
+    // Don't toggle the spinner if a per-user cold-start is still polling
+    // upstream — otherwise this fast (~50ms) cached-only fetch would clear
+    // it well before the cold-start has a chance to land tweets, and the UI
+    // would flash to "No tweets yet" for 10+ seconds.
+    if (perUserFetchInFlight.current === 0) setLoadingTwitterFeed(true);
     try {
       // Always load the merged feed; the per-user "View" filter is applied
       // client-side via `visibleTwitterFeed`. MERGE into existing twitterFeed
@@ -1903,7 +1936,9 @@ export default function TrackersPage() {
       setTimeout(() => setToast(""), 3000);
       // Don't wipe twitterFeed on transient errors.
     } finally {
-      setLoadingTwitterFeed(false);
+      // Same guard as on entry: leave the spinner up if a per-user cold-start
+      // is still mid-flight.
+      if (perUserFetchInFlight.current === 0) setLoadingTwitterFeed(false);
     }
   };
 
