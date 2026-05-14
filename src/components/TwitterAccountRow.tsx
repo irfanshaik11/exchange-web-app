@@ -7,11 +7,20 @@ type TwitterAccountRowProps = {
   onViewProfile: (username: string) => void;
 };
 
-const TwitterAccountRow: React.FC<TwitterAccountRowProps> = ({ 
-  account, 
+const TwitterAccountRow: React.FC<TwitterAccountRowProps> = ({
+  account,
   onRemove,
-  onViewProfile 
+  onViewProfile
 }) => {
+  // A row is "enriched" once the backend has filled in profile pic + followers
+  // from TwitterAPI.io. Until then we show skeleton loaders in those slots
+  // instead of a generic letter-avatar / "0 followers" — clearer feedback
+  // that data is on its way, prevents the user from thinking the account
+  // has 0 followers.
+  const hasProfilePic = Boolean(account.profileImageUrl);
+  const hasFollowers = typeof account.followers === 'number';
+  const isEnriching = !hasProfilePic && !hasFollowers;
+
   const formatNumber = (num?: number) => {
     if (!num) return '0';
     if (num >= 1000000) {
@@ -25,41 +34,61 @@ const TwitterAccountRow: React.FC<TwitterAccountRowProps> = ({
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
       year: 'numeric'
     });
   };
 
+  const openProfile = () => window.open(`https://twitter.com/${account.username}`, '_blank');
+
   return (
     <tr className="border-b border-white/[0.03] transition-colors duration-300 hover:bg-white/[0.03]">
       <td className="px-2 py-3">
         <div className="flex items-center gap-2">
-          {account.profileImageUrl ? (
-            <img 
-              src={account.profileImageUrl} 
+          {hasProfilePic ? (
+            <img
+              src={account.profileImageUrl}
               alt={account.name}
               className="w-8 h-8 rounded-full ring-1 ring-white/10 cursor-pointer"
-							onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}
+              onClick={openProfile}
             />
+          ) : isEnriching ? (
+            // Pulsing skeleton — signals "loading" without a hard letter avatar
+            <div className="w-8 h-8 rounded-full bg-neutral-800 animate-pulse" />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 flex items-center justify-center text-neutral-300 text-xs font-bold cursor-pointer" onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}>
+            <div
+              className="w-8 h-8 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-800 flex items-center justify-center text-neutral-300 text-xs font-bold cursor-pointer"
+              onClick={openProfile}
+            >
               {account.name.charAt(0).toUpperCase()}
             </div>
           )}
           <div className="flex flex-col min-w-0">
-            <span className="font-semibold text-white text-sm truncate cursor-pointer" onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}>
+            <span
+              className="font-semibold text-white text-sm truncate cursor-pointer"
+              onClick={openProfile}
+            >
               {account.name}
             </span>
-            <span className="text-neutral-400 text-xs truncate cursor-pointer" onClick={() => window.open(`https://twitter.com/${account.username}`, '_blank')}>
+            <span
+              className="text-neutral-400 text-xs truncate cursor-pointer"
+              onClick={openProfile}
+            >
               @{account.username}
             </span>
           </div>
         </div>
       </td>
       <td className="px-2 py-3 text-xs text-neutral-400">
-        {formatNumber(account.followers)} followers
+        {hasFollowers ? (
+          `${formatNumber(account.followers)} followers`
+        ) : isEnriching ? (
+          <span className="inline-block h-3 w-16 rounded bg-neutral-800 animate-pulse align-middle" />
+        ) : (
+          '0 followers'
+        )}
       </td>
       <td className="px-2 py-3 text-xs text-neutral-400">
         {formatDate(account.createdAt)}
@@ -85,4 +114,3 @@ const TwitterAccountRow: React.FC<TwitterAccountRowProps> = ({
 };
 
 export default TwitterAccountRow;
-

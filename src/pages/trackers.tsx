@@ -802,40 +802,62 @@ export default function TrackersPage() {
   }, [twitterTab, twitterAccounts]);
 
   // When a specific user is selected (via View), fetch their tweets and MERGE
-  // them into twitterFeed (never replace). The backend does a cold-start live
-  // fetch on cache miss, so this is what actually surfaces tweets for a
-  // handle the poller hasn't reached yet. Merging means an empty response can
-  // never wipe what we already have from the combined feed.
+  // them into twitterFeed (never replace). If the first fetch returns empty
+  // (cold-start failed or backend prime hasn't completed), retry every 8s up
+  // to 5 times. `loadingTwitterFeed` stays true across retries so the UI
+  // keeps showing the loader instead of flashing "No tweets" between attempts.
   useEffect(() => {
     if (!selectedTwitterUser) return;
     if (twitterTab !== 1) return;
     let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 5;
+    const RETRY_MS = 8_000;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
     setLoadingTwitterFeed(true);
-    (async () => {
+
+    const tryOnce = async () => {
+      if (cancelled) return;
+      attempts++;
       try {
         const tweets = await getUserTweets(selectedTwitterUser, 20);
         if (cancelled) return;
-        if (tweets.length === 0) return;
-        setTwitterFeed((prev) => {
-          const seen = new Set(prev.map((t) => t.id));
-          const fresh = tweets.filter((t) => !seen.has(t.id));
-          if (fresh.length === 0) return prev;
-          const merged = [...fresh, ...prev];
-          merged.sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() -
-              new Date(a.createdAt).getTime(),
-          );
-          return merged.slice(0, 100);
-        });
+        if (tweets.length > 0) {
+          setTwitterFeed((prev) => {
+            const seen = new Set(prev.map((t) => t.id));
+            const fresh = tweets.filter((t) => !seen.has(t.id));
+            if (fresh.length === 0) return prev;
+            const merged = [...fresh, ...prev];
+            merged.sort(
+              (a, b) =>
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime(),
+            );
+            return merged.slice(0, 100);
+          });
+          setLoadingTwitterFeed(false);
+          return;
+        }
+        if (attempts < MAX_ATTEMPTS) {
+          retryTimer = setTimeout(tryOnce, RETRY_MS);
+        } else {
+          setLoadingTwitterFeed(false);
+        }
       } catch (err) {
         console.error("Failed to fetch tweets for selected user:", err);
-      } finally {
-        if (!cancelled) setLoadingTwitterFeed(false);
+        if (!cancelled && attempts < MAX_ATTEMPTS) {
+          retryTimer = setTimeout(tryOnce, RETRY_MS);
+        } else if (!cancelled) {
+          setLoadingTwitterFeed(false);
+        }
       }
-    })();
+    };
+    tryOnce();
+
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
     // `viewRequestCount` is the retry trigger — bumping it from
     // handleViewTwitterProfile re-runs this effect for the same selectedUser.
