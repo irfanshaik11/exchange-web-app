@@ -1825,12 +1825,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 													<span className="text-xs sm:text-sm text-white">
 														{(() => {
 															const holders = totalHolders;
+															// BANDAID: 50000 is the server pagination cap (holders_endpoint.go:48). Show "+" so capped tokens are distinguishable from genuine ~50K.
+															const isCapped = holders === 50000;
 															if (holders >= 1e9)
 																return `${(holders / 1e9).toFixed(1)}B`;
 															if (holders >= 1e6)
 																return `${(holders / 1e6).toFixed(1)}M`;
 															if (holders >= 1e3)
-																return `${(holders / 1e3).toFixed(1)}K`;
+																return `${(holders / 1e3).toFixed(1)}K${isCapped ? "+" : ""}`;
 															return holders.toString();
 														})()}
 													</span>
