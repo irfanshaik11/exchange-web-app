@@ -30,6 +30,11 @@ export default function TwitterTrackerContent() {
   );
   // Retry trigger for the per-user fetch effect. Re-clicking View re-runs.
   const [viewRequestCount, setViewRequestCount] = useState(0);
+  // See trackers.tsx — same per-user fetch tracker. Without this the
+  // merged-feed loader (loadTwitterFeed, ~50ms cached-only) clears the
+  // spinner while the per-user cold-start is still polling upstream for
+  // ~10-18s, flashing "No tweets yet" until the cold-start lands.
+  const perUserFetchInFlight = useRef(0);
 
   // Tombstones — usernames the user just removed. Stored as state so the
   // render-time filter below re-runs when they change. Applied at render
@@ -87,11 +92,14 @@ export default function TwitterTrackerContent() {
   const loadTwitterFeed = async () => {
     if (twitterAccounts.length === 0) {
       setTwitterFeed([]);
-      setLoadingTwitterFeed(false);
+      if (perUserFetchInFlight.current === 0) setLoadingTwitterFeed(false);
       return;
     }
 
-    setLoadingTwitterFeed(true);
+    // Don't toggle the spinner if a per-user cold-start is still polling
+    // upstream — this fast cached-only fetch would otherwise clear the
+    // spinner well before the cold-start has a chance to land tweets.
+    if (perUserFetchInFlight.current === 0) setLoadingTwitterFeed(true);
     try {
       const combinedFeed = await getTwitterFeed(
         twitterAccounts.map((acc) => acc.username),
@@ -129,7 +137,8 @@ export default function TwitterTrackerContent() {
       // Do NOT wipe twitterFeed on transient fetch errors — keep whatever WS
       // and per-user fetches have already given us.
     } finally {
-      setLoadingTwitterFeed(false);
+      // Same guard as on entry — leave spinner up if cold-start still pending.
+      if (perUserFetchInFlight.current === 0) setLoadingTwitterFeed(false);
     }
   };
 
@@ -214,11 +223,26 @@ export default function TwitterTrackerContent() {
     if (twitterTab !== 1) return;
     let cancelled = false;
     let attempts = 0;
-    const MAX_ATTEMPTS = 5;
-    const RETRY_MS = 8_000;
+    // 2 retries × 4s. See trackers.tsx for the rationale — used to be 5 × 8s
+    // which left the user staring at a spinner for ~40s when the upstream
+    // can't serve us. The circuit breaker on the backend now exits in ~1s
+    // when sources are unavailable, so a long retry budget is just dead time.
+    const MAX_ATTEMPTS = 2;
+    const RETRY_MS = 4_000;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    perUserFetchInFlight.current += 1;
     setLoadingTwitterFeed(true);
+    let counted = true;
+    const decrement = () => {
+      if (!counted) return;
+      counted = false;
+      perUserFetchInFlight.current = Math.max(0, perUserFetchInFlight.current - 1);
+    };
+    const finish = () => {
+      decrement();
+      setLoadingTwitterFeed(false);
+    };
 
     const tryOnce = async () => {
       if (cancelled) return;
@@ -239,20 +263,20 @@ export default function TwitterTrackerContent() {
             );
             return merged.slice(0, 100);
           });
-          setLoadingTwitterFeed(false);
+          finish();
           return;
         }
         if (attempts < MAX_ATTEMPTS) {
           retryTimer = setTimeout(tryOnce, RETRY_MS);
         } else {
-          setLoadingTwitterFeed(false);
+          finish();
         }
       } catch (err) {
         console.error("Failed to fetch tweets for selected user:", err);
         if (!cancelled && attempts < MAX_ATTEMPTS) {
           retryTimer = setTimeout(tryOnce, RETRY_MS);
         } else if (!cancelled) {
-          setLoadingTwitterFeed(false);
+          finish();
         }
       }
     };
@@ -261,6 +285,7 @@ export default function TwitterTrackerContent() {
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
+      decrement();
     };
   }, [selectedTwitterUser, twitterTab, viewRequestCount]);
 
