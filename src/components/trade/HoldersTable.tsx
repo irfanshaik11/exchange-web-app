@@ -1003,10 +1003,14 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         const lastActivityUnix = h.last_activity_at
           ? Math.floor(new Date(h.last_activity_at).getTime() / 1000)
           : 0;
-        const solBalance =
-          h.sol_balance_lamports && h.sol_balance_lamports > 0
-            ? h.sol_balance_lamports / 1e9
-            : null;
+        // BANDAID PERF FIX: treat the endpoint's sol_balance_lamports as
+        // authoritative (incl. 0). The previous mapping flagged 0 as "unknown"
+        // and triggered the client-side RPC fallback at line ~1100 — which
+        // batches 5-at-a-time with 200ms delays. For big tokens like TRUMP/JUP
+        // where most top-100 holders are indexer-stale, that meant ~10s of
+        // background RPC calls per token switch. The WS branch (commented below)
+        // never did this; it trusted 0 as 0. Matching that behaviour here.
+        const solBalance = (h.sol_balance_lamports ?? 0) / 1e9;
         // Map the boolean badges to the holderType discriminant used by the table.
         // Priority matches the WS path: dev > sniper > bundler > generic holder.
         const holderType: "dev" | "sniper" | "bundler" | "holder" = h.is_dev
@@ -1019,11 +1023,15 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
         return {
           address: h.wallet_address,
           lastTransactionAt: lastActivityUnix,
-          // sol_balance_lamports comes from wallet_holder_positions (indexer-fed).
-          // 0 means the indexer hasn't recorded SOL balance for this wallet yet —
-          // fall back to the client-side RPC fetcher (HoldersTable.tsx ~1038).
+          // BANDAID PERF FIX: solBalance is always defined (lamports/1e9, with
+          // 0 meaning "indexer hasn't recorded a balance for this wallet").
+          // isLoadingBalance is permanently false on the REST path so the row's
+          // SOL Bal cell renders immediately and the RPC fallback never fires.
+          // The cost: some indexer-stale wallets display 0 SOL when their real
+          // balance is higher. The benefit: 5-10s perceived speed-up on big
+          // tokens (TRUMP, JUP, etc.) where 80%+ of holders are indexer-stale.
           solBalance,
-          isLoadingBalance: solBalance == null,
+          isLoadingBalance: false,
           // Use live SOL price (chainPrice) rather than the endpoint's hard-coded
           // $200 sol_price_usd. Keeps USD columns in sync with the live feed.
           amountBoughtUsd30d: String(h.total_bought_sol * chainPrice),
