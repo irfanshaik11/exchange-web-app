@@ -828,6 +828,10 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   // if the REST endpoint is unavailable.
   const {
     holders: restHolders,
+    // BANDAID: total_holders from the endpoint is the TRUE on-chain count,
+    // NOT the (limit-capped) length of the holders array. Used below to
+    // report the right number to onTotalCountChange.
+    totalHolders: restTotalHolders,
     isLoading: restLoading,
     error: restError,
   } = useHoldersRest(chain === "sol" ? token?.mint : undefined, { limit: 100 });
@@ -1084,12 +1088,20 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   // kept for the commented WS fallback branch (no-op until uncommented).
   }, [chain, monadHolders, useRestData, restHolders, useWebSocketData, wsHolders, codexHolders, chainPrice]);
 
-  // Notify parent of total count changes
+  // Notify parent of total count changes.
+  // BANDAID: When REST is active, send the TRUE on-chain total (top-level
+  // `total_holders`) rather than the limit-capped array length. Otherwise the
+  // tab badge briefly flashes "100" on first load (the limit we request) before
+  // the parent's separate useHoldersRest hook overwrites it with the real count
+  // — that was the observed prod bug.
   useEffect(() => {
-    if (onTotalCountChange) {
-      onTotalCountChange(normalizedHolders.length);
-    }
-  }, [normalizedHolders.length, onTotalCountChange]);
+    if (!onTotalCountChange) return;
+    const count =
+      useRestData && typeof restTotalHolders === "number"
+        ? restTotalHolders
+        : normalizedHolders.length;
+    onTotalCountChange(count);
+  }, [normalizedHolders.length, onTotalCountChange, useRestData, restTotalHolders]);
 
   // Fetch SOL balances for holders (only for Solana chain and only if not provided by WebSocket)
   useEffect(() => {
