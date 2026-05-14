@@ -107,6 +107,12 @@ export default function useHoldersRest(
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // BANDAID: track consecutive errors so we can retry FAST on transient
+    // upstream failures (Helius DAS rate-limits, timeouts, etc) instead of
+    // waiting the full 15s poll interval. Resets on every success.
+    // Backoff schedule: 2s → 5s → 10s → 15s (POLL_MS) thereafter.
+    let consecutiveErrors = 0;
+    const errorBackoffs = [2_000, 5_000, 10_000];
 
     const fetchOnce = async () => {
       if (abortRef.current) abortRef.current.abort();
@@ -130,21 +136,29 @@ export default function useHoldersRest(
         setDecimals(body.decimals ?? 0);
         setError(null);
         hasDataRef.current = true;
+        consecutiveErrors = 0;
       } catch (err) {
         if (cancelled) return;
         // AbortError is expected on mint changes / unmount — don't surface it.
         if (err instanceof Error && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "failed to load holders");
+        consecutiveErrors += 1;
       } finally {
         if (!cancelled) setIsLoading(false);
       }
+    };
+
+    const nextDelay = () => {
+      if (consecutiveErrors === 0) return POLL_MS;
+      const idx = Math.min(consecutiveErrors - 1, errorBackoffs.length - 1);
+      return errorBackoffs[idx];
     };
 
     const schedule = () => {
       timer = setTimeout(async () => {
         await fetchOnce();
         if (!cancelled) schedule();
-      }, POLL_MS);
+      }, nextDelay());
     };
 
     fetchOnce().then(() => {

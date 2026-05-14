@@ -71,9 +71,14 @@ const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab, onIn
               )}
               {tab === 'Holders' && holdersCount !== undefined && holdersCount > 0 && (
                 <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: AX.border, color: AX.muted }}>
-                  {holdersCount >= 1e6 ? `${(holdersCount / 1e6).toFixed(1)}M` :
-                   holdersCount >= 1e3 ? `${(holdersCount / 1e3).toFixed(1)}K` :
-                   holdersCount.toString()}
+                  {/* BANDAID: 50000 = server pagination cap (heliusMaxPages × heliusPageSize in holders_endpoint.go:48). Suffix "+" so capped tokens show as "50.0K+" to distinguish from genuine ~50K. */}
+                  {(() => {
+                    const isCapped = holdersCount === 50000;
+                    const suffix = isCapped ? '+' : '';
+                    if (holdersCount >= 1e6) return `${(holdersCount / 1e6).toFixed(1)}M${suffix}`;
+                    if (holdersCount >= 1e3) return `${(holdersCount / 1e3).toFixed(1)}K${suffix}`;
+                    return holdersCount.toString();
+                  })()}
                 </span>
               )}
             </button>
