@@ -96,6 +96,12 @@ export default function useHoldersRest(
       return;
     }
 
+    // BANDAID: Reset state on EVERY mint change so the previous token's
+    // count + rows don't bleed into the new token's view while the first
+    // fetch is in flight. Without this, totalHolders/holders stay stale
+    // until line ~125 writes the new response (~100ms-3s later).
+    setTotalHolders(undefined);
+    setHolders([]);
     // New mint → previous data is stale; treat next fetch as "initial".
     hasDataRef.current = false;
 
