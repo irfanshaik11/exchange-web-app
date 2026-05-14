@@ -732,10 +732,13 @@ export default function TradePage() {
   }, [holderSummary?.total_holders]);
   */
 
-  // NEW (bandaid): REST-driven holders count + holder rows. limit=100 so
-  // HoldersTable can also consume `restHoldersData.holders` (top-N sliced
-  // server-side; client slices further if needed).
-  const restHoldersData = useHoldersRest(resolvedTokenMint, { limit: 100 });
+  // BANDAID PERF: parent only needs the top-level `total_holders` count to feed
+  // TradeHeader / TradeActionPanel / tab badge — NOT the holders array. Dropping
+  // limit from 100 → 1 makes the response ~50× smaller (50KB → ~1KB) and the
+  // JSON parse / setState with the (unused) holders array near-instant. The
+  // table itself, when the user opens the Holders tab, fetches its own full
+  // 100-row response via HoldersTable's separate useHoldersRest call.
+  const restHoldersData = useHoldersRest(resolvedTokenMint, { limit: 1 });
   const restHoldersCount = restHoldersData.totalHolders;
   // BANDAID: Reset the local holdersCount when the mint changes so the
   // previous token's count doesn't bleed into the new view. Without this,
@@ -1564,11 +1567,19 @@ export default function TradePage() {
                     <CodexTopTraders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
                   </React.Suspense>
                 </div>
-                <div className={`flex flex-col h-full ${selectedTab === "Holders" ? "" : "hidden"}`}>
-                  <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" onTotalCountChange={setHoldersCount} />
-                  </React.Suspense>
-                </div>
+                {/* BANDAID PERF: conditionally mount the Holders tab body instead of
+                    using `hidden` CSS. HoldersTable is heavy — 100 rows, useMemo
+                    chains, walletDataMap, sortedAndFilteredHolders, etc. The old
+                    pattern rendered all of that on every page load even when the
+                    tab was hidden, blocking the count's first paint. Now we only
+                    pay that cost when the user actually opens the tab. */}
+                {selectedTab === "Holders" && (
+                  <div className="flex flex-col h-full">
+                    <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
+                      <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" onTotalCountChange={setHoldersCount} />
+                    </React.Suspense>
+                  </div>
+                )}
                 <div className={`flex flex-col h-full ${selectedTab === "Dev Tokens" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexDevTokens token={displayToken} chain="sol" onTotalCountChange={setDevTokensCount} />
