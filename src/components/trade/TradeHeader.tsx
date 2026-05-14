@@ -446,6 +446,10 @@ interface TradeHeaderProps {
 	wsVolume?: SolanaTokenVolume | null;
 	/** Holder summary from unified WebSocket (kol_count, total_holders, etc.) */
 	holderSummary?: HolderSummary | null;
+	/** BANDAID: REST-driven holder count from /v1/token/{mint}/holders. Takes
+	 * precedence over holderSummary?.total_holders while the WS path is
+	 * disabled. Remove this prop + uncomment the WS chain below to revert. */
+	restHoldersCount?: number;
 	/** Toggle function for right panel visibility */
 	onToggleRightPanel?: () => void;
 	/** Whether the right panel is currently visible */
@@ -456,7 +460,7 @@ interface TradeHeaderProps {
 	onRefreshSupply?: () => void;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume, holderSummary, onToggleRightPanel, isRightPanelVisible, circulatingSupply, onRefreshSupply }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume, holderSummary, restHoldersCount, onToggleRightPanel, isRightPanelVisible, circulatingSupply, onRefreshSupply }) => {
 	const coalesceNumber = (...values: any[]): number | null => {
 		for (const v of values) {
 			const n = typeof v === "string" ? parseFloat(v) : v;
@@ -1691,8 +1695,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										// Get kol_count from holderSummary (priority) or token
 										const kolCount = holderSummary?.kol_count ?? token?.kol_count ?? 0;
 
-										// Get total holders from holderSummary (priority), wsTokenInfo, or token
-										const totalHolders = holderSummary?.total_holders ?? wsTokenInfo?.holder_count ?? token?.holder_count ?? token?.total_holders ?? (token as any)?.unique_wallets_24h ?? 0;
+										// BANDAID: WS holderSummary chain disabled, using REST prop instead.
+										// To restore: replace `restHoldersCount ?? 0` with the commented chain below.
+										// const totalHolders = holderSummary?.total_holders ?? wsTokenInfo?.holder_count ?? token?.holder_count ?? token?.total_holders ?? (token as any)?.unique_wallets_24h ?? 0;
+										const totalHolders = restHoldersCount ?? 0;
 
 										return (
 											<>

@@ -271,7 +271,7 @@ const AddressDisplay: React.FC<{
 };
 
 // Token Info Dropdown Component
-const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null; firstBuyers?: FirstBuyer[]; firstBuyersSummary?: FirstBuyersSummary | null }> = ({ token, liveMarketCapUsd, firstBuyers, firstBuyersSummary }) => {
+const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null; firstBuyers?: FirstBuyer[]; firstBuyersSummary?: FirstBuyersSummary | null; restHoldersCount?: number }> = ({ token, liveMarketCapUsd, firstBuyers, firstBuyersSummary, restHoldersCount }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   // Get token metrics (using Codex fields if available, fallback to token-analytics)
@@ -663,7 +663,9 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
                 <div className="flex items-center gap-1.5">
                   <FaUsers className="text-white" size={16} />
                   <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
-                    {token?.total_holders || 0}
+                    {/* BANDAID: token.total_holders disabled, using REST prop. Restore by uncommenting. */}
+                    {/* {token?.total_holders || 0} */}
+                    {restHoldersCount ?? 0}
                   </div>
                 </div>
                 <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Holders</div>
@@ -733,7 +735,7 @@ const formatCompactNumber = (n: number | string): string => {
 /* ── Toast helpers (showOrderToast + ORDER_TOAST_STYLE imported from ~/utils/tradeToast) ── */
 
 // Pool Info Section Component
-const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; liveLiquidityUsd?: number | null }> = ({ token, liveMarketCapUsd, liveLiquidityUsd }) => {
+const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; liveLiquidityUsd?: number | null; restHoldersCount?: number }> = ({ token, liveMarketCapUsd, liveLiquidityUsd, restHoldersCount }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   const copyToClipboard = (text: string) => {
@@ -929,7 +931,9 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holders</span>
               <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                {token?.total_holders || token?.unique_traders || 0}
+                {/* BANDAID: token.total_holders / unique_traders disabled, using REST prop. Restore by uncommenting. */}
+                {/* {token?.total_holders || token?.unique_traders || 0} */}
+                {restHoldersCount ?? 0}
               </span>
             </div>
 
@@ -1056,6 +1060,10 @@ interface TradeActionPanelProps {
   circulatingSupply?: number; // Circulating supply from /v1/supply endpoint
   firstBuyers?: FirstBuyer[];
   firstBuyersSummary?: FirstBuyersSummary | null;
+  /** BANDAID: REST-driven holder count from /v1/token/{mint}/holders. Takes
+   * precedence over token?.total_holders / token?.unique_traders while the
+   * WS path is disabled. Remove this prop + uncomment the reads below to revert. */
+  restHoldersCount?: number;
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
@@ -1071,6 +1079,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   circulatingSupply,
   firstBuyers,
   firstBuyersSummary,
+  restHoldersCount,
 }) => {
   // Live SOL price from Pyth Network (same source as footer)
   const { solPrice: liveSolPrice } = useSolPrice();
@@ -4516,10 +4525,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== Token Info ===== */}
-      <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} firstBuyers={firstBuyers} firstBuyersSummary={firstBuyersSummary} />
+      <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} firstBuyers={firstBuyers} firstBuyersSummary={firstBuyersSummary} restHoldersCount={restHoldersCount} />
 
       {/* ===== Pool Info Section ===== */}
-      <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} liveLiquidityUsd={liveLiquidityUsd} />
+      <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} liveLiquidityUsd={liveLiquidityUsd} restHoldersCount={restHoldersCount} />
 
       {/* High Slippage Warning Dialog */}
       <HighSlippageWarningDialog
