@@ -1236,17 +1236,21 @@ export default function PulsePage() {
   const { preloadImages } = useImagePreloader();
 
   useEffect(() => {
-    if (newPairsToShow && newPairsToShow.length > 0) {
-      const imageSources = newPairsToShow
-        .slice(0, 20)
-        .map((token: any) => extractTokenImage(token))
-        .filter(Boolean);
+    const allTokens = [
+      ...((newPairsToShow as any[]) || []),
+      ...((finalStretchToShow as any[]) || []),
+      ...((migratedToShow as any[]) || []),
+    ];
+    if (allTokens.length === 0) return;
 
-      if (imageSources.length > 0) {
-        preloadImages(imageSources, { priority: true, timeout: 2000 });
-      }
+    const imageSources = allTokens
+      .map((token: any) => extractTokenImage(token))
+      .filter(Boolean);
+
+    if (imageSources.length > 0) {
+      preloadImages(imageSources, { priority: true, timeout: 2000 });
     }
-  }, [newPairsToShow, preloadImages]);
+  }, [newPairsToShow, finalStretchToShow, migratedToShow, preloadImages]);
 
   // Sync rolling trade cache with visible pulse tokens (debounced to prevent excessive requests)
   // CRITICAL: Only sync cache for Solana route - Monad tokens use different service
@@ -1477,7 +1481,7 @@ export default function PulsePage() {
         <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
-      <div className="flex h-screen flex-col overflow-hidden bg-[#050608] text-neutral-100">
+      <div className="flex h-screen flex-col overflow-hidden bg-[#030304] text-zinc-100">
         <div className="relative z-[10000]"><Header /></div>
         <div className="flex-1 min-h-0 p-1 pb-7 sm:p-1.5 sm:pb-7">
           <DockedPanelMarginWrapper>

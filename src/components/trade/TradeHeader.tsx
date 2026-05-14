@@ -62,20 +62,22 @@ const MONAD_BRAND = {
 // Monad candle colors (matches chart colors)
 const MONAD_RED = "#f26682";
 
-/* ---------- AXIOM palette ---------- */
+/* ---------- AXIOM palette (refined) ---------- */
 const AX = {
-	bg: "#111214",
-	surface: "#1A1A1A",
-	surface2: "#17191E",
-	border: "#2A2B33",
-	text: "#f0f5f5",
-	muted: "#9CA3AF",
-	green: "#3DDC84",
-	blue: "#8EC5FF",
+	bg: "#0c0d10",
+	surface: "#101114",
+	surface2: "#141619",
+	border: "#1f2127",
+	borderHover: "#2a2d36",
+	text: "#f4f4f5",
+	muted: "#71717a",
+	green: "#18c48c",
+	blue: "#3b82f6",
 	warning: "#facc15",
 	aiBlue: "#3B82F6",
 	aiGreen: "#18c48c",
 	aiCyan: "#06B6D4",
+	sell: "#ef4444",
 	glowBlue: "rgba(59, 130, 246, 0.35)",
 	glowGreen: "rgba(24, 196, 140, 0.3)",
 	glowCyan: "rgba(6, 182, 212, 0.3)",
@@ -444,6 +446,10 @@ interface TradeHeaderProps {
 	wsVolume?: SolanaTokenVolume | null;
 	/** Holder summary from unified WebSocket (kol_count, total_holders, etc.) */
 	holderSummary?: HolderSummary | null;
+	/** BANDAID: REST-driven holder count from /v1/token/{mint}/holders. Takes
+	 * precedence over holderSummary?.total_holders while the WS path is
+	 * disabled. Remove this prop + uncomment the WS chain below to revert. */
+	restHoldersCount?: number;
 	/** Toggle function for right panel visibility */
 	onToggleRightPanel?: () => void;
 	/** Whether the right panel is currently visible */
@@ -454,7 +460,7 @@ interface TradeHeaderProps {
 	onRefreshSupply?: () => void;
 }
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume, holderSummary, onToggleRightPanel, isRightPanelVisible, circulatingSupply, onRefreshSupply }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMarketCapUsd, wsTokenInfo, wsVolume, holderSummary, restHoldersCount, onToggleRightPanel, isRightPanelVisible, circulatingSupply, onRefreshSupply }) => {
 	const coalesceNumber = (...values: any[]): number | null => {
 		for (const v of values) {
 			const n = typeof v === "string" ? parseFloat(v) : v;
@@ -482,11 +488,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		// No data yet — reserve layout space with invisible placeholder (no skeleton flicker)
 		return (
 			<div className="flex-shrink-0 px-2">
-				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.surface }}>
-					<div className="h-10 w-10 rounded-md" />
+				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.bg }}>
+					<div className="h-10 w-10 rounded-lg" style={{ backgroundColor: AX.border }} />
 					<div className="flex flex-col gap-1">
-						<div className="h-4 w-24 rounded" />
-						<div className="h-3 w-16 rounded" />
+						<div className="h-4 w-24 rounded" style={{ backgroundColor: AX.border }} />
+						<div className="h-3 w-16 rounded" style={{ backgroundColor: AX.border }} />
 					</div>
 				</div>
 			</div>
@@ -497,11 +503,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		// Have objects but no identity yet — invisible placeholder
 		return (
 			<div className="flex-shrink-0 px-2">
-				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.surface }}>
-					<div className="h-10 w-10 rounded-md" />
+				<div className="flex items-center gap-3 rounded-lg p-3" style={{ backgroundColor: AX.bg }}>
+					<div className="h-10 w-10 rounded-lg" style={{ backgroundColor: AX.border }} />
 					<div className="flex flex-col gap-1">
-						<div className="h-4 w-24 rounded" />
-						<div className="h-3 w-16 rounded" />
+						<div className="h-4 w-24 rounded" style={{ backgroundColor: AX.border }} />
+						<div className="h-3 w-16 rounded" style={{ backgroundColor: AX.border }} />
 					</div>
 				</div>
 			</div>
@@ -780,7 +786,23 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 	const isLiquidityLoading = isSolanaToken
 		? !hasWsLiquidity && !hasTokenLiquidity
 		: !hasWsLiquidity && !hasTokenLiquidity && !wsLiquidityFromMarketData;
-	const supply = circulatingSupply ?? (token as any)?.total_supply ?? (token as any)?.supply ?? 1_000_000_000;
+	// `circulatingSupply` from useTokenSupply uses the value `1` as a sentinel
+	// meaning "still loading /v1/supply" — that's intentional so the chart's
+	// transformBar multiplier renders USD-scale values during the cold-start
+	// window instead of price×1B-fallback. But for the Supply STAT field we
+	// want a placeholder until the real value resolves; rendering "1.000" in
+	// the header is the ugly artifact the user reported. Any value <= 1 here
+	// is treated as "not loaded yet", with token.total_supply and token.supply
+	// as best-effort fallbacks (e.g. for tokens where useTokenSupply's RPC
+	// is still in flight but the token-service payload already had a value).
+	const supplyResolved =
+		circulatingSupply && circulatingSupply > 1
+			? circulatingSupply
+			: (token as any)?.total_supply ?? (token as any)?.supply ?? null;
+	// Keep `supply` defined for any downstream use that still expects a number.
+	// Falls back to 1B only when nothing else is known — same behavior as before
+	// my recent useTokenSupply sentinel change, just gated on resolution status.
+	const supply = supplyResolved ?? 1_000_000_000;
 	const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
 	const isLowLiquidity = Number(liq) < 1000;
 
@@ -1673,8 +1695,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 										// Get kol_count from holderSummary (priority) or token
 										const kolCount = holderSummary?.kol_count ?? token?.kol_count ?? 0;
 
-										// Get total holders from holderSummary (priority), wsTokenInfo, or token
-										const totalHolders = holderSummary?.total_holders ?? wsTokenInfo?.holder_count ?? token?.holder_count ?? token?.total_holders ?? (token as any)?.unique_wallets_24h ?? 0;
+										// BANDAID: WS holderSummary chain disabled, using REST prop instead.
+										// To restore: replace `restHoldersCount ?? 0` with the commented chain below.
+										// const totalHolders = holderSummary?.total_holders ?? wsTokenInfo?.holder_count ?? token?.holder_count ?? token?.total_holders ?? (token as any)?.unique_wallets_24h ?? 0;
+										const totalHolders = restHoldersCount ?? 0;
 
 										return (
 											<>
@@ -1935,7 +1959,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 						})()}
 						<StatInline label="Supply">
 							<span className="inline-flex items-center gap-1">
-								{formatSmartNumber(supply)}
+								{/* Show placeholder until the real supply resolves. supplyResolved
+								    is null when useTokenSupply hasn't returned a real value AND
+								    the token payload doesn't carry a supply field. */}
+								{supplyResolved !== null ? formatSmartNumber(supplyResolved) : "—"}
 								{onRefreshSupply && (
 									<button
 										type="button"

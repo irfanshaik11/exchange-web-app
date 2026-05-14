@@ -30,7 +30,7 @@ import {
 } from "~/utils/seasons";
 import posthog from "posthog-js";
 
-type LeaderboardType = "points" | "pnl" | "volume";
+type LeaderboardType = "points" | "pnl";
 // Leaderboard period is now always a season. Legacy DAILY/MONTHLY/LIFETIME
 // still serve traffic from the backend during the bake period but are no
 // longer exposed in the UI — tracking cleanup in exchange-backend#256.
@@ -175,14 +175,12 @@ export default function LeaderboardPage() {
   const categoryLabel = {
     points: "Credits",
     pnl: "Realized PnL",
-    volume: "Volume",
   }[type];
 
   const getEntryValue = (entry: LeaderboardEntry | undefined): number => {
     if (!entry) return 0;
     if (type === "points") return Number(entry.points ?? entry.goldEarned ?? 0);
-    if (type === "pnl") return Number(entry.pnl ?? 0);
-    return Number(entry.volume ?? 0);
+    return Number(entry.pnl ?? 0);
   };
 
   const formatValue = (value: number): string => {
@@ -296,7 +294,6 @@ export default function LeaderboardPage() {
                         [
                           { key: "points", label: "Credits" },
                           { key: "pnl", label: "Realized PnL" },
-                          { key: "volume", label: "Volume" },
                         ] as const
                       ).map(({ key, label }) => {
                         const active = type === key;
@@ -620,7 +617,6 @@ export default function LeaderboardPage() {
                     const unrankedHint = {
                       points: "Start trading to earn your first Credits",
                       pnl: "Close a position to appear on the PnL board",
-                      volume: "Start trading to appear on the Volume board",
                     }[type];
 
                     return (

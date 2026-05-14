@@ -437,7 +437,7 @@ export default function ImportWalletModal({
                   <textarea
                     value={privateKeyInput}
                     onChange={(e) => handlePrivateKeyChange(e.target.value)}
-                    placeholder="Paste your private key (base58 for Solana, 0x... for EVM)"
+                    placeholder="Paste your seed phrase (base58 for Solana, 0x... for EVM)"
                     disabled={isImporting}
                     className="w-full h-20 px-3 py-2 bg-[#0b0c0f] border border-[#2A2B33] rounded-md text-sm text-[#f0f5f5] placeholder-[#6B7280] focus:border-[#70E0B0] focus:outline-none resize-none"
                     style={{ fontFamily: "monospace" }}

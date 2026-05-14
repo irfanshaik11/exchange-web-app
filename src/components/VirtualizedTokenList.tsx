@@ -25,6 +25,31 @@ interface VirtualizedTokenListProps<T> {
   emptyRenderer?: () => React.ReactNode;
   /** Optional className on the container div */
   className?: string;
+  /**
+   * Stable per-row key extractor for react-window. WITHOUT this, react-window
+   * keys rows by index → every WS-prepend shifts row 0 → row 1 etc → React
+   * reuses DOM nodes with new props → list-wide image flicker. Pass an
+   * identity function (e.g. `(t) => t.mint`) per call site for full type
+   * safety; the fallback in this component handles common token-shape fields
+   * but degrades to numeric index for unknown shapes.
+   */
+  getItemKey?: (item: T, index: number) => React.Key;
+}
+
+// Token-shape fields used by the default itemKey extractor. Runtime narrowing
+// (not a cast) — a token without any of these falls through to the numeric
+// index, which preserves the pre-fix behavior rather than breaking.
+function defaultItemKey(item: unknown, index: number): React.Key {
+  if (item !== null && typeof item === "object") {
+    const obj = item as Record<string, unknown>;
+    const mint = obj.mint;
+    if (typeof mint === "string" && mint.length > 0) return mint;
+    const mintAddress = obj.mint_address;
+    if (typeof mintAddress === "string" && mintAddress.length > 0) return mintAddress;
+    const pairAddress = obj.pair_address;
+    if (typeof pairAddress === "string" && pairAddress.length > 0) return pairAddress;
+  }
+  return index;
 }
 
 interface RowData<T> {
@@ -59,6 +84,7 @@ function VirtualizedTokenListInner<T>({
   loading = false,
   emptyRenderer,
   className,
+  getItemKey,
 }: VirtualizedTokenListProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(600);
@@ -113,6 +139,21 @@ function VirtualizedTokenListInner<T>({
         overscanCount={overscanCount}
         outerElementType={OuterElement}
         itemData={itemData}
+        // Stable per-row identity. Without this, react-window keys rows by
+        // index — every WS prepend shifts row 0 → row 1, reusing the same
+        // DOM node with new props, triggering FastImage's `useEffect` on
+        // every existing row → list-wide image flicker. Caller-supplied
+        // `getItemKey` is preferred (full type safety); otherwise we narrow
+        // common token-shape fields at runtime and fall back to index for
+        // unknown shapes (no worse than the pre-fix default). Closes over
+        // `items` rather than relying on `data` typing, which TypeScript
+        // doesn't reliably infer through react-window's generics.
+        itemKey={(index) => {
+          const item = items[index];
+          if (item === undefined) return index;
+          if (getItemKey) return getItemKey(item, index);
+          return defaultItemKey(item, index);
+        }}
       >
         {MemoRow}
       </FixedSizeList>

@@ -27,10 +27,16 @@ import { getMyLimitOrders } from "../../utils/api";
 import { creatorAddressCache } from "../../utils/preloadTradeChart";
 import { useKeepOrderFresh } from "../../hooks/usePrefetchOrder";
 import useTokenSupply from "../../hooks/useTokenSupply";
+// BANDAID: REST-driven holders count (token-service /v1/token/{mint}/holders).
+// Replaces WS holderSummary.total_holders for the TradeHeader people-icon, the
+// TradeActionPanel "Holders" tile, and the TradeTabs "Holders" tab badge until
+// the WS path is restored.
+import useHoldersRest from "../../hooks/useHoldersRest";
 // Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
 import AdvancedOHLCChart, { type AdvancedOHLCChartHandle } from "../../components/AdvancedOHLCChart";
 import { usePendingTradeMarkers } from "../../hooks/usePendingTradeMarkers";
 import { subscribe as subscribePendingTrades } from "../../utils/pendingTradeMarkers";
+import { useSolPrice } from "../../components/SolPriceContext";
 
 // Lazy load other heavy components to reduce initial bundle size
 //const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
@@ -39,17 +45,22 @@ const CodexTopTraders = dynamic(() => import("../../components/trade/CodexTopTra
 const CodexDevTokens = dynamic(() => import("../../components/trade/CodexDevTokens"), { ssr: false });
 const CodexHolders = dynamic(() => import("../../components/trade/CodexHolders"), { ssr: false });
 
-/* ---------- AXIOM palette ---------- */
+/* ---------- AXIOM palette (refined) ---------- */
 const AX = {
-  bg: "#101114",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
+  bg: "#0c0d10",
+  surface: "#101114",
+  surface2: "#141619",
+  border: "#1f2127",
+  borderHover: "#2a2d36",
+  text: "#f4f4f5",
+  textMuted: "#71717a",
+  textDim: "#52525b",
+  mint: "#18c48c",
+  mintHover: "#14a876",
+  mintGlow: "rgba(24, 196, 140, 0.25)",
+  sell: "#ef4444",
+  sellGlow: "rgba(239, 68, 68, 0.25)",
+  blue: "#3b82f6",
 };
 
 /* ===================================================================== */
@@ -402,8 +413,23 @@ export default function TradePage() {
     return undefined;
   }, [optimisticToken?.mint, _mint, id]);
 
-  // Fetch real circulating supply from token service (falls back to 1B)
-  const { circulatingSupply, refetch: refetchSupply } = useTokenSupply(resolvedTokenMint);
+  // Fetch real circulating supply from token service. The launchpad_protocol
+  // hint lets useTokenSupply apply the 1B last-resort fallback for known
+  // bonding-curve launchpads (pump.fun, bonk.fun, meteora, etc.) when every
+  // accurate path has failed. We compose the hint from every source available
+  // at this point in render: URL query param (instant, present when entered
+  // via PulseTable hover) OR correctTokenData from /v1/search (~100-500ms
+  // after mount, present even when URL is a bare paste from SearchModal).
+  // useTokenSupply mirrors this prop into a ref, so a late arrival from
+  // search re-arms the 1B fallback even after the initial 2s timer ran.
+  const launchpadProtocolHint =
+    optimisticToken?.launchpad_protocol ??
+    (correctTokenData as any)?.launchpad_protocol ??
+    undefined;
+  const { circulatingSupply, refetch: refetchSupply } = useTokenSupply(
+    resolvedTokenMint,
+    launchpadProtocolHint,
+  );
 
   // Prefetch is handled by TradeActionPanel when the user selects an amount.
   // The previous page-level prefetch used a hardcoded 0.1 SOL which spammed
@@ -695,13 +721,27 @@ export default function TradePage() {
     }
   }, [holderSummary?.dev_wallet, creatorAddress]);
 
-  // Set holdersCount from WebSocket snapshot (same source as TradeHeader/TradeActionPanel)
+  // BANDAID: WS-driven holdersCount disabled while we route through REST.
+  // To restore: delete the useHoldersRest call below + uncomment this block.
+  /*
   useEffect(() => {
     const wsHolders = holderSummary?.total_holders;
     if (wsHolders != null && wsHolders > 0) {
       setHoldersCount(wsHolders);
     }
   }, [holderSummary?.total_holders]);
+  */
+
+  // NEW (bandaid): REST-driven holders count + holder rows. limit=100 so
+  // HoldersTable can also consume `restHoldersData.holders` (top-N sliced
+  // server-side; client slices further if needed).
+  const restHoldersData = useHoldersRest(resolvedTokenMint, { limit: 100 });
+  const restHoldersCount = restHoldersData.totalHolders;
+  useEffect(() => {
+    if (restHoldersCount != null && restHoldersCount > 0) {
+      setHoldersCount(restHoldersCount);
+    }
+  }, [restHoldersCount]);
 
   // Get current pair address for caching
   const currentPairAddress = React.useMemo(() => {
@@ -744,6 +784,7 @@ export default function TradePage() {
   // executeEnhancedTrade. Persisted to localStorage so they survive reload.
   const userWalletForMarkers = primaryWalletAddresses?.solana || user?.publicKey || null;
   const pendingTrades = usePendingTradeMarkers(resolvedTokenMint, userWalletForMarkers);
+  const { solPrice: currentSolPriceUsd } = useSolPrice();
 
   // Imperative ref to the chart so we can fire refreshMarks() immediately on
   // pending-store mutations, bypassing the chart's internal 800ms debounce.
@@ -797,6 +838,14 @@ export default function TradePage() {
         id: p.id,
         price_usd: p.priceUsd,
         amount: p.amountSol ?? p.amountToken,
+        // Compute total_usd so the chart tooltip shows the correct value:
+        // amountSol × SOL/USD price, or amountToken × per-token USD price.
+        total_usd:
+          p.amountSol && currentSolPriceUsd
+            ? p.amountSol * currentSolPriceUsd
+            : p.amountToken && p.priceUsd
+              ? p.amountToken * p.priceUsd
+              : undefined,
         __optimistic: true,
         __optimisticId: p.id,
         // createdAt — used by fuzzy-match guard to reject WS trades older
@@ -941,7 +990,7 @@ export default function TradePage() {
     }
 
     return combined;
-  }, [wsHistoricalTrades, pendingTrades]);
+  }, [wsHistoricalTrades, pendingTrades, currentSolPriceUsd]);
 
   // No auto-removal of confirmed optimistic rows from the store. Even when
   // the WS feed currently has the trade, that buffer is finite (~200 trades)
@@ -973,14 +1022,56 @@ export default function TradePage() {
   // Prevents one-frame flicker of previous token's MC when switching via watchlist ticker.
   const validChartMetrics = chartMetrics.forTokenId === idString ? chartMetrics : {};
 
-  // Coalesced live market cap for TradeActionPanel (same priority as chart header)
+  // Coalesced live market cap for the trade-page header + TradeActionPanel.
+  //
+  // Priority (revised after Goblin/TRUMP regression):
+  //   1. FE-computed: wsTokenInfo.price_usd × circulatingSupply (real)
+  //   2. wsTokenInfo.market_cap_usd (indexer-computed, may be wrong for
+  //      pump.fun)
+  //   3. validChartMetrics.lastMarketCapUsd (chart-derived, TF-dependent)
+  //
+  // Why (1) is now first: the indexer stores `tokens.market_cap_usd` as
+  // `price × 1_000_000_000` for pump.fun pre-graduation tokens (see the
+  // hardcoded 1B in indexer's lib/tokenSupply.ts). That's wrong for any
+  // pump.fun token with non-1B circulating supply — e.g. Goblin has
+  // 710.49M, so the indexer reports $16.32M when the real MC is $11.36M.
+  //
+  // The FE has both pieces independently:
+  //   - wsTokenInfo.price_usd: live price tick from the token-info WS
+  //     (useSolanaTokenWebSocket), TF-independent, fires on every trade
+  //   - circulatingSupply: real on-chain supply from useTokenSupply,
+  //     which RPCs the token-service /v1/supply endpoint (for pump.fun
+  //     this does the proper getTokenSupply minus reserve-wallet
+  //     subtraction)
+  //
+  // Multiplying these client-side is both TF-stable AND uses the correct
+  // supply, fixing the regression where the header showed 1B-multiplied
+  // values for pump.fun tokens whose real supply is anything other than 1B.
+  //
+  // Fallbacks remain for the brief window before useTokenSupply resolves
+  // (supply <= 1 sentinel) — fall through to indexer's value, then chart.
   const liveMarketCapForPanel = React.useMemo(() => {
-    const chart = validChartMetrics.lastMarketCapUsd;
-    if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
+    const livePrice = wsTokenInfo?.price_usd;
+    if (
+      typeof livePrice === "number" &&
+      Number.isFinite(livePrice) &&
+      livePrice > 0 &&
+      typeof circulatingSupply === "number" &&
+      circulatingSupply > 1
+    ) {
+      return livePrice * circulatingSupply;
+    }
     const ws = wsTokenInfo?.market_cap_usd;
     if (typeof ws === "number" && Number.isFinite(ws) && ws > 0) return ws;
+    const chart = validChartMetrics.lastMarketCapUsd;
+    if (typeof chart === "number" && Number.isFinite(chart) && chart > 0) return chart;
     return null;
-  }, [validChartMetrics.lastMarketCapUsd, wsTokenInfo?.market_cap_usd]);
+  }, [
+    wsTokenInfo?.price_usd,
+    circulatingSupply,
+    wsTokenInfo?.market_cap_usd,
+    validChartMetrics.lastMarketCapUsd,
+  ]);
 
   // Live browser tab title: "TOKEN ↑ $264K" with direction arrow
   const prevMcapRef = useRef<number | null>(null);
@@ -1241,9 +1332,9 @@ export default function TradePage() {
       <div
         className="min-h-screen w-full flex flex-col overflow-y-auto overflow-x-hidden"
         style={{
-          backgroundColor: "#101114",
+          backgroundColor: AX.bg,
           color: AX.text,
-          fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif",
         }}
       >
         {/* Top global header */}
@@ -1266,6 +1357,7 @@ export default function TradePage() {
             className="flex-1 min-w-0 max-w-full flex flex-col pb-0"
             style={{
               borderRight: `1px solid ${AX.border}`,
+              backgroundColor: AX.surface,
               minHeight: 0,
             }}
           >
@@ -1285,6 +1377,8 @@ export default function TradePage() {
                   wsTokenInfo={wsTokenInfo}
                   wsVolume={wsVolume}
                   holderSummary={holderSummary}
+                  /* BANDAID: REST-driven holder count for the people icon. */
+                  restHoldersCount={restHoldersCount}
                   livePriceUsd={validChartMetrics.lastPriceUsd}
                   liveMarketCapUsd={validChartMetrics.lastMarketCapUsd}
                   onToggleRightPanel={() => setIsRightPanelVisible(!isRightPanelVisible)}
@@ -1295,7 +1389,7 @@ export default function TradePage() {
               </div>
 
               {/* Separator line after TradeHeader */}
-              <div className="px-3 border-b border-[#2A2B33]" />
+              <div className="px-3" style={{ borderBottom: `1px solid ${AX.border}` }} />
 
               <div 
                 id="chart-container-wrapper"
@@ -1416,16 +1510,18 @@ export default function TradePage() {
                 (e.target as Element).addEventListener("pointerup", onUp, { passive: false });
                 (e.target as Element).addEventListener("pointercancel", onUp, { passive: false });
               }}
-              className="relative h-3 cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
-              style={{ touchAction: "none", zIndex: 10, pointerEvents: "auto" }}
+              className="relative h-2 cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center transition-colors group"
+              style={{ touchAction: "none", zIndex: 10, pointerEvents: "auto", backgroundColor: AX.surface }}
             >
-              {/* Visual separator line - behind dots */}
-              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] bg-gray-700/30" />
+              {/* Visual separator line */}
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px]" style={{ backgroundColor: AX.border }} />
+              {/* Hover indicator */}
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ backgroundColor: `${AX.mint}10` }} />
               {/* Visible dots handle */}
-              <div className="relative z-10 flex items-center gap-1">
-                <div className="w-1 h-1 rounded-full bg-[#757e80]" />
-                <div className="w-1 h-1 rounded-full bg-[#757e80]" />
-                <div className="w-1 h-1 rounded-full bg-[#757e80]" />
+              <div className="relative z-10 flex items-center gap-0.5">
+                <div className="w-1 h-1 rounded-full transition-colors" style={{ backgroundColor: AX.textDim }} />
+                <div className="w-1 h-1 rounded-full transition-colors" style={{ backgroundColor: AX.textDim }} />
+                <div className="w-1 h-1 rounded-full transition-colors" style={{ backgroundColor: AX.textDim }} />
               </div>
             </div>
 
@@ -1478,7 +1574,10 @@ export default function TradePage() {
 
           {/* RIGHT: action panel + reused image + similar tokens */}
           {isRightPanelVisible && (
-            <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden md:flex flex-col pb-12">
+            <div 
+              className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden md:flex flex-col pb-12"
+              style={{ backgroundColor: AX.bg }}
+            >
 
               {/* Token Info / actions */}
               <div className="right-rail-panel token-info-panel">
@@ -1495,6 +1594,8 @@ export default function TradePage() {
                   circulatingSupply={circulatingSupply}
                   firstBuyers={wsFirstBuyers}
                   firstBuyersSummary={wsFirstBuyersSummary}
+                  /* BANDAID: REST-driven Holders stat tile. */
+                  restHoldersCount={restHoldersCount}
                 />
               </div>
 
@@ -1524,8 +1625,15 @@ export default function TradePage() {
 
           {/* Trade button for mobile */}
           <div className="fixed bottom-0 left-0 w-full p-4 z-50 md:hidden mb-10">
-            <button className="w-full bg-emerald-500 text-white p-2 rounded-lg cursor-pointer"
-                    onClick={() => setShowMobileTradeModal(true)}>
+            <button 
+              className="w-full p-3 rounded-xl cursor-pointer font-semibold text-sm transition-all duration-200"
+              style={{ 
+                backgroundColor: AX.mint, 
+                color: '#030304',
+                boxShadow: `0 0 20px ${AX.mintGlow}`,
+              }}
+              onClick={() => setShowMobileTradeModal(true)}
+            >
               Trade
             </button>
           </div>
@@ -1536,17 +1644,17 @@ export default function TradePage() {
       {/* Mobile Trade Modal */}
       {showMobileTradeModal && (
         <div className="fixed inset-0 z-[100] md:hidden">
-          <div className={`absolute inset-0 bg-black/70 bg-opacity-50 transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`} onClick={closeModal}/>
+          <div className={`absolute inset-0 backdrop-blur-sm transition-opacity duration-300 ${isClosingModal ? "opacity-0" : "opacity-100"}`} style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} onClick={closeModal}/>
           <div ref={modalDragRef}
-               className={`absolute bottom-0 left-0 right-0 bg-[#101114] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
-               style={{ touchAction: "none" }}>
+               className={`absolute bottom-0 left-0 right-0 rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col ${isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"}`}
+               style={{ touchAction: "none", backgroundColor: AX.surface, borderTop: `1px solid ${AX.border}` }}>
             <div className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing select-none"
                  onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}
                  onMouseDown={handleDragStart} style={{ touchAction: "none" }}>
-              <div className="w-12 h-1 bg-[#2A2B33] rounded-full" />
+              <div className="w-12 h-1 rounded-full" style={{ backgroundColor: AX.border }} />
             </div>
             <div className="flex justify-end pr-4 pb-2">
-              <button onClick={closeModal} className="w-8 h-8 rounded-full bg-[#2A2B33] flex items-center justify-center text-[#9CA3AF] hover:bg-[#1E1F26] transition-colors">
+              <button onClick={closeModal} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors" style={{ backgroundColor: AX.border, color: AX.textMuted }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18"></line>
                   <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -1567,6 +1675,8 @@ export default function TradePage() {
                 circulatingSupply={circulatingSupply}
                 firstBuyers={wsFirstBuyers}
                 firstBuyersSummary={wsFirstBuyersSummary}
+                /* BANDAID: REST-driven Holders stat tile (mobile). */
+                restHoldersCount={restHoldersCount}
               />
             </div>
           </div>
@@ -1577,6 +1687,12 @@ export default function TradePage() {
 
       {/* Global tight spacing & chart styles */}
       <style jsx global>{`
+        /* Axiom-style scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1f2127; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2a2d36; }
+        
         .lightweight-chart-container, .ohlc-chart-container, .tv-lightweight-charts { width:100% !important; height:100% !important; }
         .tv-lightweight-charts .pane { overflow: visible !important; }
         .tv-lightweight-charts canvas { image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges; }
@@ -1588,6 +1704,7 @@ export default function TradePage() {
           width: 100%;
           height: 100%;
           min-height: 240px;
+          background-color: #0c0d10;
         }
         .chart-wrapper > * { 
           max-width:100%; 
@@ -1598,7 +1715,7 @@ export default function TradePage() {
         }
         [role="separator"] { pointer-events:auto; position:relative; }
         [role="separator"]:hover { opacity:1; }
-        #tabs-pane { margin-top:0 !important; padding-top:0 !important; }
+        #tabs-pane { margin-top:0 !important; padding-top:0 !important; background-color: #101114; }
         #tabs-pane > * { margin-top:0 !important; padding-top:0 !important; }
         #tabs-pane > div:first-of-type, #tabs-pane [class*="tabs"]:first-of-type, #tabs-pane [class*="Tab"]:first-of-type {
           margin-top:0 !important; padding-top:0 !important;
@@ -1607,7 +1724,7 @@ export default function TradePage() {
 
         /* ---------- RIGHT RAIL STACKING ---------- */
         /* No default gap between any stacked panels */
-        .right-rail-panel { margin: 0; }
+        .right-rail-panel { margin: 0; background-color: #0c0d10; }
         .right-rail-panel + .right-rail-panel { margin-top: 0; }
 
         /* Ensure Token Info contributes no trailing space */

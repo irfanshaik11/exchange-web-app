@@ -38,12 +38,15 @@ interface Props {
 }
 
 const AX = {
-  surface: "bg-[#151719]",
-  border: "border-[#24262B]",
-  text: "text-[#E6E7EA]",
-  muted: "text-[#9CA3AF]",
-  mint: "text-[#70E0B0]",
-  rowHover: "hover:bg-neutral-800/40",
+  surface: "bg-[#0c0d10]",
+  surfaceHex: "#0c0d10",
+  border: "border-[#1f2127]",
+  borderHex: "#1f2127",
+  text: "text-[#f4f4f5]",
+  muted: "text-[#71717a]",
+  mint: "text-[#18c48c]",
+  mintHex: "#18c48c",
+  rowHover: "hover:bg-[#141619]",
 };
 
 function formatAgeShort(sec?: number) {
@@ -142,7 +145,7 @@ const Row: React.FC<{ t: SimilarToken }> = ({ t }) => {
 
       {/* Right column */}
       <div className="text-right flex-shrink-0">
-        <div className="text-[11px] text-emerald-400">{ageBadge}</div>
+        <div className="text-[11px]" style={{ color: AX.mintHex }}>{ageBadge}</div>
         <div className={`text-sm font-semibold ${AX.mint}`}>{mc}</div>
       </div>
     </Link>
@@ -160,7 +163,8 @@ const Header: React.FC<{
   const toggleSort = () => onSortChange?.(sortKey, sortDir === "desc" ? "asc" : "desc");
   return (
     <div
-      className={`sticky top-0 z-10 flex items-center justify-between px-3 py-2 border-b ${AX.border} bg-[#151719]/95 backdrop-blur`}
+      className={`sticky top-0 z-10 flex items-center justify-between px-3 py-2 border-b ${AX.border}`}
+      style={{ backgroundColor: `${AX.surfaceHex}f5`, backdropFilter: 'blur(8px)' }}
     >
       <button
         onClick={onToggleCollapse}
@@ -293,7 +297,7 @@ const SimilarTokensPanel: React.FC<Props> = ({
 
       {/* Footer hidden when collapsed */}
       {!collapsed && (
-        <div className="px-3 py-2 border-t border-[#24262B] text-[11px] text-neutral-500 flex items-center gap-2">
+        <div className="px-3 py-2 text-[11px] flex items-center gap-2" style={{ borderTop: `1px solid ${AX.borderHex}`, color: '#52525b' }}>
           <FaChevronRight size={10} />
           <span>Scroll to explore related tokens</span>
         </div>

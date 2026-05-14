@@ -1,4 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
+import { setWsSupply } from "~/utils/wsSupplyCache";
 import { subscribe as subscribePendingTradeMarkers } from "../utils/pendingTradeMarkers";
 import {
   KOL_ADDRESS_MAP,
@@ -96,7 +97,11 @@ const VALID_INTERVALS: BackendInterval[] = [
   "1d",
   "7d",
 ];
-const DEFAULT_SUPPLY = 1_000_000_000; // Fallback when circulatingSupply prop is not provided
+// Sentinel "supply not loaded yet". Multiplier of 1 keeps MC-mode visually
+// equivalent to USD until the real supply resolves via /v1/supply.
+// Previously hardcoded to 1_000_000_000, which silently rendered wrong-scale
+// MC values for any non-1B-supply token (e.g. JUP @ 6.86B real supply).
+const DEFAULT_SUPPLY = 1;
 const CHART_DEBUG = false; // Set to true only when debugging chart issues
 
 // Map our intervals to TradingView resolution format
@@ -486,7 +491,11 @@ function applyFlatCandleSpread(bar: {
  *  to a real trading price, creating a single candle with ~1000x high/low ratio.
  *  Mutates the array in place. Only checks the first few candles. */
 const LAUNCH_SPIKE_RATIO = 100;
-const MAX_LAUNCH_CANDLES_CHECK = 10;
+// Was 10 — clamped only the first ten bars of a snapshot. Continuous-aggregate
+// snapshots can reach back hundreds of buckets; a spike at index 50 of a 500-bar
+// snapshot was silently passed through to TradingView. Now scans every bar in
+// the snapshot. O(N) over <=500 bars is negligible compared to the chart render.
+const MAX_LAUNCH_CANDLES_CHECK = 500;
 
 function clampLaunchCandles(candles: BackendOHLCData[]): void {
   const limit = Math.min(candles.length, MAX_LAUNCH_CANDLES_CHECK);
@@ -534,7 +543,13 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   tokenAgeSec,
   circulatingSupply,
 }, ref) => {
-  const MARKET_CAP_MULTIPLIER = circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY;
+  // Multiplier is held in a ref so WS handlers / TV datafeed callbacks
+  // registered before /v1/supply resolves still pick up the correct value
+  // on every tick instead of being frozen at chart-mount supply (often the
+  // 1B DEFAULT_SUPPLY fallback). See the effect below for the update + repaint.
+  const multiplierRef = useRef<number>(
+    circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY,
+  );
 
   // DEBUG: Confirm component is rendering with latest code
 
@@ -587,6 +602,136 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     syncLinesInFlightRef.current = false;
   }, [displayMode]);
 
+  // Keep multiplierRef pinned to the latest circulating supply. The WS handlers
+  // and TradingView datafeed `getBars` capture transformBar at registration time,
+  // so without a ref every live tick / history pull would multiply by whatever
+  // supply existed at chart mount (often DEFAULT_SUPPLY=1B during the brief
+  // window before /v1/supply resolves). When the supply does change, force a
+  // single resetData() so the already-rendered bars repaint with the fresh
+  // multiplier — `lastGoodCandlesRef` stores raw USD, so re-running through
+  // transformBar with the new ref value produces correct MC values.
+  useEffect(() => {
+    const next =
+      circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY;
+    if (multiplierRef.current === next) return;
+    const prev = multiplierRef.current;
+    multiplierRef.current = next;
+
+    // When supply transitions from DEFAULT_SUPPLY (or any sentinel) to a real
+    // value, the chart may have already rendered bars at the old multiplier
+    // (race: WS snapshot arrives before /v1/supply resolves, especially on
+    // SearchModal click-time preload). Force a full repaint:
+    //   1. resetData() → TradingView re-fetches bars via getBars → transformBar
+    //      now uses the new multiplier
+    //   2. Clear lastAppliedLinesRef so price-lines get redrawn at new scale
+    //      (otherwise a USD-priced horizontal line stays pinned to its old
+    //      MC value — e.g. a $0.16 line showing as $162M with multiplier=1B
+    //      and never moving to $1.1B when multiplier updates to 6.86B)
+    //
+    // widgetRef may not be ready yet if this useEffect fires before
+    // TradingView's onChartReady. Use a short retry loop to handle that race.
+    if (displayModeRef.current === "MC") {
+      lastAppliedLinesRef.current = {};
+      syncLinesInFlightRef.current = false;
+
+      // Pricescale was baked in at resolveSymbol-init time based on the
+      // sentinel multiplier (1). resetData() repaints the bars with the new
+      // multiplier values, but the axis labels keep using the old pricescale
+      // — so $30K MC values get formatted with 7 decimals and the axis
+      // column truncates to "0.00" everywhere. Mirror the displayMode-toggle
+      // pattern: setSymbol() with a versioned name forces TV to re-resolve
+      // the symbol, which recomputes pricescale based on the now-correct
+      // multiplier. Use Date.now() for uniqueness.
+      const trySetSymbol = (attempts: number): void => {
+        const widget = widgetRef.current;
+        if (!widget) {
+          if (attempts > 0) {
+            setTimeout(() => trySetSymbol(attempts - 1), 100);
+          }
+          return;
+        }
+        // TradingView's `activeChart()` itself throws "Cannot read properties
+        // of undefined (reading 'activeChart')" when called before the chart
+        // is fully initialized — the optional chain protects against the
+        // method being undefined, but NOT against an internal throw inside
+        // the (defined) method body. Wrap in try/catch and treat the throw
+        // the same as "chart not ready yet" → retry.
+        let chart: any = null;
+        try {
+          chart = widget.activeChart?.();
+        } catch {
+          // swallow — handled by the retry path below
+        }
+        if (chart?.setSymbol && chart?.symbol && chart?.resolution) {
+          try {
+            const rawSymbol = chart.symbol() || initialTokenId || "";
+            const baseSymbol = rawSymbol.split("|")[0];
+            const currentMode = displayModeRef.current;
+            const versionSuffix = `s${Date.now()}`;
+            const newSymbol = `${baseSymbol}|${currentMode}|${versionSuffix}`;
+            const currentResolution = chart.resolution?.() || "1S";
+            chart.setSymbol(newSymbol, currentResolution, () => {
+              // After re-resolve completes, sync price lines at new scale
+              requestPriceLineSync(50);
+              // CRITICAL: force pricescale auto-rescale so the Y-axis
+              // range adapts to the new multiplier's bar values.
+              //
+              // Without this, TradingView's price-scale auto-zoom keeps
+              // the extent from the previous multiplier. Example user
+              // bug: SearchModal entry on Goblin (pump.fun, 710M supply)
+              //   t=0    bars not yet rendered
+              //   t=500  fast-fallback fires → multiplier=1B → bars
+              //          rendered with MC ≈ $0.016 × 1B = $16M each
+              //   t=500  pricescale auto-zooms to fit $11M-$16M range
+              //   t=700  /v1/supply returns 710M → setCirculatingSupply
+              //   t=701  trySetSymbol fires → bars re-rendered with
+              //          multiplier=710M → MC ≈ $11.5M each
+              //   t=701  pricescale STAYS at $11M-$16M range (stale)
+              //   Result: Y-axis shows $16M upper bound, ~$4M of empty
+              //   space above the now-correct $11.5M bars.
+              //
+              // setAutoScale(true) tells TradingView to recompute the
+              // Y-axis bounds based on the currently-visible bars,
+              // which after re-resolve are the corrected ones.
+              try {
+                const ps =
+                  typeof chart.priceScale === "function"
+                    ? chart.priceScale()
+                    : null;
+                if (ps && typeof ps.setAutoScale === "function") {
+                  ps.setAutoScale(true);
+                }
+              } catch {
+                // Some TV versions / chart states don't expose priceScale;
+                // safe to skip — bars are still correctly rendered.
+              }
+            });
+          } catch {
+            // Fall back to plain resetData if setSymbol throws — at least
+            // the bars repaint, even if axis labels stay stale.
+            try {
+              chart.resetData?.();
+              requestPriceLineSync(50);
+            } catch {}
+          }
+          return;
+        }
+        if (attempts > 0) {
+          // 50 × 100ms = 5s budget. Covers slow chart bootstrap on first
+          // page load when the supply state change races ahead of widget
+          // initialization. Previous 20-frame (~330ms) budget could expire
+          // before TradingView finished mounting on cold loads, leaving
+          // the supply transition un-applied → bars stuck at sentinel
+          // multiplier → user sees near-zero MC on historical bars.
+          setTimeout(() => trySetSymbol(attempts - 1), 100);
+        }
+      };
+      trySetSymbol(50);
+    }
+    // Suppress unused-var lint for prev — kept for debugging
+    void prev;
+  }, [circulatingSupply]);
+
   // Helper function to transform OHLC values based on display mode (USD vs MC)
   // MC = USD price * circulating supply (fetched from /v1/supply, defaults to 1B)
   const transformOHLCValue = useCallback(
@@ -594,9 +739,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       if (!supportsMcMode || mode === "USD") {
         return value;
       }
-      return value * MARKET_CAP_MULTIPLIER;
+      return value * multiplierRef.current;
     },
-    [MARKET_CAP_MULTIPLIER],
+    [],
   );
 
   // Helper function to transform a bar object based on display mode
@@ -667,16 +812,16 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       return null;
     }
 
-    const result = maxHigh * MARKET_CAP_MULTIPLIER;
+    const result = maxHigh * multiplierRef.current;
     if (CHART_DEBUG) console.log("✅ [MAX_MC_COMPUTE] Final max MC (USD):", {
       maxHighPriceUSD: maxHigh,
-      MARKET_CAP_MULTIPLIER,
+      multiplier: multiplierRef.current,
       resultMaxMcUSD: result,
       formatted: `$${(result / 1_000_000).toFixed(2)}M`,
     });
 
     return result;
-  }, [MARKET_CAP_MULTIPLIER]);
+  }, []);
 
   // Price line management - always clears and redraws to ensure consistency
   const syncPriceLines = useCallback(
@@ -753,7 +898,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       const toAxisPrice = (usdPrice?: number | null): number | null => {
         if (usdPrice === null || usdPrice === undefined) return null;
         const result = axisIsMarketCap
-          ? usdPrice * MARKET_CAP_MULTIPLIER
+          ? usdPrice * multiplierRef.current
           : usdPrice;
         if (CHART_DEBUG) console.log("🔢 [TO_AXIS_PRICE] Conversion:", { input_USD: usdPrice, output_AxisPrice: result });
         return result;
@@ -763,7 +908,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       const exitPrice = toAxisPrice(avgExitUsd);
 
       const maxMcPriceInput = maxMarketCapUsd
-        ? maxMarketCapUsd / MARKET_CAP_MULTIPLIER
+        ? maxMarketCapUsd / multiplierRef.current
         : null;
       const maxMcPrice = toAxisPrice(maxMcPriceInput);
 
@@ -907,7 +1052,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           if (!Number.isFinite(mcValue) || mcValue <= 0) continue;
 
           // MC → USD price per token → axis price
-          const orderPriceUsd = mcValue / MARKET_CAP_MULTIPLIER;
+          const orderPriceUsd = mcValue / multiplierRef.current;
           const orderAxisPrice = toAxisPrice(orderPriceUsd);
 
           const isBuy = order.type === "Buy";
@@ -976,7 +1121,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     const metrics = {
       lastPriceUsd,
       lastMarketCapUsd: supportsMcMode
-        ? lastPriceUsd * MARKET_CAP_MULTIPLIER
+        ? lastPriceUsd * multiplierRef.current
         : undefined,
       maxMarketCapUsd: supportsMcMode
         ? (maxMarketCapUsd ?? undefined)
@@ -1108,7 +1253,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           }
         }
 
-        const maxMcUsd = maxHigh > 0 ? maxHigh * MARKET_CAP_MULTIPLIER : null;
+        const maxMcUsd = maxHigh > 0 ? maxHigh * multiplierRef.current : null;
 
 
         maxMarketCapFromApiRef.current = maxMcUsd;
@@ -1635,7 +1780,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
         const isMC = displayModeRef.current === "MC";
         // targetMC is already in raw USD market cap; convert to axis coordinates
-        const axisPrice = isMC ? targetMC : targetMC / MARKET_CAP_MULTIPLIER;
+        const axisPrice = isMC ? targetMC : targetMC / multiplierRef.current;
         const labelText = `Limit Target: ${formatAxisLabel(axisPrice, isMC)}`;
 
         if (previewLineShapeIdRef.current) {
@@ -3066,14 +3211,26 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           const snapshotCandles = (message.data as Array<any>) || [];
           wsGapBridgedRef.current = false; // Reset for the upcoming real-time candles
 
+          // Token-service piggybacks `circulating_supply` onto the snapshot
+          // when the indexer has it. Pre-warming the supply cache here lets
+          // `useTokenSupply` skip the /v1/supply HTTP fetch entirely for
+          // non-pump.fun tokens — chart MC renders correctly on first paint.
+          if (message.supply && message.mint) {
+            setWsSupply(message.mint, message.supply);
+          }
+
           if (snapshotCandles.length === 0) {
-            const now = Math.floor(Date.now() / 1000);
-            const placeholderCandle: BackendOHLCData = {
-              unix_time: now,
-              o: 0, h: 0, l: 0, c: 0,
-              v_usd: 0,
-            };
-            lastGoodCandlesRef.current = [placeholderCandle];
+            // Bug N: previously we inserted a {o:0,h:0,l:0,c:0} placeholder here
+            // so getBars() and the chart had *something* to render. The downstream
+            // connectivity logic (~3318) reads prevCandle.c as previousClose and
+            // forces the next live bar's open to that value. When prevCandle.c is
+            // 0, the first real trade renders as a flat-line-at-zero followed by a
+            // green jump-bar — visible artifact on fresh tokens.
+            // Fix: leave lastGoodCandlesRef empty. The connectivity check now
+            // guards on prevCandle.c > 0 so it no-ops cleanly when the cache is
+            // empty; the first real live bar becomes the first real candle without
+            // any synthetic prior to glue to.
+            lastGoodCandlesRef.current = [];
             cachedIntervalRef.current = latestParamsRef.current.interval;
             cachedTimeframeRef.current = latestParamsRef.current.timeframe;
             wsConnectedRef.current = true;
@@ -3082,7 +3239,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               snapshotResolverRef.current();
               snapshotResolverRef.current = null;
             }
-            setCandles([placeholderCandle]);
+            setCandles([]);
             setIsLoading(false);
             hasInitializedRef.current = true;
             firstLoadRef.current = false;
@@ -3091,18 +3248,42 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
           // Convert snapshot to our format, dropping all-zero candles (no trades in
           // that second). Without this filter, getBars() substitutes MIN_PRICE (1e-7)
-          // which in MC mode = 0.0000001 × 1B = 100 — creating a visible green dot.
+          // which historically multiplied by 1B in MC mode yielded ~100 — creating a
+          // visible green dot. That artifact is gone with DEFAULT_SUPPLY=1 sentinel.
+          // Use `??` (nullish coalescing) instead of `||` so legitimate 0 values
+          // aren't coerced to the alternate field — important for sub-cent tokens
+          // where a momentary 0 in one of the OHLC fields is real, not "missing".
           const converted: BackendOHLCData[] = snapshotCandles
             .map((c: any) => ({
-              unix_time: c.unix_time || c.time,
-              o: c.o || c.open || 0,
-              h: c.h || c.high || 0,
-              l: c.l || c.low || 0,
-              c: c.c || c.close || 0,
-              v_usd: c.v_usd || c.v || c.volume || 0,
+              unix_time: c.unix_time ?? c.time,
+              o: c.o ?? c.open ?? 0,
+              h: c.h ?? c.high ?? 0,
+              l: c.l ?? c.low ?? 0,
+              c: c.c ?? c.close ?? 0,
+              v_usd: c.v_usd ?? c.v ?? c.volume ?? 0,
             }))
-            .filter((c: BackendOHLCData) => !(c.o === 0 && c.h === 0 && c.l === 0 && c.c === 0))
-            .sort((a: BackendOHLCData, b: BackendOHLCData) => a.unix_time - b.unix_time);
+            .filter((c: BackendOHLCData) => !(c.o === 0 && c.h === 0 && c.l === 0 && c.c === 0));
+          // Bug K: defensively dedupe by unix_time, keep last (most-recent) value
+          // per timestamp. Server snapshot path may include duplicates if the
+          // Redis 1s-cache hasn't been deduped server-side yet (token-service
+          // PR #211 fixes that source; this is the client-side defense). Then
+          // re-sort ASC — input may already be sorted, but resort cheaply.
+          {
+            const dedup: BackendOHLCData[] = [];
+            const seen = new Map<number, number>();   // unix_time -> dedup index
+            for (const bar of converted) {
+              const idx = seen.get(bar.unix_time);
+              if (idx === undefined) {
+                seen.set(bar.unix_time, dedup.length);
+                dedup.push(bar);
+              } else {
+                dedup[idx] = bar;
+              }
+            }
+            converted.length = 0;
+            converted.push(...dedup);
+          }
+          converted.sort((a: BackendOHLCData, b: BackendOHLCData) => a.unix_time - b.unix_time);
 
           // RACE FIX (defense-in-depth): If chart hasn't been populated yet
           // (token switch in progress), any existing cache is stale from the
@@ -3127,6 +3308,10 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
             // Sync cached refs so getBars() knows this data matches the current params
             cachedTimeframeRef.current = latestParamsRef.current.timeframe;
+            // Bug X: this merge branch never cleared the loading spinner. When HTTP
+            // preload had populated the cache before WS arrived, the spinner stuck
+            // because only the else-branch below called setIsLoading(false).
+            setIsLoading(false);
 
             // Always trigger resetData() to re-render with merged data (through getBars → collapseTimeGaps)
             if (!chartPopulatedRef.current) {
@@ -3215,12 +3400,12 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             });
             const ohlcData = message.data;
             const oneSecCandle: BackendOHLCData = {
-              unix_time: ohlcData.unix_time || ohlcData.time,
-              o: ohlcData.o || ohlcData.open || 0,
-              h: ohlcData.h || ohlcData.high || 0,
-              l: ohlcData.l || ohlcData.low || 0,
-              c: ohlcData.c || ohlcData.close || 0,
-              v_usd: ohlcData.v_usd || ohlcData.v || ohlcData.volume || 0,
+              unix_time: ohlcData.unix_time ?? ohlcData.time,
+              o: ohlcData.o ?? ohlcData.open ?? 0,
+              h: ohlcData.h ?? ohlcData.high ?? 0,
+              l: ohlcData.l ?? ohlcData.low ?? 0,
+              c: ohlcData.c ?? ohlcData.close ?? 0,
+              v_usd: ohlcData.v_usd ?? ohlcData.v ?? ohlcData.volume ?? 0,
             };
             // Clamp launch-candle artifacts (l=0) before caching
             if (oneSecCandle.c > 0 && oneSecCandle.l <= 0) {
@@ -3287,12 +3472,24 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           const cachedData = lastGoodCandlesRef.current;
           if (cachedData.length > 0) {
             const prevCandle = cachedData[cachedData.length - 1];
-            if (oneSecCandle.unix_time > prevCandle.unix_time) {
+            if (oneSecCandle.unix_time > prevCandle.unix_time && prevCandle.c > 0) {
               const previousClose = prevCandle.c;
               if (baseBar.open !== previousClose) {
                 baseBar.open = previousClose;
                 if (baseBar.high < baseBar.open) baseBar.high = baseBar.open;
                 if (baseBar.low > baseBar.open) baseBar.low = baseBar.open;
+              }
+              // Symmetric anti-stale-wick clamp: if the live bar's `low` is far
+              // below previousClose, treat it as a stale-cache artifact from the
+              // indexer (Bug F — e.g. seed from a dead 30m aggregate produced
+              // l=0.18 on a token trading at 0.24). The existing clamp above only
+              // handles `low > open`; this catches the opposite direction.
+              // Threshold 30% — generous enough to allow real rug-pull crashes
+              // (which the indexer marks isPoolDrain/isCrashSell to bypass the
+              // server's spike protection in the first place).
+              const MAX_LOW_DROP_PCT = 0.30;
+              if (baseBar.low > 0 && baseBar.low < previousClose * (1 - MAX_LOW_DROP_PCT)) {
+                baseBar.low = baseBar.open;
               }
             }
           }
@@ -3751,6 +3948,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       let price = Number.isFinite(parsedPrice) ? parsedPrice : fallbackPrice;
 
       const amountRaw =
+        trade.token_amount ||
         trade.amount ||
         trade.data?.amountNonLiquidityToken ||
         trade.data?.amount0 ||
@@ -3768,6 +3966,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
       const totalUsdRaw =
         trade.totalUSD ||
+        trade.total_usd ||
         trade.data?.priceUsdTotal ||
         trade.priceUsdTotal ||
         trade.originalEvent?.data?.priceUsdTotal ||
@@ -3904,7 +4103,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           samplePrice = MIN_PRICE;
         }
 
-        // Adjust sample price based on display mode (MC = USD * 1 billion)
+        // Adjust sample price based on display mode (MC = USD * circulating supply).
         // Extract mode from symbol name (e.g., "TOKEN|MC" → "MC") rather than
         // displayModeRef — during rapid toggles, the ref may have been updated by
         // a later toggle, causing pricescale/data mismatch.
@@ -3912,7 +4111,13 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         const mode: "USD" | "MC" = (modeFromSymbol === "USD" || modeFromSymbol === "MC") ? modeFromSymbol : displayModeRef.current;
         let effectiveSample = samplePrice;
         if (mode === "MC") {
-          effectiveSample = samplePrice * 1_000_000_000;
+          // Use the live multiplier (real supply once /v1/supply resolves; 1 sentinel
+          // before then). Previously hardcoded to 1_000_000_000 here, which made
+          // pricescale wrong for non-1B-supply tokens like JUP.
+          const supplyMultiplier = multiplierRef.current && multiplierRef.current > 0
+            ? multiplierRef.current
+            : 1;
+          effectiveSample = samplePrice * supplyMultiplier;
         }
 
         // Calculate pricescale based on effective sample (accounts for MC mode)
@@ -4047,6 +4252,37 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           // Phase 5: Per-resolution cache — save current candles to old resolution's cache slot,
           // then restore from new resolution's cache if available (avoids re-fetching on switch-back)
           if (lastGoodCandlesRef.current.length > 0) {
+            // Bug G instrumentation: live WS handler pushes raw 1s bars into
+            // lastGoodCandlesRef regardless of which resolution is currently
+            // displayed. If the user sits on (say) 5m long enough, this cache
+            // ends up holding 1s rows being saved under cache[5]. Track the
+            // delta between bars vs the expected bucket size — if they don't
+            // line up, the cache is mixed-resolution and Bug G is real.
+            // (Sample only first few pairs to keep logs cheap.)
+            try {
+              const bars = lastGoodCandlesRef.current;
+              const expectedBucket: Record<string, number> = {
+                "1S": 1, "5S": 5, "15S": 15, "30S": 30,
+                "1": 60, "5": 300, "15": 900, "30": 1800,
+                "60": 3600, "240": 14400, "1D": 86400, "1W": 604800,
+              };
+              const exp = expectedBucket[prevTvResolution];
+              if (exp && bars.length >= 2) {
+                const deltas: number[] = [];
+                for (let i = 1; i < Math.min(bars.length, 6); i++) {
+                  deltas.push(bars[i].unix_time - bars[i - 1].unix_time);
+                }
+                const allMatch = deltas.every(d => d === exp || d % exp === 0);
+                if (!allMatch) {
+                  // eslint-disable-next-line no-console
+                  console.warn(
+                    `[CACHE_SAVE_MISMATCH] prevTvResolution=${prevTvResolution} expectedBucket=${exp}s actualDeltas=${deltas.join(",")} — Bug G candidate (mixed-resolution cache)`
+                  );
+                }
+              }
+            } catch {
+              // instrumentation must never throw
+            }
             resolutionCacheRef.current.set(prevTvResolution, [...lastGoodCandlesRef.current]);
           }
           const cached = resolutionCacheRef.current.get(resolution);
@@ -4057,6 +4293,129 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             cachedTimeframeRef.current = (mappedTf && mappedTf !== "auto")
               ? mappedTf as BackendTimeRange
               : latestParamsRef.current.timeframe;
+          } else if (
+            latestParamsRef.current.network !== "monad" &&
+            resolution !== "1S"
+          ) {
+            // Bug: TF-change gap. On a high-volume token, the WS-prefetched 1s
+            // snapshot only spans the last few minutes (500 bars × ~1s each ≈
+            // <10 min wall-clock). Aggregating that to 30m/1h/1d via TradingView's
+            // local engine yields 1-2 partial bars at the right edge with a
+            // huge empty area to the left. Refresh "fixes" it because the page
+            // re-mounts and fetches a fresh 30m snapshot directly. Do the same
+            // explicitly here: when switching to a non-1S resolution for the
+            // first time, fetch historical data at that TF via the existing
+            // /api/token-service/ohlc proxy (same endpoint used by lazy-load
+            // and max-MC).
+            const fetchInterval = RESOLUTION_TO_INTERVAL[resolution] || "1s";
+            // Sub-minute fakes (5S/15S/30S) all collapse to 1s server-side; skip
+            // the explicit refetch for those — TradingView's aggregation of the
+            // existing 1s cache is sufficient there.
+            if (!["1s", "5s", "15s", "30s"].includes(fetchInterval)) {
+              const tokenAddress =
+                latestParamsRef.current.mint || latestParamsRef.current.pairAddress;
+              if (tokenAddress) {
+                try {
+                  const fetchUrl = new URL(
+                    "/api/token-service/ohlc",
+                    window.location.origin,
+                  );
+                  fetchUrl.searchParams.set("tokenAddress", tokenAddress);
+                  fetchUrl.searchParams.set("timeframe", fetchInterval);
+                  fetchUrl.searchParams.set("limit", "5000");
+                  const resp = await fetch(fetchUrl.toString(), {
+                    signal: AbortSignal.timeout(8000),
+                    headers: { Accept: "application/json" },
+                  });
+                  if (resp.ok) {
+                    const json = await resp.json();
+                    const items: BackendOHLCData[] =
+                      (json?.data?.items as BackendOHLCData[]) ||
+                      (json?.candles as BackendOHLCData[]) ||
+                      [];
+                    if (items.length > 0) {
+                      // Sort ASC and dedupe defensively (same posture as
+                      // snapshot-ingest in the live WS handler)
+                      items.sort((a, b) => a.unix_time - b.unix_time);
+                      const dedup: BackendOHLCData[] = [];
+                      let prevUt = -1;
+                      for (const b of items) {
+                        if (b.unix_time === prevUt) {
+                          dedup[dedup.length - 1] = b;
+                          continue;
+                        }
+                        dedup.push(b);
+                        prevUt = b.unix_time;
+                      }
+
+                      // STALE-LAST-BAR FIX. The /v1/ohlcv proxy reads from
+                      // TimescaleDB continuous aggregates which materialize
+                      // with an `end_offset` window (1h has 1h, 4h has 4h,
+                      // 1d has 1d, 1w has 1d). The snapshot's last bar is
+                      // therefore from end_offset ago — for 4h that's ~14h
+                      // stale; for 1d that's ~2 days; for 1w even more.
+                      // Reading the close of that stale bar gives the wrong
+                      // "current price" for downstream consumers (the header
+                      // MC reads chart's last close). Repair the tail by
+                      // aggregating the LIVE 1s cache (cache["1S"], which
+                      // contains the WS-fed 1s bars covering NOW back as
+                      // far as the WS has been streaming) into the same
+                      // target TF, then APPENDING/OVERWRITING any bucket
+                      // whose start-time is at or after the snapshot's
+                      // last bar. Result: last visible bar's close = close
+                      // of the most recent live 1s bar = current price.
+                      try {
+                        const liveOneS =
+                          resolutionCacheRef.current.get("1S") || [];
+                        if (liveOneS.length > 0) {
+                          const aggLive = aggregateCandlesToInterval(
+                            liveOneS,
+                            fetchInterval,
+                          );
+                          if (aggLive.length > 0) {
+                            // Index dedup'd snapshot by bucket-start
+                            const byTime = new Map<number, BackendOHLCData>();
+                            for (const b of dedup) byTime.set(b.unix_time, b);
+                            // Cutoff = snapshot's last bucket. We overwrite
+                            // that bucket and any newer ones with live data
+                            // (live is authoritative for in-progress + the
+                            // last-completed bucket the cagg hasn't yet
+                            // materialized).
+                            const cutoff = dedup[dedup.length - 1].unix_time;
+                            for (const b of aggLive) {
+                              if (b.unix_time >= cutoff) {
+                                byTime.set(b.unix_time, b);
+                              }
+                            }
+                            const merged = Array.from(byTime.values()).sort(
+                              (a, b) => a.unix_time - b.unix_time,
+                            );
+                            // Replace dedup with the merged result
+                            dedup.length = 0;
+                            for (const b of merged) dedup.push(b);
+                          }
+                        }
+                      } catch {
+                        // If aggregation fails the snapshot alone is still
+                        // shown — stale-last-bar but at least correct shape.
+                      }
+
+                      lastGoodCandlesRef.current = dedup;
+                      resolutionCacheRef.current.set(resolution, [...dedup]);
+                      cachedIntervalRef.current = fetchInterval;
+                      const mappedTf = RESOLUTION_TO_TIMEFRAME[resolution];
+                      cachedTimeframeRef.current =
+                        (mappedTf && mappedTf !== "auto"
+                          ? (mappedTf as BackendTimeRange)
+                          : latestParamsRef.current.timeframe);
+                    }
+                  }
+                } catch {
+                  // Fetch failed — fall through to existing aggregation behavior.
+                  // TradingView will aggregate from the 1s cache (small/empty).
+                }
+              }
+            }
           }
         }
 
@@ -5483,9 +5842,9 @@ Amount: ${formattedAmount} ${displaySymbol}
 Total: ${formattedTotalUsd}
 Maker: ${walletAddress}`;
             } else if (kolInfo) {
-              // KOL marker: unique color per KOL, 2-char label
+              // KOL marker: green for buys, red for sells
               label = kolInfo.label;
-              markColor = kolInfo.namedColor;
+              markColor = isBuy ? "green" : "red";
               const kolDisplayName = kolInfo.name || kolInfo.twitterUsername;
               markerText = `KOL ${isBuy ? "Buy" : "Sell"}: ${kolDisplayName} • ${displaySymbol}
 ${formattedDate} UTC

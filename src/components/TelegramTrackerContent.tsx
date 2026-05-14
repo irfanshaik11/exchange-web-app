@@ -103,12 +103,12 @@ export default function TelegramTrackerContent() {
     }
   }, [telegramTab, user?.bearerToken, telegramChannels.length]);
 
-  const loadTelegramFeed = async () => {
+  const loadTelegramFeed = async (force: boolean = false) => {
     if (!user?.bearerToken) return;
     setLoadingTelegramFeed(true);
     setTelegramFeedHint(null);
     try {
-      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, FEED_LIMIT);
+      const { messages, hint } = await getTelegramChannelFeed(user.bearerToken, FEED_LIMIT, force);
       setTelegramFeed(messages);
       setTelegramFeedHint(hint ?? null);
     } catch (error) {
@@ -298,7 +298,7 @@ export default function TelegramTrackerContent() {
               <button
                 type="button"
                 className="mt-4 rounded-lg border border-white/[0.1] bg-white/[0.05] px-4 py-2 text-xs font-medium text-neutral-200 hover:bg-white/[0.08]"
-                onClick={() => loadTelegramFeed()}
+                onClick={() => loadTelegramFeed(true)}
               >
                 Retry
               </button>

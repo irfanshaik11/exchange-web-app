@@ -857,6 +857,28 @@ export default function ExportWalletModal({
   const isForceLockActive = forceExport && !hasConfirmedStorage && status !== "error" && iframeVisible;
   const isCloseDisabled = isForceLockActive;
 
+  // Escape key to close
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (isCloseDisabled) {
+        toast.error("Please confirm you've safely stored this key before closing.");
+        return;
+      }
+      if (status === "initializing" || status === "requesting" || status === "injecting") {
+        if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+        if (abortControllerRef.current) { abortControllerRef.current.abort(); abortControllerRef.current = null; }
+        setStatus("idle");
+        setError(null);
+      }
+      pendingRevealRef.current = false;
+      onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, isCloseDisabled, status, onClose]);
+
   const handleConfirmStorage = useCallback(async () => {
     if (hasConfirmedStorage || confirmingStorage) return;
     setConfirmingStorage(true);
@@ -953,7 +975,7 @@ export default function ExportWalletModal({
     <>
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-        onClick={isCloseDisabled ? undefined : handleClose}
+        onClick={handleClose}
       >
         <div
           className="bg-[#101114] rounded-lg shadow-2xl w-full max-w-[400px] max-h-[90vh] overflow-y-auto relative border border-[#2A2B33]"
@@ -964,11 +986,11 @@ export default function ExportWalletModal({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-[#f0f5f5]">Export Wallet</h2>
-                {forceExport && (
+                {/* {forceExport && (
                   <p className="text-xs text-[#FF4D7F] mt-1">
                     You must export and back up this key before continuing.
                   </p>
-                )}
+                )} */}
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -1116,20 +1138,20 @@ export default function ExportWalletModal({
                   </div>
                 )}
 
-                {monadAddress && solanaAddress && (
+                {/* {monadAddress && solanaAddress && (
                   <p className="text-[11px] text-[#9CA3AF]">
                     Wallets created from recovery phrases export both chains. Imported private keys export the single key.
                   </p>
-                )}
+                )} */}
               </div>
             )}
 
             {/* Private Key Area */}
             <div className="mb-3">
               <label className="text-xs text-[#9CA3AF] mb-1.5 block">
-                {solanaAddress && !monadAddress ? "Solana Private Key (Base58)" : "Private Key"}
+                {solanaAddress && !monadAddress ? "Solana Seed Phrase" : "Seed Phrase"}
               </label>
-              <div className="rounded-lg border border-[#2A2B33] bg-[#121212] p-3 min-h-[100px] relative">
+              <div className="rounded-lg border border-[#2A2B33] bg-[#121212] p-3 min-h-[50px] relative">
                 {/* Solana key display (Base58 format) */}
                 {decryptedSolanaKey && (
                   <div className="space-y-2">
@@ -1137,7 +1159,7 @@ export default function ExportWalletModal({
                       <textarea
                         value={decryptedSolanaKey}
                         readOnly
-                        className="w-full h-24 px-3 py-2 pr-20 rounded-lg bg-[#17191E] border border-[#70E0B0] text-[#70E0B0] text-xs font-mono resize-none"
+                        className="w-full h-12 px-3 py-2 pr-20 rounded-lg bg-[#17191E] border border-[#70E0B0] text-[#70E0B0] text-xs font-mono resize-none"
                       />
                       <button
                         onClick={() => {
@@ -1204,7 +1226,7 @@ export default function ExportWalletModal({
               {(iframeVisible || decryptedSolanaKey) && !copyPasteValidated && (
                 <div className="mt-3 p-3 rounded-lg border border-[#2A2B33] bg-[#121212]">
                   <p className="text-xs text-[#9CA3AF] mb-2">
-                    Copy your private key from above, then paste it twice to confirm:
+                    Copy your seed phrase, then paste it twice to confirm:
                   </p>
                   <div className="space-y-2">
                     <input
@@ -1214,7 +1236,7 @@ export default function ExportWalletModal({
                         setPastedKeyFirst(e.target.value);
                         setValidationError(null);
                       }}
-                      placeholder="Paste your private key here..."
+                      placeholder="Paste your seed phrase here..."
                       className="w-full px-3 py-2 rounded-lg bg-[#17191E] border border-[#2A2B33] text-[#f0f5f5] text-xs font-mono placeholder:text-[#6B7280]"
                     />
                     <input
@@ -1294,12 +1316,12 @@ export default function ExportWalletModal({
 
             {forceExport && status === "done" && (iframeVisible || decryptedSolanaKey) && (
               <div className="mt-3 p-3 rounded-lg border border-[#2A2B33] bg-[#121212]">
-                <p className="text-xs text-[#f0f5f5]">
+                {/* <p className="text-xs text-[#f0f5f5]">
                   Back up this key now. Save it in an encrypted manager that <em>you</em> control.
-                </p>
-                <p className="mt-1.5 text-[11px] text-[#9CA3AF]">
+                </p> */}
+                {/* <p className="mt-1.5 text-[11px] text-[#9CA3AF]">
                   By confirming, you acknowledge that storing this key safely is your responsibility.
-                </p>
+                </p> */}
                 <button
                   onClick={handleConfirmStorage}
                   disabled={confirmingStorage || hasConfirmedStorage || !copyPasteValidated}

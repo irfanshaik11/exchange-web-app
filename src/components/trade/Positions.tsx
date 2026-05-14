@@ -35,6 +35,7 @@ import { useSolPrice } from '../SolPriceContext';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
 import { preloadTradeChart } from '~/utils/preloadTradeChart';
 import { useSolanaPositionWebSocketContext } from '~/contexts/SolanaPositionWebSocketContext';
+import { fetchAllSolanaWalletTokens } from '~/hooks/useWalletTokenBalances';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -676,13 +677,40 @@ const Positions: React.FC<PositionsProps> = ({
           // Token already sold or transferred - remove from UI and refresh
           message = 'Token already sold or transferred.';
           setPositions((prev) => prev.filter((p) => getPositionKey(p) !== tokenKey));
-          // Immediately refresh to get accurate data
-          refreshPositions();
+          // Refresh: chain-derived mode (SOL primary with skipFetch=true) owns
+          // its data via useWalletPortfolio's WS + REST refetch, driven off of
+          // TRADE_COMPLETED_EVENT in portfolio.tsx. Calling refreshPositions()
+          // here would fetch the LEGACY user-aggregate from memecoin-backend
+          // and push it back via onPositionsChange, wiping cross-platform
+          // (Axiom/GMGN/etc.) positions that the chain endpoint correctly has.
+          // For chain-derived mode, broadcast the trade-completed event so
+          // portfolio.tsx's existing handler triggers wp.refetch() instead.
+          if (skipFetch) {
+            broadcastTradeCompleted({
+              tokenAddress: position.tokenAddress,
+              tradeType: 'sell',
+              chain: isMonad ? 'monad' : 'sol',
+              sellPercentage: percent,
+            });
+          } else {
+            refreshPositions();
+          }
         } else if (errorCode === 'NO_LIQUIDITY' || errorMessage?.includes('no liquidity across all')) {
           // Dead token — no liquidity anywhere. Backend already cleaned up DB position.
           message = 'No liquidity available. Position removed.';
           setPositions((prev) => prev.filter((p) => getPositionKey(p) !== tokenKey));
-          refreshPositions();
+          // Same chain-derived gate as NO_HOLDINGS above — avoid wiping chain
+          // state via the legacy user-aggregate fetch.
+          if (skipFetch) {
+            broadcastTradeCompleted({
+              tokenAddress: position.tokenAddress,
+              tradeType: 'sell',
+              chain: isMonad ? 'monad' : 'sol',
+              sellPercentage: percent,
+            });
+          } else {
+            refreshPositions();
+          }
         } else if (isMonad) {
           message = formatMonadError(errorMessage);
         } else {
@@ -976,13 +1004,41 @@ const Positions: React.FC<PositionsProps> = ({
     }
   }, [positionsCacheKey, skipFetch, userId]);
 
-  // If preloaded positions are provided, use them
+  // If preloaded positions are provided, mirror them into local state so
+  // existing internal logic (sort, filter, hidden tokens, sell handlers) keeps
+  // working unchanged. The render path *also* reads `livePreloaded` directly
+  // (see useMemo below) so live updates show without waiting for setPositions
+  // → re-render → effect → setPositions cycle. This is the pulse-style "data
+  // arrives at one place, render reads from there directly" pattern.
   useEffect(() => {
     if (preloadedPositions && skipFetch) {
-      // Reverse so newest positions appear at the top
       const reversedPositions = [...preloadedPositions].reverse();
       setPositions(reversedPositions);
       setLoading(false);
+    }
+  }, [preloadedPositions, skipFetch]);
+
+  // Live render-source: when the parent owns the data (skipFetch=true), read
+  // preloadedPositions directly during render so a WS-driven prop change
+  // reflects in the DOM on the SAME render cycle, not after a setPositions
+  // round-trip. Falls back to internal `positions` state when the component
+  // is in fetch-mode (legacy path for monad / search filters / etc).
+  const livePreloaded: PositionRow[] | null = useMemo(() => {
+    if (preloadedPositions && skipFetch) {
+      return [...preloadedPositions].reverse();
+    }
+    return null;
+  }, [preloadedPositions, skipFetch]);
+
+  // The single source the render iterates over. positions stays in sync via
+  // the useEffect above for any code path that still consults internal state.
+  const renderPositions: PositionRow[] = livePreloaded ?? positions;
+
+  useEffect(() => {
+    if (preloadedPositions && skipFetch && preloadedPositions.length > 0) {
+      // requestMetadataForTokens already filters to uncached mints internally,
+      // so calling it on every preload change is cheap when nothing is new.
+      const reversedPositions = [...preloadedPositions].reverse();
       requestMetadataForTokens(reversedPositions);
     }
   }, [preloadedPositions, skipFetch, requestMetadataForTokens]);
@@ -1031,7 +1087,42 @@ const Positions: React.FC<PositionsProps> = ({
           return;
         }
 
-        const fetchedPositions = result.data;
+        let fetchedPositions = result.data;
+
+        // For Solana: also discover tokens held externally (not traded through Interstate)
+        if (blockchain !== 'monad') {
+          const walletAddr = primaryWalletAddresses?.solana || user?.publicKey;
+          if (walletAddr) {
+            try {
+              const allWalletTokens = await fetchAllSolanaWalletTokens(walletAddr);
+              const backendAddresses = new Set(
+                fetchedPositions.map((p) => p.tokenAddress.toLowerCase())
+              );
+              const externalTokens = allWalletTokens.filter(
+                (t) => !backendAddresses.has(t.tokenAddress.toLowerCase())
+              );
+              if (externalTokens.length > 0) {
+                const externalPositions: PositionRow[] = externalTokens.map((t) => ({
+                  tokenAddress: t.tokenAddress,
+                  bought: t.balance,
+                  boughtUsdValue: 0,
+                  sold: 0,
+                  soldUsdValue: 0,
+                  remaining: t.balance,
+                  remainingUsdValue: 0,
+                  pnl: 0,
+                  pnlPercentage: 0,
+                  actions: 'sell',
+                  blockchain: 'solana',
+                }));
+                fetchedPositions = [...fetchedPositions, ...externalPositions];
+              }
+            } catch (err) {
+              // Non-critical: log and continue with backend-only positions
+              console.warn('[Positions] Failed to fetch external wallet tokens:', err);
+            }
+          }
+        }
 
         // Reverse so newest positions appear at the top
         const reversedPositions = [...fetchedPositions].reverse();
@@ -1421,8 +1512,8 @@ const Positions: React.FC<PositionsProps> = ({
           </tr>
         </thead>
         <tbody>
-          {positions.length > 0 ? (
-            positions
+          {renderPositions.length > 0 ? (
+            renderPositions
               .filter(pos => (pos.remaining > 0) && (showHidden || !hiddenTokens.has(pos.tokenAddress)))
               .map((pos, idx) => {
               const sourcePosition = mergeWithFallback(pos);
@@ -1774,7 +1865,7 @@ const Positions: React.FC<PositionsProps> = ({
           ) : (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions yet.</td></tr>
           )}
-          {positions.length > 0 && (
+          {renderPositions.length > 0 && (
             <tr style={{ height: '48px' }}>
               <td colSpan={6}></td>
             </tr>

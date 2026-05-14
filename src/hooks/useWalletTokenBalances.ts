@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 interface UseWalletTokenBalancesReturn {
   balances: Record<string, number>;
@@ -174,5 +174,31 @@ export function useWalletTokenBalances(
     error,
     refresh,
   };
+}
+
+/**
+ * Fetch all SPL token accounts for a Solana wallet, returning non-zero balances.
+ * Used to detect tokens held by the wallet regardless of where they were traded.
+ */
+export async function fetchAllSolanaWalletTokens(
+  walletAddress: string,
+): Promise<Array<{ tokenAddress: string; balance: number }>> {
+  const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+  const connection = new Connection(RPC_URL, 'confirmed');
+  const walletPubkey = new PublicKey(walletAddress);
+
+  const tokenAccounts = await connection.getParsedTokenAccountsByOwner(walletPubkey, {
+    programId: TOKEN_PROGRAM_ID,
+  });
+
+  return tokenAccounts.value
+    .filter((acc) => {
+      const uiAmount = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
+      return typeof uiAmount === 'number' && uiAmount > 0;
+    })
+    .map((acc) => ({
+      tokenAddress: acc.account.data.parsed.info.mint as string,
+      balance: acc.account.data.parsed.info.tokenAmount.uiAmount as number,
+    }));
 }
 

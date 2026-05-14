@@ -13,6 +13,7 @@ import {
   addPendingTrade,
   removePendingTrade,
   updatePendingTrade,
+  verifyTxAndRollbackMarker,
 } from "~/utils/pendingTradeMarkers";
 import { getTradeActivityByUser } from "~/utils/functions";
 import toast, { type ToastOptions } from "react-hot-toast";
@@ -53,19 +54,24 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-/* ---- style palette ---- */
+/* ---- style palette (Axiom refined) ---- */
 const AX = {
-  bg: "#101114",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-  aiGreen: "#14b080",
-  red: "#f25561",
+  bg: "#0c0d10",
+  surface: "#101114",
+  surface2: "#141619",
+  border: "#1f2127",
+  borderHover: "#2a2d36",
+  text: "#f4f4f5",
+  muted: "#71717a",
+  textDim: "#52525b",
+  mint: "#18c48c",
+  mintHover: "#14a876",
+  mintGlow: "rgba(24, 196, 140, 0.25)",
+  sell: "#ef4444",
+  sellHover: "#dc2626",
+  sellGlow: "rgba(239, 68, 68, 0.25)",
+  aiGreen: "#18c48c",
+  red: "#ef4444",
 };
 
 const baseBtn =
@@ -266,7 +272,7 @@ const AddressDisplay: React.FC<{
 };
 
 // Token Info Dropdown Component
-const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null; firstBuyers?: FirstBuyer[]; firstBuyersSummary?: FirstBuyersSummary | null }> = ({ token, liveMarketCapUsd, firstBuyers, firstBuyersSummary }) => {
+const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null; firstBuyers?: FirstBuyer[]; firstBuyersSummary?: FirstBuyersSummary | null; restHoldersCount?: number }> = ({ token, liveMarketCapUsd, firstBuyers, firstBuyersSummary, restHoldersCount }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   // Get token metrics (using Codex fields if available, fallback to token-analytics)
@@ -290,13 +296,16 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
   const insiderCount = token?.insider_count ?? undefined;
 
   return (
-    <div className="border-t border-[#2A2B33]" style={{ backgroundColor: '#101114' }}>
+    <div style={{ backgroundColor: AX.bg, borderTop: `1px solid ${AX.border}` }}>
       <div className="flex items-center justify-between px-3 py-2">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-2 py-1 -mx-2 -my-1 rounded hover:bg-[#2A2B33] transition-colors"
+          className="flex items-center gap-2 px-2 py-1 -mx-2 -my-1 rounded transition-colors"
+          style={{ color: AX.muted }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = AX.border}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         >
-          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Token Info</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide">Token Info</span>
           <svg 
             width="12" 
             height="12" 
@@ -311,7 +320,10 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           onClick={() => {
             // Refresh action could go here
           }}
-          className="p-1 rounded hover:bg-[#1E1F26] transition-colors"
+          className="p-1 rounded transition-colors"
+          style={{ color: AX.muted }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = AX.border}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
@@ -340,11 +352,11 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
           {/* Token Metrics Grid - First Row */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* Top 10 Holders */}
-            <div className="rounded-md p-2 border h-[68px]" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
+            <div className="rounded-lg p-2 border h-[68px]" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
               <div className="flex flex-col items-center justify-center gap-1 h-full">
                 <div className="flex items-center gap-1.5">
-                  <BsPersonGear size={16} style={{ color: AX.aiGreen }} />
-                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                  <BsPersonGear size={16} style={{ color: AX.mint }} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.mint }}>
                     {top10Percent > 0 ? `${top10Percent.toFixed(2)}%` : '0%'}
                   </div>
                 </div>
@@ -354,11 +366,11 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
 
             {/* Dev Holdings - with hover popout */}
             <div className="relative group h-[68px]">
-              <div className="rounded-md p-2 border cursor-pointer hover:border-[#3A3B43] transition-colors h-full" style={{ backgroundColor: '#101114', borderColor: AX.border }}>
+              <div className="rounded-lg p-2 border cursor-pointer transition-colors h-full" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
                 <div className="flex flex-col items-center justify-center gap-1 h-full">
                   <div className="flex items-center gap-1.5">
-                    <LuChefHat size={16} style={{ color: AX.aiGreen }} />
-                    <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                    <LuChefHat size={16} style={{ color: AX.mint }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.mint }}>
                       {devPercent > 0 ? `${devPercent.toFixed(1)}%` : '0%'}
                     </div>
                   </div>
@@ -367,12 +379,12 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
               </div>
               {/* Dev Popout */}
               <div className="absolute left-0 top-full mt-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none group-hover:pointer-events-auto">
-                <div className="rounded-lg border shadow-xl min-w-[220px]" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
+                <div className="rounded-xl border shadow-2xl min-w-[220px]" style={{ backgroundColor: AX.surface2, borderColor: AX.border }}>
                   {/* Header */}
                   <div className="px-3 py-2 border-b" style={{ borderColor: AX.border }}>
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-semibold" style={{ color: AX.text }}>DEV Holds</span>
-                      <span className="text-[11px] font-bold" style={{ color: AX.aiGreen }}>
+                      <span className="text-[11px] font-bold" style={{ color: AX.mint }}>
                         {devPercent > 0 ? `${devPercent.toFixed(2)}%` : '0%'}
                       </span>
                     </div>
@@ -401,7 +413,7 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px]" style={{ color: AX.muted }}>Bought</span>
-                      <span className="text-[10px]" style={{ color: AX.aiGreen }}>
+                      <span className="text-[10px]" style={{ color: AX.mint }}>
                         {token?.dev_bought_usd ? `$${formatSmartNumber(token.dev_bought_usd)}` : '$0'} / {token?.dev_buy_count || 0}TXs
                       </span>
                     </div>
@@ -652,7 +664,9 @@ const TokenInfoDropdown: React.FC<{ token: any; liveMarketCapUsd?: number | null
                 <div className="flex items-center gap-1.5">
                   <FaUsers className="text-white" size={16} />
                   <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
-                    {token?.total_holders || 0}
+                    {/* BANDAID: token.total_holders disabled, using REST prop. Restore by uncommenting. */}
+                    {/* {token?.total_holders || 0} */}
+                    {restHoldersCount ?? 0}
                   </div>
                 </div>
                 <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Holders</div>
@@ -722,7 +736,7 @@ const formatCompactNumber = (n: number | string): string => {
 /* ── Toast helpers (showOrderToast + ORDER_TOAST_STYLE imported from ~/utils/tradeToast) ── */
 
 // Pool Info Section Component
-const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; liveLiquidityUsd?: number | null }> = ({ token, liveMarketCapUsd, liveLiquidityUsd }) => {
+const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; liveLiquidityUsd?: number | null; restHoldersCount?: number }> = ({ token, liveMarketCapUsd, liveLiquidityUsd, restHoldersCount }) => {
   const [isOpen, setIsOpen] = useState(true);
 
   const copyToClipboard = (text: string) => {
@@ -918,7 +932,9 @@ const PoolInfoSection: React.FC<{ token: any; liveMarketCapUsd?: number | null; 
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holders</span>
               <span className="text-[11px] text-[#E6E7EA] font-semibold">
-                {token?.total_holders || token?.unique_traders || 0}
+                {/* BANDAID: token.total_holders / unique_traders disabled, using REST prop. Restore by uncommenting. */}
+                {/* {token?.total_holders || token?.unique_traders || 0} */}
+                {restHoldersCount ?? 0}
               </span>
             </div>
 
@@ -1045,6 +1061,10 @@ interface TradeActionPanelProps {
   circulatingSupply?: number; // Circulating supply from /v1/supply endpoint
   firstBuyers?: FirstBuyer[];
   firstBuyersSummary?: FirstBuyersSummary | null;
+  /** BANDAID: REST-driven holder count from /v1/token/{mint}/holders. Takes
+   * precedence over token?.total_holders / token?.unique_traders while the
+   * WS path is disabled. Remove this prop + uncomment the reads below to revert. */
+  restHoldersCount?: number;
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
@@ -1060,6 +1080,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   circulatingSupply,
   firstBuyers,
   firstBuyersSummary,
+  restHoldersCount,
 }) => {
   // Live SOL price from Pyth Network (same source as footer)
   const { solPrice: liveSolPrice } = useSolPrice();
@@ -1223,6 +1244,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     user,
     solBalance,
     refreshBalance,
+    refreshAllBalances,
     walletList,
     walletBalances,
     selectedWalletIds,
@@ -1258,6 +1280,39 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       const bal = addr ? walletBalances?.[addr] ?? w.balance ?? 0 : 0;
       return acc + (bal || 0);
     }, 0);
+
+  // Fetch live balances for every SOL wallet on the trade page so the picker pill
+  // reflects real on-chain values (refreshBalance only covers the primary wallet).
+  useEffect(() => {
+    if (!solWallets.length) return;
+    const wallets = solWallets
+      .map((w: any) => ({
+        address: (w.solanaAddress || "").trim(),
+        chain: "sol" as const,
+      }))
+      .filter((w) => w.address);
+    if (wallets.length > 0) {
+      refreshAllBalances(wallets);
+    }
+  }, [solWallets, refreshAllBalances]);
+
+  // Default-select the primary wallet on first load so the pill shows the user's
+  // balance instead of 0/0.00 before they open the picker. Runs only while the
+  // selection is empty — clearing all wallets after this is preserved as user intent.
+  const didAutoSelectRef = useRef(false);
+  useEffect(() => {
+    if (didAutoSelectRef.current) return;
+    if (solWallets.length === 0) return;
+    if (selectedWalletSet.size > 0) {
+      didAutoSelectRef.current = true;
+      return;
+    }
+    const primary = solWallets.find((w: any) => w?.isPrimary) ?? solWallets[0];
+    if (primary?.id) {
+      setSelectedWalletsForChain?.([primary.id], "sol");
+      didAutoSelectRef.current = true;
+    }
+  }, [solWallets, selectedWalletSet, setSelectedWalletsForChain]);
 
   // Click-outside to close the wallet picker (covers both trigger and portaled dropdown)
   useEffect(() => {
@@ -1520,7 +1575,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const tokenPriceUsdField = Number((token as any)?.price_usd) || 0;
 
   const liveTokenPriceInSol = useMemo(() => {
-    const supply = circulatingSupply ?? (Number(token?.total_supply) || 0);
+    // Treat `circulatingSupply <= 1` as "still loading" — useTokenSupply uses
+    // 1 as a sentinel before /v1/supply resolves. If we accept it as real,
+    // we compute baseMarketCap / (1 * solUsd) which is wildly wrong.
+    const supply =
+      circulatingSupply && circulatingSupply > 1
+        ? circulatingSupply
+        : (Number(token?.total_supply) || 0);
     const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
     // Best: derive from live market cap + circulating supply
     if (baseMarketCap > 0 && supply > 0 && solUsd > 0) {
@@ -1543,7 +1604,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Token price in SOL at the limit order's target market cap
   const limitTokenPriceInSol = useMemo(() => {
     if (tab !== "limit") return 0;
-    const supply = circulatingSupply ?? (Number(token?.total_supply) || 0);
+    // Same sentinel guard as liveTokenPriceInSol above.
+    const supply =
+      circulatingSupply && circulatingSupply > 1
+        ? circulatingSupply
+        : (Number(token?.total_supply) || 0);
     const solUsd = liveSolPrice > 0 ? liveSolPrice : 0;
     const tmc = Number(targetMC);
     if (tmc > 0 && supply > 0 && solUsd > 0) {
@@ -2810,6 +2875,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 signature: sellResult.hash,
                 status: "confirmed",
               });
+              // Fire-and-forget: verify the tx actually succeeded on-chain.
+              // If meta.err is set the marker is silently removed.
+              verifyTxAndRollbackMarker(sellMarkerId, sellResult.hash);
             }
 
             // Success - update link to be clickable
@@ -3154,6 +3222,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               signature: firstTxHash,
               status: "confirmed",
             });
+            // Fire-and-forget: verify the tx actually succeeded on-chain.
+            // If meta.err is set the marker is silently removed.
+            verifyTxAndRollbackMarker(buyMarkerId, firstTxHash);
           } else {
             removePendingTrade(buyMarkerId);
           }
@@ -3359,44 +3430,45 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
           </div>
           <div>
-            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Sells</div>
-            <div className="whitespace-nowrap tabular-nums text-[#FF4D7F] flex items-baseline gap-0.5 text-[11px]">
+            <div className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Sells</div>
+            <div className="whitespace-nowrap tabular-nums flex items-baseline gap-0.5 text-[11px]" style={{ color: AX.sell }}>
               <span>{formatCompactNumber(Math.round(sells ?? 0))}</span>
-              <span className="text-[#9CA3AF]">/</span>
-              <span className="text-[#FF4D7F]">${formatCompactNumber(Math.round(sellVolume || 0))}</span>
+              <span style={{ color: AX.muted }}>/</span>
+              <span style={{ color: AX.sell }}>${formatCompactNumber(Math.round(sellVolume || 0))}</span>
             </div>
           </div>
           <div>
-            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Net</div>
-            <div className={cx("whitespace-nowrap tabular-nums text-[11px]", netVolume >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
+            <div className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Net</div>
+            <div className="whitespace-nowrap tabular-nums text-[11px]" style={{ color: netVolume >= 0 ? AX.mint : AX.sell }}>
               {netVolume >= 0 ? "+" : "-"}${formatCompactNumber(Math.round(Math.abs(netVolume)))}
             </div>
           </div>
         </div>
-        <div className="mt-1 h-0.5 w-full rounded-full bg-[#25282B] relative overflow-hidden">
-          <div className="absolute left-0 top-0 h-full" style={{ width: `${buyPercentage}%`, background: AX.mint }} />
-          <div className="absolute right-0 top-0 h-full" style={{ width: `${sellPercentage}%`, background: AX.sell }} />
+        <div className="mt-1.5 h-1 w-full rounded-full relative overflow-hidden" style={{ backgroundColor: AX.border }}>
+          <div className="absolute left-0 top-0 h-full rounded-l-full" style={{ width: `${buyPercentage}%`, background: AX.mint }} />
+          <div className="absolute right-0 top-0 h-full rounded-r-full" style={{ width: `${sellPercentage}%`, background: AX.sell }} />
         </div>
       </div>
       </div>
 
       {/* ===== C. Buy/Sell switcher ===== */}
-      <div className="px-3 py-1.5 -mt-px border-b border-[#2A2B33]">
+      <div className="px-3 py-2 -mt-px" style={{ borderBottom: `1px solid ${AX.border}` }}>
         <div className="mx-auto w-full max-w-xl relative">
-          <div className="relative h-9 rounded-lg border border-[#2A2B33] bg-[#101114] overflow-hidden">
+          <div className="relative h-10 rounded-xl overflow-hidden" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
             <div
-              className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
+              className="absolute top-1 left-1 h-[calc(100%-8px)] w-[calc(50%-4px)] rounded-lg transition-all duration-200"
               style={{
-                transform: mode === "sell" ? "translateX(100%)" : "translateX(0%)",
+                transform: mode === "sell" ? "translateX(calc(100% + 4px))" : "translateX(0%)",
                 background: mode === "buy" ? AX.mint : AX.sell,
+                boxShadow: mode === "buy" ? `0 0 12px ${AX.mintGlow}` : `0 0 12px ${AX.sellGlow}`,
               }}
             />
             <div className="relative z-10 grid grid-cols-2 h-full">
               <button
                 className={cx(
                   "cursor-pointer select-none text-[13px] font-semibold",
-                  "flex items-center justify-center h-full",
-                  mode === "buy" ? "text-black" : "text-[#C7CBD1] hover:text-white"
+                  "flex items-center justify-center h-full transition-colors duration-200",
+                  mode === "buy" ? "text-[#030304]" : "text-[#71717a] hover:text-white"
                 )}
                 onClick={() => setMode("buy")}
               >
@@ -3405,8 +3477,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               <button
                 className={cx(
                   "cursor-pointer select-none text-[13px] font-semibold",
-                  "flex items-center justify-center h-full",
-                  mode === "sell" ? "text-black" : "text-[#C7CBD1] hover:text-white"
+                  "flex items-center justify-center h-full transition-colors duration-200",
+                  mode === "sell" ? "text-[#030304]" : "text-[#71717a] hover:text-white"
                 )}
                 onClick={() => setMode("sell")}
               >
@@ -3418,19 +3490,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== D. Tabs ===== */}
-      <div className="relative px-3 pt-2.5 pb-1 border-b border-[#2A2B33]">
-        <div className="flex items-center justify-start gap-6">
+      <div className="relative px-3 pt-2.5 pb-1" style={{ borderBottom: `1px solid ${AX.border}` }}>
+        <div className="flex items-center justify-start gap-2">
           {(["market", "limit", "adv"] as const).map((t) => (
             <button
               key={t}
               className={cx(
-                tabBtn,
-                "hover:text-[#E6E7EA]",
-                tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]",
-                isMigratingToken && t === "market" && "opacity-50 cursor-not-allowed blur-sm"
+                "px-3 py-1.5 text-[11px] tracking-wide uppercase font-semibold rounded-md transition-all duration-200",
+                isMigratingToken && t === "market" && "opacity-30 cursor-not-allowed"
               )}
+              style={{
+                backgroundColor: tab === t ? `${AX.mint}15` : 'transparent',
+                color: tab === t ? AX.mint : AX.muted,
+                border: tab === t ? `1px solid ${AX.mint}40` : '1px solid transparent',
+              }}
               onClick={() => {
-                if (isMigratingToken && t === "market") return; // Disable market tab for migrating tokens
+                if (isMigratingToken && t === "market") return;
                 setTab(t);
               }}
               disabled={isMigratingToken && t === "market"}
@@ -3446,8 +3521,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             ref={walletTriggerRef}
             type="button"
             onClick={() => setWalletPickerOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-md border bg-[#101114] px-2 py-1 text-[11px] font-medium text-[#E6E7EA] transition-colors hover:border-[#70E0B0]"
-            style={{ borderColor: AX.border }}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all duration-200"
+            style={{ 
+              backgroundColor: AX.surface,
+              borderColor: AX.border, 
+              border: `1px solid ${AX.border}`,
+              color: AX.text,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = AX.mint;
+              e.currentTarget.style.boxShadow = `0 0 8px ${AX.mintGlow}`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = AX.border;
+              e.currentTarget.style.boxShadow = 'none';
+            }}
             title="Select trading wallets"
           >
             <span className="flex items-center gap-1">
@@ -3668,10 +3756,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== F. Amount ===== */}
       <div className="px-3 pt-2">
-        <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B]">
-          <div className="flex items-center justify-between gap-3 px-3 py-0.5">
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
+        <div className="mx-auto w-full max-w-xl relative rounded-xl overflow-hidden" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
+          <div className="flex items-center justify-between gap-3 px-3 py-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>
                 {isSniperMode ? "Sniper Amount" : "Amount"}
               </span>
               <input
@@ -3679,9 +3767,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 inputMode="decimal"
                 pattern="[0-9]*[.,]?[0-9]*"
                 className="h-6 w-20 bg-transparent border-none text-left pl-2
-                           text-[12px] font-normal text-[#E6E7EA] tabular-nums
-                           placeholder:text-[#9CA3AF] focus:outline-none"
-                style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                           text-[13px] font-medium tabular-nums
+                           placeholder:opacity-50 focus:outline-none"
+                style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', color: AX.text }}
                 placeholder="0.00"
                 value={isSniperMode ? sniperAmount : amount}
                 onChange={(e) => {
@@ -3722,7 +3810,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
             <div className="flex items-center justify-center w-5 h-5">
               {mode === "sell" ? (
-                <span className="text-[14px] font-semibold text-[#E6E7EA]">%</span>
+                <span className="text-[14px] font-semibold" style={{ color: AX.text }}>%</span>
               ) : (
                 <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
                   <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
@@ -3756,7 +3844,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             const showSubtext = isSellWithPosition || isBuyWithPrice;
             const presetRowHeight = showSubtext ? "h-9" : "h-7";
             return (
-          <div className="border-t border-[#000] rounded-b-lg overflow-hidden">
+          <div className="overflow-hidden" style={{ borderTop: `1px solid ${AX.border}` }}>
             <div className="grid grid-cols-5">
               {amountPresets.map((opt, i) => {
                 const currentValue = editingPresets ? (presetDrafts[i] || "") : String(opt);
@@ -3768,12 +3856,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     : null;
                 if (editingPresets) {
                   return (
-                    <div key={i} className={`${presetRowHeight} border-r border-[#000] last:border-r-0 min-w-0`}>
+                    <div key={i} className={`${presetRowHeight} min-w-0`} style={{ borderRight: i < 4 ? `1px solid ${AX.border}` : 'none' }}>
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="h-full w-full bg-[#101114] text-center text-[12px] font-semibold text-[#E6E7EA]
-                                   outline-none focus:bg-[#1E1F26]"
+                        className="h-full w-full text-center text-[12px] font-semibold outline-none"
+                        style={{ backgroundColor: AX.surface, color: AX.text }}
                         value={presetDrafts[i] ?? ""}
                         onChange={(e) => {
                           const v = e.target.value.replace(/,/g, ".");
@@ -3796,11 +3884,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     key={i}
                     type="button"
                     className={cx(
-                      `${presetRowHeight} border-r border-[#000] last:border-r-0 text-[12px] font-semibold tabular-nums`,
-                      active
-                        ? "bg-[#2A2B33] text-[#E6E7EA]"
-                        : "bg-[#101114] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                      `${presetRowHeight} text-[12px] font-semibold tabular-nums transition-colors duration-150`
                     )}
+                    style={{
+                      borderRight: i < 4 ? `1px solid ${AX.border}` : 'none',
+                      backgroundColor: active ? `${AX.mint}15` : AX.surface,
+                      color: active ? AX.mint : AX.text,
+                    }}
                     onClick={() => {
                       if (isSniperMode) {
                         setSniperAmount(String(opt));
@@ -3826,7 +3916,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingPresets(true)}
-                  className={`${presetRowHeight} bg-[#101114] hover:bg-[#1E1F26] text-[#E6E7EA]`}
+                  className={`${presetRowHeight} transition-colors duration-150`}
+                  style={{ backgroundColor: AX.surface, color: AX.muted }}
                   title="Edit preset values"
                 >
                   <LuPencil className="mx-auto h-4 w-4" />
@@ -3835,7 +3926,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 <button
                   type="button"
                   onClick={commitPresetDrafts}
-                  className={`${presetRowHeight} bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#25282B]`}
+                  className={`${presetRowHeight} transition-colors duration-150`}
+                  style={{ backgroundColor: `${AX.mint}15`, color: AX.mint }}
                   title="Done"
                 >
                   <LuCheck className="mx-auto h-4 w-4" />
@@ -3853,18 +3945,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         <div className="px-3 pt-2 space-y-3">
           {/* Market cap input */}
           <div className=" pt-2 pb-3">
-            <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#25282B] mb-3">
+            <div className="mx-auto w-full max-w-xl relative rounded-xl mb-3" style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}>
               <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">MKT CAP</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: AX.muted }}>MKT CAP</span>
                   <input
                     type="text"
                     inputMode="decimal"
                     pattern="[0-9]*[.,]?[0-9]*"
                     className="h-8 w-20 bg-transparent border-none text-left pl-2
-                               text-[12px] font-normal text-[#E6E7EA] tabular-nums
-                               placeholder:text-[#9CA3AF] focus:outline-none"
-                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                               text-[13px] font-medium tabular-nums
+                               placeholder:opacity-50 focus:outline-none"
+                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', color: AX.text }}
                     placeholder="0"
                     value={targetMC}
                     onChange={(e) => {
@@ -3882,7 +3974,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     }}
                   />
                 </div>
-                <span className="text-[11px] font-normal text-[#9CA3AF]">$</span>
+                <span className="text-[11px] font-normal" style={{ color: AX.muted }}>$</span>
               </div>
             </div>
 
@@ -3892,15 +3984,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               <div className="flex-1">
                 <div className="relative h-4 flex items-center">
                   {/* Base track */}
-                  <div className="absolute top-1/2 left-0 w-full h-0.5 bg-[#2A2B33] rounded-lg"></div>
+                  <div className="absolute top-1/2 left-0 w-full h-1 rounded-full" style={{ backgroundColor: AX.border }}></div>
                   
                   {/* Markings */}
                   <div className="absolute top-1/2 left-0 w-full h-0.5 flex justify-between items-center pointer-events-none">
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1.5 bg-[#E6E7EA] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
-                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
+                    <div className="w-px h-1 -mt-0.5" style={{ backgroundColor: AX.muted }}></div>
+                    <div className="w-px h-1 -mt-0.5" style={{ backgroundColor: AX.muted }}></div>
+                    <div className="w-px h-1.5 -mt-0.5" style={{ backgroundColor: AX.text }}></div>
+                    <div className="w-px h-1 -mt-0.5" style={{ backgroundColor: AX.muted }}></div>
+                    <div className="w-px h-1 -mt-0.5" style={{ backgroundColor: AX.muted }}></div>
                   </div>
                   
                   <input
@@ -4125,31 +4217,41 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* Est. receive row for buy mode */}
       {mode === "buy" && effectiveBuyTokenPrice > 0 && Number(isSniperMode ? sniperAmount : amount) > 0 && (
-        <div className="mx-3 mt-1 flex items-center justify-between rounded-md bg-[#1A1B1E] px-3 py-1.5">
-          <span className="text-[11px] text-[#9CA3AF]">Est. receive</span>
-          <span className="text-[12px] font-semibold text-[#E6E7EA] tabular-nums">
+        <div className="mx-3 mt-1 flex items-center justify-between rounded-lg px-3 py-1.5" style={{ backgroundColor: AX.surface2 }}>
+          <span className="text-[11px]" style={{ color: AX.muted }}>Est. receive</span>
+          <span className="text-[12px] font-semibold tabular-nums" style={{ color: AX.text }}>
             ~{formatCompactNumber(Number(isSniperMode ? sniperAmount : amount) / effectiveBuyTokenPrice)} {token.symbol}
           </span>
         </div>
       )}
 
       {/* Primary action */}
-      <div className="px-3 py-2">
+      <div className="px-3 py-3">
         <button
           ref={tradeButtonRef}
           type="button"
           className={cx(
             baseBtn,
-            "w-full h-10 rounded-full text-[14px] cursor-pointer",
-            mode === "buy"
-              ? "bg-[#70E0B0] text-black hover:bg-[#58B890]"
-              : "bg-[#FF4D7F] text-black hover:opacity-90"
+            "w-full h-11 rounded-xl text-[14px] cursor-pointer transition-all duration-200"
           )}
+          style={{
+            backgroundColor: mode === "buy" ? AX.mint : AX.sell,
+            color: '#030304',
+            boxShadow: mode === "buy" ? `0 0 20px ${AX.mintGlow}` : `0 0 20px ${AX.sellGlow}`,
+          }}
           disabled={isSniperMode
             ? !sniperAmount || Number(sniperAmount) <= 0 || sniperSubmitting
             : isDevSellMode
               ? !amount || Number(amount) <= 0 || devSubmitting || !creatorAddress
               : !amount || (tab === "limit" && !targetMC)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.filter = 'brightness(1.1)';
+            e.currentTarget.style.transform = 'scale(1.01)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.filter = 'brightness(1)';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
           onClick={() => {
             if (isSniperMode) {
               void handleCreateSniperOrder();
@@ -4219,8 +4321,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3">
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+          <span className="text-[9px] uppercase tracking-wide" style={{ color: AX.muted }}>Bought</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
@@ -4243,13 +4345,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[10px] font-semibold">
+            <span className="text-[10px] font-semibold" style={{ color: AX.mint }}>
               ${positionData ? formatCompactNumber(positionData.boughtUsdValue) : '0'}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+          <span className="text-[9px] uppercase tracking-wide" style={{ color: AX.muted }}>Sold</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
@@ -4272,13 +4374,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#FF4D7F] text-[10px] font-semibold">
+            <span className="text-[10px] font-semibold" style={{ color: AX.sell }}>
               ${positionData ? formatCompactNumber(positionData.soldUsdValue) : '0'}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33]">
-          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+          <span className="text-[9px] uppercase tracking-wide" style={{ color: AX.muted }}>Holding</span>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5">
               <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
@@ -4301,7 +4403,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#E6E7EA] text-[10px] font-semibold">
+            <span className="text-[10px] font-semibold" style={{ color: AX.text }}>
               ${positionData ? formatCompactNumber(positionData.remainingUsdValue) : '0'}
             </span>
           </div>
@@ -4325,9 +4427,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               : 'PnL: realized (from closed sells). Click to switch to unrealized.'
           }
           onClick={() => setPnlMode((m) => (m === 'unrealized' ? 'realized' : 'unrealized'))}
-          className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#101114] border border-[#2A2B33] hover:bg-[#1E1F26] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#70E0B0] transition-colors cursor-pointer"
+          className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg transition-colors cursor-pointer"
+          style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
         >
-          <span className="flex items-center gap-1 text-[9px] text-[#9CA3AF] uppercase tracking-wide">
+          <span className="flex items-center gap-1 text-[9px] uppercase tracking-wide" style={{ color: AX.muted }}>
             {pnlMode === 'unrealized' ? 'UPnL' : 'PnL'}
             <LuArrowLeftRight size={9} aria-hidden="true" />
           </span>
@@ -4429,10 +4532,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       </div>
 
       {/* ===== Token Info ===== */}
-      <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} firstBuyers={firstBuyers} firstBuyersSummary={firstBuyersSummary} />
+      <TokenInfoDropdown token={token} liveMarketCapUsd={liveMarketCapUsd} firstBuyers={firstBuyers} firstBuyersSummary={firstBuyersSummary} restHoldersCount={restHoldersCount} />
 
       {/* ===== Pool Info Section ===== */}
-      <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} liveLiquidityUsd={liveLiquidityUsd} />
+      <PoolInfoSection token={token} liveMarketCapUsd={liveMarketCapUsd} liveLiquidityUsd={liveLiquidityUsd} restHoldersCount={restHoldersCount} />
 
       {/* High Slippage Warning Dialog */}
       <HighSlippageWarningDialog
