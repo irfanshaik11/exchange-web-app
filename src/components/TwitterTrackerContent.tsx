@@ -213,32 +213,54 @@ export default function TwitterTrackerContent() {
     if (!selectedTwitterUser) return;
     if (twitterTab !== 1) return;
     let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 5;
+    const RETRY_MS = 8_000;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
     setLoadingTwitterFeed(true);
-    (async () => {
+
+    const tryOnce = async () => {
+      if (cancelled) return;
+      attempts++;
       try {
         const tweets = await getUserTweets(selectedTwitterUser, 20);
         if (cancelled) return;
-        if (tweets.length === 0) return;
-        setTwitterFeed((prev) => {
-          const seen = new Set(prev.map((t) => t.id));
-          const fresh = tweets.filter((t) => !seen.has(t.id));
-          if (fresh.length === 0) return prev;
-          const merged = [...fresh, ...prev];
-          merged.sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() -
-              new Date(a.createdAt).getTime(),
-          );
-          return merged.slice(0, 100);
-        });
+        if (tweets.length > 0) {
+          setTwitterFeed((prev) => {
+            const seen = new Set(prev.map((t) => t.id));
+            const fresh = tweets.filter((t) => !seen.has(t.id));
+            if (fresh.length === 0) return prev;
+            const merged = [...fresh, ...prev];
+            merged.sort(
+              (a, b) =>
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime(),
+            );
+            return merged.slice(0, 100);
+          });
+          setLoadingTwitterFeed(false);
+          return;
+        }
+        if (attempts < MAX_ATTEMPTS) {
+          retryTimer = setTimeout(tryOnce, RETRY_MS);
+        } else {
+          setLoadingTwitterFeed(false);
+        }
       } catch (err) {
         console.error("Failed to fetch tweets for selected user:", err);
-      } finally {
-        if (!cancelled) setLoadingTwitterFeed(false);
+        if (!cancelled && attempts < MAX_ATTEMPTS) {
+          retryTimer = setTimeout(tryOnce, RETRY_MS);
+        } else if (!cancelled) {
+          setLoadingTwitterFeed(false);
+        }
       }
-    })();
+    };
+    tryOnce();
+
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [selectedTwitterUser, twitterTab, viewRequestCount]);
 
