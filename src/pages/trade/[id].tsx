@@ -737,6 +737,12 @@ export default function TradePage() {
   // server-side; client slices further if needed).
   const restHoldersData = useHoldersRest(resolvedTokenMint, { limit: 100 });
   const restHoldersCount = restHoldersData.totalHolders;
+  // BANDAID: Reset the local holdersCount when the mint changes so the
+  // previous token's count doesn't bleed into the new view. Without this,
+  // `holdersCount` keeps Token A's value until Token B's REST fetch returns.
+  useEffect(() => {
+    setHoldersCount(undefined);
+  }, [resolvedTokenMint]);
   useEffect(() => {
     if (restHoldersCount != null && restHoldersCount > 0) {
       setHoldersCount(restHoldersCount);
