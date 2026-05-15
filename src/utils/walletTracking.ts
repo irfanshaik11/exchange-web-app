@@ -431,6 +431,36 @@ export async function removeTrackedWallet(
   }
 }
 
+// One-shot bulk remove. Replaces the per-wallet `Promise.all(map(removeTrackedWallet))`
+// "Remove All" pattern that issued N parallel DELETEs (150 round-trips for the
+// default-150-wallets case). Pass `all: true` to wipe every tracked wallet for
+// the chain, or `addresses` for a targeted subset.
+export async function removeTrackedWalletsBulk(
+  args: { chain?: "sol" | "monad"; all?: boolean; addresses?: string[] },
+  authToken?: string,
+): Promise<{ deleted: number }> {
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+  const response = await fetch(
+    `${WALLET_TRACKER_API_URL}/api/watch/bulk-delete`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        chain: args.chain ?? "sol",
+        ...(args.all ? { all: true } : { addresses: args.addresses ?? [] }),
+      }),
+    },
+  );
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || (body as any)?.ok === false) {
+    throw new Error((body as any)?.error || "Failed to bulk-remove wallets");
+  }
+  return { deleted: Number((body as any)?.deleted ?? 0) };
+}
+
 // Get wallet event history
 export async function getWalletHistory(
   address: string,

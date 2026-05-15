@@ -18,6 +18,7 @@ import {
   addTrackedWallet,
   addTrackedWalletsBulk,
   removeTrackedWallet,
+  removeTrackedWalletsBulk,
   getTrackedWallets,
   getWalletHistory,
   toggleWalletNotifications,
@@ -1292,16 +1293,13 @@ export default function TrackersPage() {
   const handleRemoveWallet = async (addressToRemove: string) => {
     try {
       if (addressToRemove === "all") {
-        // Remove all wallets for the selected chain
-        await Promise.all(
-          wallets.map((w) =>
-            removeTrackedWallet(
-              w.address,
-              user?.id,
-              selectedChain,
-              user?.bearerToken,
-            ),
-          ),
+        // Single round-trip via the bulk endpoint. The old `Promise.all(map())`
+        // fired N parallel DELETEs (150 for the default-import case) and
+        // backed up the API's connection pool — felt slow even though each
+        // individual call was fast.
+        await removeTrackedWalletsBulk(
+          { chain: selectedChain, all: true },
+          user?.bearerToken,
         );
 
         // Clear all state
