@@ -1126,27 +1126,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
               >
                 <div className="flex items-center gap-1">
                   <span className="text-xs">Wallet</span>
-                  <button
-                    onClick={handleWalletFilterClick}
-                    className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
-                    style={{ color: isWalletFilterActive ? AX.mint : AX.muted }}
-                  >
-                    <CiFilter size={14} />
-                  </button>
-                  {isWalletFilterActive && (
-                    <span
-                      className="rounded px-1 text-[9px]"
-                      style={{
-                        backgroundColor: `${AX.mint}20`,
-                        color: AX.mint,
-                      }}
-                    >
-                      {walletFilter.tags.length > 0
-                        ? walletFilter.tags.length
-                        : ""}
-                      {walletFilter.address ? "🔍" : ""}
-                    </span>
-                  )}
                 </div>
               </th>
               <th className="px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
@@ -1155,11 +1134,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     label="Bought"
                     sortDirection={filters.bought.sort}
                     onSort={() => handleSort("bought")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("bought", e)}
-                    isFilterActive={
-                      !!filters.bought.range.min || !!filters.bought.range.max
-                    }
                   />
                   <span className="text-xs text-[#757e80]">
                     /
@@ -1168,11 +1142,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     label="Avg Buy"
                     sortDirection={filters.avgBuy.sort}
                     onSort={() => handleSort("avgBuy")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("avgBuy", e)}
-                    isFilterActive={
-                      !!filters.avgBuy.range.min || !!filters.avgBuy.range.max
-                    }
                   />
                 </div>
               </th>
@@ -1182,11 +1151,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     label="Sold"
                     sortDirection={filters.sold.sort}
                     onSort={() => handleSort("sold")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("sold", e)}
-                    isFilterActive={
-                      !!filters.sold.range.min || !!filters.sold.range.max
-                    }
                   />
                   <span className="text-xs text-[#757e80]">
                     /
@@ -1195,11 +1159,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     label="Avg Sell"
                     sortDirection={filters.avgSell.sort}
                     onSort={() => handleSort("avgSell")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("avgSell", e)}
-                    isFilterActive={
-                      !!filters.avgSell.range.min || !!filters.avgSell.range.max
-                    }
                   />
                 </div>
               </th>
@@ -1209,11 +1168,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     label="PnL"
                     sortDirection={filters.pnl.sort}
                     onSort={() => handleSort("pnl")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("pnl", e)}
-                    isFilterActive={
-                      !!filters.pnl.range.min || !!filters.pnl.range.max
-                    }
                   />
                   <span className="text-xs text-[#757e80]">
                     /
@@ -1222,11 +1176,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     label="%"
                     sortDirection={filters.pnlPct.sort}
                     onSort={() => handleSort("pnlPct")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("pnlPct", e)}
-                    isFilterActive={
-                      !!filters.pnlPct.range.min || !!filters.pnlPct.range.max
-                    }
                   />
                 </div>
               </th>
@@ -1236,12 +1185,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     label="Remaining"
                     sortDirection={filters.remaining.sort}
                     onSort={() => handleSort("remaining")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("remaining", e)}
-                    isFilterActive={
-                      !!filters.remaining.range.min ||
-                      !!filters.remaining.range.max
-                    }
                   />
                   <span className="text-xs text-[#757e80]">
                     /
@@ -1250,12 +1193,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                     label="%"
                     sortDirection={filters.remainingPct.sort}
                     onSort={() => handleSort("remainingPct")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("remainingPct", e)}
-                    isFilterActive={
-                      !!filters.remainingPct.range.min ||
-                      !!filters.remainingPct.range.max
-                    }
                   />
                 </div>
               </th>
@@ -1264,12 +1201,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                   label="Last Active"
                   sortDirection={filters.lastActive.sort}
                   onSort={() => handleSort("lastActive")}
-                  hasFilter
-                  onFilterClick={(e) => handleFilterClick("lastActive", e)}
-                  isFilterActive={
-                    !!filters.lastActive.range.min ||
-                    !!filters.lastActive.range.max
-                  }
                 />
               </th>
             </tr>

@@ -2018,37 +2018,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
           {/* Trader */}
           <div className="w-[23%] px-2 py-3 text-right whitespace-nowrap text-[#757e80]">
-            <div className="flex items-center justify-end gap-1">
-              <span className="text-[13px] font-normal text-[#757e80]">
-                Trader
-              </span>
-              <button
-                onClick={handleWalletFilterClick}
-                className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
-                style={{
-                  color: isWalletFilterActive ? AX.mint : "#757e80",
-                }}
-              >
-                <CiFilter size={14} />
-              </button>
-              {isWalletFilterActive && (
-                <span
-                  className="rounded px-1 text-[9px]"
-                  style={{
-                    backgroundColor: `${AX.mint}20`,
-                    color: AX.mint,
-                  }}
-                >
-                  {filters.wallet.tags.length > 0
-                    ? filters.wallet.tags.length
-                    : ""}
-                  {filters.wallet.address ? "🔍" : ""}
-                  {filters.wallet.txsRange.min || filters.wallet.txsRange.max
-                    ? "📊"
-                    : ""}
-                </span>
-              )}
-            </div>
+            <span className="text-[13px] font-normal text-[#757e80]">
+              Trader
+            </span>
           </div>
         </div>
 
