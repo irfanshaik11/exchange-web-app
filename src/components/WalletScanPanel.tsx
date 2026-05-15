@@ -425,15 +425,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // Total value = positions (cost basis) + SOL balance
     const totalValue = totalPositionsValue + solBalanceUsd;
 
-    // Unrealized PnL: prefer the Go service summary's pre-computed total
-    // (authoritative, accounts for all positions). Fall back to summing
-    // per-position values only when the summary isn't available yet.
-    const unrealizedPnl = goSummary && goSummary.total_unrealized_pnl_usd != null
-      ? goSummary.total_unrealized_pnl_usd
-      : aggregatedPositions.reduce(
-          (sum, position) => sum + position.unrealizedPnl,
-          0
-        );
+    const unrealizedPnl = goSummary?.total_unrealized_pnl_usd ?? 0;
 
     return {
       totalValue,
@@ -610,7 +602,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 {goLoading ? (
                   <span className="animate-pulse text-neutral-500">—</span>
                 ) : (
-                  `${portfolioMetrics.unrealizedPnl >= 0 ? "+" : ""}$${formatSmartNumber(Math.abs(portfolioMetrics.unrealizedPnl))}`
+                  `$${portfolioMetrics.unrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 )}
               </div>
               <div className="mt-2 text-xs text-neutral-500">
