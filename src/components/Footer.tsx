@@ -768,7 +768,7 @@ export default function Footer() {
           >
             <XIcon size={11} />
             <span className="hidden text-[11px] leading-none sm:inline sm:text-xs">
-              Social
+              Twitter
             </span>
             <span
               className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full"
@@ -799,6 +799,9 @@ export default function Footer() {
             }}
           >
             <FaTelegram size={11} className="sm:h-3 sm:w-3" />
+            <span className="hidden text-[11px] leading-none sm:inline sm:text-xs">
+              Telegram
+            </span>
             <span
               className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full"
               style={{ backgroundColor: "#ec4899" }}
