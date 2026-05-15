@@ -7,7 +7,6 @@ import {
   FaCompass,
   FaChartLine,
   FaChartBar,
-  FaDiscord,
   FaFileAlt,
   FaChevronDown,
   FaCog,
@@ -18,7 +17,6 @@ import {
 import { GoServer } from "react-icons/go";
 import { VscWindow } from "react-icons/vsc";
 import { IoIosNotificationsOutline } from "react-icons/io";
-import { IoColorPaletteOutline } from "react-icons/io5";
 import QuickBuySettingsModal from "./QuickBuySettingsModal";
 import PnLModal from "./PnLModal";
 import WalletSwitcher from "./WalletSwitcher";
@@ -28,7 +26,6 @@ import TelegramTrackerPopup from "./TelegramTrackerPopup";
 import DiscoverPopup from "./DiscoverPopup";
 import PulsePopup from "./PulsePopup";
 import NotificationSettingsModal from "./NotificationSettingsModal";
-import ThemeCustomizationModal from "./ThemeCustomizationModal";
 import { useQuickBuy } from "./QuickBuyContext";
 import { useSolPrice } from "./SolPriceContext";
 import { useUser } from "./UserContext";
@@ -310,7 +307,6 @@ export default function Footer() {
   const [showPnLModal, setShowPnLModal] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] =
     useState(false);
-  const [showThemeCustomization, setShowThemeCustomization] = useState(false);
   const { latencyMs, isConnected, latencyColor } = useServerLatency();
   const [modalPosition, setModalPosition] = useState({ bottom: 0, right: 0 });
   const [selectedRegion] = useState(() => detectNearestRegion());
@@ -463,22 +459,9 @@ export default function Footer() {
       strokeWidth: 0.7,
       onClick: () => setShowNotificationSettings(true),
     },
-    {
-      icon: IoColorPaletteOutline,
-      tooltip: "Customize Theme",
-      iconSize: 16,
-      strokeWidth: 0.7,
-      onClick: () => setShowThemeCustomization(true),
-    },
   ];
 
   const socialLinks = [
-    {
-      icon: FaDiscord,
-      href: "https://discord.gg/sACYQmCsTJ",
-      tooltip: "Discord",
-      text: undefined,
-    },
     {
       icon: XIcon,
       href: "https://x.com/interstatefdn",
@@ -1160,12 +1143,6 @@ export default function Footer() {
       <NotificationSettingsModal
         isOpen={showNotificationSettings}
         onClose={() => setShowNotificationSettings(false)}
-      />
-
-      {/* Theme Customization Modal */}
-      <ThemeCustomizationModal
-        isOpen={showThemeCustomization}
-        onClose={() => setShowThemeCustomization(false)}
       />
     </footer>
   );
