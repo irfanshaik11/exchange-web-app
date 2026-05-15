@@ -33,6 +33,7 @@ import ImportEvmWalletModal from "../components/ImportEvmWalletModal";
 import { SolanaIcon } from "../components/Footer";
 import ExportWalletModal from "../components/ExportWalletModal";
 import RealizedPnlChart, { type PnlChartDataPoint } from "~/components/charts/RealizedPnlChart";
+import PnlShareCard from "~/components/PnlShareCard";
 
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { useImagePreloader } from "~/hooks/useImagePreloader";
@@ -911,6 +912,7 @@ export default function PortfolioPage() {
     between0AndMinus50: 0,
     belowMinus50: 0,
   });
+  const [showPnlShareCard, setShowPnlShareCard] = useState(false);
 
   // Fetch trade history whenever user is logged in (needed for performance metrics)
   useEffect(() => {
@@ -3367,6 +3369,18 @@ export default function PortfolioPage() {
                     Max
                   </button>
                 </div>
+                <button
+                  onClick={() => setShowPnlShareCard(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#0c0e12]/60 border border-white/[0.06] text-[#71717a] hover:text-[#18c48c] hover:border-[#18c48c]/30 transition-all duration-200 cursor-pointer text-xs font-medium"
+                  title="Share PnL"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <polyline points="16 6 12 2 8 6" />
+                    <line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                  Share PnL
+                </button>
               </div>
             )}
           </div>
@@ -4818,6 +4832,20 @@ export default function PortfolioPage() {
           </div>
         </div>
       )}
+      <PnlShareCard
+        isOpen={showPnlShareCard}
+        onClose={() => setShowPnlShareCard(false)}
+        username={user?.name || "Anonymous"}
+        totalPnl={totalPnl}
+        totalPnlPercentage={totalPnlPercentage}
+        realizedPnl={displayRealizedPnl ?? timeframeMetrics.realizedPnl}
+        realizedPnlPercentage={displayRealizedPnlPct ?? timeframeMetrics.realizedPnlPercentage}
+        unrealizedPnl={unrealizedPnl}
+        winningTrades={timeframeMetrics.winningTrades}
+        losingTrades={timeframeMetrics.losingTrades}
+        timeframe={selectedTimeframe}
+        chain={currentChain}
+      />
     </>
   );
 }
