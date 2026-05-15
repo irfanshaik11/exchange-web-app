@@ -24,6 +24,7 @@ import {
 } from '~/hooks/useQueryTokens';
 import { useUser } from '~/components/UserContext';
 import { getTradeActivityByUser } from '~/utils/functions';
+import { prefetchXStocks, prefetchNewPairs, prefetchPumpLive } from '~/utils/discoverPrefetch';
 
 // ─── Trending / Discover tabs ─────────────────────────────────────────────────
 
@@ -95,6 +96,22 @@ function PortfolioPreloader() {
   return null;
 }
 
+// ─── Discover REST tabs (xStocks, New Pairs, Pump Live) ─────────────────────
+
+function DiscoverRestPreloader() {
+  useEffect(() => {
+    // Fire all three prefetches in parallel — they write to the same
+    // localStorage / sessionStorage keys that discover.tsx reads on mount,
+    // so the page skips its loading state entirely.
+    prefetchXStocks();
+    prefetchNewPairs('sol');
+    prefetchNewPairs('monad');
+    prefetchPumpLive();
+  }, []);
+
+  return null;
+}
+
 // ─── Root export ──────────────────────────────────────────────────────────────
 
 export function TrendingBackgroundLoader() {
@@ -103,6 +120,7 @@ export function TrendingBackgroundLoader() {
       <TrendingWsPreloader />
       <TrenchesQueryPreloader />
       <PortfolioPreloader />
+      <DiscoverRestPreloader />
     </>
   );
 }
