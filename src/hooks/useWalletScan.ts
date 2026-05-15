@@ -89,8 +89,11 @@ export function toAggregatedPosition(
   // Market value of remaining tokens (from Go service: remaining_tokens * current_price_usd)
   const remainingMarketValue = p.remaining_value_usd || 0;
 
-  // Unrealized PnL = market value - cost basis of remaining
-  const unrealizedPnl = remainingMarketValue - remainingValue;
+  // Unrealized PnL: prefer the Go service's pre-computed value to avoid
+  // cost-basis drift (airdrops, transfers-in, missing bought_usd_value).
+  const unrealizedPnl = p.unrealized_pnl_usd !== 0
+    ? p.unrealized_pnl_usd
+    : remainingMarketValue - remainingValue;
   const totalPnl = realizedPnl + unrealizedPnl;
   const pnlPercentage = boughtUsd > 0 ? (totalPnl / boughtUsd) * 100 : 0;
 
