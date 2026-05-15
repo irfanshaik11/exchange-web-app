@@ -75,6 +75,12 @@ export function toPositionRow(p: WalletPortfolioPosition): PositionRow {
   (row as any).bought_sol = p.bought_sol;
   (row as any).sold_sol = p.sold_sol;
   (row as any).realized_pnl_sol = p.realized_pnl_sol;
+  // total_outflow_sol: indexer-migration-023 chain-truth cost basis (swap +
+  // all fees). When > 0, enrichment uses this instead of bought_sol for the
+  // USD cost-basis calculation, since bought_sol misses 70-95% of the real
+  // cost on small trades with normal network fees. Falls back to bought_sol
+  // when 0 (no migration-aware trades for this position yet).
+  (row as any).total_outflow_sol = (p as any).total_outflow_sol ?? 0;
   return row;
 }
 

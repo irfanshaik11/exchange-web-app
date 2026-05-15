@@ -608,13 +608,25 @@ export default function PortfolioPage() {
     const enriched = wp.positions
       .filter((p) => p.remaining > 0.001)
       .map((p) => {
-        // Prefer backend-supplied USD values when present; fall back to SOL × solPrice.
-        const boughtSol = (p as any).bought_sol ?? 0;  // raw fields preserved on PositionRow via spread
+        // Cost basis priority order:
+        //   1. p.boughtUsdValue from backend (currently always 0; indexer doesn't
+        //      stamp USD-at-trade-time yet, so this branch is rarely taken)
+        //   2. total_outflow_sol × solPrice — the indexer's full SOL outflow
+        //      (swap + ALL fees) from migration 023. THIS is the chain-truth
+        //      cost basis; what Axiom/GMGN use.
+        //   3. bought_sol × solPrice — swap-amount-only fallback for positions
+        //      composed of pre-migration-023 trades where total_outflow_sol is 0.
+        //      Understates real cost basis by 70-95% on small trades but it's
+        //      the best we have for old data.
+        const boughtSol = (p as any).bought_sol ?? 0;
         const soldSol = (p as any).sold_sol ?? 0;
         const realizedSol = (p as any).realized_pnl_sol ?? 0;
+        const totalOutflowSol = (p as any).total_outflow_sol ?? 0;
         const boughtUsd = p.boughtUsdValue && p.boughtUsdValue > 0
           ? p.boughtUsdValue
-          : boughtSol * solPrice;
+          : totalOutflowSol > 0
+            ? totalOutflowSol * solPrice
+            : boughtSol * solPrice;
         const soldUsd = p.soldUsdValue && p.soldUsdValue > 0
           ? p.soldUsdValue
           : soldSol * solPrice;

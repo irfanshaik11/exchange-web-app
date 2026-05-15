@@ -1838,6 +1838,17 @@ export interface WalletPortfolioPosition {
   is_smart_money: boolean;
   is_bundler: boolean;
   holder_type: string;
+  /**
+   * Total SOL outflow across the wallet's buy trades for this mint.
+   * Includes swap amount + ALL fees (network + priority + Jito tip + platform).
+   * The real cost basis the user paid to acquire these tokens. Populated from
+   * solana_trades.total_sol_outflow_lamports (indexer migration 023 onward).
+   *
+   * NOTE: 0 for positions composed entirely of trades written by pre-migration-023
+   * indexer pods (those rows have NULL total_sol_outflow_lamports; SUM skips NULLs).
+   * Consumers should fall back to `bought_sol` when this is 0.
+   */
+  total_outflow_sol?: number;
 }
 
 export interface WalletPortfolioSummary {
