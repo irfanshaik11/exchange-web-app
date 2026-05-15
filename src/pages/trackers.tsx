@@ -67,6 +67,8 @@ import {
   FiCopy,
   FiBarChart2,
   FiExternalLink,
+  FiHeart,
+  FiRepeat,
 } from "react-icons/fi";
 import { FaXTwitter } from "react-icons/fa6";
 import { SiSolana } from "react-icons/si";
@@ -746,8 +748,7 @@ export default function TrackersPage() {
 
     const incompleteSignature = twitterAccounts
       .filter(
-        (a) =>
-          !Boolean(a.profileImageUrl) || typeof a.followers !== "number",
+        (a) => !Boolean(a.profileImageUrl) || typeof a.followers !== "number",
       )
       .map((a) => a.username.toLowerCase())
       .sort()
@@ -837,7 +838,10 @@ export default function TrackersPage() {
     const decrement = () => {
       if (!counted) return;
       counted = false;
-      perUserFetchInFlight.current = Math.max(0, perUserFetchInFlight.current - 1);
+      perUserFetchInFlight.current = Math.max(
+        0,
+        perUserFetchInFlight.current - 1,
+      );
     };
     const finish = () => {
       decrement();
@@ -2735,16 +2739,16 @@ export default function TrackersPage() {
                         <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pt-3.5 pb-2.5 sm:pt-4 sm:pb-3">
                           <div className="flex items-center gap-4 sm:gap-5">
                             <button
-                            type="button"
-                            onClick={() => setSocialPanelTab("twitter")}
-                            className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
-                              socialPanelTab === "twitter"
-                                ? "text-[#f4f4f5]"
-                                : "text-[#52525b] hover:text-[#a1a1aa]"
-                            }`}
-                          >
-                            X Tracker
-                          </button>
+                              type="button"
+                              onClick={() => setSocialPanelTab("twitter")}
+                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                                socialPanelTab === "twitter"
+                                  ? "text-[#f4f4f5]"
+                                  : "text-[#52525b] hover:text-[#a1a1aa]"
+                              }`}
+                            >
+                              X Tracker
+                            </button>
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("telegram")}
@@ -3102,18 +3106,20 @@ export default function TrackersPage() {
                                   <div className="scrollbar-hide flex-1 overflow-auto">
                                     <table className="w-full min-w-[280px] text-[10px] sm:min-w-[320px] sm:text-xs">
                                       <tbody>
-                                        {visibleTwitterAccounts.map((account) => (
-                                          <TwitterAccountRow
-                                            key={account.username}
-                                            account={account}
-                                            onRemove={
-                                              handleRemoveTwitterAccount
-                                            }
-                                            onViewProfile={
-                                              handleViewTwitterProfile
-                                            }
-                                          />
-                                        ))}
+                                        {visibleTwitterAccounts.map(
+                                          (account) => (
+                                            <TwitterAccountRow
+                                              key={account.username}
+                                              account={account}
+                                              onRemove={
+                                                handleRemoveTwitterAccount
+                                              }
+                                              onViewProfile={
+                                                handleViewTwitterProfile
+                                              }
+                                            />
+                                          ),
+                                        )}
                                       </tbody>
                                     </table>
                                   </div>
@@ -3210,12 +3216,17 @@ export default function TrackersPage() {
                                             </div>
                                           )}
                                         <div className="mt-2.5 flex items-center gap-4 text-[10px] text-[#52525b] sm:text-xs">
-                                          <span>❤️ {tweet.likeCount || 0}</span>
-                                          <span>
-                                            🔄 {tweet.retweetCount || 0}
+                                          <span className="inline-flex items-center gap-1">
+																						<FiHeart className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+																						{tweet.likeCount || 0}
                                           </span>
-                                          <span>
-                                            💬 {tweet.replyCount || 0}
+                                          <span className="inline-flex items-center gap-1">
+                                            <FiRepeat className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                                            {tweet.retweetCount || 0}
+                                          </span>
+                                          <span className="inline-flex items-center gap-1">
+                                            <FiMessageCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                                            {tweet.replyCount || 0}
                                           </span>
                                         </div>
                                       </a>
