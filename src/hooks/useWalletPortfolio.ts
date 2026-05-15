@@ -312,6 +312,14 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
                   realized_pnl_sol: 0,
                   realized_pnl_usd: 0,
                   unrealized_pnl_usd: 0,
+                  // total_outflow_sol / cost_basis_sol are indexer aggregates
+                  // that don't ride the position_update NOTIFY payload — they
+                  // only arrive via REST. Seed 0 so portfolio enrichment's
+                  // priority chain falls cleanly to bought_sol × solPrice until
+                  // fetchAll() reconciles. Without explicit 0, these are
+                  // `undefined` and any future strict numeric check would fail.
+                  total_outflow_sol: 0,
+                  cost_basis_sol: 0,
                   is_sniper: false,
                   is_insider: false,
                   is_dev: false,
@@ -474,6 +482,18 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
               realized_pnl_usd: 0,
               unrealized_pnl_usd: 0,
               current_price_usd: t.price_usd ?? null,
+              // Chain-derived outflow + cost-basis are aggregates the indexer
+              // computes after the position_update flush; the WS new_trade
+              // payload doesn't carry them. Seed 0 so portfolio enrichment's
+              // boughtUsd fallback chain (cost_basis_sol → total_outflow_sol →
+              // bought_sol) correctly skips both and lands on swap-only until
+              // fetchAll() reconciles in ~2s with authoritative API data.
+              // Without these defaults, the fields are `undefined` and
+              // (p as any).cost_basis_sol ?? 0 still resolves to 0 — but being
+              // explicit prevents future code from accidentally treating
+              // "undefined" as a third state.
+              total_outflow_sol: 0,
+              cost_basis_sol: 0,
               is_sniper: false,
               is_insider: false,
               is_dev: false,
