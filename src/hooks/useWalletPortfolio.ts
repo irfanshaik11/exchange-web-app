@@ -81,6 +81,11 @@ export function toPositionRow(p: WalletPortfolioPosition): PositionRow {
   // cost on small trades with normal network fees. Falls back to bought_sol
   // when 0 (no migration-aware trades for this position yet).
   (row as any).total_outflow_sol = (p as any).total_outflow_sol ?? 0;
+  // cost_basis_sol: migration-024 refinement — outflow MINUS recoverable
+  // ATA rent (~0.00204 SOL per new mint). Closer to "what you actually
+  // paid that you can't get back" — what Axiom/GMGN show. Use this for
+  // PnL display when > 0; falls back to total_outflow_sol then bought_sol.
+  (row as any).cost_basis_sol = (p as any).cost_basis_sol ?? 0;
   return row;
 }
 
