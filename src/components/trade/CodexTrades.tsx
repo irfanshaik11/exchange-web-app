@@ -1943,28 +1943,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           <div className="w-[13%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
             <div className="flex items-center gap-1">
               <span className="text-[13px] font-medium">Type</span>
-              <button
-                onClick={handleTypeFilterClick}
-                className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
-                style={{
-                  color: filters.type.filter !== "all" ? AX.mint : "#757e80",
-                }}
-              >
-                <CiFilter size={14} />
-              </button>
-              {filters.type.filter !== "all" && (
-                <span
-                  className="rounded px-1 text-[9px]"
-                  style={{
-                    backgroundColor:
-                      filters.type.filter === "buy" ? "#34d39920" : "#f8717120",
-                    color:
-                      filters.type.filter === "buy" ? "#34d399" : "#f87171",
-                  }}
-                >
-                  {filters.type.filter === "buy" ? "Buy" : "Sell"}
-                </span>
-              )}
             </div>
           </div>
 
@@ -1987,11 +1965,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                 label=""
                 sortDirection={filters.price.sort}
                 onSort={() => handleSort("price")}
-                hasFilter
-                onFilterClick={(e) => handleFilterClick("price", e)}
-                isFilterActive={
-                  !!filters.price.range.min || !!filters.price.range.max
-                }
               />
             </div>
           </div>
@@ -2002,11 +1975,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
               label="Amount"
               sortDirection={filters.amount.sort}
               onSort={() => handleSort("amount")}
-              hasFilter
-              onFilterClick={(e) => handleFilterClick("amount", e)}
-              isFilterActive={
-                !!filters.amount.range.min || !!filters.amount.range.max
-              }
             />
           </div>
 
