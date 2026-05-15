@@ -1699,7 +1699,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   // Abort controller for predictive scroll-left prefetch (Phase 4: fetches older data before user reaches edge)
   const predictivePrefetchAbortRef = useRef<AbortController | null>(null);
   // Track TradingView's actual current resolution (dropdown selection), separate from React interval prop
-  const tvResolutionRef = useRef<string>("1S");
+  const tvResolutionRef = useRef<string>(
+    (typeof window !== "undefined" && localStorage.getItem("tv_chart_resolution")) || "1S"
+  );
   // Map of resolution → TradingView's raw onRealtimeCallback.
   // TradingView may reuse old subscriptions without calling subscribeBars again
   // (e.g., switching 1S→30S→1D→1S — TV never unsubscribes 1S and reuses it).
@@ -6220,8 +6222,11 @@ Maker: ${walletAddress}`;
 
         // Both Monad and Solana use 1s candles as default
         const isMonad = network === "monad";
-        // Always start with 1S (1 second) candles for both chains
-        const initialInterval = "1S";
+        // Restore last-used resolution from localStorage, falling back to 1S
+        const savedResolution = typeof window !== "undefined"
+          ? localStorage.getItem("tv_chart_resolution")
+          : null;
+        const initialInterval = savedResolution || "1S";
         // Pre-populate candle data from preload to prevent getBars 2s wait loop.
         // The useEffect that normally writes preloadedData → lastGoodCandlesRef may not
         // have fired yet when TradingView synchronously calls getBars on onChartReady.
@@ -6754,6 +6759,8 @@ Maker: ${walletAddress}`;
             if (chart && chart.onIntervalChanged) {
               chart.onIntervalChanged().subscribe(null, (interval: string) => {
                 ++lifecycleSeqRef.current;
+                // Persist selected resolution so it survives page refresh
+                try { localStorage.setItem("tv_chart_resolution", interval); } catch {}
                 const storedEntry = resolutionCallbackMapRef.current.get(interval);
 
                 // TradingView may reuse old subscriber UIDs without calling subscribeBars
