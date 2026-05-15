@@ -1224,6 +1224,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
       return;
     }
 
+    const INT_MIN = -2147483648;
+    const INT_MAX = 2147483647;
+
     const baseUrl = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(
       /\/$/,
       "",
@@ -1231,8 +1234,8 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     if (!baseUrl) return;
 
     const params = new URLSearchParams();
-    if (hasMin) params.set("min_usd", String(parseFloat(totalMin)));
-    if (hasMax) params.set("max_usd", String(parseFloat(totalMax)));
+    params.set("min_usd", String(hasMin ? parseFloat(totalMin) : INT_MIN));
+    params.set("max_usd", String(hasMax ? parseFloat(totalMax) : INT_MAX));
     params.set("limit", "50");
 
     const controller = new AbortController();
