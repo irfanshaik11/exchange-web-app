@@ -91,9 +91,13 @@ export function toAggregatedPosition(
 
   // Unrealized PnL: prefer the Go service's pre-computed value to avoid
   // cost-basis drift (airdrops, transfers-in, missing bought_usd_value).
+  // Only fall back to manual calc when the Go service genuinely didn't supply
+  // a value AND we have a valid remaining market value to compare against.
   const unrealizedPnl = p.unrealized_pnl_usd !== 0
     ? p.unrealized_pnl_usd
-    : remainingMarketValue - remainingValue;
+    : remainingMarketValue > 0
+      ? remainingMarketValue - remainingValue
+      : 0;
   const totalPnl = realizedPnl + unrealizedPnl;
   const pnlPercentage = boughtUsd > 0 ? (totalPnl / boughtUsd) * 100 : 0;
 

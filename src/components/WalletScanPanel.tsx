@@ -425,17 +425,21 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // Total value = positions (cost basis) + SOL balance
     const totalValue = totalPositionsValue + solBalanceUsd;
 
-    // Unrealized PnL = sum of unrealized PnL from all active positions
-    const unrealizedPnl = aggregatedPositions.reduce(
-      (sum, position) => sum + position.unrealizedPnl,
-      0
-    );
+    // Unrealized PnL: prefer the Go service summary's pre-computed total
+    // (authoritative, accounts for all positions). Fall back to summing
+    // per-position values only when the summary isn't available yet.
+    const unrealizedPnl = goSummary && goSummary.total_unrealized_pnl_usd !== 0
+      ? goSummary.total_unrealized_pnl_usd
+      : aggregatedPositions.reduce(
+          (sum, position) => sum + position.unrealizedPnl,
+          0
+        );
 
     return {
       totalValue,
       unrealizedPnl,
     };
-  }, [aggregatedPositions, walletBalance, currentSolPrice]);
+  }, [aggregatedPositions, walletBalance, currentSolPrice, goSummary]);
 
   // Top 100 positions by PnL — open positions always shown first (so Activity
   // tab tokens are always visible), then closed positions fill remaining slots.
