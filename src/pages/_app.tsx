@@ -50,6 +50,7 @@ import { ArenaWebSocketProvider } from '../contexts/ArenaWebSocketContext';
 import { listenForConfirmationUpdates } from '../utils/tradeToast';
 import { DockedPanelProvider } from '../contexts/DockedPanelContext';
 import { HyperliquidProvider } from '../contexts/HyperliquidContext';
+import { PortfolioDataProvider } from '../contexts/PortfolioDataContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -890,6 +891,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                           <FilterProvider>
                             <WalletTrackerProvider>
                               <SolanaPositionWebSocketProvider>
+                                <PortfolioDataProvider>
                                 <ArenaWebSocketProvider>
                                   <ReferralAccessGate>
                                     <DockedPanelProvider>
@@ -904,6 +906,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                                     </DockedPanelProvider>
                                   </ReferralAccessGate>
                                 </ArenaWebSocketProvider>
+                                </PortfolioDataProvider>
                               </SolanaPositionWebSocketProvider>
                             </WalletTrackerProvider>
                           </FilterProvider>

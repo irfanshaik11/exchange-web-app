@@ -7,8 +7,7 @@ import { DockedPanelMarginWrapper } from "../contexts/DockedPanelContext";
 import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
 import Activity from "../components/trade/Activity";
-import { useWalletPortfolio } from "~/hooks/useWalletPortfolio";
-import { useWalletTrades } from "~/hooks/useWalletTrades";
+import { usePortfolioData } from "~/contexts/PortfolioDataContext";
 import { walletPortfolioTradeToTradeRow } from "~/utils/walletTradeAdapter";
 import { useUser } from "../components/UserContext";
 import { useSolPrice } from "../components/SolPriceContext";
@@ -34,6 +33,7 @@ import ImportEvmWalletModal from "../components/ImportEvmWalletModal";
 import { SolanaIcon } from "../components/Footer";
 import ExportWalletModal from "../components/ExportWalletModal";
 import RealizedPnlChart, { type PnlChartDataPoint } from "~/components/charts/RealizedPnlChart";
+import PnlShareCard from "~/components/PnlShareCard";
 
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { useImagePreloader } from "~/hooks/useImagePreloader";
@@ -362,19 +362,10 @@ export default function PortfolioPage() {
   const chainBalance = chainBalances?.[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
   const chainPrice = currentChain === 'monad' ? (monPrice || 0) : (contextSolPrice || 0);
 
-  // Chain-derived portfolio for the primary Solana wallet. Source of truth for
-  // Active Positions + Top 100 + the position-derived top metric cards.
-  // Returns empty state when chain != "sol" or no primary is set yet.
-  // Powered by /v1/wallet/:addr/* on token-service (live via WS, see useRobustWebSocket).
-  const primarySolAddr = currentChain === "sol" ? (primaryWalletAddresses?.solana ?? null) : null;
-  const wp = useWalletPortfolio(primarySolAddr);
-
-  // Chain-derived trade history for Activity tab. Only fetches when:
-  //  - The Activity tab (index 2) is active (lazy fetch — no waste on Active Positions/Top 100 views)
-  //  - Chain is Solana with a primary wallet set
-  // When the wallet trader index is still building, isIndexing flips true and the
-  // Activity render below falls back to existing on-platform trades + shows a banner.
-  const wt = useWalletTrades(primarySolAddr, currentChain === "sol" && activeSpotTab === 2);
+  // Portfolio data is pre-fetched at the app level via PortfolioDataProvider so
+  // positions + trades are warm before the user navigates here.
+  const { wp, wt, primarySolAddr: contextPrimarySolAddr } = usePortfolioData();
+  const primarySolAddr = currentChain === "sol" ? contextPrimarySolAddr : null;
 
   // Per-wallet chain-derived holdings counts. The Wallets list shows a holdings
   // badge per row; backend's wallet.holdingsCount is computed from TradeHistory
@@ -921,6 +912,7 @@ export default function PortfolioPage() {
     between0AndMinus50: 0,
     belowMinus50: 0,
   });
+  const [showPnlShareCard, setShowPnlShareCard] = useState(false);
 
   // Fetch trade history whenever user is logged in (needed for performance metrics)
   useEffect(() => {
@@ -3377,6 +3369,18 @@ export default function PortfolioPage() {
                     Max
                   </button>
                 </div>
+                <button
+                  onClick={() => setShowPnlShareCard(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#0c0e12]/60 border border-white/[0.06] text-[#71717a] hover:text-[#18c48c] hover:border-[#18c48c]/30 transition-all duration-200 cursor-pointer text-xs font-medium"
+                  title="Share PnL"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <polyline points="16 6 12 2 8 6" />
+                    <line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                  Share PnL
+                </button>
               </div>
             )}
           </div>
@@ -4828,6 +4832,20 @@ export default function PortfolioPage() {
           </div>
         </div>
       )}
+      <PnlShareCard
+        isOpen={showPnlShareCard}
+        onClose={() => setShowPnlShareCard(false)}
+        username={user?.name || "Anonymous"}
+        totalPnl={totalPnl}
+        totalPnlPercentage={totalPnlPercentage}
+        realizedPnl={displayRealizedPnl ?? timeframeMetrics.realizedPnl}
+        realizedPnlPercentage={displayRealizedPnlPct ?? timeframeMetrics.realizedPnlPercentage}
+        unrealizedPnl={unrealizedPnl}
+        winningTrades={timeframeMetrics.winningTrades}
+        losingTrades={timeframeMetrics.losingTrades}
+        timeframe={selectedTimeframe}
+        chain={currentChain}
+      />
     </>
   );
 }
