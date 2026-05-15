@@ -403,12 +403,25 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
   // (FIFO computations removed — positions are now served pre-computed by Go token service)
 
-  // Calculate total portfolio value and unrealized PnL from RPC (Go token service)
+  // Calculate total portfolio value and unrealized PnL from RPC (on-chain balances)
   const portfolioMetrics = useMemo(() => {
-    // Sum of all active positions' market value (from Go service RPC, not cost basis)
-    const totalPositionsValue = goPositions
-      .filter((p) => p.remaining_tokens > 0.001)
-      .reduce((sum, p) => sum + (p.remaining_value_usd || 0), 0);
+    let totalPositionsValue = 0;
+    let totalUnrealizedPnl = 0;
+
+    for (const p of goPositions) {
+      if (p.remaining_tokens <= 0.001) continue;
+      // Use on-chain balance from RPC if available, otherwise fall back to remaining_tokens
+      const rpcBalance = p.on_chain_token_balance ?? p.remaining_tokens;
+      const price = p.current_price_usd ?? 0;
+      const marketValue = rpcBalance * price;
+      totalPositionsValue += marketValue;
+
+      // Unrealized PnL from RPC: market value of on-chain balance minus cost basis
+      const soldFraction = p.bought_tokens > 0 ? Math.min(p.sold_tokens / p.bought_tokens, 1) : 0;
+      const boughtUsd = p.bought_usd_value > 0 ? p.bought_usd_value : p.bought_sol * currentSolPrice;
+      const costBasis = boughtUsd * Math.max(0, 1 - soldFraction);
+      totalUnrealizedPnl += marketValue - costBasis;
+    }
 
     // Wallet SOL balance in USD
     let solBalanceUsd = 0;
@@ -420,17 +433,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       }
     }
 
-    // Total value = positions (market value from RPC) + SOL balance
-    const totalValue = totalPositionsValue + solBalanceUsd;
-
-    // Unrealized PnL from Go service summary
-    const unrealizedPnl = goSummary?.total_unrealized_pnl_usd ?? 0;
-
     return {
-      totalValue,
-      unrealizedPnl,
+      totalValue: totalPositionsValue + solBalanceUsd,
+      unrealizedPnl: totalUnrealizedPnl,
     };
-  }, [goPositions, walletBalance, currentSolPrice, goSummary]);
+  }, [goPositions, walletBalance, currentSolPrice]);
 
   // Top 100 positions by PnL — open positions always shown first (so Activity
   // tab tokens are always visible), then closed positions fill remaining slots.
