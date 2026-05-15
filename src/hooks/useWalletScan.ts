@@ -78,26 +78,19 @@ export function toAggregatedPosition(
       ? p.realized_pnl_usd
       : p.realized_pnl_sol * solPrice;
 
-  // Cost basis of the remaining (unsold) portion. This is what the user paid
-  // for tokens they still hold — NOT market value. Uses avg-cost pro-rata:
-  // if you sold 60% of tokens, remaining cost basis = 40% of total bought USD.
+  // Use on-chain balance from RPC if available, otherwise fall back to remaining_tokens
+  const rpcBalance = p.on_chain_token_balance ?? p.remaining_tokens;
+  const price = p.current_price_usd ?? 0;
+  const marketValue = rpcBalance * price;
+
+  // Cost basis of the remaining (unsold) portion using avg-cost pro-rata
   const soldFraction = p.bought_tokens > 0
     ? Math.min(p.sold_tokens / p.bought_tokens, 1)
     : 0;
-  const remainingValue = boughtUsd * Math.max(0, 1 - soldFraction);
+  const costBasis = boughtUsd * Math.max(0, 1 - soldFraction);
 
-  // Market value of remaining tokens (from Go service: remaining_tokens * current_price_usd)
-  const remainingMarketValue = p.remaining_value_usd || 0;
-
-  // Unrealized PnL: prefer the Go service's pre-computed value to avoid
-  // cost-basis drift (airdrops, transfers-in, missing bought_usd_value).
-  // Only fall back to manual calc when the Go service genuinely didn't supply
-  // a value AND we have a valid remaining market value to compare against.
-  const unrealizedPnl = p.unrealized_pnl_usd != null
-    ? p.unrealized_pnl_usd
-    : remainingMarketValue > 0
-      ? remainingMarketValue - remainingValue
-      : 0;
+  // Unrealized PnL from RPC: market value of on-chain balance minus cost basis
+  const unrealizedPnl = rpcBalance > DUST ? marketValue - costBasis : 0;
   const totalPnl = realizedPnl + unrealizedPnl;
   const pnlPercentage = boughtUsd > 0 ? (totalPnl / boughtUsd) * 100 : 0;
 
@@ -111,13 +104,13 @@ export function toAggregatedPosition(
     boughtValue: boughtUsd,
     soldAmount: p.sold_tokens,
     soldValue: soldUsd,
-    remainingAmount: p.remaining_tokens,
-    remainingValue,
+    remainingAmount: rpcBalance,
+    remainingValue: marketValue,
     realizedPnl,
     unrealizedPnl,
     totalPnl,
     pnlPercentage,
-    isOpen: p.remaining_tokens > DUST,
+    isOpen: rpcBalance > DUST,
   };
 }
 
