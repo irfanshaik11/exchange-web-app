@@ -1435,11 +1435,13 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               ? "bg-[#70E0B0] text-black hover:bg-[#58B890]"
               : "bg-[#FF4D7F] text-black hover:opacity-90"
           )}
-          disabled={!amount || isLoading || !isConnected}
+          disabled={user && isConnected ? (!amount || isLoading) : false}
           onClick={handleTrade}
         >
           {isLoading ? (
             "Processing..."
+          ) : !user ? (
+            "Login to Trade"
           ) : !isConnected ? (
             "Connect Wallet"
           ) : (
