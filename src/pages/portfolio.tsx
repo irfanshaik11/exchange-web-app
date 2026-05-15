@@ -7,8 +7,7 @@ import { DockedPanelMarginWrapper } from "../contexts/DockedPanelContext";
 import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
 import Activity from "../components/trade/Activity";
-import { useWalletPortfolio } from "~/hooks/useWalletPortfolio";
-import { useWalletTrades } from "~/hooks/useWalletTrades";
+import { usePortfolioData } from "~/contexts/PortfolioDataContext";
 import { walletPortfolioTradeToTradeRow } from "~/utils/walletTradeAdapter";
 import { useUser } from "../components/UserContext";
 import { useSolPrice } from "../components/SolPriceContext";
@@ -362,19 +361,10 @@ export default function PortfolioPage() {
   const chainBalance = chainBalances?.[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
   const chainPrice = currentChain === 'monad' ? (monPrice || 0) : (contextSolPrice || 0);
 
-  // Chain-derived portfolio for the primary Solana wallet. Source of truth for
-  // Active Positions + Top 100 + the position-derived top metric cards.
-  // Returns empty state when chain != "sol" or no primary is set yet.
-  // Powered by /v1/wallet/:addr/* on token-service (live via WS, see useRobustWebSocket).
-  const primarySolAddr = currentChain === "sol" ? (primaryWalletAddresses?.solana ?? null) : null;
-  const wp = useWalletPortfolio(primarySolAddr);
-
-  // Chain-derived trade history for Activity tab. Only fetches when:
-  //  - The Activity tab (index 2) is active (lazy fetch — no waste on Active Positions/Top 100 views)
-  //  - Chain is Solana with a primary wallet set
-  // When the wallet trader index is still building, isIndexing flips true and the
-  // Activity render below falls back to existing on-platform trades + shows a banner.
-  const wt = useWalletTrades(primarySolAddr, currentChain === "sol" && activeSpotTab === 2);
+  // Portfolio data is pre-fetched at the app level via PortfolioDataProvider so
+  // positions + trades are warm before the user navigates here.
+  const { wp, wt, primarySolAddr: contextPrimarySolAddr } = usePortfolioData();
+  const primarySolAddr = currentChain === "sol" ? contextPrimarySolAddr : null;
 
   // Per-wallet chain-derived holdings counts. The Wallets list shows a holdings
   // badge per row; backend's wallet.holdingsCount is computed from TradeHistory
