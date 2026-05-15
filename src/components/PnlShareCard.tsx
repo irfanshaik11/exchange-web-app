@@ -1,9 +1,11 @@
 import React, { useRef, useState, useCallback } from "react";
-import { X, Copy, Check, Download } from "lucide-react";
+import { X, Copy, Check, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { FaXTwitter } from "react-icons/fa6";
 import html2canvas from "html2canvas";
 import toast from "react-hot-toast";
 import { formatSmallPrice, formatSmartNumber } from "~/utils/db";
+
+const PNL_BACKGROUNDS = ["/pnl-bg-1.png", "/pnl-bg-2.png", "/pnl-bg-3.png"];
 
 interface PnlShareCardProps {
   isOpen: boolean;
@@ -37,6 +39,26 @@ export default function PnlShareCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [bgIndex, setBgIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+
+  const handleBgPrev = () =>
+    setBgIndex((i) => (i - 1 + PNL_BACKGROUNDS.length) % PNL_BACKGROUNDS.length);
+  const handleBgNext = () =>
+    setBgIndex((i) => (i + 1) % PNL_BACKGROUNDS.length);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(diff) > 50) {
+      if (diff < 0) handleBgNext();
+      else handleBgPrev();
+    }
+    touchStartX.current = null;
+  };
 
   const isProfit = totalPnl >= 0;
   const winRate =
@@ -94,13 +116,46 @@ export default function PnlShareCard({
     }
   }, [captureCard, timeframe]);
 
-  const handleShareX = useCallback(() => {
-    const pnlSign = totalPnl >= 0 ? "+" : "-";
-    const pnlText = `${pnlSign}$${formatSmallPrice(Math.abs(totalPnl))} (${totalPnlPercentage >= 0 ? "+" : ""}${formatSmallPrice(totalPnlPercentage)}%)`;
-    const text = `My ${timeframe} PnL on @InterstateHQ: ${pnlText}\n\nWin rate: ${winRate}% | ${winningTrades}W / ${losingTrades}L\n\nTrade on Interstate:`;
-    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent("https://interstate.so")}`;
-    window.open(url, "_blank");
-  }, [totalPnl, totalPnlPercentage, timeframe, winRate, winningTrades, losingTrades]);
+  const handleShareX = useCallback(async () => {
+    try {
+      const canvas = await captureCard();
+      if (!canvas) return;
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/png")
+      );
+
+      if (blob) {
+        // Try native share with file (works on mobile)
+        if (navigator.share && navigator.canShare?.({ files: [new File([blob], "pnl.png", { type: "image/png" })] })) {
+          const file = new File([blob], "interstate-pnl.png", { type: "image/png" });
+          const pnlSign = totalPnl >= 0 ? "+" : "-";
+          const pnlText = `${pnlSign}$${formatSmallPrice(Math.abs(totalPnl))} (${totalPnlPercentage >= 0 ? "+" : ""}${formatSmallPrice(totalPnlPercentage)}%)`;
+          const text = `My ${timeframe} PnL on @InterstateHQ: ${pnlText}\n\nWin rate: ${winRate}% | ${winningTrades}W / ${losingTrades}L\n\nTrade on Interstate: https://interstate.so`;
+          await navigator.share({ text, files: [file] });
+          return;
+        }
+
+        // Desktop fallback: copy image to clipboard, then open tweet composer
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob }),
+          ]);
+          toast.success("Card copied! Paste it into your tweet", { duration: 4000 });
+        } catch {
+          // clipboard failed, still open the tweet window
+        }
+      }
+
+      const pnlSign = totalPnl >= 0 ? "+" : "-";
+      const pnlText = `${pnlSign}$${formatSmallPrice(Math.abs(totalPnl))} (${totalPnlPercentage >= 0 ? "+" : ""}${formatSmallPrice(totalPnlPercentage)}%)`;
+      const text = `My ${timeframe} PnL on @InterstateHQ: ${pnlText}\n\nWin rate: ${winRate}% | ${winningTrades}W / ${losingTrades}L\n\nTrade on Interstate:`;
+      const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent("https://interstate.so")}`;
+      window.open(url, "_blank");
+    } catch {
+      toast.error("Failed to share card");
+    }
+  }, [captureCard, totalPnl, totalPnlPercentage, timeframe, winRate, winningTrades, losingTrades]);
 
   if (!isOpen) return null;
 
@@ -113,7 +168,7 @@ export default function PnlShareCard({
       />
 
       {/* Modal */}
-      <div className="relative z-10 flex flex-col items-center gap-4 p-4 max-w-[420px] w-full mx-4">
+      <div className="relative z-10 flex flex-col items-center gap-4 p-4 max-w-[560px] w-full mx-4">
         {/* Header */}
         <div className="flex items-center justify-between w-full px-1">
           <span className="text-sm text-[#a1a1aa] font-medium">
@@ -130,12 +185,27 @@ export default function PnlShareCard({
         {/* === THE CARD (captured as image) === */}
         <div
           ref={cardRef}
-          className="w-full rounded-2xl overflow-hidden"
+          className="w-full rounded-2xl overflow-hidden relative"
           style={{ background: "#080a0f" }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
+          {/* Background image */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `url(${PNL_BACKGROUNDS[bgIndex]})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              opacity: 0.55,
+            }}
+          />
+          {/* Dark overlay for readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#080a0f] via-[#080a0f]/60 to-transparent" />
+
           {/* Top accent gradient bar */}
           <div
-            className="h-1 w-full"
+            className="h-1 w-full relative z-[1]"
             style={{
               background: isProfit
                 ? "linear-gradient(90deg, #18c48c 0%, #a3f7bf 50%, #18c48c 100%)"
@@ -143,21 +213,21 @@ export default function PnlShareCard({
             }}
           />
 
-          <div className="p-5 pb-4">
+          <div className="p-6 pb-5 relative z-[1]">
             {/* Card header: logo + branding + timeframe */}
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
                 <img
                   src="/interstate-logo-icon.png"
                   alt="Interstate"
-                  className="w-8 h-8"
+                  className="w-10 h-10"
                   crossOrigin="anonymous"
                 />
                 <div>
-                  <div className="text-[#f4f4f5] text-sm font-bold tracking-tight">
+                  <div className="text-[#f4f4f5] text-base font-bold tracking-tight">
                     Interstate
                   </div>
-                  <div className="text-[#52525b] text-[10px] uppercase tracking-widest font-medium">
+                  <div className="text-[#52525b] text-[11px] uppercase tracking-widest font-medium">
                     {chain === "monad" ? "Monad" : "Solana"} Trading
                   </div>
                 </div>
@@ -175,20 +245,20 @@ export default function PnlShareCard({
             </div>
 
             {/* Username */}
-            <div className="text-[#a1a1aa] text-xs font-medium mb-2 truncate">
+            <div className="text-[#a1a1aa] text-sm font-medium mb-2 truncate">
               {username}
             </div>
 
             {/* Big PnL number */}
-            <div className="mb-4">
+            <div className="mb-5">
               <div
-                className="text-4xl font-bold tabular-nums tracking-tight"
+                className="text-5xl font-bold tabular-nums tracking-tight"
                 style={{ color: isProfit ? "#18c48c" : "#ef4444" }}
               >
                 {totalPnl >= 0 ? "+" : "-"}${formatSmallPrice(Math.abs(totalPnl))}
               </div>
               <div
-                className="text-lg font-semibold tabular-nums mt-0.5"
+                className="text-xl font-semibold tabular-nums mt-1"
                 style={{
                   color: isProfit
                     ? "rgba(24,196,140,0.7)"
@@ -202,18 +272,18 @@ export default function PnlShareCard({
 
             {/* Stats grid */}
             <div
-              className="grid grid-cols-3 gap-3 rounded-xl p-3.5"
+              className="grid grid-cols-3 gap-4 rounded-xl p-4"
               style={{
                 background: "rgba(255,255,255,0.03)",
                 border: "1px solid rgba(255,255,255,0.06)",
               }}
             >
               <div>
-                <div className="text-[#52525b] text-[10px] uppercase tracking-wider font-medium mb-1">
+                <div className="text-[#52525b] text-[11px] uppercase tracking-wider font-medium mb-1.5">
                   Realized
                 </div>
                 <div
-                  className="text-sm font-semibold tabular-nums"
+                  className="text-base font-semibold tabular-nums"
                   style={{
                     color: realizedPnl >= 0 ? "#18c48c" : "#ef4444",
                   }}
@@ -223,18 +293,18 @@ export default function PnlShareCard({
                 </div>
               </div>
               <div>
-                <div className="text-[#52525b] text-[10px] uppercase tracking-wider font-medium mb-1">
+                <div className="text-[#52525b] text-[11px] uppercase tracking-wider font-medium mb-1.5">
                   Win Rate
                 </div>
-                <div className="text-sm font-semibold text-[#f4f4f5] tabular-nums">
+                <div className="text-base font-semibold text-[#f4f4f5] tabular-nums">
                   {winRate}%
                 </div>
               </div>
               <div>
-                <div className="text-[#52525b] text-[10px] uppercase tracking-wider font-medium mb-1">
+                <div className="text-[#52525b] text-[11px] uppercase tracking-wider font-medium mb-1.5">
                   Trades
                 </div>
-                <div className="text-sm font-semibold tabular-nums">
+                <div className="text-base font-semibold tabular-nums">
                   <span className="text-[#18c48c]">{winningTrades}W</span>
                   <span className="text-[#52525b] mx-0.5">/</span>
                   <span className="text-[#ef4444]">{losingTrades}L</span>
@@ -291,6 +361,35 @@ export default function PnlShareCard({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Background selector */}
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={handleBgPrev}
+            className="text-[#71717a] hover:text-white transition-colors cursor-pointer p-1"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1.5">
+            {PNL_BACKGROUNDS.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setBgIndex(i)}
+                className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
+                  i === bgIndex
+                    ? "bg-[#18c48c] scale-110"
+                    : "bg-white/20 hover:bg-white/40"
+                }`}
+              />
+            ))}
+          </div>
+          <button
+            onClick={handleBgNext}
+            className="text-[#71717a] hover:text-white transition-colors cursor-pointer p-1"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Action buttons */}
