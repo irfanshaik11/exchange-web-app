@@ -1259,9 +1259,63 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     return () => controller.abort();
   }, [chain, stableToken?.mint, totalMin, totalMax]);
 
+  // Server-side wallet/trader filter — when the user enters a wallet address
+  // we hit /v1/token/{mint}/wallet/{address}/trades to get that trader's full history.
+  const [serverWalletTrades, setServerWalletTrades] = React.useState<
+    any[] | null
+  >(null);
+  const [serverWalletLoading, setServerWalletLoading] = React.useState(false);
+  const walletAddress = filters.wallet.address;
+
+  React.useEffect(() => {
+    if (chain !== "sol") return;
+    const mint = stableToken?.mint;
+    if (!mint) return;
+
+    const trimmedAddress = walletAddress.trim();
+    if (!trimmedAddress) {
+      setServerWalletTrades(null);
+      setServerWalletLoading(false);
+      return;
+    }
+
+    const baseUrl = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(
+      /\/$/,
+      "",
+    );
+    if (!baseUrl) return;
+
+    const controller = new AbortController();
+    setServerWalletLoading(true);
+
+    fetch(
+      `${baseUrl}/v1/token/${encodeURIComponent(mint)}/wallet/${encodeURIComponent(trimmedAddress)}/trades?limit=50`,
+      { signal: controller.signal },
+    )
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        const trades = Array.isArray(data)
+          ? data
+          : data?.trades ?? data?.results ?? [];
+        setServerWalletTrades(trades);
+      })
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        console.error("[CodexTrades] wallet trades failed:", err);
+        setServerWalletTrades([]);
+      })
+      .finally(() => setServerWalletLoading(false));
+
+    return () => controller.abort();
+  }, [chain, stableToken?.mint, walletAddress]);
+
   // Preserve trades - once we have trades from WebSocket, always use them
   // This ensures trades don't disappear or change unless new ones arrive
   const displayTrades = React.useMemo(() => {
+    // When server-side wallet filter is active, it's the source of truth.
+    if (serverWalletTrades !== null) {
+      return serverWalletTrades;
+    }
     // When server-side USD filter is active, it's the source of truth.
     if (serverFilteredTrades !== null) {
       return serverFilteredTrades;
@@ -1272,27 +1326,28 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     }
     // Fallback to initial trades only if WebSocket hasn't provided any yet
     return stableInitialTrades;
-  }, [serverFilteredTrades, wsTrades, stableInitialTrades]);
+  }, [serverWalletTrades, serverFilteredTrades, wsTrades, stableInitialTrades]);
 
   // Only show loading if we don't have any trades at all (not even cached ones)
   // If we have cached trades, show them immediately even if WebSocket is still connecting
   const isLoading =
     (wsLoading && displayTrades.length === 0 && stableInitialTrades.length === 0) ||
-    serverFilterLoading;
+    serverFilterLoading ||
+    serverWalletLoading;
 
   // Update parent cache when trades change (for persistence across tab switches).
-  // Skip while a server-side USD filter is active so we don't overwrite the full
+  // Skip while a server-side filter is active so we don't overwrite the full
   // trade cache with a filtered subset.
   React.useEffect(() => {
-    if (serverFilteredTrades !== null) return;
+    if (serverFilteredTrades !== null || serverWalletTrades !== null) return;
     if (onTradesUpdate && displayTrades.length > 0) {
       onTradesUpdate(displayTrades);
     }
-  }, [displayTrades, onTradesUpdate, serverFilteredTrades]);
+  }, [displayTrades, onTradesUpdate, serverFilteredTrades, serverWalletTrades]);
 
   // Save trades to localStorage cache when they update (skip filtered results).
   React.useEffect(() => {
-    if (serverFilteredTrades !== null) return;
+    if (serverFilteredTrades !== null || serverWalletTrades !== null) return;
     if (stableToken?.pair_address && displayTrades.length > 0) {
       saveToCache(displayTrades, stableToken.pair_address);
     }
@@ -1301,6 +1356,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     stableToken?.pair_address,
     saveToCache,
     serverFilteredTrades,
+    serverWalletTrades,
   ]);
 
   // Helper to extract complete trader address from raw trade data
@@ -2018,9 +2074,18 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
           {/* Trader */}
           <div className="w-[23%] px-2 py-3 text-right whitespace-nowrap text-[#757e80]">
-            <span className="text-[13px] font-normal text-[#757e80]">
-              Trader
-            </span>
+            <div className="flex items-center justify-end gap-1">
+              <span className="text-[13px] font-normal text-[#757e80]">
+                Trader
+              </span>
+              <button
+                onClick={handleWalletFilterClick}
+                className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
+                style={{ color: isWalletFilterActive ? AX.mint : "#757e80" }}
+              >
+                <CiFilter size={14} />
+              </button>
+            </div>
           </div>
         </div>
 
