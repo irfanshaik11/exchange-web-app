@@ -66,6 +66,26 @@ export default function PnlShareCard({
       ? ((winningTrades / (winningTrades + losingTrades)) * 100).toFixed(0)
       : "0";
 
+  const imgToDataUrl = useCallback((src: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        c.getContext("2d")?.drawImage(img, 0, 0);
+        try {
+          resolve(c.toDataURL("image/png"));
+        } catch {
+          resolve(src);
+        }
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    });
+  }, []);
+
   const captureCard = useCallback(async () => {
     if (!cardRef.current) return null;
     const canvas = await html2canvas(cardRef.current, {
@@ -73,9 +93,29 @@ export default function PnlShareCard({
       scale: 2,
       useCORS: true,
       logging: false,
+      onclone: async (_doc, element) => {
+        // Inline all images as data URLs to avoid CORS / tainted canvas issues
+        const imgs = element.querySelectorAll("img");
+        await Promise.all(
+          Array.from(imgs).map(async (img) => {
+            img.src = await imgToDataUrl(img.src);
+            img.removeAttribute("crossOrigin");
+          })
+        );
+        // Inline CSS background images
+        const els = element.querySelectorAll<HTMLElement>("[style]");
+        await Promise.all(
+          Array.from(els).map(async (el) => {
+            const match = el.style.backgroundImage?.match(/url\("?(.+?)"?\)/);
+            if (match?.[1]) {
+              el.style.backgroundImage = `url("${await imgToDataUrl(match[1])}")`;
+            }
+          })
+        );
+      },
     });
     return canvas;
-  }, []);
+  }, [imgToDataUrl]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -221,7 +261,7 @@ export default function PnlShareCard({
                   src="/interstate-logo-icon.png"
                   alt="Interstate"
                   className="w-10 h-10"
-                  crossOrigin="anonymous"
+                  crossOrigin=""
                 />
                 <div>
                   <div className="text-[#f4f4f5] text-base font-bold tracking-tight">
