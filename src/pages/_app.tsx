@@ -515,31 +515,37 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  
+
   // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
     setIsMounted(true);
   }, []);
-  
+
+  // Listen for "open-login-modal" custom events (from Header login button, trade panels, etc.)
   useEffect(() => {
     if (!isMounted) return;
-    if (enforceLogin && !userLoading && !user) {
-      setLoginOpen(true);
-    }
+    const handler = () => {
+      if (!user) setLoginOpen(true);
+    };
+    window.addEventListener("open-login-modal", handler);
+    return () => window.removeEventListener("open-login-modal", handler);
+  }, [isMounted, user]);
+
+  useEffect(() => {
+    if (!isMounted) return;
     if (user && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
-  
-  // Prevent closing if not logged in
+  }, [user, loginOpen, isMounted]);
+
   const handleLoginClose = () => {
-    if (user) setLoginOpen(false);
+    setLoginOpen(false);
   };
-  
-  if (!enforceLogin || !isMounted) return null;
-  
+
+  if (!isMounted) return null;
+
   return (
-    <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
+    <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={false} />
   );
 }
 

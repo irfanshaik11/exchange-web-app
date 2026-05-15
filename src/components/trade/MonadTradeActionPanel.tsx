@@ -617,13 +617,14 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   };
 
   const handleTrade = async () => {
-    if (!isConnected || !user) {
-      toast.error("Please connect your wallet to trade");
+    if (!user || !user.bearerToken) {
+      window.dispatchEvent(new CustomEvent("open-login-modal"));
+      toast.error("Please log in to trade");
       return;
     }
 
-    if (!user.bearerToken) {
-      toast.error("Please log in to trade");
+    if (!isConnected) {
+      toast.error("Please connect your wallet to trade");
       return;
     }
 

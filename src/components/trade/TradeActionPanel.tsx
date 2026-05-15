@@ -2397,7 +2397,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       if (!user?.bearerToken) {
         setSuccessMessage(null);
-        showCenteredErrorToast("Authentication required to create orders.");
+        window.dispatchEvent(new CustomEvent("open-login-modal"));
+        showCenteredErrorToast("Please log in to trade.");
         setPendingTradeOptions(null);
         return;
       }
