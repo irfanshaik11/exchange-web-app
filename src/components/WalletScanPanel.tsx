@@ -165,8 +165,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   // Calculate performance metrics from closed orders
   const performanceMetrics = useMemo(() => {
     if (!closedOrders || closedOrders.length === 0) {
+      // Even with no closed orders, the summary may have realized PnL
+      // (positions endpoint doesn't capture all trades).
+      const summaryPnl = goSummary
+        ? (goSummary.total_realized_pnl_usd !== 0
+            ? goSummary.total_realized_pnl_usd
+            : goSummary.total_realized_pnl_sol * currentSolPrice)
+        : 0;
       return {
-        totalPnl: 0,
+        totalPnl: summaryPnl,
         totalTransactions: 0,
         completedTransactions: 0,
         categoryCounts: {
@@ -194,8 +201,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       filteredOrders = closedOrders.filter((order) => order.closedAt >= cutoff);
     }
 
-    // Calculate totals from closed orders
-    const totalPnl = filteredOrders.reduce((sum, order) => sum + order.pnl, 0);
+    // For "Max" range, use the summary's authoritative total rather than
+    // summing per-position PnL (positions don't capture all trades).
+    const positionPnl = filteredOrders.reduce((sum, order) => sum + order.pnl, 0);
+    const totalPnl = selectedRange === "Max" && goSummary
+      ? (goSummary.total_realized_pnl_usd !== 0
+          ? goSummary.total_realized_pnl_usd
+          : goSummary.total_realized_pnl_sol * currentSolPrice)
+      : positionPnl;
     const totalTransactions = filteredOrders.length;
     const completedTransactions = filteredOrders.length;
 
@@ -237,7 +250,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       categoryCounts,
       progressPercentage,
     };
-  }, [closedOrders, selectedRange]);
+  }, [closedOrders, selectedRange, goSummary, currentSolPrice]);
 
   // Build per-trade Realized PnL chart data, scoped to selectedRange
   const pnlChartData = useMemo((): PnlChartDataPoint[] => {
@@ -301,6 +314,16 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   }, [closedOrders, selectedRange]);
 
   const realizedPnlPercentage = useMemo(() => {
+    // For "Max" range, derive percentage from summary's authoritative totals.
+    if (selectedRange === "Max" && goSummary) {
+      const totalBoughtUsd = goSummary.total_bought_sol * currentSolPrice;
+      if (totalBoughtUsd <= 0) return 0;
+      const pnlUsd = goSummary.total_realized_pnl_usd !== 0
+        ? goSummary.total_realized_pnl_usd
+        : goSummary.total_realized_pnl_sol * currentSolPrice;
+      return (pnlUsd / totalBoughtUsd) * 100;
+    }
+
     if (!closedOrders || closedOrders.length === 0) return 0;
 
     const now = Date.now();
@@ -320,7 +343,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     if (totalCostBasis <= 0) return 0;
     const totalPnl = scoped.reduce((sum, o) => sum + o.pnl, 0);
     return (totalPnl / totalCostBasis) * 100;
-  }, [closedOrders, selectedRange]);
+  }, [closedOrders, selectedRange, goSummary, currentSolPrice]);
 
 
   // Fetch balance independently (fast: ~100-200ms)
