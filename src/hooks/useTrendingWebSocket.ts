@@ -119,6 +119,12 @@ export interface NormalizedTrendingToken {
   price_usd: number;
   fully_diluted_value: number;
   total_liquidity_usd: number;
+  // For the matching trending timeframe (5m/1h/6h), this field carries raw
+  // SOL from the per-token Redis bucket reader — same source as the Trade
+  // page volume / OHLC chart. The volume column multiplies by Pyth SOL/USD
+  // at render time so the same token shows the same volume on Trending and
+  // the Trade page. Non-matching timeframe slots are typically 0 (omitempty
+  // drops them on the wire).
   volume_1h: number;
   volume_5m: number;
   volume_6h: number;

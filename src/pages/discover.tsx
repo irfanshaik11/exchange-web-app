@@ -4729,6 +4729,7 @@ export function DiscoverPageContent({
             selectedTimeframe={selectedTimeframe}
             quickBuyAmount={Number(quickBuyAmount) || 0}
             chain={currentChain}
+            solPrice={solPrice}
             isDiscoverPage={true}
           />
         </section>
@@ -4760,6 +4761,7 @@ export function DiscoverPageContent({
             selectedTimeframe={selectedTimeframe}
             quickBuyAmount={Number(quickBuyAmount) || 0}
             chain={currentChain}
+            solPrice={solPrice}
             isDiscoverPage={true}
           />
         </section>
