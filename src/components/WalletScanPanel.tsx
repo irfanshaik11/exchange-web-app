@@ -403,13 +403,12 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
   // (FIFO computations removed — positions are now served pre-computed by Go token service)
 
-  // Calculate total portfolio value and unrealized PnL
+  // Calculate total portfolio value and unrealized PnL from RPC (Go token service)
   const portfolioMetrics = useMemo(() => {
-    // Sum of all active positions' remaining value (cost basis)
-    const totalPositionsValue = aggregatedPositions.reduce(
-      (sum, position) => sum + position.remainingValue,
-      0
-    );
+    // Sum of all active positions' market value (from Go service RPC, not cost basis)
+    const totalPositionsValue = goPositions
+      .filter((p) => p.remaining_tokens > 0.001)
+      .reduce((sum, p) => sum + (p.remaining_value_usd || 0), 0);
 
     // Wallet SOL balance in USD
     let solBalanceUsd = 0;
@@ -417,21 +416,21 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       if (typeof walletBalance.usd === "number" && Number.isFinite(walletBalance.usd)) {
         solBalanceUsd = walletBalance.usd;
       } else if (typeof walletBalance.sol === "number" && Number.isFinite(walletBalance.sol)) {
-        // Use current SOL price from context
         solBalanceUsd = walletBalance.sol * currentSolPrice;
       }
     }
 
-    // Total value = positions (cost basis) + SOL balance
+    // Total value = positions (market value from RPC) + SOL balance
     const totalValue = totalPositionsValue + solBalanceUsd;
 
+    // Unrealized PnL from Go service summary
     const unrealizedPnl = goSummary?.total_unrealized_pnl_usd ?? 0;
 
     return {
       totalValue,
       unrealizedPnl,
     };
-  }, [aggregatedPositions, walletBalance, currentSolPrice, goSummary]);
+  }, [goPositions, walletBalance, currentSolPrice, goSummary]);
 
   // Top 100 positions by PnL — open positions always shown first (so Activity
   // tab tokens are always visible), then closed positions fill remaining slots.
