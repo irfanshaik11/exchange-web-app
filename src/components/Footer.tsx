@@ -432,7 +432,6 @@ export default function Footer() {
 
   const navLinks = [
     { name: "Wallet", href: "/trackers", icon: FaWallet },
-    { name: "Social", href: "/trackers", icon: XIcon, hasNotification: true },
     { name: "Discover", href: "/", icon: FaCompass, hasNotification: true },
     { name: "Pulse", href: "/pulse", icon: FaChartLine, hasNotification: true },
     // { name: "PnL", href: "/pnl", icon: FaChartBar }, // Disabled: 404 route not available
@@ -602,13 +601,11 @@ export default function Footer() {
             const isActive =
               link.name === "Wallet"
                 ? showWalletDropdown
-                : link.name === "Social"
-                  ? showTwitterDropdown || showTelegramDropdown
-                  : link.name === "Discover"
-                    ? showDiscoverDropdown
-                    : link.name === "Pulse"
-                      ? showPulseDropdown
-                      : router.pathname === link.href;
+                : link.name === "Discover"
+                  ? showDiscoverDropdown
+                  : link.name === "Pulse"
+                    ? showPulseDropdown
+                    : router.pathname === link.href;
 
             return (
               <React.Fragment key={link.name}>
@@ -646,45 +643,6 @@ export default function Footer() {
                     <span className="hidden text-[11px] leading-none sm:inline sm:text-xs">
                       {link.name}
                     </span>
-                  </button>
-                ) : link.name === "Social" ? (
-                  <button
-                    onClick={() => {
-                      const shouldOpen = !(showTwitterDropdown || showTelegramDropdown);
-                      setShowTwitterDropdown(shouldOpen);
-                      setShowTelegramDropdown(shouldOpen);
-                    }}
-                    className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
-                    style={{
-                      color: isActive ? AX.mint : AX.muted,
-                      backgroundColor: isActive
-                        ? `${AX.mint}20`
-                        : "transparent",
-                      cursor: "pointer",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.color = AX.mint;
-                        e.currentTarget.style.backgroundColor = `${AX.mint}10`;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.color = AX.muted;
-                        e.currentTarget.style.backgroundColor = "transparent";
-                      }
-                    }}
-                  >
-                    <IconComponent size={11} className="sm:h-3 sm:w-3" />
-                    <span className="hidden text-[11px] leading-none sm:inline sm:text-xs">
-                      {link.name}
-                    </span>
-                    {link.hasNotification && (
-                      <span
-                        className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full"
-                        style={{ backgroundColor: "#ec4899" }}
-                      />
-                    )}
                   </button>
                 ) : link.name === "Discover" ? (
                   <button
@@ -779,6 +737,73 @@ export default function Footer() {
               </React.Fragment>
             );
           })}
+
+          {/* Social Section - X and Telegram tracker toggles */}
+          <div
+            className="mx-1 h-2.5 w-px sm:h-3"
+            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)" }}
+          />
+          <button
+            onClick={() => setShowTwitterDropdown(!showTwitterDropdown)}
+            className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
+            style={{
+              color: showTwitterDropdown ? AX.mint : AX.muted,
+              backgroundColor: showTwitterDropdown
+                ? `${AX.mint}20`
+                : "transparent",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => {
+              if (!showTwitterDropdown) {
+                e.currentTarget.style.color = AX.mint;
+                e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!showTwitterDropdown) {
+                e.currentTarget.style.color = AX.muted;
+                e.currentTarget.style.backgroundColor = "transparent";
+              }
+            }}
+          >
+            <XIcon size={11} />
+            <span className="hidden text-[11px] leading-none sm:inline sm:text-xs">
+              Social
+            </span>
+            <span
+              className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: "#ec4899" }}
+            />
+          </button>
+          <button
+            onClick={() => setShowTelegramDropdown(!showTelegramDropdown)}
+            className="group relative flex items-center gap-1 rounded px-2 py-0.5 transition-all duration-300 ease-out sm:gap-2"
+            style={{
+              color: showTelegramDropdown ? AX.mint : AX.muted,
+              backgroundColor: showTelegramDropdown
+                ? `${AX.mint}20`
+                : "transparent",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => {
+              if (!showTelegramDropdown) {
+                e.currentTarget.style.color = AX.mint;
+                e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!showTelegramDropdown) {
+                e.currentTarget.style.color = AX.muted;
+                e.currentTarget.style.backgroundColor = "transparent";
+              }
+            }}
+          >
+            <FaTelegram size={11} className="sm:h-3 sm:w-3" />
+            <span
+              className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: "#ec4899" }}
+            />
+          </button>
         </div>
 
         {/* Right Section - Status, Price, Global, Utilities, Social */}
