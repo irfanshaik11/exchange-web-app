@@ -596,7 +596,7 @@ function normalizeTrade(
   let pricePerToken = 0;
   let tokenAmount = 0;
   let solAmount = 0;
-  let maker = trade.maker || trade.trader || "";
+  let maker = trade.maker || trade.trader || trade.trader_wallet || "";
   let timestampSec = Date.now() / 1000;
   let keyPart = "";
 
@@ -615,11 +615,12 @@ function normalizeTrade(
     trade.is_buy !== undefined &&
     (trade.mon_amount !== undefined || trade.token_amount !== undefined);
 
-  if (typeof trade.timestamp === "number") {
-    timestampSec =
-      trade.timestamp < 1e10 ? trade.timestamp : trade.timestamp / 1000;
-  } else if (typeof trade.timestamp === "string") {
-    timestampSec = new Date(trade.timestamp).getTime() / 1000;
+  // Check timestamp, created_at, and block_timestamp fields
+  const rawTs = trade.timestamp ?? trade.created_at ?? trade.block_timestamp;
+  if (typeof rawTs === "number") {
+    timestampSec = rawTs < 1e10 ? rawTs : rawTs / 1000;
+  } else if (typeof rawTs === "string") {
+    timestampSec = new Date(rawTs).getTime() / 1000;
   }
 
   if (hasWsShape) {
@@ -685,8 +686,8 @@ function normalizeTrade(
     keyPart =
       (trade.signature || trade.transaction_hash || trade.id || "") +
       (trade.timestamp || "");
-    // Handle both wallet_address (new format) and trader (old format)
-    maker = trade.wallet_address || trade.trader || "";
+    // Handle wallet_address, trader_wallet, and trader field names
+    maker = trade.wallet_address || trade.trader_wallet || trade.trader || "";
   } else if (hasMonadFormat) {
     // Monad trade format from useMonadTradesWebSocket
     isBuy = trade.is_buy === true;
@@ -705,10 +706,6 @@ function normalizeTrade(
     if (tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
     keyPart = (trade.tx_hash || trade.id || "") + (trade.block_timestamp || "");
     maker = trade.trader_address || "";
-    // Use block_timestamp for Monad trades
-    if (trade.block_timestamp) {
-      timestampSec = Number(trade.block_timestamp);
-    }
   } else {
     isBuy = !!(trade.side === "buy" || trade.type === "BUY");
     color = isBuy ? "text-emerald-400" : "text-red-400";
