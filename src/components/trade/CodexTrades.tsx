@@ -1201,35 +1201,107 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   const wsLoading = chain === "sol" ? solanaWsLoading : monadWsLoading;
   const wsTrades = chain === "sol" ? solanaTrades : monadTrades;
 
+  // Server-side USD range filter — when the user sets min/max on the Total (USD)
+  // column we hit /v1/token/{mint}/trades/filter so we search the full history
+  // instead of only the trades currently buffered in memory.
+  const [serverFilteredTrades, setServerFilteredTrades] = React.useState<
+    any[] | null
+  >(null);
+  const [serverFilterLoading, setServerFilterLoading] = React.useState(false);
+  const totalMin = filters.total.range.min;
+  const totalMax = filters.total.range.max;
+
+  React.useEffect(() => {
+    if (chain !== "sol") return; // endpoint is Solana-only
+    const mint = stableToken?.mint;
+    if (!mint) return;
+
+    const hasMin = totalMin !== "" && !Number.isNaN(parseFloat(totalMin));
+    const hasMax = totalMax !== "" && !Number.isNaN(parseFloat(totalMax));
+    if (!hasMin && !hasMax) {
+      setServerFilteredTrades(null);
+      setServerFilterLoading(false);
+      return;
+    }
+
+    const baseUrl = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(
+      /\/$/,
+      "",
+    );
+    if (!baseUrl) return;
+
+    const params = new URLSearchParams();
+    if (hasMin) params.set("min_usd", String(parseFloat(totalMin)));
+    if (hasMax) params.set("max_usd", String(parseFloat(totalMax)));
+    params.set("limit", "50");
+
+    const controller = new AbortController();
+    setServerFilterLoading(true);
+
+    fetch(
+      `${baseUrl}/v1/token/${encodeURIComponent(mint)}/trades/filter?${params.toString()}`,
+      { signal: controller.signal },
+    )
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        const trades = Array.isArray(data)
+          ? data
+          : data?.trades ?? data?.results ?? [];
+        setServerFilteredTrades(trades);
+      })
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        console.error("[CodexTrades] trades/filter failed:", err);
+        setServerFilteredTrades([]);
+      })
+      .finally(() => setServerFilterLoading(false));
+
+    return () => controller.abort();
+  }, [chain, stableToken?.mint, totalMin, totalMax]);
+
   // Preserve trades - once we have trades from WebSocket, always use them
   // This ensures trades don't disappear or change unless new ones arrive
   const displayTrades = React.useMemo(() => {
+    // When server-side USD filter is active, it's the source of truth.
+    if (serverFilteredTrades !== null) {
+      return serverFilteredTrades;
+    }
     // If we have WebSocket trades, always use them (they're the source of truth)
     if (wsTrades.length > 0) {
       return wsTrades;
     }
     // Fallback to initial trades only if WebSocket hasn't provided any yet
     return stableInitialTrades;
-  }, [wsTrades, stableInitialTrades]);
+  }, [serverFilteredTrades, wsTrades, stableInitialTrades]);
 
   // Only show loading if we don't have any trades at all (not even cached ones)
   // If we have cached trades, show them immediately even if WebSocket is still connecting
   const isLoading =
-    wsLoading && displayTrades.length === 0 && stableInitialTrades.length === 0;
+    (wsLoading && displayTrades.length === 0 && stableInitialTrades.length === 0) ||
+    serverFilterLoading;
 
-  // Update parent cache when trades change (for persistence across tab switches)
+  // Update parent cache when trades change (for persistence across tab switches).
+  // Skip while a server-side USD filter is active so we don't overwrite the full
+  // trade cache with a filtered subset.
   React.useEffect(() => {
+    if (serverFilteredTrades !== null) return;
     if (onTradesUpdate && displayTrades.length > 0) {
       onTradesUpdate(displayTrades);
     }
-  }, [displayTrades, onTradesUpdate]);
+  }, [displayTrades, onTradesUpdate, serverFilteredTrades]);
 
-  // Save trades to localStorage cache when they update
+  // Save trades to localStorage cache when they update (skip filtered results).
   React.useEffect(() => {
+    if (serverFilteredTrades !== null) return;
     if (stableToken?.pair_address && displayTrades.length > 0) {
       saveToCache(displayTrades, stableToken.pair_address);
     }
-  }, [displayTrades, stableToken?.pair_address, saveToCache]);
+  }, [
+    displayTrades,
+    stableToken?.pair_address,
+    saveToCache,
+    serverFilteredTrades,
+  ]);
 
   // Helper to extract complete trader address from raw trade data
   const getCompleteTraderAddress = React.useCallback((trade: any): string => {
