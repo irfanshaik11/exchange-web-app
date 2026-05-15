@@ -593,24 +593,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           <div className="flex flex-row gap-8 px-8 pt-6 pb-2">
             {/* Balance */}
             <div className="min-w-[180px] flex-1">
-              <div className="mb-1 text-xs text-neutral-400">Total Value</div>
-              <div className="text-3xl font-bold text-white">
-                {loading ? (
-                  <span className="animate-pulse text-neutral-500">—</span>
-                ) : (
-                  `$${formatSmartNumber(portfolioMetrics.totalValue)}`
-                )}
-              </div>
-              <div className="mt-2 text-xs text-neutral-500">
-                Unrealized PNL
-              </div>
-              <div className={`text-lg font-semibold ${portfolioMetrics.unrealizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {goLoading ? (
-                  <span className="animate-pulse text-neutral-500">—</span>
-                ) : (
-                  `$${portfolioMetrics.unrealizedPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                )}
-              </div>
               <div className="mt-2 text-xs text-neutral-500">
                 Available Balance
               </div>
