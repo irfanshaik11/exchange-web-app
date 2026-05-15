@@ -428,7 +428,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // Unrealized PnL: prefer the Go service summary's pre-computed total
     // (authoritative, accounts for all positions). Fall back to summing
     // per-position values only when the summary isn't available yet.
-    const unrealizedPnl = goSummary && goSummary.total_unrealized_pnl_usd !== 0
+    const unrealizedPnl = goSummary && goSummary.total_unrealized_pnl_usd != null
       ? goSummary.total_unrealized_pnl_usd
       : aggregatedPositions.reduce(
           (sum, position) => sum + position.unrealizedPnl,

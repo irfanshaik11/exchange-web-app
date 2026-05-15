@@ -74,7 +74,7 @@ export function toAggregatedPosition(
   const soldUsd =
     p.sold_usd_value > 0 ? p.sold_usd_value : p.sold_sol * solPrice;
   const realizedPnl =
-    p.realized_pnl_usd !== 0
+    p.realized_pnl_usd != null
       ? p.realized_pnl_usd
       : p.realized_pnl_sol * solPrice;
 
@@ -93,7 +93,7 @@ export function toAggregatedPosition(
   // cost-basis drift (airdrops, transfers-in, missing bought_usd_value).
   // Only fall back to manual calc when the Go service genuinely didn't supply
   // a value AND we have a valid remaining market value to compare against.
-  const unrealizedPnl = p.unrealized_pnl_usd !== 0
+  const unrealizedPnl = p.unrealized_pnl_usd != null
     ? p.unrealized_pnl_usd
     : remainingMarketValue > 0
       ? remainingMarketValue - remainingValue
