@@ -506,32 +506,45 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
           });
         }
 
-        // Authoritative refetch on TRAILING-edge debounce: wait 2s after the
-        // last new_trade in a burst before refetching. The optimistic update
-        // above is already on screen; the only purpose of fetchAll() here is
-        // to reconcile against the indexer's canonical aggregates.
+        // Authoritative refetch strategy: schedule MULTIPLE fetches at 800ms,
+        // 2.5s, and 5s after a new_trade. This handles two competing concerns:
         //
-        // CRITICAL: this MUST be trailing-edge, not leading-edge. Reason: when
-        // a trade fires, it lands in `solana_trades` immediately, but the
-        // `wallet_holder_positions` aggregate row that powers
-        // /v1/wallet/{addr}/positions can lag the trade insert by hundreds of
-        // ms to several seconds (and even longer when indexer parsers stall
-        // or batch-flush at slow cadence). A leading-edge fetchAll fires
-        // immediately, hits the API before the aggregate has updated, and
-        // gets back STALE data — then setRawPositions(p.positions) clobbers
-        // the optimistic update with that stale list. From the user's POV
-        // the position row "reverts" within a second of trading and stays
-        // that way until they manually refresh — which happens to work only
-        // because by the time they click refresh, the aggregate has caught up.
-        // Trailing-edge with 2s buffer gives the indexer aggregator enough
-        // headroom that fetchAll's response is fresh and merges cleanly.
+        //   (1) Indexer lag — `solana_trades` insert is instant, but the
+        //       `wallet_holder_positions` aggregate row that powers /positions
+        //       can take 100ms-5s to catch up. A leading-edge fetchAll fires
+        //       too early and gets PRE-trade data, then setRawPositions()
+        //       clobbers the optimistic synthetic row with the stale list.
+        //       The retention guard (addedMintsRef) handles the case where
+        //       the API misses the mint entirely, but it doesn't help when
+        //       the API returns the row with pre-trade aggregates.
+        //
+        //   (2) Cost-basis fields (cost_basis_sol, total_outflow_sol) are
+        //       only populated via REST, not via WS NOTIFY. The synthetic
+        //       row created here has them as 0, so portfolio enrichment
+        //       displays a swap-only PnL (~0% on a fresh buy) until fetchAll
+        //       reconciles. Old single trailing-edge 2s debounce was too
+        //       slow because subsequent WS events kept resetting the timer,
+        //       leaving users at 0% PnL until they manually refreshed.
+        //
+        // Strategy: kick off 3 staggered fetches. Each one replaces the
+        // synthetic with API data IF the aggregate has caught up. First
+        // fetch at 800ms catches the fast path (typical aggregator latency).
+        // 2.5s catches the slow path. 5s catches indexer-stall pathological
+        // cases. After any successful reconcile, the position has correct
+        // cost_basis_sol and enrichment renders the chain-truth PnL.
+        //
+        // Why not debounce: bursts of WS events kept resetting the timer
+        // indefinitely on busy wallets, deferring reconciliation forever.
+        // Multiple absolute timers fire regardless.
         if (refetchDebounceRef.current) {
           clearTimeout(refetchDebounceRef.current);
         }
-        refetchDebounceRef.current = setTimeout(() => {
-          refetchDebounceRef.current = null;
-          void fetchAll();
-        }, 2000);
+        const scheduleReconcile = (delay: number) => {
+          setTimeout(() => { void fetchAll(); }, delay);
+        };
+        scheduleReconcile(800);
+        scheduleReconcile(2500);
+        scheduleReconcile(5000);
         break;
       }
       case "pong":
