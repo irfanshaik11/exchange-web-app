@@ -1,9 +1,11 @@
 import React, { useRef, useState, useCallback } from "react";
-import { X, Copy, Check, Download } from "lucide-react";
+import { X, Copy, Check, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { FaXTwitter } from "react-icons/fa6";
 import html2canvas from "html2canvas";
 import toast from "react-hot-toast";
 import { formatSmallPrice, formatSmartNumber } from "~/utils/db";
+
+const PNL_BACKGROUNDS = ["/pnl-bg-1.png", "/pnl-bg-2.png", "/pnl-bg-3.png"];
 
 interface PnlShareCardProps {
   isOpen: boolean;
@@ -37,6 +39,26 @@ export default function PnlShareCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [bgIndex, setBgIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+
+  const handleBgPrev = () =>
+    setBgIndex((i) => (i - 1 + PNL_BACKGROUNDS.length) % PNL_BACKGROUNDS.length);
+  const handleBgNext = () =>
+    setBgIndex((i) => (i + 1) % PNL_BACKGROUNDS.length);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(diff) > 50) {
+      if (diff < 0) handleBgNext();
+      else handleBgPrev();
+    }
+    touchStartX.current = null;
+  };
 
   const isProfit = totalPnl >= 0;
   const winRate =
@@ -130,12 +152,27 @@ export default function PnlShareCard({
         {/* === THE CARD (captured as image) === */}
         <div
           ref={cardRef}
-          className="w-full rounded-2xl overflow-hidden"
+          className="w-full rounded-2xl overflow-hidden relative"
           style={{ background: "#080a0f" }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
+          {/* Background image */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `url(${PNL_BACKGROUNDS[bgIndex]})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              opacity: 0.25,
+            }}
+          />
+          {/* Dark overlay for readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#080a0f] via-[#080a0f]/60 to-transparent" />
+
           {/* Top accent gradient bar */}
           <div
-            className="h-1 w-full"
+            className="h-1 w-full relative z-[1]"
             style={{
               background: isProfit
                 ? "linear-gradient(90deg, #18c48c 0%, #a3f7bf 50%, #18c48c 100%)"
@@ -143,7 +180,7 @@ export default function PnlShareCard({
             }}
           />
 
-          <div className="p-5 pb-4">
+          <div className="p-5 pb-4 relative z-[1]">
             {/* Card header: logo + branding + timeframe */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2.5">
@@ -291,6 +328,35 @@ export default function PnlShareCard({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Background selector */}
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={handleBgPrev}
+            className="text-[#71717a] hover:text-white transition-colors cursor-pointer p-1"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1.5">
+            {PNL_BACKGROUNDS.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setBgIndex(i)}
+                className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
+                  i === bgIndex
+                    ? "bg-[#18c48c] scale-110"
+                    : "bg-white/20 hover:bg-white/40"
+                }`}
+              />
+            ))}
+          </div>
+          <button
+            onClick={handleBgNext}
+            className="text-[#71717a] hover:text-white transition-colors cursor-pointer p-1"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Action buttons */}
