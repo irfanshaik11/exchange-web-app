@@ -115,16 +115,22 @@ function normalizeDexScreenerToken(raw: any): NormalizedTrendingToken {
     price_usd: raw.price_usd || 0,
     fully_diluted_value: raw.fdv || raw.market_cap_usd || 0,
     total_liquidity_usd: raw.liquidity_usd || 0,
-    // DexScreener proxy ships volume in USD (their API is multi-chain and only
-    // emits USD). Trending ships SOL and the FE multiplies by Pyth — these
-    // two feeds use the same field names but different units. InterstateTable
-    // branches on `tableType === "dexscreener"` to read these as USD directly.
+    // Legacy USD volume from DexScreener API (always present). Kept as the
+    // fallback for mints Interstate's indexer hasn't seen yet.
     // `??` (not `||`) so a real `0` from BE is preserved as `0` rather than
-    // re-coerced through the fallback (same value, clearer intent).
+    // re-coerced through the fallback.
     volume_1h: raw.volume_1h ?? 0,
     volume_5m: raw.volume_5m ?? 0,
     volume_6h: raw.volume_6h ?? 0,
     volume_24h: raw.volume_24h ?? 0,
+    // Interstate-indexed SOL volume (BE enrichment populates these only when
+    // the mint exists in Interstate's vol:{mint}:{minute} Redis buckets — same
+    // source the Trade page reads from). When > 0, InterstateTable prefers
+    // these so the DEX Screener tab vol matches the Trade page for that mint.
+    volume_sol_5m: raw.volume_sol_5m ?? undefined,
+    volume_sol_1h: raw.volume_sol_1h ?? undefined,
+    volume_sol_6h: raw.volume_sol_6h ?? undefined,
+    volume_sol_24h: raw.volume_sol_24h ?? undefined,
     holder_count: 0,
     rank: raw.rank || 0,
     status: "ACTIVE",
@@ -479,6 +485,29 @@ function connectDexScreenerWS() {
                   typeof update.volume_24h === "number" && update.volume_24h > 0
                     ? update.volume_24h
                     : existing.volume_24h,
+                // Mirror the same preserve-on-zero guard for the SOL fields so
+                // a delta without enrichment data (BE cache miss this tick)
+                // doesn't blank out a row that had real SOL volume last tick.
+                volume_sol_5m:
+                  typeof update.volume_sol_5m === "number" &&
+                  update.volume_sol_5m > 0
+                    ? update.volume_sol_5m
+                    : existing.volume_sol_5m,
+                volume_sol_1h:
+                  typeof update.volume_sol_1h === "number" &&
+                  update.volume_sol_1h > 0
+                    ? update.volume_sol_1h
+                    : existing.volume_sol_1h,
+                volume_sol_6h:
+                  typeof update.volume_sol_6h === "number" &&
+                  update.volume_sol_6h > 0
+                    ? update.volume_sol_6h
+                    : existing.volume_sol_6h,
+                volume_sol_24h:
+                  typeof update.volume_sol_24h === "number" &&
+                  update.volume_sol_24h > 0
+                    ? update.volume_sol_24h
+                    : existing.volume_sol_24h,
                 rank: update.rank ?? existing.rank,
                 total_buys_5m: update.total_buys_5m ?? existing.total_buys_5m,
                 total_sells_5m:
