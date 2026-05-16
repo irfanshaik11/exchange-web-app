@@ -296,12 +296,19 @@ const getVolume = (
   token: Token,
   timeframe: string,
   solPrice: number = 0,
+  tableType?: string,
 ): number => {
-  // Backend ships SOL in `volume_{tf}` for the timeframe that ranks the
-  // trending list a token belongs to — same source as /v1/ws/token/{mint}
-  // (Trade page volume + OHLC chart). Multiply by live Pyth SOL/USD to
-  // render USD identical to the Trade page header. Trending only supports
-  // 5m / 1h / 6h timeframes.
+  // DexScreener proxy ships `volume_{tf}` in USD (their API is multi-chain
+  // and only emits USD). Read it directly — no Pyth multiply, no solPrice
+  // requirement. This keeps the DexScreener tab working when Pyth is dead
+  // and avoids 170× inflation if solPrice were accidentally piped through.
+  if (tableType === "dexscreener") {
+    return getNumber(token as any, `volume_${timeframe}`);
+  }
+  // Internal trending: BE ships SOL in `volume_{tf}` for the timeframe that
+  // ranks the trending list — same source as /v1/ws/token/{mint} (Trade
+  // page volume + OHLC chart). Multiply by live Pyth SOL/USD to render USD
+  // identical to the Trade page header. Trending supports 5m / 1h / 6h.
   if (!Number.isFinite(solPrice) || solPrice <= 0) return 0;
   const sol = getNumber(token as any, `volume_${timeframe}`);
   return sol * solPrice;
@@ -436,10 +443,14 @@ const getSortableValue = (
   key: string,
   selectedTimeframe?: string,
   solPrice: number = 0,
+  tableType?: string,
 ): number => {
-  // Handle volume calculation for sorting
+  // Handle volume calculation for sorting. tableType is threaded through so
+  // the DexScreener branch in getVolume fires for sort, not just display —
+  // otherwise Volume-column sort silently re-breaks with the same solPrice
+  // early-return that the display path used to hit.
   if (key === "volume" && selectedTimeframe) {
-    return getVolume(token, selectedTimeframe, solPrice);
+    return getVolume(token, selectedTimeframe, solPrice, tableType);
   }
 
   // Handle TXNS calculation for sorting
@@ -2906,13 +2917,13 @@ const TableRow: React.FC<{
       [onQuickBuy, token, onClick],
     );
 
-    // For newPairs, use PulseTable-style volume: try all timeframes, sum buy+sell, convert SOL→USD
-    // For other tables (trending/top/gainers), getVolume prefers SOL × Pyth
-    // when the backend ships SOL fields, otherwise falls back to USD path.
+    // For newPairs, use PulseTable-style volume: try all timeframes, sum buy+sell, convert SOL→USD.
+    // For DexScreener (USD-native wire), getVolume reads volume_{tf} directly.
+    // For trending/top/gainers (SOL-native wire), getVolume does SOL × Pyth.
     const volume =
       tableType === "newPairs" && solPrice > 0
         ? getNewPairVolume(token, solPrice)
-        : getVolume(token, selectedTimeframe, solPrice);
+        : getVolume(token, selectedTimeframe, solPrice, tableType);
 
     // Debug volume calculation
     // console.log('Volume calculation debug:', {
@@ -3061,11 +3072,17 @@ const TableRow: React.FC<{
                     }),
               }}
             >
-              {/* Show "0" on discover page, "-" on other pages when volume is 0 */}
+              {/* DexScreener tab renders "—" on zero so a BE regression
+                  (missing volume_{tf} field, unit mismatch) is visible at a
+                  glance rather than masquerading as $0. Other tabs keep the
+                  existing $0/- behavior because their feeds legitimately
+                  emit zero for inactive windows. */}
               {volume === 0
-                ? isDiscoverPage
-                  ? "$0"
-                  : "-"
+                ? tableType === "dexscreener"
+                  ? "—"
+                  : isDiscoverPage
+                    ? "$0"
+                    : "-"
                 : `$${formatSmartNumber(volume)}`}
             </div>
           </td>
@@ -3203,12 +3220,14 @@ export default function InterstateTable({
         sortKey,
         selectedTimeframe,
         solPrice,
+        tableType,
       );
       const bVal = getSortableValue(
         b.token,
         sortKey,
         selectedTimeframe,
         solPrice,
+        tableType,
       );
       const diff = aVal - bVal;
       if (diff === 0) {

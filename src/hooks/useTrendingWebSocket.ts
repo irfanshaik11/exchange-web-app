@@ -163,7 +163,9 @@ export interface NormalizedTrendingToken {
   // Pool/pair address for direct trade routing (used by DexScreener tokens)
   pair_address?: string;
   migrated_pool_address?: string;
-  created_at?: string;
+  // string from internal trending feed, number (epoch ms) from DexScreener
+  // proxy. InterstateTable.getTokenAge normalizes both shapes.
+  created_at?: string | number;
   // Mayhem Mode flag — backend sets true on tokens currently inside the
   // 24h Mayhem hot window. Surfaced so the Discover Mayhem chip can filter
   // trending rows the same way PulseFilters does on the new-pairs feed.

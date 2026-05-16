@@ -115,10 +115,16 @@ function normalizeDexScreenerToken(raw: any): NormalizedTrendingToken {
     price_usd: raw.price_usd || 0,
     fully_diluted_value: raw.fdv || raw.market_cap_usd || 0,
     total_liquidity_usd: raw.liquidity_usd || 0,
-    volume_1h: raw.volume_1h || 0,
-    volume_5m: raw.volume_5m || 0,
-    volume_6h: raw.volume_6h || 0,
-    volume_24h: raw.volume_24h || 0,
+    // DexScreener proxy ships volume in USD (their API is multi-chain and only
+    // emits USD). Trending ships SOL and the FE multiplies by Pyth — these
+    // two feeds use the same field names but different units. InterstateTable
+    // branches on `tableType === "dexscreener"` to read these as USD directly.
+    // `??` (not `||`) so a real `0` from BE is preserved as `0` rather than
+    // re-coerced through the fallback (same value, clearer intent).
+    volume_1h: raw.volume_1h ?? 0,
+    volume_5m: raw.volume_5m ?? 0,
+    volume_6h: raw.volume_6h ?? 0,
+    volume_24h: raw.volume_24h ?? 0,
     holder_count: 0,
     rank: raw.rank || 0,
     status: "ACTIVE",
@@ -162,6 +168,10 @@ function normalizeDexScreenerToken(raw: any): NormalizedTrendingToken {
     // consistency with the trending normaliser. Strict `=== true` keeps
     // hostile payload values (e.g. truthy strings) from flipping it.
     is_mayhem_mode: raw.is_mayhem_mode === true || raw.isMayhemMode === true,
+    // DexScreener ships pairCreatedAt as int64 ms (key `created_at` on the
+    // wire via the Go json tag). InterstateTable.getTokenAge accepts both
+    // number-ms and string-iso, so we forward as-is.
+    created_at: raw.created_at ?? raw.pair_created_at ?? undefined,
   };
 }
 
@@ -449,10 +459,26 @@ function connectDexScreenerWS() {
                 total_liquidity_usd:
                   update.liquidity_usd ?? existing.total_liquidity_usd,
                 liquidityUsd: update.liquidity_usd ?? existing.liquidityUsd,
-                volume_5m: update.volume_5m ?? existing.volume_5m,
-                volume_1h: update.volume_1h ?? existing.volume_1h,
-                volume_6h: update.volume_6h ?? existing.volume_6h,
-                volume_24h: update.volume_24h ?? existing.volume_24h,
+                // Preserve snapshot when delta carries 0/null — DexScreener's
+                // per-TF emitter occasionally drops a window to 0 between
+                // recomputes; `??` alone (which treats 0 as "set") would zero
+                // out a row that still has real activity in the snapshot.
+                volume_5m:
+                  typeof update.volume_5m === "number" && update.volume_5m > 0
+                    ? update.volume_5m
+                    : existing.volume_5m,
+                volume_1h:
+                  typeof update.volume_1h === "number" && update.volume_1h > 0
+                    ? update.volume_1h
+                    : existing.volume_1h,
+                volume_6h:
+                  typeof update.volume_6h === "number" && update.volume_6h > 0
+                    ? update.volume_6h
+                    : existing.volume_6h,
+                volume_24h:
+                  typeof update.volume_24h === "number" && update.volume_24h > 0
+                    ? update.volume_24h
+                    : existing.volume_24h,
                 rank: update.rank ?? existing.rank,
                 total_buys_5m: update.total_buys_5m ?? existing.total_buys_5m,
                 total_sells_5m:

@@ -5475,6 +5475,7 @@ export function DiscoverPageContent({
                 quickBuyAmount={Number(quickBuyAmount) || 0}
                 chain={currentChain}
                 tableType="dexscreener"
+                solPrice={solPrice}
                 isDiscoverPage={true}
               />
             )}
