@@ -537,6 +537,36 @@ export async function toggleWalletNotifications(
   }
 }
 
+// Bulk toggle notifications for all of the user's wallets in one request.
+// Avoids N HTTP roundtrips when the user clicks "enable/disable all".
+export async function toggleAllWalletNotifications(
+  enabled: boolean,
+  authToken: string,
+  chain?: "sol" | "monad",
+): Promise<{ count: number }> {
+  const params = new URLSearchParams();
+  if (chain) params.append("chain", chain);
+
+  const url = `${WALLET_TRACKER_API_URL}/api/watch/notifications/bulk${params.toString() ? `?${params.toString()}` : ""}`;
+
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({ enabled }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || "Failed to bulk toggle notifications");
+  }
+
+  const data = await response.json();
+  return { count: typeof data.count === "number" ? data.count : 0 };
+}
+
 // Normalize balance from various API response shapes (wallet tracker or local get-sol-bal)
 function parseBalanceFromResponse(data: any): number | null {
   if (data == null) return null;
