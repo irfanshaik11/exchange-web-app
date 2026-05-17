@@ -176,6 +176,7 @@ const navLinks = [
   { name: "Trenches", href: "/pulse" },
   { name: "Trending", href: "/discover" },
   { name: "Trackers", href: "/trackers" },
+  { name: "Vision", href: "/vision" },
   { name: "Predictions", href: "/predictions" },
   { name: "Airdrop", href: "/airdrop-genesis" },
   { name: "Portfolio", href: "/portfolio" },

@@ -3238,12 +3238,12 @@ export default function TrackersPage() {
                                   <div className="my-2.5 flex items-center gap-2 border-b border-white/[0.06] pb-2.5">
                                     <input
                                       type="text"
-                                      placeholder="@ Search handle"
+                                      placeholder="Search handle"
                                       value={approvedHandlesSearch}
                                       onChange={(e) =>
                                         setApprovedHandlesSearch(e.target.value)
                                       }
-                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
+                                      className="w-full flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">
