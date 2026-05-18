@@ -31,6 +31,7 @@ This document provides a comprehensive reference for all field mappings between 
 
 ---
 
+
 ## Overview
 
 The Pulse feature displays real-time token data from WebSocket connections. Data flows from the Go backend through a Web Worker to React components. Due to historical reasons and different API versions, many fields have multiple name variants that must all be supported.
