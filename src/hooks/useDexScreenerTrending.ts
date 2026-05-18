@@ -485,29 +485,20 @@ function connectDexScreenerWS() {
                   typeof update.volume_24h === "number" && update.volume_24h > 0
                     ? update.volume_24h
                     : existing.volume_24h,
-                // Mirror the same preserve-on-zero guard for the SOL fields so
-                // a delta without enrichment data (BE cache miss this tick)
-                // doesn't blank out a row that had real SOL volume last tick.
-                volume_sol_5m:
-                  typeof update.volume_sol_5m === "number" &&
-                  update.volume_sol_5m > 0
-                    ? update.volume_sol_5m
-                    : existing.volume_sol_5m,
-                volume_sol_1h:
-                  typeof update.volume_sol_1h === "number" &&
-                  update.volume_sol_1h > 0
-                    ? update.volume_sol_1h
-                    : existing.volume_sol_1h,
-                volume_sol_6h:
-                  typeof update.volume_sol_6h === "number" &&
-                  update.volume_sol_6h > 0
-                    ? update.volume_sol_6h
-                    : existing.volume_sol_6h,
-                volume_sol_24h:
-                  typeof update.volume_sol_24h === "number" &&
-                  update.volume_sol_24h > 0
-                    ? update.volume_sol_24h
-                    : existing.volume_sol_24h,
+                // SOL fields come from Interstate's `vol:{mint}:{minute}`
+                // Redis buckets — same source as the Trade page. Unlike the
+                // DexScreener USD legacy fields above (which need the `> 0`
+                // guard because DexScreener's emitter has a known zero-flicker
+                // bug between recomputes), Interstate's buckets roll to a real
+                // zero when a token genuinely stops trading. Using `??` here
+                // accepts a real `0` from BE so a cooled-off token's volume
+                // can decay to zero on screen, matching Trade page reality.
+                // A missing field (BE cache miss, mint not yet indexed) still
+                // preserves the snapshot value via the `??` fallback.
+                volume_sol_5m: update.volume_sol_5m ?? existing.volume_sol_5m,
+                volume_sol_1h: update.volume_sol_1h ?? existing.volume_sol_1h,
+                volume_sol_6h: update.volume_sol_6h ?? existing.volume_sol_6h,
+                volume_sol_24h: update.volume_sol_24h ?? existing.volume_sol_24h,
                 rank: update.rank ?? existing.rank,
                 total_buys_5m: update.total_buys_5m ?? existing.total_buys_5m,
                 total_sells_5m:
