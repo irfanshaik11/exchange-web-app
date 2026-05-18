@@ -1593,21 +1593,39 @@ const Positions: React.FC<PositionsProps> = ({
               };
               
               const corrected = getCorrectedValues();
-              
-              // Calculate live PNL using current token price
+
+              // Live token price + remaining-value computation, used by both
+              // the chain-derived and legacy paths below (and by handleRowClick
+              // for the detail modal).
               const currentPrice = livePrices[pos.tokenAddress] || 0;
-              const liveRemainingValue = currentPrice > 0 
-                ? corrected.correctedRemaining * currentPrice 
+              const liveRemainingValue = currentPrice > 0
+                ? corrected.correctedRemaining * currentPrice
                 : corrected.correctedRemainingUsdValue; // Fallback to stored value if no live price
-              
-              const livePnl = corrected.correctedSoldUsdValue + liveRemainingValue - sourcePosition.boughtUsdValue;
-              const livePnlPercentage = sourcePosition.boughtUsdValue > 0 
-                ? (livePnl / sourcePosition.boughtUsdValue) * 100 
-                : 0;
-              
-              // Use live PNL if we have a current price, otherwise use corrected PNL
-              const displayPnl = currentPrice > 0 ? livePnl : corrected.correctedPnl;
-              const displayPnlPercentage = currentPrice > 0 ? livePnlPercentage : corrected.correctedPnlPercentage;
+
+              // Chain-derived mode (skipFetch=true, SOL primary): the enrichment
+              // effect in portfolio.tsx already produced authoritative pos.pnl /
+              // pos.pnlPercentage from chain data. The legacy render-time
+              // correction below was built for the user-aggregate
+              // getActivePositionsByUser path that has unit errors and stale USD
+              // values — applying it here can zero out the PnL (when livePrices
+              // is empty for a tracked mint, the "average buy price" fallback
+              // makes liveRemainingValue equal boughtUsdValue → PnL = 0 → user
+              // sees -0.15% rounding noise instead of the real value).
+              //
+              // For chain-derived mode, trust the values from the hook.
+              let displayPnl: number;
+              let displayPnlPercentage: number;
+              if (skipFetch) {
+                displayPnl = toNumericValue(sourcePosition.pnl);
+                displayPnlPercentage = toNumericValue(sourcePosition.pnlPercentage);
+              } else {
+                const livePnl = corrected.correctedSoldUsdValue + liveRemainingValue - sourcePosition.boughtUsdValue;
+                const livePnlPercentage = sourcePosition.boughtUsdValue > 0
+                  ? (livePnl / sourcePosition.boughtUsdValue) * 100
+                  : 0;
+                displayPnl = currentPrice > 0 ? livePnl : corrected.correctedPnl;
+                displayPnlPercentage = currentPrice > 0 ? livePnlPercentage : corrected.correctedPnlPercentage;
+              }
               
               // For positions: backend stores originalPairAddress value in pairAddress field
               const navigateAddress = pos.tokenAddress || sourcePosition.pairAddress;
