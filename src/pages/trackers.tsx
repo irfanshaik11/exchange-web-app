@@ -22,6 +22,7 @@ import {
   getTrackedWallets,
   getWalletHistory,
   toggleWalletNotifications,
+  toggleAllWalletNotifications,
   WalletTrackerAuthError,
   type WatchWallet,
   type WalletEvent,
@@ -1396,40 +1397,50 @@ export default function TrackersPage() {
       return;
     }
 
+    if (!user?.bearerToken) {
+      console.error("Cannot toggle notifications without auth token");
+      return;
+    }
+
+    const newState = !allNotificationsEnabled;
+    const previousWallets = watchedWallets;
+
     setIsTogglingAllNotifications(true);
 
+    // Optimistic update: flip local state immediately so the button feels
+    // instant. We roll back if the bulk call fails.
+    setWatchedWallets((prev) =>
+      prev.map((w) => ({ ...w, notificationsEnabled: newState })),
+    );
+    previousWallets.forEach((wallet) => {
+      localStorage.setItem(
+        `wallet_notifications_${wallet.address}`,
+        JSON.stringify(newState),
+      );
+    });
+
     try {
-      // Determine new state: if all are enabled, disable all. Otherwise, enable all.
-      const newState = !allNotificationsEnabled;
-      isDev &&
-        console.log(
-          `🔔 Toggle all notifications: ${allNotificationsEnabled} → ${newState}`,
-        );
-      isDev && console.log(`📊 Toggling ${watchedWallets.length} wallets`);
-
-      // Toggle each wallet's notifications
-      const togglePromises = watchedWallets.map((wallet) => {
-        return toggleWalletNotifications(
-          wallet.address,
-          newState,
-          wallet.ownerId || undefined,
-          wallet.chain || selectedChain,
-          user?.bearerToken,
-        );
-      });
-
-      const results = await Promise.all(togglePromises);
-      // Update localStorage for each wallet
-      watchedWallets.forEach((wallet) => {
-        const storageKey = `wallet_notifications_${wallet.address}`;
-        localStorage.setItem(storageKey, JSON.stringify(newState));
-      });
-
-      // Reload from backend to refresh state
-      await loadWalletsFromBackend();
-      await refreshWatchedWallets();
+      await toggleAllWalletNotifications(
+        newState,
+        user.bearerToken,
+        selectedChain,
+      );
+      // Sync from backend in the background — don't block the button on it.
+      // loadWalletsFromBackend already calls refreshWatchedWallets internally,
+      // so no second refresh is needed.
+      loadWalletsFromBackend().catch((err) =>
+        console.error("Background wallet refresh failed:", err),
+      );
     } catch (error) {
       console.error("❌ Failed to toggle all notifications:", error);
+      // Rollback optimistic update
+      setWatchedWallets(previousWallets);
+      previousWallets.forEach((wallet) => {
+        localStorage.setItem(
+          `wallet_notifications_${wallet.address}`,
+          JSON.stringify(wallet.notificationsEnabled),
+        );
+      });
     } finally {
       setIsTogglingAllNotifications(false);
     }
