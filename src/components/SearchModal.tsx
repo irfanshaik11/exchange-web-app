@@ -870,11 +870,16 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
     switch (sortBy) {
       case "smart":
-        return sortedTokens.sort(
-          (a, b) =>
-            calculateSmartScore(b, searchQuery) -
-            calculateSmartScore(a, searchQuery),
-        );
+        // Trust the backend tier order: token-service returns canonical →
+        // active → long-tail with signal-weighted scoring within each tier
+        // (typesense.go:scoreSearchResult). Re-sorting client-side via
+        // calculateSmartScore discarded that ordering — a 49-day-old spam
+        // clone with $71K mcap would rank above the canonical Goblin at
+        // $11.7M mcap because the client formula over-weights recency and
+        // ignores tier. The other sort cases (time/market_cap/volume_1h/
+        // liquidity) remain client-side because they are explicit user
+        // choices.
+        return tokens;
       case "time":
         return sortedTokens.sort(
           (a, b) =>
