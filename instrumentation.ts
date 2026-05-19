@@ -12,7 +12,7 @@
  * → Vision page. The page never triggers a refresh — only this cron does.
  */
 
-const REFRESH_INTERVAL_MS = 30 * 60_000;
+const REFRESH_INTERVAL_MS = 30 * 1_000;
 
 export async function register(): Promise<void> {
   // Only run server-side, never in the Edge runtime.
