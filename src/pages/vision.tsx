@@ -1,8 +1,10 @@
 /**
- * KOL Leaderboard Page
+ * Vision Page
  *
- * Displays top KOL (Key Opinion Leader) traders scraped from kolscan.io,
- * ranked by profit across daily, weekly, and monthly timeframes.
+ * Surfaces the same KOL leaderboard data as /kol-leaderboard, branded as
+ * "Vision" — the top traders worth keeping an eye on. Backed by the same
+ * `useKolLeaderboard` hook, which reads from the wallet-tracker backend's
+ * `KolLeaderboardRow` table (repopulated every 30 min by the kolscan poller).
  */
 
 import React, { useState } from "react";
@@ -47,21 +49,23 @@ function SkeletonRow() {
   );
 }
 
-export default function KolLeaderboardPage() {
+export default function VisionPage() {
   const [timeframe, setTimeframe] = useState<KolTimeframe>("DAILY");
   const { data, isLoading, isError, refetch } = useKolLeaderboard(timeframe, {
     limit: 1000,
   });
 
   const entries = data?.entries ?? [];
+  const topThree = entries.slice(0, 3);
+  const rest = entries.slice(3);
 
   return (
     <>
       <Head>
-        <title>KOL Leaderboard | Interstate</title>
+        <title>Vision | Interstate</title>
         <meta
           name="description"
-          content="Top KOL memecoin traders ranked by profit, win rate, and trade count."
+          content="Vision — top KOL memecoin traders worth watching, ranked by profit."
         />
       </Head>
 
@@ -73,14 +77,14 @@ export default function KolLeaderboardPage() {
             <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a0b]">
               <main className="relative z-10 mx-auto max-w-6xl px-4 pt-8 pb-24 sm:px-6">
                 {/* Title */}
-                <div className="mb-8 text-center">
-                  <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">
-                    KOL LEADERBOARD
+                {/* <div className="mb-8 text-center">
+                  <h1 className="bg-gradient-to-r from-emerald-300 via-emerald-400 to-teal-300 bg-clip-text text-4xl font-black tracking-tight text-transparent md:text-5xl">
+                    VISION
                   </h1>
                   <p className="mt-2 text-sm text-neutral-400">
-                    Top KOL memecoin traders ranked by profit
+                    Top KOL traders worth watching — sorted by profit
                   </p>
-                </div>
+                </div> */}
 
                 {/* Timeframe pills */}
                 <div className="mb-6 flex items-center justify-center">
@@ -108,7 +112,7 @@ export default function KolLeaderboardPage() {
                 {isError && (
                   <div className="flex flex-col items-center gap-3 py-16 text-center">
                     <p className="text-sm text-neutral-400">
-                      Failed to load KOL leaderboard data
+                      Failed to load Vision leaderboard
                     </p>
                     <button
                       onClick={() => refetch()}
@@ -119,6 +123,15 @@ export default function KolLeaderboardPage() {
                   </div>
                 )}
 
+                {/* Podium — top 3 highlighted */}
+                {!isError && topThree.length > 0 && (
+                  <div className="mb-6 grid gap-3 sm:grid-cols-3">
+                    {topThree.map((entry) => (
+                      <PodiumCard key={entry.walletAddress} entry={entry} />
+                    ))}
+                  </div>
+                )}
+
                 {/* Table */}
                 {!isError && (
                   <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-[#111113]">
@@ -126,7 +139,7 @@ export default function KolLeaderboardPage() {
                       <thead>
                         <tr className="border-b border-white/[0.08] text-xs text-neutral-500 uppercase">
                           <th className="px-4 py-3 font-medium">Rank</th>
-                          <th className="px-4 py-3 font-medium">Wallet</th>
+                          <th className="px-4 py-3 font-medium">Trader</th>
                           <th className="px-4 py-3 text-right font-medium">
                             PnL (SOL)
                           </th>
@@ -149,7 +162,7 @@ export default function KolLeaderboardPage() {
                           ? Array.from({ length: 10 }).map((_, i) => (
                               <SkeletonRow key={i} />
                             ))
-                          : entries.map((entry) => (
+                          : rest.map((entry) => (
                               <TraderRow key={entry.walletAddress} entry={entry} />
                             ))}
                         {!isLoading && entries.length === 0 && (
@@ -158,7 +171,7 @@ export default function KolLeaderboardPage() {
                               colSpan={7}
                               className="px-4 py-12 text-center text-neutral-500"
                             >
-                              No data available
+                              No data available — the poller may not have run yet
                             </td>
                           </tr>
                         )}
@@ -168,9 +181,9 @@ export default function KolLeaderboardPage() {
                 )}
 
                 {/* Source attribution */}
-                {/* <p className="mt-4 text-center text-xs text-neutral-600">
+                <p className="mt-4 text-center text-xs text-neutral-600">
                   Data sourced from kolscan.io — updated every 30 minutes
-                </p> */}
+                </p>
               </main>
             </div>
           </div>
@@ -182,32 +195,82 @@ export default function KolLeaderboardPage() {
   );
 }
 
+function PodiumCard({ entry }: { entry: KolTraderEntry }) {
+  const profitColor =
+    entry.profit >= 0 ? "text-emerald-400" : "text-rose-400";
+  const rankAccent =
+    entry.rank === 1
+      ? "border-amber-400/50 bg-gradient-to-br from-amber-500/[0.08] to-transparent"
+      : entry.rank === 2
+        ? "border-neutral-400/40 bg-gradient-to-br from-neutral-400/[0.06] to-transparent"
+        : "border-amber-700/40 bg-gradient-to-br from-amber-800/[0.06] to-transparent";
+
+  return (
+    <div
+      className={`rounded-xl border ${rankAccent} p-4 transition-colors hover:bg-white/[0.02]`}
+    >
+      <div className="flex items-center justify-between">
+        <span
+          className={`text-2xl font-black ${
+            entry.rank === 1
+              ? "text-amber-400"
+              : entry.rank === 2
+                ? "text-neutral-300"
+                : "text-amber-700"
+          }`}
+        >
+          #{entry.rank}
+        </span>
+        <div className="flex gap-2">
+          {entry.twitter && (
+            <a
+              href={entry.twitter}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-neutral-500 hover:text-white"
+            >
+              <FaXTwitter className="h-4 w-4" />
+            </a>
+          )}
+          {entry.telegram && (
+            <a
+              href={entry.telegram}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-neutral-500 hover:text-sky-400"
+            >
+              <FaTelegram className="h-4 w-4" />
+            </a>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 truncate font-semibold text-white">{entry.name}</div>
+      <a
+        href={`https://solscan.io/account/${entry.walletAddress}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-0.5 flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-300"
+      >
+        {truncateAddress(entry.walletAddress)}
+        <FiExternalLink className="h-3 w-3" />
+      </a>
+      <div className={`mt-3 font-mono text-lg font-bold ${profitColor}`}>
+        {formatProfit(entry.profit)} SOL
+      </div>
+      <div className="mt-1 text-xs text-neutral-500">
+        {entry.winRate.toFixed(1)}% win rate · {entry.wins}W / {entry.losses}L
+      </div>
+    </div>
+  );
+}
+
 function TraderRow({ entry }: { entry: KolTraderEntry }) {
   const profitColor =
     entry.profit >= 0 ? "text-emerald-400" : "text-rose-400";
 
   return (
     <tr className="border-b border-white/[0.04] transition-colors hover:bg-white/[0.02]">
-      {/* Rank */}
-      <td className="px-4 py-3 font-medium text-neutral-300">
-        {entry.rank <= 3 ? (
-          <span
-            className={
-              entry.rank === 1
-                ? "text-amber-400"
-                : entry.rank === 2
-                  ? "text-neutral-300"
-                  : "text-amber-700"
-            }
-          >
-            {entry.rank}
-          </span>
-        ) : (
-          entry.rank
-        )}
-      </td>
-
-      {/* Wallet / Name */}
+      <td className="px-4 py-3 font-medium text-neutral-300">{entry.rank}</td>
       <td className="px-4 py-3">
         <div className="flex flex-col">
           <span className="font-medium text-white">{entry.name}</span>
@@ -222,28 +285,16 @@ function TraderRow({ entry }: { entry: KolTraderEntry }) {
           </a>
         </div>
       </td>
-
-      {/* PnL */}
-      <td className={`px-4 py-3 text-right font-mono font-medium ${profitColor}`}>
+      <td
+        className={`px-4 py-3 text-right font-mono font-medium ${profitColor}`}
+      >
         {formatProfit(entry.profit)} SOL
       </td>
-
-      {/* Win Rate */}
       <td className="px-4 py-3 text-right text-neutral-300">
         {entry.winRate.toFixed(1)}%
       </td>
-
-      {/* Wins */}
-      <td className="px-4 py-3 text-right text-emerald-400/80">
-        {entry.wins}
-      </td>
-
-      {/* Losses */}
-      <td className="px-4 py-3 text-right text-rose-400/80">
-        {entry.losses}
-      </td>
-
-      {/* Socials */}
+      <td className="px-4 py-3 text-right text-emerald-400/80">{entry.wins}</td>
+      <td className="px-4 py-3 text-right text-rose-400/80">{entry.losses}</td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-center gap-2">
           {entry.twitter && (
