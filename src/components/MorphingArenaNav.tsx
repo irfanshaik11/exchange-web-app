@@ -14,7 +14,6 @@ const arenaMenuItems = [
   { name: "Referrals", href: "/referrals", icon: "users", disabled: false },
   { name: "Leaderboard", href: "/leaderboard", icon: "chart", disabled: true },
   { name: "KOL Leaderboard", href: "/kol-leaderboard", icon: "chart", disabled: false },
-  { name: "Vision", href: "/vision", icon: "chart", disabled: false },
   { name: "Jackpot", href: "/jackpot", icon: "grid", disabled: true },
 ];
 
