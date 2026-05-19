@@ -7,8 +7,7 @@ import {
   DockedPanelMarginWrapper,
   useDockedPanel,
 } from "../contexts/DockedPanelContext";
-import { getActivePositionsByUser } from "~/utils/functions";
-import type { PositionRow, Wallet } from "~/utils/functions";
+import type { Wallet } from "~/utils/functions";
 import { formatMarketCap } from "~/utils/db";
 import AddWalletModal from "../components/AddWalletModal";
 import WalletRow from "../components/WalletRow";
@@ -322,7 +321,6 @@ export default function TrackersPage() {
     lastActiveMap,
   } = useWalletTracker();
   const [activeTab, setActiveTab] = useState(0);
-  const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddWalletModal, setShowAddWalletModal] = useState(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
