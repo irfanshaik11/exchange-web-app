@@ -89,6 +89,11 @@ import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 import LiveTradesPanel from "../components/LiveTradesPanel";
 import kolWalletTrackerData from "../data/kol-wallet-tracker.json";
+import { useSolPrice } from "../components/SolPriceContext";
+import {
+  getWalletPortfolioSummary,
+  type WalletPortfolioSummary,
+} from "~/utils/api";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -397,6 +402,12 @@ export default function TrackersPage() {
   const [cachedLiveTrades, setCachedLiveTrades] = useState<TradeEvent[]>([]);
   const fetchedMintsRef = useRef<Set<string>>(new Set());
   const [showUSD, setShowUSD] = useState(false); // Toggle between USD and SOL display
+
+  // Portfolio summaries for total value / unrealized PnL
+  const { solPrice: currentSolPrice } = useSolPrice();
+  const [portfolioSummaries, setPortfolioSummaries] = useState<
+    Record<string, WalletPortfolioSummary>
+  >({});
 
   // Quick Buy functionality
   const { presets, activePreset, setActivePreset } = useQuickBuy();
@@ -722,6 +733,75 @@ export default function TrackersPage() {
   useEffect(() => {
     loadWalletsFromBackend();
   }, [user?.id, router.query.chain]);
+
+  // Fetch portfolio summaries for all tracked wallets (total value + unrealized PnL)
+  useEffect(() => {
+    if (!user || wallets.length === 0) {
+      setPortfolioSummaries({});
+      return;
+    }
+    const ac = new AbortController();
+    const BATCH = 10;
+    (async () => {
+      const results: Record<string, WalletPortfolioSummary> = {};
+      for (let i = 0; i < wallets.length; i += BATCH) {
+        if (ac.signal.aborted) return;
+        const batch = wallets.slice(i, i + BATCH);
+        const settled = await Promise.allSettled(
+          batch.map((w) =>
+            getWalletPortfolioSummary(w.address, ac.signal),
+          ),
+        );
+        for (let j = 0; j < settled.length; j++) {
+          const r = settled[j]!;
+          if (r.status === "fulfilled") {
+            results[batch[j]!.address] = r.value;
+          }
+        }
+      }
+      if (!ac.signal.aborted) setPortfolioSummaries({ ...results });
+    })();
+    return () => ac.abort();
+  }, [user, wallets]);
+
+  // Aggregate portfolio metrics across all tracked wallets
+  const aggregatePortfolio = useMemo(() => {
+    const addresses = Object.keys(portfolioSummaries);
+    if (addresses.length === 0) return { totalValue: 0, unrealizedPnl: 0 };
+
+    let totalSolBalance = 0;
+    let totalUnrealizedPnl = 0;
+
+    for (const addr of addresses) {
+      const summary = portfolioSummaries[addr]!;
+      totalUnrealizedPnl += summary.total_unrealized_pnl_usd;
+
+      // SOL balance from context (already in SOL units)
+      const solBal = contextWalletBalances[addr] ?? 0;
+      totalSolBalance += solBal;
+    }
+
+    // Total value = SOL balance in USD + unrealized value (approximated from bought - sold + unrealized)
+    const solBalanceUsd = totalSolBalance * currentSolPrice;
+
+    // Sum up the "remaining value" — total bought minus total sold gives a rough invested amount still in positions
+    // The actual remaining value is the unrealized PnL + cost basis of open positions
+    let totalRemainingPositionValue = 0;
+    for (const addr of addresses) {
+      const summary = portfolioSummaries[addr]!;
+      const boughtSolUsd = summary.total_bought_sol * currentSolPrice;
+      const soldSolUsd = summary.total_sold_sol * currentSolPrice;
+      // cost basis of remaining positions ≈ bought - sold
+      const costBasis = Math.max(0, boughtSolUsd - soldSolUsd);
+      // remaining market value = cost basis + unrealized PnL
+      totalRemainingPositionValue += costBasis + summary.total_unrealized_pnl_usd;
+    }
+
+    return {
+      totalValue: solBalanceUsd + totalRemainingPositionValue,
+      unrealizedPnl: totalUnrealizedPnl,
+    };
+  }, [portfolioSummaries, contextWalletBalances, currentSolPrice]);
 
   // Load Twitter accounts on mount
   useEffect(() => {
@@ -2467,6 +2547,36 @@ export default function TrackersPage() {
                                         setKolSearchTerm(e.target.value)
                                       }
                                     />
+                                  </div>
+                                )}
+
+                                {/* Portfolio summary bar — total value + unrealized PnL */}
+                                {activeTab === 0 && user && wallets.length > 0 && (
+                                  <div className="flex items-center gap-4 border-b border-white/[0.04] px-1 py-2.5 sm:gap-6 sm:px-2 sm:py-3">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] text-[#71717a] sm:text-xs">Total Value</span>
+                                      <span className="text-xs font-semibold tabular-nums text-[#f4f4f5] sm:text-sm">
+                                        {Object.keys(portfolioSummaries).length === 0
+                                          ? "..."
+                                          : `$${aggregatePortfolio.totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] text-[#71717a] sm:text-xs">Unrealized PnL</span>
+                                      <span
+                                        className={`text-xs font-semibold tabular-nums sm:text-sm ${
+                                          Object.keys(portfolioSummaries).length === 0
+                                            ? "text-[#f4f4f5]"
+                                            : aggregatePortfolio.unrealizedPnl >= 0
+                                              ? "text-[#18c48c]"
+                                              : "text-[#ef4444]"
+                                        }`}
+                                      >
+                                        {Object.keys(portfolioSummaries).length === 0
+                                          ? "..."
+                                          : `${aggregatePortfolio.unrealizedPnl >= 0 ? "+" : ""}$${aggregatePortfolio.unrealizedPnl.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      </span>
+                                    </div>
                                   </div>
                                 )}
 
