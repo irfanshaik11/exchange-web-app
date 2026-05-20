@@ -599,13 +599,30 @@ export default function PortfolioPage() {
     const enriched = wp.positions
       .filter((p) => p.remaining > 0.001)
       .map((p) => {
-        // Prefer backend-supplied USD values when present; fall back to SOL × solPrice.
-        const boughtSol = (p as any).bought_sol ?? 0;  // raw fields preserved on PositionRow via spread
+        // Cost basis priority order (highest to lowest):
+        //   1. p.boughtUsdValue from backend (currently always 0; indexer doesn't
+        //      stamp USD-at-trade-time yet, so this branch is rarely taken)
+        //   2. cost_basis_sol × solPrice — migration-024 truth: outflow MINUS
+        //      recoverable ATA rent. This is the non-recoverable amount the user
+        //      actually paid. Matches Axiom/GMGN semantics. Use this when > 0.
+        //   3. total_outflow_sol × solPrice — migration-023 raw outflow including
+        //      ATA rent. Over-pessimistic (treats recoverable rent as cost) but
+        //      better than swap-only. Used when cost_basis_sol is 0 (e.g., pre-
+        //      migration-024 rows).
+        //   4. bought_sol × solPrice — swap-only fallback for positions composed
+        //      entirely of pre-migration-023 trades. Understates by 70-95%.
+        const boughtSol = (p as any).bought_sol ?? 0;
         const soldSol = (p as any).sold_sol ?? 0;
         const realizedSol = (p as any).realized_pnl_sol ?? 0;
+        const totalOutflowSol = (p as any).total_outflow_sol ?? 0;
+        const costBasisSol = (p as any).cost_basis_sol ?? 0;
         const boughtUsd = p.boughtUsdValue && p.boughtUsdValue > 0
           ? p.boughtUsdValue
-          : boughtSol * solPrice;
+          : costBasisSol > 0
+            ? costBasisSol * solPrice
+            : totalOutflowSol > 0
+              ? totalOutflowSol * solPrice
+              : boughtSol * solPrice;
         const soldUsd = p.soldUsdValue && p.soldUsdValue > 0
           ? p.soldUsdValue
           : soldSol * solPrice;

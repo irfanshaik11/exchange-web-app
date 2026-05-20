@@ -129,6 +129,16 @@ export interface NormalizedTrendingToken {
   volume_5m: number;
   volume_6h: number;
   volume_24h: number;
+  // Interstate-indexed SOL volume from the BE (only DexScreener feed populates
+  // these today, via `enrichWithInterstateVolume` in exchange-token-service).
+  // When present and > 0, InterstateTable.getVolume multiplies by Pyth so the
+  // DEX Screener tab's vol matches the Trade page header for that mint.
+  // When absent / 0, falls back to the USD `volume_{tf}` above (DexScreener's
+  // own number, preserved so fresh un-indexed mints don't render as $0).
+  volume_sol_5m?: number;
+  volume_sol_1h?: number;
+  volume_sol_6h?: number;
+  volume_sol_24h?: number;
   holder_count: number;
   rank: number;
   status: string;

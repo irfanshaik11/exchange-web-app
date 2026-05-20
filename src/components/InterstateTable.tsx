@@ -298,11 +298,19 @@ const getVolume = (
   solPrice: number = 0,
   tableType?: string,
 ): number => {
-  // DexScreener proxy ships `volume_{tf}` in USD (their API is multi-chain
-  // and only emits USD). Read it directly — no Pyth multiply, no solPrice
-  // requirement. This keeps the DexScreener tab working when Pyth is dead
-  // and avoids 170× inflation if solPrice were accidentally piped through.
+  // DEX Screener tab: BE enriches each mint with Interstate's per-mint SOL
+  // volume (same source as Trade page) under `volume_sol_{tf}`. When present
+  // and positive, multiply by Pyth so the displayed vol matches the Trade
+  // page header exactly for that mint. When absent (mint not yet in
+  // Interstate's indexer — common for fresh pump.fun mints), fall back to
+  // DexScreener's own USD value on `volume_{tf}` so we show something real
+  // rather than $0. Pyth dead during fallback path stays correct (USD is
+  // already USD).
   if (tableType === "dexscreener") {
+    const sol = getNumber(token as any, `volume_sol_${timeframe}`);
+    if (sol > 0 && Number.isFinite(solPrice) && solPrice > 0) {
+      return sol * solPrice;
+    }
     return getNumber(token as any, `volume_${timeframe}`);
   }
   // Internal trending: BE ships SOL in `volume_{tf}` for the timeframe that

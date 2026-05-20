@@ -1,4 +1,4 @@
-memecoin UI   
+memecoin UI    
 
 ## Environment variables
 
