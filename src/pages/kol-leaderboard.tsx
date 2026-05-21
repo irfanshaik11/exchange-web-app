@@ -53,7 +53,7 @@ export default function KolLeaderboardPage() {
     limit: 1000,
   });
 
-  const entries = data?.entries ?? [];
+  const entries = data?.data.entries ?? [];
 
   return (
     <>

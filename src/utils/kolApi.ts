@@ -39,6 +39,19 @@ export interface KolLeaderboardResponse {
   timeframe: KolTimeframe;
 }
 
+export type KolCacheSource = "redis" | "postgres" | "disabled";
+
+export interface KolCacheMeta {
+  hit: boolean;
+  source: KolCacheSource;
+  cachedAt: number | null; // epoch ms; null if not a Redis hit
+}
+
+export interface KolLeaderboardResult {
+  data: KolLeaderboardResponse;
+  cache: KolCacheMeta;
+}
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -83,7 +96,7 @@ function getBaseUrl(): string {
 export async function getKolLeaderboard(
   timeframe: KolTimeframe,
   options: { limit?: number; offset?: number } = {},
-): Promise<KolLeaderboardResponse> {
+): Promise<KolLeaderboardResult> {
   const params = new URLSearchParams({ timeframe });
   if (options.limit) params.set("limit", options.limit.toString());
   if (options.offset) params.set("offset", options.offset.toString());
@@ -96,6 +109,12 @@ export async function getKolLeaderboard(
     throw new Error(`Failed to fetch KOL leaderboard: ${response.status}`);
   }
 
-  const data = await response.json();
-  return data.data;
+  const body = (await response.json()) as {
+    data: KolLeaderboardResponse;
+    cache?: KolCacheMeta;
+  };
+  return {
+    data: body.data,
+    cache: body.cache ?? { hit: false, source: "postgres", cachedAt: null },
+  };
 }
