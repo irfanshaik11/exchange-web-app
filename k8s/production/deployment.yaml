@@ -51,6 +51,19 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: walletconnect-project-id
+        # KOL leaderboard read path. The wallet-tracker-backend's kolscanPoller
+        # is the single writer (runs under PM2 on the wallet-tracker prod VM);
+        # this points the Vision page's read at the same Neon DB.
+        - name: KOL_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: kol-db
+              key: url
+        # Disable the in-process refresher in instrumentation.ts — the backend
+        # poller already keeps Neon fresh, no need for the Next.js pods to
+        # double-fetch kolscan.
+        - name: DISABLE_KOL_INPROCESS_CRON
+          value: "true"
         resources:
           requests:
             memory: "256Mi"

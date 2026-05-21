@@ -4,10 +4,10 @@
  * Surfaces the same KOL leaderboard data as /kol-leaderboard, branded as
  * "Vision" — the top traders worth keeping an eye on. Backed by the same
  * `useKolLeaderboard` hook, which reads from the wallet-tracker backend's
- * `KolLeaderboardRow` table (repopulated every 30 min by the kolscan poller).
+ * `KolLeaderboardRow` table (repopulated every 30 s by the kolscan poller).
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import Header from "~/components/Header";
 import Footer from "~/components/Footer";
@@ -49,15 +49,26 @@ function SkeletonRow() {
   );
 }
 
+function useSecondsSince(timestampMs: number | undefined): number | null {
+  // Re-render once per second so the "Updated Xs ago" pill counts up live.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 1_000);
+    return () => clearInterval(id);
+  }, []);
+  if (!timestampMs) return null;
+  return Math.max(0, Math.floor((Date.now() - timestampMs) / 1_000));
+}
+
 export default function VisionPage() {
   const [timeframe, setTimeframe] = useState<KolTimeframe>("DAILY");
-  const { data, isLoading, isError, refetch } = useKolLeaderboard(timeframe, {
-    limit: 1000,
-  });
+  const { data, isLoading, isError, refetch, dataUpdatedAt, isFetching } =
+    useKolLeaderboard(timeframe, { limit: 1000 });
 
   const entries = data?.entries ?? [];
   const topThree = entries.slice(0, 3);
   const rest = entries.slice(3);
+  const secondsAgo = useSecondsSince(dataUpdatedAt);
 
   return (
     <>
@@ -180,10 +191,27 @@ export default function VisionPage() {
                   </div>
                 )}
 
-                {/* Source attribution */}
-                <p className="mt-4 text-center text-xs text-neutral-600">
-                  Data sourced from kolscan.io — updated every 30 minutes
-                </p>
+                {/* Source attribution + live freshness indicator */}
+                <div className="mt-4 flex flex-col items-center gap-1.5 text-xs text-neutral-600">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        isFetching
+                          ? "animate-pulse bg-emerald-400"
+                          : "bg-neutral-700"
+                      }`}
+                      aria-hidden
+                    />
+                    <span>
+                      {secondsAgo === null
+                        ? "Loading…"
+                        : isFetching
+                          ? "Updating…"
+                          : `Updated ${secondsAgo}s ago`}
+                    </span>
+                  </div>
+                  {/* <p>Data sourced from kolscan.io — refreshed every 30 seconds</p> */}
+                </div>
               </main>
             </div>
           </div>
