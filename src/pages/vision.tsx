@@ -210,7 +210,7 @@ export default function VisionPage() {
                           : `Updated ${secondsAgo}s ago`}
                     </span>
                   </div>
-                  <p>Data sourced from kolscan.io — refreshed every 30 seconds</p>
+                  {/* <p>Data sourced from kolscan.io — refreshed every 30 seconds</p> */}
                 </div>
               </main>
             </div>
