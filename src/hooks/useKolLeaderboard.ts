@@ -19,7 +19,9 @@ export function useKolLeaderboard(
   return useQuery<KolLeaderboardResponse>({
     queryKey: ["kol-leaderboard", timeframe, options.limit, options.offset],
     queryFn: () => getKolLeaderboard(timeframe, options),
-    staleTime: 60_000, // 1 minute
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,
   });
 }

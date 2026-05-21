@@ -12,6 +12,10 @@
  * → Vision page. The page never triggers a refresh — only this cron does.
  */
 
+// 30 s to match the wallet-tracker-backend's kolscanPoller default. Locally
+// this is the only writer (the backend poller isn't typically running on a
+// dev machine); in staging/prod the deployment sets DISABLE_KOL_INPROCESS_CRON=true
+// so the backend poller is the single writer and this scheduler is a no-op.
 const REFRESH_INTERVAL_MS = 30 * 1_000;
 
 export async function register(): Promise<void> {

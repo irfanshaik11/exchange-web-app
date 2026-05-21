@@ -90,9 +90,12 @@ export default async function handler(
       timeframe,
     };
 
+    // Poller writes Neon every 30s; cap edge cache well below that so two
+    // consecutive client polls don't get served the same byte-identical
+    // payload from a CDN.
     res.setHeader(
       "Cache-Control",
-      "public, s-maxage=60, stale-while-revalidate=300",
+      "public, s-maxage=10, stale-while-revalidate=20",
     );
     return res.status(200).json({ data: payload });
   } catch (err) {
