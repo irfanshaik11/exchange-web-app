@@ -1,17 +1,11 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import type { Wallet, TradeRow } from "~/utils/functions";
-import {
-  formatSmartNumber,
-  fetchWalletBalance,
-} from "~/utils/functions";
+import { formatSmartNumber, fetchWalletBalance } from "~/utils/functions";
 import InterstatePopout from "./InterstatePopout";
-import {
-  FaRegCopy,
-  FaCheck,
-  FaExternalLinkAlt,
-} from "react-icons/fa";
+import { FaRegCopy, FaCheck, FaExternalLinkAlt } from "react-icons/fa";
 import { FiExternalLink } from "react-icons/fi";
 import type { Token } from "~/utils/db";
+import { getWalletSolBalance } from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
 import { useSolPrice } from "./SolPriceContext";
@@ -38,7 +32,13 @@ interface WalletScanPanelProps {
   onClose: () => void;
 }
 
-const TABS = ["Active Positions", "History", "Top 100", "Dev Tokens", "Activity"];
+const TABS = [
+  "Active Positions",
+  "History",
+  "Top 100",
+  "Dev Tokens",
+  "Activity",
+];
 
 const MAX_TOKEN_NAME_LENGTH = 10;
 const truncateTokenName = (name: string | null | undefined): string => {
@@ -95,16 +95,17 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   // Get latest trades from context (same as Live Trades)
   const { latestTrades, walletBalances } = useWalletTracker();
 
-  const {
-    tokens: devTokens,
-    isLoading: devTokensLoading,
-  } = useDevTokensByWallet(wallet?.address);
+  const { tokens: devTokens, isLoading: devTokensLoading } =
+    useDevTokensByWallet(wallet?.address);
 
   // Only re-fetch history when the count of trades for THIS wallet changes,
   // not on every unrelated trade from other tracked wallets.
   const walletTradeCount = useMemo(
-    () => latestTrades.filter(t => t.wallet.toLowerCase() === wallet.address.toLowerCase()).length,
-    [latestTrades, wallet.address]
+    () =>
+      latestTrades.filter(
+        (t) => t.wallet.toLowerCase() === wallet.address.toLowerCase(),
+      ).length,
+    [latestTrades, wallet.address],
   );
 
   // Get SOL price from context
@@ -120,10 +121,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     positionsLoading,
     tradesLoading,
     error: goError,
-  } = useWalletScan(
-    wallet.address,
-    { refetchSignal: walletTradeCount },
-  );
+    isUnsupportedChain,
+  } = useWalletScan(wallet.address, { refetchSignal: walletTradeCount });
 
   // Live data state — hydrate from context batch balance for instant display
   const contextBalance = walletBalances[wallet.address] ?? null;
@@ -175,9 +174,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       // Even with no closed orders, the summary may have realized PnL
       // (positions endpoint doesn't capture all trades).
       const summaryPnl = goSummary
-        ? (goSummary.total_realized_pnl_usd !== 0
-            ? goSummary.total_realized_pnl_usd
-            : goSummary.total_realized_pnl_sol * currentSolPrice)
+        ? goSummary.total_realized_pnl_usd !== 0
+          ? goSummary.total_realized_pnl_usd
+          : goSummary.total_realized_pnl_sol * currentSolPrice
         : 0;
       return {
         totalPnl: summaryPnl,
@@ -210,12 +209,16 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     // For "Max" range, use the summary's authoritative total rather than
     // summing per-position PnL (positions don't capture all trades).
-    const positionPnl = filteredOrders.reduce((sum, order) => sum + order.pnl, 0);
-    const totalPnl = selectedRange === "Max" && goSummary
-      ? (goSummary.total_realized_pnl_usd !== 0
+    const positionPnl = filteredOrders.reduce(
+      (sum, order) => sum + order.pnl,
+      0,
+    );
+    const totalPnl =
+      selectedRange === "Max" && goSummary
+        ? goSummary.total_realized_pnl_usd !== 0
           ? goSummary.total_realized_pnl_usd
-          : goSummary.total_realized_pnl_sol * currentSolPrice)
-      : positionPnl;
+          : goSummary.total_realized_pnl_sol * currentSolPrice
+        : positionPnl;
     const totalTransactions = filteredOrders.length;
     const completedTransactions = filteredOrders.length;
 
@@ -281,7 +284,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     const ordered = [...scoped].sort((a, b) => a.closedAt - b.closedAt);
 
     const formatTime = (ts: number) =>
-      new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      new Date(ts).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
     const formatDate = (ts: number) =>
       new Date(ts).toLocaleString("en-US", {
         month: "short",
@@ -325,9 +331,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     if (selectedRange === "Max" && goSummary) {
       const totalBoughtUsd = goSummary.total_bought_sol * currentSolPrice;
       if (totalBoughtUsd <= 0) return 0;
-      const pnlUsd = goSummary.total_realized_pnl_usd !== 0
-        ? goSummary.total_realized_pnl_usd
-        : goSummary.total_realized_pnl_sol * currentSolPrice;
+      const pnlUsd =
+        goSummary.total_realized_pnl_usd !== 0
+          ? goSummary.total_realized_pnl_usd
+          : goSummary.total_realized_pnl_sol * currentSolPrice;
       return (pnlUsd / totalBoughtUsd) * 100;
     }
 
@@ -352,11 +359,20 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     return (totalPnl / totalCostBasis) * 100;
   }, [closedOrders, selectedRange, goSummary, currentSolPrice]);
 
+  // Keep latest SOL price in a ref so the balance-loader can read it without
+  // re-firing the fetch on every SOL price tick.
+  const solPriceRef = useRef(solPrice);
+  useEffect(() => {
+    solPriceRef.current = solPrice;
+  }, [solPrice]);
 
   // Fetch balance independently (fast: ~100-200ms)
   // If we already have a context balance, show it instantly and refresh in background
   useEffect(() => {
     if (!wallet?.address) return;
+    // EVM/Monad wallets short-circuit at render; skip the doomed Solana
+    // balance endpoint + RPC fallback for them.
+    if (isUnsupportedChain) return;
 
     // Only show loading spinner if we have no data at all (no context balance)
     const hasContextBalance = walletBalances[wallet.address] != null;
@@ -370,11 +386,39 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         if (data?.balance) {
           setWalletBalance(data.balance);
           setBalance(data.balance.sol);
+          return;
         }
+        // Primary returned success but no balance — fall through to RPC fallback.
+        throw new Error("balance endpoint returned no balance");
       } catch (err) {
-        console.warn("Error fetching wallet balance (handled gracefully):", err);
-        if (!hasContextBalance) {
-          setBalance(null);
+        console.warn(
+          "[WalletScan] primary balance endpoint failed, trying RPC fallback:",
+          err,
+        );
+        try {
+          const sol = await getWalletSolBalance(wallet.address);
+          if (sol != null && Number.isFinite(sol)) {
+            const liveSolPrice = solPriceRef.current;
+            // If solPrice context hasn't loaded yet, use NaN as an "unknown USD"
+            // sentinel. Both portfolioMetrics.totalValue (line 468) and the
+            // header USD display (line 688) treat NaN as missing and fall back
+            // to `sol * currentSolPrice`, which uses the component-scoped
+            // live price (with a 150 floor). Writing 0 here would silently
+            // undercount the SOL position in totalValue.
+            const usd = liveSolPrice > 0 ? sol * liveSolPrice : Number.NaN;
+            setWalletBalance({ sol, usd, usdFormatted: null });
+            setBalance(sol);
+          } else if (!hasContextBalance) {
+            setBalance(null);
+          }
+        } catch (fallbackErr) {
+          console.warn(
+            "[WalletScan] RPC balance fallback also failed:",
+            fallbackErr,
+          );
+          if (!hasContextBalance) {
+            setBalance(null);
+          }
         }
       } finally {
         setLoading(false);
@@ -382,22 +426,23 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     };
 
     void loadBalance();
-  }, [wallet.address]);
+  }, [wallet.address, isUnsupportedChain]);
 
   // Activity data: convert Go service trades to TradeRow format for Activity component
   const activityData = useMemo((): TradeRow[] => {
     return goTrades.map((t, idx) => {
       const date = new Date(t.created_at);
-      const usdValue = t.price_usd > 0 && t.token_amount > 0
-        ? t.price_usd * t.token_amount
-        : t.sol_amount * currentSolPrice;
+      const usdValue =
+        t.price_usd > 0 && t.token_amount > 0
+          ? t.price_usd * t.token_amount
+          : t.sol_amount * currentSolPrice;
       return {
         id: idx,
         tokenAddress: t.token_mint,
         pairAddress: t.pool_address ?? undefined,
         blockchain: "sol",
         tradeTime: date.toISOString(),
-        type: t.is_buy ? "Buy" as const : "Sell" as const,
+        type: t.is_buy ? ("Buy" as const) : ("Sell" as const),
         marketCap: t.market_cap_usd || 0,
         solAmount: t.sol_amount,
         tokenAmount: t.token_amount,
@@ -424,8 +469,12 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       totalPositionsValue += marketValue;
 
       // Unrealized PnL from RPC: market value of on-chain balance minus cost basis
-      const soldFraction = p.bought_tokens > 0 ? Math.min(p.sold_tokens / p.bought_tokens, 1) : 0;
-      const boughtUsd = p.bought_usd_value > 0 ? p.bought_usd_value : p.bought_sol * currentSolPrice;
+      const soldFraction =
+        p.bought_tokens > 0 ? Math.min(p.sold_tokens / p.bought_tokens, 1) : 0;
+      const boughtUsd =
+        p.bought_usd_value > 0
+          ? p.bought_usd_value
+          : p.bought_sol * currentSolPrice;
       const costBasis = boughtUsd * Math.max(0, 1 - soldFraction);
       totalUnrealizedPnl += marketValue - costBasis;
     }
@@ -433,9 +482,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // Wallet SOL balance in USD
     let solBalanceUsd = 0;
     if (walletBalance) {
-      if (typeof walletBalance.usd === "number" && Number.isFinite(walletBalance.usd)) {
+      if (
+        typeof walletBalance.usd === "number" &&
+        Number.isFinite(walletBalance.usd)
+      ) {
         solBalanceUsd = walletBalance.usd;
-      } else if (typeof walletBalance.sol === "number" && Number.isFinite(walletBalance.sol)) {
+      } else if (
+        typeof walletBalance.sol === "number" &&
+        Number.isFinite(walletBalance.sol)
+      ) {
         solBalanceUsd = walletBalance.sol * currentSolPrice;
       }
     }
@@ -449,8 +504,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   // Top 100 positions by PnL — open positions always shown first (so Activity
   // tab tokens are always visible), then closed positions fill remaining slots.
   const top100Positions = useMemo(() => {
-    const open = allAggregatedPositions.filter(p => p.isOpen);
-    const closed = allAggregatedPositions.filter(p => !p.isOpen);
+    const open = allAggregatedPositions.filter((p) => p.isOpen);
+    const closed = allAggregatedPositions.filter((p) => !p.isOpen);
     return [...open, ...closed].slice(0, 100);
   }, [allAggregatedPositions]);
 
@@ -510,6 +565,49 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     }
   }, [toast]);
 
+  // EVM/Monad wallets short-circuit: the Go token service is Solana-only, so
+  // we render a clean "coming soon" state instead of letting the panel hit a
+  // 400 and render empty tabs.
+  if (isUnsupportedChain) {
+    const truncatedAddress =
+      typeof wallet.address === "string" && wallet.address.length >= 10
+        ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`
+        : wallet.address || "—";
+    return (
+      <InterstatePopout
+        open={true}
+        onClose={onClose}
+        align="center"
+        zIndex={99999}
+        className="h-auto w-[90%] bg-transparent p-0 shadow-none md:w-[480px]"
+      >
+        <div className="relative flex w-full flex-col items-center gap-3 border border-neutral-700 bg-black px-6 py-8 text-center shadow-2xl">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-3 right-3 rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-300"
+            aria-label="Close"
+          >
+            <IoIosCloseCircleOutline className="h-5 w-5" />
+          </button>
+          <div className="text-lg font-semibold text-white">
+            {wallet.name || "Wallet"}
+          </div>
+          <div className="font-mono text-xs text-neutral-400">
+            {truncatedAddress}
+          </div>
+          <div className="mt-2 text-sm font-medium text-pink-400">
+            Monad wallet scan coming soon
+          </div>
+          <p className="max-w-[360px] text-xs leading-relaxed text-neutral-400">
+            Trade history and PnL for EVM wallets aren't wired yet. Solana
+            wallets work as expected.
+          </p>
+        </div>
+      </InterstatePopout>
+    );
+  }
+
   return (
     <InterstatePopout
       open={true}
@@ -544,7 +642,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               {copied && (
                 <span className="ml-1 text-xs text-emerald-400">Copied!</span>
               )}
-              {tokenBalanceLoading || tokenLoading ? null : tokenBalanceError ? (
+              {tokenBalanceLoading ||
+              tokenLoading ? null : tokenBalanceError ? (
                 <>
                   <span className="mx-2 text-neutral-500">|</span>
                   <span className="text-red-400">Error</span>
@@ -610,12 +709,17 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   </span>
                 ) : walletBalance ? (
                   <div className="flex flex-col">
-                    {typeof walletBalance.usd === "number" && Number.isFinite(walletBalance.usd) ? (
+                    {typeof walletBalance.usd === "number" &&
+                    Number.isFinite(walletBalance.usd) ? (
                       <span>${formatSmartNumber(walletBalance.usd)}</span>
                     ) : walletBalance.usdFormatted ? (
                       <span>{walletBalance.usdFormatted}</span>
-                    ) : typeof walletBalance.sol === "number" && Number.isFinite(walletBalance.sol) ? (
-                      <span>${formatSmartNumber(walletBalance.sol * currentSolPrice)}</span>
+                    ) : typeof walletBalance.sol === "number" &&
+                      Number.isFinite(walletBalance.sol) ? (
+                      <span>
+                        $
+                        {formatSmartNumber(walletBalance.sol * currentSolPrice)}
+                      </span>
                     ) : (
                       <span className="text-red-400">No balance</span>
                     )}
@@ -697,8 +801,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               </div>
               <div className="mb-2 flex flex-row items-center justify-between">
                 <span className="font-semibold text-white">
-                  {performanceMetrics.totalPnl >= 0 ? "+" : ""}
-                  ${formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
+                  {performanceMetrics.totalPnl >= 0 ? "+" : ""}$
+                  {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
                 </span>
                 <span className="font-semibold text-white">
                   {performanceMetrics.completedTransactions} /{" "}
@@ -761,7 +865,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           <div className="mt-2 flex items-center justify-between border-b border-neutral-800 px-8">
             <div className="mt-2 flex flex-row gap-10 text-sm">
               {TABS.map((t) => {
-                const label = t === "Dev Tokens" ? `Dev Tokens (${devTokens.length})` : t;
+                const label =
+                  t === "Dev Tokens" ? `Dev Tokens (${devTokens.length})` : t;
                 return (
                   <button
                     key={t}
@@ -819,164 +924,162 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
-                      {closedOrders
-                        .map((order, idx) => {
-                          // Format time - when the position was closed (sell time)
-                          const timeAgo = formatTimeAgo(order.closedAt);
+                      {closedOrders.map((order, idx) => {
+                        // Format time - when the position was closed (sell time)
+                        const timeAgo = formatTimeAgo(order.closedAt);
 
-                          const displayName =
-                            order.tokenName ||
-                            order.tokenSymbol ||
-                            null;
-                          const displaySymbol =
-                            order.tokenSymbol ||
-                            order.tokenName ||
-                            order.mint?.slice(0, 8) + "..." ||
-                            "Unknown";
+                        const displayName =
+                          order.tokenName || order.tokenSymbol || null;
+                        const displaySymbol =
+                          order.tokenSymbol ||
+                          order.tokenName ||
+                          order.mint?.slice(0, 8) + "..." ||
+                          "Unknown";
 
-                          const boughtDisplay = `$${formatSmartNumber(order.boughtValue)}`;
-                          const soldDisplay = `$${formatSmartNumber(order.soldValue)}`;
+                        const boughtDisplay = `$${formatSmartNumber(order.boughtValue)}`;
+                        const soldDisplay = `$${formatSmartNumber(order.soldValue)}`;
 
-                          // Format PnL
-                          const pnlDisplay = `${order.pnl >= 0 ? "+" : ""}$${formatSmartNumber(Math.abs(order.pnl))}`;
-                          const pnlPercentageDisplay = `${order.pnlPercentage >= 0 ? "+" : ""}${order.pnlPercentage.toFixed(2)}%`;
+                        // Format PnL
+                        const pnlDisplay = `${order.pnl >= 0 ? "+" : ""}$${formatSmartNumber(Math.abs(order.pnl))}`;
+                        const pnlPercentageDisplay = `${order.pnlPercentage >= 0 ? "+" : ""}${order.pnlPercentage.toFixed(2)}%`;
 
-                          return (
-                            <tr
-                              key={order.mint || idx}
-                              className="transition-colors hover:bg-neutral-800"
-                            >
-                              <td className="px-4 py-3 text-neutral-300">
-                                <div className="font-mono text-sm">
-                                  {timeAgo}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                {(() => {
-                                  const protocolSource =
-                                    order.launchpadProtocol ||
-                                    (order.mint?.toLowerCase().endsWith("pump")
-                                      ? "pumpfun"
-                                      : "");
-                                  const branding = getProtocolBranding(
-                                    protocolSource || "",
-                                  );
-                                  const protocolColor = branding.color;
-                                  const tokenIcon = branding.iconUrl;
-                                  const isFullCircleImage = branding.isFullCircle;
-                                  const shortAddress = order.mint
-                                    ? `${order.mint.slice(0, 4)}...${order.mint.slice(-4)}`
-                                    : "";
-                                  return (
-                                    <div className="flex items-center gap-3">
-                                      <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
+                        return (
+                          <tr
+                            key={order.mint || idx}
+                            className="transition-colors hover:bg-neutral-800"
+                          >
+                            <td className="px-4 py-3 text-neutral-300">
+                              <div className="font-mono text-sm">{timeAgo}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const protocolSource =
+                                  order.launchpadProtocol ||
+                                  (order.mint?.toLowerCase().endsWith("pump")
+                                    ? "pumpfun"
+                                    : "");
+                                const branding = getProtocolBranding(
+                                  protocolSource || "",
+                                );
+                                const protocolColor = branding.color;
+                                const tokenIcon = branding.iconUrl;
+                                const isFullCircleImage = branding.isFullCircle;
+                                const shortAddress = order.mint
+                                  ? `${order.mint.slice(0, 4)}...${order.mint.slice(-4)}`
+                                  : "";
+                                return (
+                                  <div className="flex items-center gap-3">
+                                    <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
+                                      <div
+                                        className="relative rounded-lg transition-all duration-300 ease-out"
+                                        style={{
+                                          border: protocolSource
+                                            ? `1px solid ${protocolColor}`
+                                            : "1px solid rgba(128, 128, 128, 0.3)",
+                                          padding: "2px",
+                                        }}
+                                      >
                                         <div
-                                          className="relative rounded-lg transition-all duration-300 ease-out"
+                                          className="relative rounded-lg"
                                           style={{
-                                            border: protocolSource
-                                              ? `1px solid ${protocolColor}`
-                                              : "1px solid rgba(128, 128, 128, 0.3)",
+                                            border:
+                                              "1px solid rgba(192, 192, 192, 0.5)",
                                             padding: "2px",
                                           }}
                                         >
-                                          <div
-                                            className="relative rounded-lg"
-                                            style={{
-                                              border: "1px solid rgba(192, 192, 192, 0.5)",
-                                              padding: "2px",
-                                            }}
-                                          >
-                                            <div className="relative h-10 w-10 overflow-hidden rounded-lg">
-                                              <FastImage
-                                                src={order.imageUrl || ""}
-                                                alt={
-                                                  displayName ||
-                                                  displaySymbol ||
-                                                  "Token"
-                                                }
-                                                symbol={displaySymbol || undefined}
-                                                name={displayName || undefined}
-                                                width={40}
-                                                height={40}
-                                                className="h-full w-full object-cover"
-                                                showBubble={false}
-                                              />
-                                            </div>
-                                          </div>
-                                        </div>
-                                        {protocolSource && tokenIcon && (
-                                          <div
-                                            className="absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full bg-white"
-                                            style={{
-                                              width: 18,
-                                              height: 18,
-                                              border: `2px solid ${protocolColor}`,
-                                              boxShadow: `0 0 4px ${protocolColor}60`,
-                                            }}
-                                          >
-                                            <Image
-                                              src={tokenIcon}
-                                              alt={`${protocolSource} logo`}
-                                              width={14}
-                                              height={14}
-                                              className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                                          <div className="relative h-10 w-10 overflow-hidden rounded-lg">
+                                            <FastImage
+                                              src={order.imageUrl || ""}
+                                              alt={
+                                                displayName ||
+                                                displaySymbol ||
+                                                "Token"
+                                              }
+                                              symbol={
+                                                displaySymbol || undefined
+                                              }
+                                              name={displayName || undefined}
+                                              width={40}
+                                              height={40}
+                                              className="h-full w-full object-cover"
+                                              showBubble={false}
                                             />
                                           </div>
-                                        )}
+                                        </div>
                                       </div>
-                                      <div className="flex min-w-0 flex-col">
+                                      {protocolSource && tokenIcon && (
+                                        <div
+                                          className="absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full bg-white"
+                                          style={{
+                                            width: 18,
+                                            height: 18,
+                                            border: `2px solid ${protocolColor}`,
+                                            boxShadow: `0 0 4px ${protocolColor}60`,
+                                          }}
+                                        >
+                                          <Image
+                                            src={tokenIcon}
+                                            alt={`${protocolSource} logo`}
+                                            width={14}
+                                            height={14}
+                                            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex min-w-0 flex-col">
+                                      <span
+                                        className="truncate text-sm font-medium text-neutral-100"
+                                        title={order.mint || undefined}
+                                      >
+                                        {truncateTokenName(
+                                          displayName ||
+                                            displaySymbol ||
+                                            shortAddress,
+                                        )}
+                                      </span>
+                                      {shortAddress && (
                                         <span
-                                          className="truncate text-sm font-medium text-neutral-100"
+                                          className="truncate font-mono text-xs text-neutral-400"
                                           title={order.mint || undefined}
                                         >
-                                          {truncateTokenName(
-                                            displayName ||
-                                              displaySymbol ||
-                                              shortAddress,
-                                          )}
+                                          {shortAddress}
                                         </span>
-                                        {shortAddress && (
-                                          <span
-                                            className="truncate font-mono text-xs text-neutral-400"
-                                            title={order.mint || undefined}
-                                          >
-                                            {shortAddress}
-                                          </span>
-                                        )}
-                                      </div>
+                                      )}
                                     </div>
-                                  );
-                                })()}
-                              </td>
-                              <td className="px-4 py-3 text-right text-neutral-300">
-                                {boughtDisplay}
-                              </td>
-                              <td className="px-4 py-3 text-right text-neutral-300">
-                                {soldDisplay}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex flex-col items-end">
-                                  <div
-                                    className={`font-semibold ${
-                                      order.pnl >= 0
-                                        ? "text-emerald-400"
-                                        : "text-red-400"
-                                    }`}
-                                  >
-                                    {pnlDisplay}
                                   </div>
-                                  <div
-                                    className={`text-xs ${
-                                      order.pnlPercentage >= 0
-                                        ? "text-emerald-400/70"
-                                        : "text-red-400/70"
-                                    }`}
-                                  >
-                                    {pnlPercentageDisplay}
-                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-4 py-3 text-right text-neutral-300">
+                              {boughtDisplay}
+                            </td>
+                            <td className="px-4 py-3 text-right text-neutral-300">
+                              {soldDisplay}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex flex-col items-end">
+                                <div
+                                  className={`font-semibold ${
+                                    order.pnl >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400"
+                                  }`}
+                                >
+                                  {pnlDisplay}
                                 </div>
-                              </td>
-                              {/* <td className="px-4 py-3 text-center">
+                                <div
+                                  className={`text-xs ${
+                                    order.pnlPercentage >= 0
+                                      ? "text-emerald-400/70"
+                                      : "text-red-400/70"
+                                  }`}
+                                >
+                                  {pnlPercentageDisplay}
+                                </div>
+                              </div>
+                            </td>
+                            {/* <td className="px-4 py-3 text-center">
                                 <a
                                   href={`https://solscan.io/tx/${order.sellTrade.tx}`}
                                   target="_blank"
@@ -987,9 +1090,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                   <FiExternalLink className="inline text-sm" />
                                 </a>
                               </td> */}
-                            </tr>
-                          );
-                        })}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -1005,7 +1108,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   </div>
                 ) : aggregatedPositions.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-neutral-500">No active positions found</div>
+                    <div className="text-neutral-500">
+                      No active positions found
+                    </div>
                   </div>
                 ) : (
                   <table className="w-full text-sm">
@@ -1026,138 +1131,141 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         <th className="px-4 py-3 text-right font-semibold">
                           PNL ↑
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">$</th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          $
+                        </th>
                         <th className="px-4 py-3 text-right font-semibold"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
-                      {aggregatedPositions
-                        .map((position, idx) => {
-                          const displayName =
-                            position.tokenName ||
-                            position.tokenSymbol ||
-                            null;
-                          const displaySymbol =
-                            position.tokenSymbol ||
-                            position.tokenName ||
-                            position.mint?.slice(0, 8) + "..." ||
-                            "Unknown";
-                          const imageUrl = position.imageUrl || "";
+                      {aggregatedPositions.map((position, idx) => {
+                        const displayName =
+                          position.tokenName || position.tokenSymbol || null;
+                        const displaySymbol =
+                          position.tokenSymbol ||
+                          position.tokenName ||
+                          position.mint?.slice(0, 8) + "..." ||
+                          "Unknown";
+                        const imageUrl = position.imageUrl || "";
 
-                          return (
-                            <tr
-                              key={position.mint || idx}
-                              className="transition-colors hover:bg-neutral-800/60"
+                        return (
+                          <tr
+                            key={position.mint || idx}
+                            className="transition-colors hover:bg-neutral-800/60"
+                          >
+                            <td
+                              className="cursor-pointer px-4 py-2"
+                              onClick={() => {
+                                const addr = position.mint;
+                                if (addr) {
+                                  window.open(`/trade/${addr}`, "_blank");
+                                }
+                              }}
                             >
-                              <td
-                                className="cursor-pointer px-4 py-2"
+                              <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
+                                  <FastImage
+                                    src={imageUrl}
+                                    alt={
+                                      displayName || displaySymbol || "Token"
+                                    }
+                                    symbol={displaySymbol || undefined}
+                                    name={displayName || undefined}
+                                    width={32}
+                                    height={32}
+                                    className="h-full w-full object-cover"
+                                    showBubble={false}
+                                  />
+                                </div>
+                                <div className="flex min-w-0 flex-col">
+                                  <span
+                                    className="truncate text-sm font-semibold text-white hover:text-blue-400"
+                                    title={position.mint || undefined}
+                                  >
+                                    {truncateTokenName(
+                                      displayName || displaySymbol,
+                                    )}
+                                  </span>
+                                  <span className="truncate text-[11px] text-neutral-500">
+                                    {displaySymbol}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <div className="flex flex-col items-end">
+                                <span className="font-semibold text-neutral-100">
+                                  ${formatSmartNumber(position.boughtValue)}
+                                </span>
+                                <span className="text-xs text-neutral-500">
+                                  {formatSmartNumber(position.boughtAmount)}{" "}
+                                  {displaySymbol}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <div className="flex flex-col items-end">
+                                <span className="font-semibold text-neutral-100">
+                                  ${formatSmartNumber(position.soldValue)}
+                                </span>
+                                <span className="text-xs text-neutral-500">
+                                  {formatSmartNumber(position.soldAmount)}{" "}
+                                  {displaySymbol}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <div className="flex flex-col items-end">
+                                <span className="font-semibold text-neutral-100">
+                                  ${formatSmartNumber(position.remainingValue)}
+                                </span>
+                                <span className="text-xs text-neutral-500">
+                                  {formatSmartNumber(position.remainingAmount)}{" "}
+                                  {displaySymbol}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <span
+                                className={`font-semibold ${
+                                  position.pnlPercentage >= 0
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {position.pnlPercentage >= 0 ? "+" : ""}
+                                {position.pnlPercentage.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <span
+                                className={`font-semibold ${
+                                  position.totalPnl >= 0
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {position.totalPnl >= 0 ? "+" : ""}$
+                                {formatSmartNumber(Math.abs(position.totalPnl))}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <button
+                                className="text-neutral-400 transition-colors hover:text-white"
                                 onClick={() => {
                                   const addr = position.mint;
                                   if (addr) {
-                                    window.open(`/trade/${addr}`, '_blank');
+                                    window.open(`/trade/${addr}`, "_blank");
                                   }
                                 }}
+                                title="Open trade"
                               >
-                                <div className="flex items-center gap-2">
-                                  <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
-                                    <FastImage
-                                      src={imageUrl}
-                                      alt={displayName || displaySymbol || "Token"}
-                                      symbol={displaySymbol || undefined}
-                                      name={displayName || undefined}
-                                      width={32}
-                                      height={32}
-                                      className="h-full w-full object-cover"
-                                      showBubble={false}
-                                    />
-                                  </div>
-                                  <div className="flex min-w-0 flex-col">
-                                    <span
-                                      className="truncate text-sm font-semibold text-white hover:text-blue-400"
-                                      title={position.mint || undefined}
-                                    >
-                                      {truncateTokenName(displayName || displaySymbol)}
-                                    </span>
-                                    <span className="truncate text-[11px] text-neutral-500">
-                                      {displaySymbol}
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <div className="flex flex-col items-end">
-                                  <span className="font-semibold text-neutral-100">
-                                    ${formatSmartNumber(position.boughtValue)}
-                                  </span>
-                                  <span className="text-xs text-neutral-500">
-                                    {formatSmartNumber(position.boughtAmount)}{" "}
-                                    {displaySymbol}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <div className="flex flex-col items-end">
-                                  <span className="font-semibold text-neutral-100">
-                                    ${formatSmartNumber(position.soldValue)}
-                                  </span>
-                                  <span className="text-xs text-neutral-500">
-                                    {formatSmartNumber(position.soldAmount)}{" "}
-                                    {displaySymbol}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <div className="flex flex-col items-end">
-                                  <span className="font-semibold text-neutral-100">
-                                    ${formatSmartNumber(position.remainingValue)}
-                                  </span>
-                                  <span className="text-xs text-neutral-500">
-                                    {formatSmartNumber(position.remainingAmount)}{" "}
-                                    {displaySymbol}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <span
-                                  className={`font-semibold ${
-                                    position.pnlPercentage >= 0
-                                      ? "text-emerald-400"
-                                      : "text-red-400"
-                                  }`}
-                                >
-                                  {position.pnlPercentage >= 0 ? "+" : ""}
-                                  {position.pnlPercentage.toFixed(1)}%
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <span
-                                  className={`font-semibold ${
-                                    position.totalPnl >= 0
-                                      ? "text-emerald-400"
-                                      : "text-red-400"
-                                  }`}
-                                >
-                                  {position.totalPnl >= 0 ? "+" : ""}$
-                                  {formatSmartNumber(Math.abs(position.totalPnl))}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <button
-                                  className="text-neutral-400 hover:text-white transition-colors"
-                                  onClick={() => {
-                                    const addr = position.mint;
-                                    if (addr) {
-                                      window.open(`/trade/${addr}`, '_blank');
-                                    }
-                                  }}
-                                  title="Open trade"
-                                >
-                                  <FiExternalLink size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                                <FiExternalLink size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -1191,127 +1299,130 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         <th className="px-4 py-3 text-right font-semibold">
                           PNL ↑
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">$</th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          $
+                        </th>
                         <th className="px-4 py-3 text-right font-semibold"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
-                      {top100Positions
-                        .map((position, idx) => {
-                          const displayName =
-                            position.tokenName ||
-                            position.tokenSymbol ||
-                            null;
-                          const displaySymbol =
-                            position.tokenSymbol ||
-                            position.tokenName ||
-                            position.mint?.slice(0, 8) + "..." ||
-                            "Unknown";
-                          const imageUrl = position.imageUrl || "";
+                      {top100Positions.map((position, idx) => {
+                        const displayName =
+                          position.tokenName || position.tokenSymbol || null;
+                        const displaySymbol =
+                          position.tokenSymbol ||
+                          position.tokenName ||
+                          position.mint?.slice(0, 8) + "..." ||
+                          "Unknown";
+                        const imageUrl = position.imageUrl || "";
 
-                          return (
-                            <tr
-                              key={position.mint || idx}
-                              className="transition-colors hover:bg-neutral-800/60"
+                        return (
+                          <tr
+                            key={position.mint || idx}
+                            className="transition-colors hover:bg-neutral-800/60"
+                          >
+                            <td
+                              className="cursor-pointer px-4 py-2"
+                              onClick={() => {
+                                const addr = position.mint;
+                                if (addr) {
+                                  window.open(`/trade/${addr}`, "_blank");
+                                }
+                              }}
                             >
-                              <td
-                                className="cursor-pointer px-4 py-2"
+                              <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
+                                  <FastImage
+                                    src={imageUrl}
+                                    alt={
+                                      displayName || displaySymbol || "Token"
+                                    }
+                                    symbol={displaySymbol || undefined}
+                                    name={displayName || undefined}
+                                    width={32}
+                                    height={32}
+                                    className="h-full w-full object-cover"
+                                    showBubble={false}
+                                  />
+                                </div>
+                                <div className="flex min-w-0 flex-col">
+                                  <span
+                                    className="truncate text-sm font-semibold text-white hover:text-blue-400"
+                                    title={position.mint || undefined}
+                                  >
+                                    {truncateTokenName(
+                                      displayName || displaySymbol,
+                                    )}
+                                  </span>
+                                  <span className="truncate text-[11px] text-neutral-500">
+                                    {displaySymbol}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <div className="flex flex-col items-end">
+                                <span className="font-semibold text-neutral-100">
+                                  ${formatSmartNumber(position.boughtValue)}
+                                </span>
+                                <span className="text-xs text-neutral-500">
+                                  {formatSmartNumber(position.boughtAmount)}{" "}
+                                  {displaySymbol}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <div className="flex flex-col items-end">
+                                <span className="font-semibold text-neutral-100">
+                                  ${formatSmartNumber(position.soldValue)}
+                                </span>
+                                <span className="text-xs text-neutral-500">
+                                  {formatSmartNumber(position.soldAmount)}{" "}
+                                  {displaySymbol}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <span
+                                className={`font-semibold ${
+                                  position.pnlPercentage >= 0
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {position.pnlPercentage >= 0 ? "+" : ""}
+                                {position.pnlPercentage.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <span
+                                className={`font-semibold ${
+                                  position.totalPnl >= 0
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {position.totalPnl >= 0 ? "+" : ""}$
+                                {formatSmartNumber(Math.abs(position.totalPnl))}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <button
+                                className="text-neutral-400 transition-colors hover:text-white"
                                 onClick={() => {
                                   const addr = position.mint;
                                   if (addr) {
-                                    window.open(`/trade/${addr}`, '_blank');
+                                    window.open(`/trade/${addr}`, "_blank");
                                   }
                                 }}
+                                title="Open trade"
                               >
-                                <div className="flex items-center gap-2">
-                                  <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
-                                    <FastImage
-                                      src={imageUrl}
-                                      alt={displayName || displaySymbol || "Token"}
-                                      symbol={displaySymbol || undefined}
-                                      name={displayName || undefined}
-                                      width={32}
-                                      height={32}
-                                      className="h-full w-full object-cover"
-                                      showBubble={false}
-                                    />
-                                  </div>
-                                  <div className="flex min-w-0 flex-col">
-                                    <span
-                                      className="truncate text-sm font-semibold text-white hover:text-blue-400"
-                                      title={position.mint || undefined}
-                                    >
-                                      {truncateTokenName(displayName || displaySymbol)}
-                                    </span>
-                                    <span className="truncate text-[11px] text-neutral-500">
-                                      {displaySymbol}
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <div className="flex flex-col items-end">
-                                  <span className="font-semibold text-neutral-100">
-                                    ${formatSmartNumber(position.boughtValue)}
-                                  </span>
-                                  <span className="text-xs text-neutral-500">
-                                    {formatSmartNumber(position.boughtAmount)}{" "}
-                                    {displaySymbol}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <div className="flex flex-col items-end">
-                                  <span className="font-semibold text-neutral-100">
-                                    ${formatSmartNumber(position.soldValue)}
-                                  </span>
-                                  <span className="text-xs text-neutral-500">
-                                    {formatSmartNumber(position.soldAmount)}{" "}
-                                    {displaySymbol}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <span
-                                  className={`font-semibold ${
-                                    position.pnlPercentage >= 0
-                                      ? "text-emerald-400"
-                                      : "text-red-400"
-                                  }`}
-                                >
-                                  {position.pnlPercentage >= 0 ? "+" : ""}
-                                  {position.pnlPercentage.toFixed(1)}%
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <span
-                                  className={`font-semibold ${
-                                    position.totalPnl >= 0
-                                      ? "text-emerald-400"
-                                      : "text-red-400"
-                                  }`}
-                                >
-                                  {position.totalPnl >= 0 ? "+" : ""}$
-                                  {formatSmartNumber(Math.abs(position.totalPnl))}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                <button
-                                  className="text-neutral-400 hover:text-white transition-colors"
-                                  onClick={() => {
-                                    const addr = position.mint;
-                                    if (addr) {
-                                      window.open(`/trade/${addr}`, '_blank');
-                                    }
-                                  }}
-                                  title="Open trade"
-                                >
-                                  <FiExternalLink size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                                <FiExternalLink size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}

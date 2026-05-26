@@ -73,6 +73,21 @@ export interface ClosedOrder {
 
 const DUST = 0.001;
 
+/** Dust threshold used by the resurrection guard. Kept in sync with DUST. */
+const DUST_TOKENS = 0.001;
+
+/**
+ * How long to suppress a "just closed" mint's re-appearance from the API.
+ * Sized for the Go service's L2 Redis cache TTL (~5s) plus a safety margin.
+ *
+ * NOTE: a genuine re-buy of the same mint within this window will be hidden
+ * until the guard expires. This is an explicit tradeoff: the stale L2 cache
+ * causes "100% sell → position resurrects for 2-5s" on every close, which
+ * happens to every user; same-mint re-buys within 15s are rare degen flows.
+ * Don't widen this without re-evaluating that tradeoff.
+ */
+const CLOSED_MINT_GUARD_MS = 15_000;
+
 export function toAggregatedPosition(
   p: WalletPortfolioPosition,
   solPrice: number,
@@ -92,9 +107,8 @@ export function toAggregatedPosition(
   const marketValue = rpcBalance * price;
 
   // Cost basis of the remaining (unsold) portion using avg-cost pro-rata
-  const soldFraction = p.bought_tokens > 0
-    ? Math.min(p.sold_tokens / p.bought_tokens, 1)
-    : 0;
+  const soldFraction =
+    p.bought_tokens > 0 ? Math.min(p.sold_tokens / p.bought_tokens, 1) : 0;
   const costBasis = boughtUsd * Math.max(0, 1 - soldFraction);
 
   // Unrealized PnL from RPC: market value of on-chain balance minus cost basis
@@ -122,9 +136,7 @@ export function toAggregatedPosition(
   };
 }
 
-export function toClosedOrder(
-  agg: AggregatedPosition,
-): ClosedOrder {
+export function toClosedOrder(agg: AggregatedPosition): ClosedOrder {
   return {
     mint: agg.mint,
     tokenName: agg.tokenName,
@@ -228,15 +240,35 @@ interface UseWalletScanResult {
   /** True while the trades endpoint is loading. Drives the Activity tab. */
   tradesLoading: boolean;
   error: string | null;
+  /** True when the address is an EVM/Monad (0x…) wallet the Go service doesn't support. */
+  isUnsupportedChain: boolean;
+}
+
+/**
+ * EVM addresses (Ethereum / Monad / etc.) are 40 hex chars prefixed with `0x`.
+ * The Go token service validates wallet addresses with a Solana base58 regex,
+ * which rejects any address containing `0` (not in base58) — so calling it
+ * with a `0x…` would return 400 and the panel would render an error state.
+ * Detect here and short-circuit so the panel can show a clean "coming soon".
+ */
+function isEvmAddress(addr: string): boolean {
+  if (!addr) return false;
+  return /^0x[0-9a-fA-F]{40}$/.test(addr);
 }
 
 export function useWalletScan(
   walletAddress: string | null | undefined,
   opts?: UseWalletScanOptions,
 ): UseWalletScanResult {
+  const unsupportedChain = useMemo(() => {
+    if (!walletAddress) return false;
+    return isEvmAddress(walletAddress.trim());
+  }, [walletAddress]);
+
   const address = useMemo(() => {
     if (!walletAddress) return "";
     const v = walletAddress.trim();
+    if (isEvmAddress(v)) return ""; // skip Go service for EVM addresses
     return v.length >= 32 && v.length <= 44 ? v : "";
   }, [walletAddress]);
 
@@ -280,6 +312,19 @@ export function useWalletScan(
   const inflightRef = useRef<AbortController | null>(null);
   const refetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Stale-resurrection guard (REST-only flavour).
+  //
+  // useWalletPortfolio drives this off WS sell events. We don't have a WS,
+  // but the same Go service L2 Redis cache (~5s TTL) can serve a pre-sell
+  // snapshot on a subsequent refetch after the indexer aggregator has already
+  // emitted remaining=0. Effect: a mint closes in one fetch, then "resurrects"
+  // open in the next, then closes again. To avoid the visual flicker we mark
+  // any mint that just transitioned open → closed in our fetch stream and
+  // reject any subsequent fetch row that shows it open again, until the
+  // guard window expires (see CLOSED_MINT_GUARD_MS).
+  const closedMintsRef = useRef<Map<string, number>>(new Map()); // mint -> expiresAt (ms)
+  const prevOpenMintsRef = useRef<Set<string>>(new Set());
+
   const fetchAll = useCallback(async (): Promise<void> => {
     if (!address) return;
     inflightRef.current?.abort();
@@ -314,8 +359,56 @@ export function useWalletScan(
     })
       .then((p) => {
         if (ac.signal.aborted) return;
-        setPositions(address, p.positions);
-        setPositionsState(p.positions);
+
+        // Stale-resurrection guard (REST-only flavour).
+        // Backend L2 cache can serve a pre-sell snapshot for ~5s after the
+        // indexer aggregator emitted remaining=0. Without this, a closed
+        // position briefly resurrects then closes again.
+        const now = Date.now();
+
+        // Sweep expired guards (avoids unbounded growth).
+        for (const [mint, expiresAt] of closedMintsRef.current) {
+          if (now >= expiresAt) closedMintsRef.current.delete(mint);
+        }
+
+        // Detect mints that just transitioned open → closed in this fetch.
+        // Defensive: skip mints already guarded so a re-detection can't
+        // accidentally extend an existing window.
+        const currentOpenMints = new Set(
+          p.positions
+            .filter((pos) => pos.remaining_tokens > DUST_TOKENS)
+            .map((pos) => pos.token_mint),
+        );
+        for (const mint of prevOpenMintsRef.current) {
+          if (!currentOpenMints.has(mint) && !closedMintsRef.current.has(mint)) {
+            closedMintsRef.current.set(mint, now + CLOSED_MINT_GUARD_MS);
+          }
+        }
+
+        // Filter: only drop rows that claim a guarded mint is OPEN again.
+        // Genuine closed rows (remaining ≤ DUST) pass through so the
+        // History tab and closed-orders math stay correct.
+        const guardedPositions =
+          closedMintsRef.current.size === 0
+            ? p.positions
+            : p.positions.filter((pos) => {
+                const expiresAt = closedMintsRef.current.get(pos.token_mint);
+                if (!expiresAt) return true;
+                if (now >= expiresAt) return true;
+                return pos.remaining_tokens <= DUST_TOKENS;
+              });
+
+        // Update the "previously open" snapshot from the GUARDED result so
+        // that a resurrection row we just dropped doesn't get back in via
+        // the next iteration's open-set comparison.
+        prevOpenMintsRef.current = new Set(
+          guardedPositions
+            .filter((pos) => pos.remaining_tokens > DUST_TOKENS)
+            .map((pos) => pos.token_mint),
+        );
+
+        setPositions(address, guardedPositions);
+        setPositionsState(guardedPositions);
       })
       .catch(onErr)
       .finally(() => {
@@ -345,6 +438,10 @@ export function useWalletScan(
       clearTimeout(refetchDebounceRef.current);
       refetchDebounceRef.current = null;
     }
+    // Resurrection-guard state is per-wallet; clear it so wallet B never
+    // inherits wallet A's just-closed mints.
+    closedMintsRef.current.clear();
+    prevOpenMintsRef.current.clear();
 
     if (!address) {
       setSummaryState(null);
@@ -491,5 +588,6 @@ export function useWalletScan(
     positionsLoading,
     tradesLoading,
     error,
+    isUnsupportedChain: unsupportedChain,
   };
 }
