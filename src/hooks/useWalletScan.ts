@@ -291,10 +291,12 @@ export function useWalletScan(
   const seededSummaryFresh =
     !!initialEntry?.summary && now - initialEntry.summaryTs < CACHE_FRESH_MS;
   const seededPositionsFresh =
-    !!initialEntry && initialEntry.positionsTs > 0 &&
+    !!initialEntry &&
+    initialEntry.positionsTs > 0 &&
     now - initialEntry.positionsTs < CACHE_FRESH_MS;
   const seededTradesFresh =
-    !!initialEntry && initialEntry.tradesTs > 0 &&
+    !!initialEntry &&
+    initialEntry.tradesTs > 0 &&
     now - initialEntry.tradesTs < CACHE_FRESH_MS;
 
   const [summaryLoading, setSummaryLoading] = useState(
@@ -322,8 +324,67 @@ export function useWalletScan(
   // any mint that just transitioned open → closed in our fetch stream and
   // reject any subsequent fetch row that shows it open again, until the
   // guard window expires (see CLOSED_MINT_GUARD_MS).
+  //
+  // The guard MUST run on every path that writes positions to React state —
+  // including cache seeds — otherwise a stale cache entry painted on panel
+  // reopen would show a since-closed position as open with no fetch firing
+  // to re-engage the guard.
   const closedMintsRef = useRef<Map<string, number>>(new Map()); // mint -> expiresAt (ms)
   const prevOpenMintsRef = useRef<Set<string>>(new Set());
+
+  /**
+   * Apply the resurrection guard to a positions array and update the rolling
+   * ref state. Pure with respect to its inputs — call from any path that
+   * paints positions (fresh fetch, cached seed, initial useState).
+   */
+  const applyResurrectionGuard = useCallback(
+    (rawPositions: WalletPortfolioPosition[]): WalletPortfolioPosition[] => {
+      const now = Date.now();
+
+      // Sweep expired guards (avoids unbounded growth).
+      for (const [mint, expiresAt] of closedMintsRef.current) {
+        if (now >= expiresAt) closedMintsRef.current.delete(mint);
+      }
+
+      // Detect mints that just transitioned open → closed (or disappeared).
+      // Defensive: skip mints already guarded so a re-detection can't
+      // accidentally extend an existing window.
+      const currentOpenMints = new Set(
+        rawPositions
+          .filter((pos) => pos.remaining_tokens > DUST_TOKENS)
+          .map((pos) => pos.token_mint),
+      );
+      for (const mint of prevOpenMintsRef.current) {
+        if (!currentOpenMints.has(mint) && !closedMintsRef.current.has(mint)) {
+          closedMintsRef.current.set(mint, now + CLOSED_MINT_GUARD_MS);
+        }
+      }
+
+      // Filter: only drop rows that claim a guarded mint is OPEN again.
+      // Genuine closed rows (remaining ≤ DUST) pass through.
+      const guarded =
+        closedMintsRef.current.size === 0
+          ? rawPositions
+          : rawPositions.filter((pos) => {
+              const expiresAt = closedMintsRef.current.get(pos.token_mint);
+              if (!expiresAt) return true;
+              if (now >= expiresAt) return true;
+              return pos.remaining_tokens <= DUST_TOKENS;
+            });
+
+      // Update the "previously open" snapshot from the GUARDED result so a
+      // resurrection row we just dropped doesn't get back in via the next
+      // iteration's open-set comparison.
+      prevOpenMintsRef.current = new Set(
+        guarded
+          .filter((pos) => pos.remaining_tokens > DUST_TOKENS)
+          .map((pos) => pos.token_mint),
+      );
+
+      return guarded;
+    },
+    [],
+  );
 
   const fetchAll = useCallback(async (): Promise<void> => {
     if (!address) return;
@@ -337,7 +398,10 @@ export function useWalletScan(
 
     const onErr = (e: unknown) => {
       if ((e as { name?: string })?.name === "AbortError") return;
-      setError(prev => prev ?? (e instanceof Error ? e.message : "Failed to load wallet"));
+      setError(
+        (prev) =>
+          prev ?? (e instanceof Error ? e.message : "Failed to load wallet"),
+      );
     };
 
     // Fire all three in parallel but resolve each independently so a slow
@@ -359,56 +423,9 @@ export function useWalletScan(
     })
       .then((p) => {
         if (ac.signal.aborted) return;
-
-        // Stale-resurrection guard (REST-only flavour).
-        // Backend L2 cache can serve a pre-sell snapshot for ~5s after the
-        // indexer aggregator emitted remaining=0. Without this, a closed
-        // position briefly resurrects then closes again.
-        const now = Date.now();
-
-        // Sweep expired guards (avoids unbounded growth).
-        for (const [mint, expiresAt] of closedMintsRef.current) {
-          if (now >= expiresAt) closedMintsRef.current.delete(mint);
-        }
-
-        // Detect mints that just transitioned open → closed in this fetch.
-        // Defensive: skip mints already guarded so a re-detection can't
-        // accidentally extend an existing window.
-        const currentOpenMints = new Set(
-          p.positions
-            .filter((pos) => pos.remaining_tokens > DUST_TOKENS)
-            .map((pos) => pos.token_mint),
-        );
-        for (const mint of prevOpenMintsRef.current) {
-          if (!currentOpenMints.has(mint) && !closedMintsRef.current.has(mint)) {
-            closedMintsRef.current.set(mint, now + CLOSED_MINT_GUARD_MS);
-          }
-        }
-
-        // Filter: only drop rows that claim a guarded mint is OPEN again.
-        // Genuine closed rows (remaining ≤ DUST) pass through so the
-        // History tab and closed-orders math stay correct.
-        const guardedPositions =
-          closedMintsRef.current.size === 0
-            ? p.positions
-            : p.positions.filter((pos) => {
-                const expiresAt = closedMintsRef.current.get(pos.token_mint);
-                if (!expiresAt) return true;
-                if (now >= expiresAt) return true;
-                return pos.remaining_tokens <= DUST_TOKENS;
-              });
-
-        // Update the "previously open" snapshot from the GUARDED result so
-        // that a resurrection row we just dropped doesn't get back in via
-        // the next iteration's open-set comparison.
-        prevOpenMintsRef.current = new Set(
-          guardedPositions
-            .filter((pos) => pos.remaining_tokens > DUST_TOKENS)
-            .map((pos) => pos.token_mint),
-        );
-
-        setPositions(address, guardedPositions);
-        setPositionsState(guardedPositions);
+        const guarded = applyResurrectionGuard(p.positions);
+        setPositions(address, guarded);
+        setPositionsState(guarded);
       })
       .catch(onErr)
       .finally(() => {
@@ -456,10 +473,15 @@ export function useWalletScan(
 
     // Seed from cache for instant paint, then refresh anything stale in the
     // background. If a resource is fresh we skip its request entirely.
+    // Cached positions MUST go through the resurrection guard — otherwise a
+    // stale "still open" snapshot from a position the user has since sold
+    // would paint on reopen and stay visible for the entire freshness window
+    // (no fetch would fire to engage the guard).
     const entry = getEntry(address);
     if (entry) {
       if (entry.summary) setSummaryState(entry.summary);
-      setPositionsState(entry.positions);
+      const guardedCached = applyResurrectionGuard(entry.positions);
+      setPositionsState(guardedCached);
       setTradesState(entry.trades);
     } else {
       setSummaryState(null);
@@ -472,7 +494,9 @@ export function useWalletScan(
     const summaryFresh =
       !!entry?.summary && t - entry.summaryTs < CACHE_FRESH_MS;
     const positionsFresh =
-      !!entry && entry.positionsTs > 0 && t - entry.positionsTs < CACHE_FRESH_MS;
+      !!entry &&
+      entry.positionsTs > 0 &&
+      t - entry.positionsTs < CACHE_FRESH_MS;
     const tradesFresh =
       !!entry && entry.tradesTs > 0 && t - entry.tradesTs < CACHE_FRESH_MS;
 
@@ -488,7 +512,10 @@ export function useWalletScan(
 
     const onErr = (e: unknown) => {
       if ((e as { name?: string })?.name === "AbortError") return;
-      setError(prev => prev ?? (e instanceof Error ? e.message : "Failed to load wallet"));
+      setError(
+        (prev) =>
+          prev ?? (e instanceof Error ? e.message : "Failed to load wallet"),
+      );
     };
 
     if (!summaryFresh) {
@@ -515,8 +542,9 @@ export function useWalletScan(
       })
         .then((p) => {
           if (ac.signal.aborted) return;
-          setPositions(address, p.positions);
-          setPositionsState(p.positions);
+          const guarded = applyResurrectionGuard(p.positions);
+          setPositions(address, guarded);
+          setPositionsState(guarded);
         })
         .catch(onErr)
         .finally(() => {
