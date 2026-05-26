@@ -113,7 +113,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const currentSolPrice = solPrice > 0 ? solPrice : 150;
 
   // ─── Go token service data (replaces RPC + client-side FIFO) ────────────────
-  const { summary: goSummary, positions: goPositions, trades: goTrades, loading: goLoading, error: goError } = useWalletScan(
+  const {
+    summary: goSummary,
+    positions: goPositions,
+    trades: goTrades,
+    positionsLoading,
+    tradesLoading,
+    error: goError,
+  } = useWalletScan(
     wallet.address,
     { refetchSignal: walletTradeCount },
   );
@@ -652,7 +659,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 {realizedPnlPercentage.toFixed(2)}%
               </div>
               <div className="mt-2 h-[180px] w-full">
-                {goLoading ? (
+                {positionsLoading ? (
                   <div className="flex h-full items-center justify-center text-xs text-neutral-500">
                     Loading chart...
                   </div>
@@ -771,7 +778,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           <div className="flex-1 overflow-auto px-8">
             {tab === "History" && (
               <div className="h-full w-full">
-                {goLoading ? (
+                {positionsLoading ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="animate-pulse text-neutral-400">
                       Loading history...
@@ -990,7 +997,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             )}
             {tab === "Active Positions" && (
               <div className="h-full w-full overflow-auto">
-                {goLoading ? (
+                {positionsLoading ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="animate-pulse text-neutral-400">
                       Loading positions...
@@ -1158,7 +1165,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             )}
             {tab === "Top 100" && (
               <div className="h-full w-full overflow-auto">
-                {goLoading ? (
+                {positionsLoading ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="animate-pulse text-neutral-400">
                       Loading top positions...
@@ -1312,7 +1319,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             )}
             {tab === "Activity" && (
               <div className="h-full w-full">
-                {goLoading ? (
+                {tradesLoading ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="animate-pulse text-neutral-400">
                       Loading activity...

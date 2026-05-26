@@ -53,7 +53,7 @@ export default function KolLeaderboardPage() {
     limit: 1000,
   });
 
-  const entries = data?.entries ?? [];
+  const entries = data?.data.entries ?? [];
 
   return (
     <>
@@ -169,7 +169,7 @@ export default function KolLeaderboardPage() {
 
                 {/* Source attribution */}
                 {/* <p className="mt-4 text-center text-xs text-neutral-600">
-                  Data sourced from kolscan.io — updated every 30 minutes
+                  Data sourced from kolscan.io — updated every 30 seconds
                 </p> */}
               </main>
             </div>

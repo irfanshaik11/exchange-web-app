@@ -8,18 +8,20 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   getKolLeaderboard,
+  type KolLeaderboardResult,
   type KolTimeframe,
-  type KolLeaderboardResponse,
 } from "~/utils/kolApi";
 
 export function useKolLeaderboard(
   timeframe: KolTimeframe,
   options: { limit?: number; offset?: number } = {},
 ) {
-  return useQuery<KolLeaderboardResponse>({
+  return useQuery<KolLeaderboardResult>({
     queryKey: ["kol-leaderboard", timeframe, options.limit, options.offset],
     queryFn: () => getKolLeaderboard(timeframe, options),
-    staleTime: 60_000, // 1 minute
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,
   });
 }

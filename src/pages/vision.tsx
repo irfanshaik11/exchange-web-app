@@ -4,16 +4,20 @@
  * Surfaces the same KOL leaderboard data as /kol-leaderboard, branded as
  * "Vision" — the top traders worth keeping an eye on. Backed by the same
  * `useKolLeaderboard` hook, which reads from the wallet-tracker backend's
- * `KolLeaderboardRow` table (repopulated every 30 min by the kolscan poller).
+ * `KolLeaderboardRow` table (repopulated every 30 s by the kolscan poller).
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import Header from "~/components/Header";
 import Footer from "~/components/Footer";
 import { DockedPanelMarginWrapper } from "~/contexts/DockedPanelContext";
 import { useKolLeaderboard } from "~/hooks/useKolLeaderboard";
-import type { KolTimeframe, KolTraderEntry } from "~/utils/kolApi";
+import type {
+  KolCacheMeta,
+  KolTimeframe,
+  KolTraderEntry,
+} from "~/utils/kolApi";
 import { FiExternalLink } from "react-icons/fi";
 import { FaXTwitter, FaTelegram } from "react-icons/fa6";
 
@@ -49,15 +53,64 @@ function SkeletonRow() {
   );
 }
 
+function CacheBadge({
+  cache,
+  cacheAgeSec,
+}: {
+  cache: KolCacheMeta | undefined;
+  cacheAgeSec: number | null;
+}) {
+  if (!cache) return null;
+  if (cache.source === "disabled") {
+    return (
+      <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-[10px] font-medium tracking-wide text-neutral-600 uppercase">
+        cache off
+      </span>
+    );
+  }
+  if (cache.hit) {
+    const ageLabel = cacheAgeSec === null ? "" : ` · ${cacheAgeSec}s old`;
+    return (
+      <span
+        className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wide text-violet-300 uppercase"
+        title="Served from Redis cache"
+      >
+        redis hit{ageLabel}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wide text-sky-300 uppercase"
+      title="Cache miss — read from Postgres, written through to Redis"
+    >
+      postgres
+    </span>
+  );
+}
+
+function useSecondsSince(timestampMs: number | undefined): number | null {
+  // Re-render once per second so the "Updated Xs ago" pill counts up live.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 1_000);
+    return () => clearInterval(id);
+  }, []);
+  if (!timestampMs) return null;
+  return Math.max(0, Math.floor((Date.now() - timestampMs) / 1_000));
+}
+
 export default function VisionPage() {
   const [timeframe, setTimeframe] = useState<KolTimeframe>("DAILY");
-  const { data, isLoading, isError, refetch } = useKolLeaderboard(timeframe, {
-    limit: 1000,
-  });
+  const { data, isLoading, isError, refetch, dataUpdatedAt, isFetching } =
+    useKolLeaderboard(timeframe, { limit: 1000 });
 
-  const entries = data?.entries ?? [];
+  const entries = data?.data.entries ?? [];
   const topThree = entries.slice(0, 3);
   const rest = entries.slice(3);
+  const secondsAgo = useSecondsSince(dataUpdatedAt);
+  const cache = data?.cache;
+  const cacheAgeSec = useSecondsSince(cache?.cachedAt ?? undefined);
 
   return (
     <>
@@ -171,7 +224,7 @@ export default function VisionPage() {
                               colSpan={7}
                               className="px-4 py-12 text-center text-neutral-500"
                             >
-                              No data available — the poller may not have run yet
+                              No data available - the poller may not have run yet
                             </td>
                           </tr>
                         )}
@@ -180,10 +233,29 @@ export default function VisionPage() {
                   </div>
                 )}
 
-                {/* Source attribution */}
-                <p className="mt-4 text-center text-xs text-neutral-600">
-                  Data sourced from kolscan.io — updated every 30 minutes
-                </p>
+                {/* Source attribution + live freshness + cache indicator */}
+                <div className="mt-4 flex flex-col items-center gap-2 text-xs text-neutral-600">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block h-1.5 w-1.5 rounded-full ${
+                          isFetching
+                            ? "animate-pulse bg-emerald-400"
+                            : "bg-neutral-700"
+                        }`}
+                        aria-hidden
+                      />
+                      <span>
+                        {secondsAgo === null
+                          ? "Loading…"
+                          : isFetching
+                            ? "Updating…"
+                            : `Updated ${secondsAgo}s ago`}
+                      </span>
+                    </div>
+                    <CacheBadge cache={cache} cacheAgeSec={cacheAgeSec} />
+                  </div>
+                </div>
               </main>
             </div>
           </div>

@@ -16,10 +16,17 @@ import {
   type KolscanTimeframeId,
 } from "~/utils/kolscanStore";
 import type {
+  KolCacheMeta,
   KolLeaderboardResponse,
   KolTimeframe,
   KolTraderEntry,
 } from "~/utils/kolApi";
+import { getCached, setCached } from "~/utils/kolRedisCache";
+
+// Cache the rendered payload for slightly less than the React Query interval
+// so concurrent clients within the window share one Postgres read but no
+// individual client serves data more than ~20s older than what's in the DB.
+const REDIS_TTL_SEC = 20;
 
 const TIMEFRAME_TO_ID: Record<KolTimeframe, KolscanTimeframeId> = {
   DAILY: 1,
@@ -59,7 +66,27 @@ export default async function handler(
   const limit = clamp(Number(req.query.limit ?? 1000) || 1000, 1, 5000);
   const offset = clamp(Number(req.query.offset ?? 0) || 0, 0, 100_000);
 
+  const cacheKey = `kol:lb:${timeframe}:${limit}:${offset}`;
+
   try {
+    // Redis layer — try first, fall back to Postgres on miss / failure / no
+    // REDIS_URL. getCached returns null in all failure modes so a flaky cache
+    // can't break the page.
+    const cached = await getCached<KolLeaderboardResponse>(cacheKey);
+    if (cached) {
+      const cacheMeta: KolCacheMeta = {
+        hit: true,
+        source: "redis",
+        cachedAt: cached.cachedAt,
+      };
+      res.setHeader("X-Cache", "HIT");
+      res.setHeader(
+        "Cache-Control",
+        "public, s-maxage=10, stale-while-revalidate=20",
+      );
+      return res.status(200).json({ data: cached.value, cache: cacheMeta });
+    }
+
     const { rows, total } = await getRows(
       TIMEFRAME_TO_ID[timeframe],
       limit,
@@ -90,11 +117,25 @@ export default async function handler(
       timeframe,
     };
 
+    // Fire-and-forget the cache write — a slow Redis must never delay the
+    // response, and a failed write just means the next request is another MISS.
+    void setCached(cacheKey, payload, REDIS_TTL_SEC);
+
+    const cacheMeta: KolCacheMeta = {
+      hit: false,
+      source: process.env.REDIS_URL ? "postgres" : "disabled",
+      cachedAt: null,
+    };
+
+    // Poller writes Neon every 30s; cap edge cache well below that so two
+    // consecutive client polls don't get served the same byte-identical
+    // payload from a CDN.
+    res.setHeader("X-Cache", "MISS");
     res.setHeader(
       "Cache-Control",
-      "public, s-maxage=60, stale-while-revalidate=300",
+      "public, s-maxage=10, stale-while-revalidate=20",
     );
-    return res.status(200).json({ data: payload });
+    return res.status(200).json({ data: payload, cache: cacheMeta });
   } catch (err) {
     console.error("[GET /api/kol-leaderboard] failed:", err);
     return res.status(500).json({
