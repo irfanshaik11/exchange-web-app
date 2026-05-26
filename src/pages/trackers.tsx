@@ -88,6 +88,7 @@ import { HiLightningBolt } from "react-icons/hi";
 import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 import LiveTradesPanel from "../components/LiveTradesPanel";
+import MonitorPanel from "../components/MonitorPanel";
 import kolWalletTrackerData from "../data/kol-wallet-tracker.json";
 import { useSolPrice } from "../components/SolPriceContext";
 import {
@@ -169,7 +170,7 @@ type DefaultWalletEntry = {
   isAlertEnabled?: boolean;
 };
 
-const TABS = ["Wallet Manager", "Live Trades", "KOLs"];
+const TABS = ["Wallet Manager", "Live Trades", "Monitor", "KOLs"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const TELEGRAM_TABS = ["Channels", "Messages", "Add Channels"];
 /** Default Telegram channels to track for all users when they have none. */
@@ -2355,7 +2356,7 @@ export default function TrackersPage() {
                                   </button>
                                 ))}
                                 <div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1 text-[10px] backdrop-blur-sm sm:px-3 sm:py-1.5 sm:text-[11px]">
-                                  {activeTab === 2 ? (
+                                  {activeTab === 3 ? (
                                     <>
                                       <span className="text-neutral-500">
                                         {KOL_TRACKER_ENTRIES.length} KOL
@@ -2411,7 +2412,7 @@ export default function TrackersPage() {
                               </div>
                             </div>
 
-                            {!user && activeTab !== 2 ? (
+                            {!user && activeTab !== 3 ? (
                               <div className="flex min-h-[260px] flex-1 flex-col items-center justify-center px-4 py-12 text-center">
                                 <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
                                 <p className="text-sm font-medium text-neutral-300">
@@ -2536,7 +2537,7 @@ export default function TrackersPage() {
                                 )}
 
                                 {/* Search — KOL directory */}
-                                {activeTab === 2 && (
+                                {activeTab === 3 && (
                                   <div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
                                     <input
                                       type="text"
@@ -2682,6 +2683,15 @@ export default function TrackersPage() {
                                       isLoading={isLoadingHistory}
                                     />
                                   ) : activeTab === 2 ? (
+                                    <MonitorPanel
+                                      trades={liveTradesToRender}
+                                      wallets={wallets}
+                                      wsConnected={wsConnected}
+                                      quickBuyAmount={quickBuyAmount}
+                                      onQuickBuy={handleQuickBuy}
+                                      isLoading={isLoadingHistory}
+                                    />
+                                  ) : activeTab === 3 ? (
                                     <div className="flex flex-col pb-2">
                                       {filteredKolEntries.length === 0 ? (
                                         <div className="flex h-48 flex-col items-center justify-center text-center">
