@@ -801,7 +801,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               </div>
               <div className="mb-2 flex flex-row items-center justify-between">
                 <span className="font-semibold text-white">
-                  {performanceMetrics.totalPnl >= 0 ? "+" : ""}$
+                  {performanceMetrics.totalPnl >= 0 ? "+" : "-"}$
                   {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
                 </span>
                 <span className="font-semibold text-white">
