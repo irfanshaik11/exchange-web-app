@@ -168,6 +168,50 @@ export function positionToClosedOrder(
   return { ...toClosedOrder(agg), closedAt };
 }
 
+/**
+ * Defensive sanity cap for backend PnL numbers.
+ *
+ * The Go aggregator's realized-PnL formula has historically produced absurd
+ * values (e.g. -$17.6 trillion) when a wallet has a dust `bought_tokens`
+ * value being divided into a large `sold_tokens`. The backend has its own
+ * clamp now (see exchange-token-service/internal/repo/pg/wallet_queries.go
+ * — `LEAST(sold_tokens, bought_tokens)`), but we keep this client-side
+ * guard as defense-in-depth: any future backend regression that produces a
+ * >1M SOL or non-finite PnL value will render "—" instead of garbage.
+ *
+ * Thresholds: 1M SOL ≈ $200M+ in any realistic scenario, so anything beyond
+ * that is contamination, not a real trader.
+ */
+const ABSURD_SOL_THRESHOLD = 1_000_000;
+const ABSURD_USD_THRESHOLD = 1_000_000_000; // $1B
+
+function sanitizeSummary(
+  s: WalletPortfolioSummary,
+): WalletPortfolioSummary {
+  const guarded = { ...s };
+  if (
+    !Number.isFinite(guarded.total_realized_pnl_sol) ||
+    Math.abs(guarded.total_realized_pnl_sol) > ABSURD_SOL_THRESHOLD
+  ) {
+    console.warn(
+      "[useWalletScan] absurd total_realized_pnl_sol — clamping to 0",
+      { wallet: s.wallet_address, raw: s.total_realized_pnl_sol },
+    );
+    guarded.total_realized_pnl_sol = 0;
+  }
+  if (
+    !Number.isFinite(guarded.total_realized_pnl_usd) ||
+    Math.abs(guarded.total_realized_pnl_usd) > ABSURD_USD_THRESHOLD
+  ) {
+    console.warn(
+      "[useWalletScan] absurd total_realized_pnl_usd — clamping to 0",
+      { wallet: s.wallet_address, raw: s.total_realized_pnl_usd },
+    );
+    guarded.total_realized_pnl_usd = 0;
+  }
+  return guarded;
+}
+
 // ─── Module-level cache ───────────────────────────────────────────────────────
 // Survives panel close/reopen and route changes within the same SPA session.
 // Fresh entries (<CACHE_FRESH_MS) are served without any network call; stale
@@ -409,8 +453,9 @@ export function useWalletScan(
     void getWalletPortfolioSummary(address, ac.signal)
       .then((s) => {
         if (ac.signal.aborted) return;
-        setSummary(address, s);
-        setSummaryState(s);
+        const safe = sanitizeSummary(s);
+        setSummary(address, safe);
+        setSummaryState(safe);
       })
       .catch(onErr)
       .finally(() => {
@@ -523,8 +568,9 @@ export function useWalletScan(
       void getWalletPortfolioSummary(address, ac.signal)
         .then((s) => {
           if (ac.signal.aborted) return;
-          setSummary(address, s);
-          setSummaryState(s);
+          const safe = sanitizeSummary(s);
+          setSummary(address, safe);
+          setSummaryState(safe);
         })
         .catch(onErr)
         .finally(() => {
