@@ -54,6 +54,10 @@ export interface RestHoldersResponse {
   decimals: number;
   fetched_at: string;
   holders: RestHolder[];
+  // % of supply held by the top 10 holders (0-100 scale), computed server-side
+  // over the FULL holder set regardless of the `limit` query param. Added in
+  // token-service prod commit 0210dd4 (holders_endpoint.go: TopTenHeldPercentage).
+  top_10_held_percentage?: number;
 }
 
 export interface UseHoldersRestResult {
@@ -61,6 +65,8 @@ export interface UseHoldersRestResult {
   holders: RestHolder[];
   solPriceUsd: number;
   decimals: number;
+  // Top-10 supply concentration (0-100). undefined until first successful fetch.
+  top10HeldPercentage: number | undefined;
   isLoading: boolean;
   error: string | null;
 }
@@ -78,6 +84,7 @@ export default function useHoldersRest(
   const [holders, setHolders] = useState<RestHolder[]>([]);
   const [solPriceUsd, setSolPriceUsd] = useState<number>(0);
   const [decimals, setDecimals] = useState<number>(0);
+  const [top10HeldPercentage, setTop10HeldPercentage] = useState<number | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +99,7 @@ export default function useHoldersRest(
     if (!mint || !enabled || !TOKEN_SERVICE_URL) {
       setTotalHolders(undefined);
       setHolders([]);
+      setTop10HeldPercentage(undefined);
       hasDataRef.current = false;
       return;
     }
@@ -102,6 +110,7 @@ export default function useHoldersRest(
     // until line ~125 writes the new response (~100ms-3s later).
     setTotalHolders(undefined);
     setHolders([]);
+    setTop10HeldPercentage(undefined);
     // New mint → previous data is stale; treat next fetch as "initial".
     hasDataRef.current = false;
 
@@ -134,6 +143,9 @@ export default function useHoldersRest(
         setHolders(body.holders ?? []);
         setSolPriceUsd(body.sol_price_usd ?? 0);
         setDecimals(body.decimals ?? 0);
+        setTop10HeldPercentage(
+          typeof body.top_10_held_percentage === "number" ? body.top_10_held_percentage : undefined,
+        );
         setError(null);
         hasDataRef.current = true;
         consecutiveErrors = 0;
@@ -172,5 +184,5 @@ export default function useHoldersRest(
     };
   }, [mint, limit, enabled]);
 
-  return { totalHolders, holders, solPriceUsd, decimals, isLoading, error };
+  return { totalHolders, holders, solPriceUsd, decimals, top10HeldPercentage, isLoading, error };
 }
