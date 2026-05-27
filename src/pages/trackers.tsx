@@ -2551,35 +2551,6 @@ export default function TrackersPage() {
                                   </div>
                                 )}
 
-                                {/* Portfolio summary bar — total value + unrealized PnL */}
-                                {activeTab === 0 && user && wallets.length > 0 && (
-                                  <div className="flex items-center gap-4 border-b border-white/[0.04] px-1 py-2.5 sm:gap-6 sm:px-2 sm:py-3">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px] text-[#71717a] sm:text-xs">Total Value</span>
-                                      <span className="text-xs font-semibold tabular-nums text-[#f4f4f5] sm:text-sm">
-                                        {Object.keys(portfolioSummaries).length === 0
-                                          ? "..."
-                                          : `$${aggregatePortfolio.totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px] text-[#71717a] sm:text-xs">Unrealized PnL</span>
-                                      <span
-                                        className={`text-xs font-semibold tabular-nums sm:text-sm ${
-                                          Object.keys(portfolioSummaries).length === 0
-                                            ? "text-[#f4f4f5]"
-                                            : aggregatePortfolio.unrealizedPnl >= 0
-                                              ? "text-[#18c48c]"
-                                              : "text-[#ef4444]"
-                                        }`}
-                                      >
-                                        {Object.keys(portfolioSummaries).length === 0
-                                          ? "..."
-                                          : `${aggregatePortfolio.unrealizedPnl >= 0 ? "+" : ""}$${aggregatePortfolio.unrealizedPnl.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                      </span>
-                                    </div>
-                                  </div>
-                                )}
 
                                 <div className="-mx-3 min-h-0 flex-1 overflow-y-auto px-3 sm:-mx-5 sm:px-5">
                                   {activeTab === 0 && user ? (
