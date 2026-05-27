@@ -234,7 +234,7 @@ export default function VisionPage() {
                 )}
 
                 {/* Source attribution + live freshness + cache indicator */}
-                <div className="mt-4 flex flex-col items-center gap-2 text-xs text-neutral-600">
+                {/* <div className="mt-4 flex flex-col items-center gap-2 text-xs text-neutral-600">
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
                       <span
@@ -255,7 +255,8 @@ export default function VisionPage() {
                     </div>
                     <CacheBadge cache={cache} cacheAgeSec={cacheAgeSec} />
                   </div>
-                </div>
+                </div> */}
+								
               </main>
             </div>
           </div>
