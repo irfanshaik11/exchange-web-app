@@ -224,7 +224,7 @@ export default function VisionPage() {
                               colSpan={7}
                               className="px-4 py-12 text-center text-neutral-500"
                             >
-                              No data available — the poller may not have run yet
+                              No data available - the poller may not have run yet
                             </td>
                           </tr>
                         )}
