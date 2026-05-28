@@ -1347,7 +1347,7 @@ export default function TradePage() {
   return (
     <>
       <div
-        className="min-h-screen w-full flex flex-col overflow-y-auto overflow-x-hidden"
+        className="h-screen w-full flex flex-col overflow-y-auto overflow-x-hidden"
         style={{
           backgroundColor: AX.bg,
           color: AX.text,
