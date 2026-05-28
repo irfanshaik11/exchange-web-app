@@ -64,6 +64,15 @@ spec:
         # double-fetch kolscan.
         - name: DISABLE_KOL_INPROCESS_CRON
           value: "true"
+        # Optional Redis cache for /api/kol-leaderboard. If the secret is
+        # absent the cache layer silently degrades to "disabled" and the API
+        # reads Postgres on every request — safe, just no caching benefit.
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: kol-redis
+              key: url
+              optional: true
         resources:
           requests:
             memory: "256Mi"
