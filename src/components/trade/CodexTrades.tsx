@@ -1175,8 +1175,42 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
         }
       }
     }
+
+    // Fallback: aggregate stats from the trades feed for wallets not in holders/topTraders.
+    const authoritativeKeys = new Set(map.keys());
+    const trades = solanaTrades.length > 0 ? solanaTrades : stableInitialTrades;
+    if (trades && trades.length > 0) {
+      for (const t of trades) {
+        const n = normalizeTrade(t, stableToken?.decimals ?? 9, chainPrice);
+        const addr = t.wallet_address || t.maker || t.trader || t.trader_wallet || "";
+        if (!addr) continue;
+        const key = addr.toLowerCase();
+        if (authoritativeKeys.has(key)) continue; // holder/topTrader data takes priority
+
+        let entry = map.get(key);
+        if (!entry) {
+          entry = {
+            walletAddress: addr,
+            totalBoughtSol: 0,
+            buyCount: 0,
+            totalSoldSol: 0,
+            sellCount: 0,
+          };
+          map.set(key, entry);
+        }
+
+        if (n.isBuy) {
+          entry.totalBoughtSol = (entry.totalBoughtSol || 0) + n.solAmount;
+          entry.buyCount = (entry.buyCount || 0) + 1;
+        } else {
+          entry.totalSoldSol = (entry.totalSoldSol || 0) + n.solAmount;
+          entry.sellCount = (entry.sellCount || 0) + 1;
+        }
+      }
+    }
+
     return map;
-  }, [chain, solanaHolders, solanaTopTraders]);
+  }, [chain, solanaHolders, solanaTopTraders, solanaTrades, stableInitialTrades, stableToken?.decimals, chainPrice]);
 
   // Simple holder type lookup for icons (backwards compatible)
   const holderTypeMap = useMemo(() => {
