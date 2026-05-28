@@ -540,6 +540,7 @@ interface CodexTradesProps {
   onTradesUpdate?: (trades: any[]) => void; // Callback to update parent cache when trades change
   pairAddress?: string; // Fallback pair address when token doesn't have it
   chain?: "sol" | "monad"; // Chain to determine which WebSocket to use
+  onWalletClick?: (address: string) => void; // Callback when wallet address is clicked in hover card
 }
 
 function getTimeFromTimestampSec(ts: number) {
@@ -798,6 +799,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   onTradesUpdate,
   pairAddress,
   chain = "sol",
+  onWalletClick,
 }) => {
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = chain === "monad" ? monPrice : solPrice;
@@ -1808,7 +1810,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
                 return (
                   <>
-                    <WalletHoverCard data={hoverData} chain={chain}>
+                    <WalletHoverCard data={hoverData} chain={chain} onWalletClick={onWalletClick}>
                       <div className="flex items-center gap-1.5">
                         <span className="cursor-pointer truncate text-[13px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
                           {shortAddr(n.maker || "")}
