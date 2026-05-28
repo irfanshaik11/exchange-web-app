@@ -722,42 +722,34 @@ export function WalletTrackerProvider({
 
       // Check if transaction sounds is enabled
       const transactionSoundsEnabled = (() => {
-        if (typeof window === "undefined") return true;
+        if (typeof window === "undefined") return false;
         try {
           const saved = localStorage.getItem("transaction-sounds-enabled");
-          return saved !== "false"; // Default to true
+          return saved === "true"; // Default to false
         } catch {
-          return true;
+          return false;
         }
       })();
 
-      // Play notification sound if enabled — 3-note ascending major chord (C5→E5→G5)
+      // Play notification sound if enabled — soft gentle ping
       if (transactionSoundsEnabled && typeof window !== "undefined") {
         try {
           const ac = new (window.AudioContext ||
             (window as any).webkitAudioContext)();
-          const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
-          const noteDuration = 0.12;
+          const osc = ac.createOscillator();
+          const gain = ac.createGain();
+          osc.type = "sine";
+          osc.frequency.value = 880; // A5 — clean, gentle tone
+          osc.connect(gain);
+          gain.connect(ac.destination);
 
-          notes.forEach((freq, i) => {
-            const osc = ac.createOscillator();
-            const gain = ac.createGain();
-            osc.type = "sine";
-            osc.frequency.value = freq;
-            osc.connect(gain);
-            gain.connect(ac.destination);
+          const t = ac.currentTime;
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.08, t + 0.01); // Soft peak
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3); // Gentle fade
 
-            const startTime = ac.currentTime + i * noteDuration;
-            gain.gain.setValueAtTime(0, startTime);
-            gain.gain.linearRampToValueAtTime(0.2, startTime + 0.01);
-            gain.gain.exponentialRampToValueAtTime(
-              0.01,
-              startTime + noteDuration,
-            );
-
-            osc.start(startTime);
-            osc.stop(startTime + noteDuration);
-          });
+          osc.start(t);
+          osc.stop(t + 0.3);
         } catch (error) {
           // Silent fail if audio context fails (e.g., user hasn't interacted with page)
         }

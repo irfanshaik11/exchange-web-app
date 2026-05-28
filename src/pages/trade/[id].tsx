@@ -693,6 +693,16 @@ export default function TradePage() {
   // If price_updates are re-enabled, re-add throttle to avoid re-rendering TradeActionPanel on every WS message.
   // Previous throttle: 5s interval with throttledHolderSummary/throttledWsTopTraders state + holderThrottleRef timer.
 
+  // BANDAID PERF: parent only needs the top-level `total_holders` count + the
+  // top-10 concentration to feed TradeHeader / TradeActionPanel / tab badge —
+  // NOT the holders array. Dropping limit from 100 → 1 makes the response ~50×
+  // smaller (50KB → ~1KB) and the JSON parse / setState near-instant; the
+  // `top_10_held_percentage` is computed server-side over the full holder set
+  // regardless of limit. The Holders tab fetches its own full 100-row response
+  // via HoldersTable's separate useHoldersRest call.
+  // Declared here (above enhancedDisplayToken) so the memo can merge top-10 in.
+  const restHoldersData = useHoldersRest(resolvedTokenMint, { limit: 1 });
+
   // Enhance displayToken with holderSummary data for TradeActionPanel
   const enhancedDisplayToken = React.useMemo(() => {
     if (!displayToken) return displayToken;
@@ -709,12 +719,15 @@ export default function TradePage() {
       bundler_count: holderSummary?.bundler_count,
       insider_held_percentage: holderSummary?.insider_held_percent,
       insider_count: holderSummary?.insider_count,
-      top10_holding_percentage: holderSummary?.top10_held_percent,
+      // Prefer the REST holders endpoint's top-10 concentration (live, computed
+      // over the full holder set) over the WS holderSummary, which is currently
+      // BANDAID-disabled and resolves to undefined → 0%.
+      top10_holding_percentage: restHoldersData.top10HeldPercentage ?? holderSummary?.top10_held_percent,
       total_holders: holderSummary?.total_holders,
       // Pro traders = count of top traders from WebSocket
       pro_traders: wsTopTraders?.length ?? displayToken.pro_traders,
     };
-  }, [displayToken, holderSummary, wsTopTraders]);
+  }, [displayToken, holderSummary, wsTopTraders, restHoldersData.top10HeldPercentage]);
 
   // Also use dev_wallet from WebSocket holderSummary for chart dev markers
   useEffect(() => {
@@ -734,13 +747,6 @@ export default function TradePage() {
   }, [holderSummary?.total_holders]);
   */
 
-  // BANDAID PERF: parent only needs the top-level `total_holders` count to feed
-  // TradeHeader / TradeActionPanel / tab badge — NOT the holders array. Dropping
-  // limit from 100 → 1 makes the response ~50× smaller (50KB → ~1KB) and the
-  // JSON parse / setState with the (unused) holders array near-instant. The
-  // table itself, when the user opens the Holders tab, fetches its own full
-  // 100-row response via HoldersTable's separate useHoldersRest call.
-  const restHoldersData = useHoldersRest(resolvedTokenMint, { limit: 1 });
   const restHoldersCount = restHoldersData.totalHolders;
   // BANDAID: Reset the local holdersCount when the mint changes so the
   // previous token's count doesn't bleed into the new view. Without this,
@@ -1341,7 +1347,7 @@ export default function TradePage() {
   return (
     <>
       <div
-        className="min-h-screen w-full flex flex-col overflow-y-auto overflow-x-hidden"
+        className="h-screen w-full flex flex-col overflow-y-auto overflow-x-hidden"
         style={{
           backgroundColor: AX.bg,
           color: AX.text,
