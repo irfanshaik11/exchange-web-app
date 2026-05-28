@@ -376,6 +376,7 @@ export default function WalletHoverCard({ data, chain = 'sol', children, solPric
         className="inline-flex"
         onMouseEnter={handleTriggerEnter}
         onMouseLeave={handleTriggerLeave}
+        onClick={onWalletClick ? (e) => { e.stopPropagation(); setIsVisible(false); onWalletClick(data.walletAddress); } : undefined}
       >
         {children}
       </div>
