@@ -21,6 +21,7 @@ interface CodexTopTradersProps {
   token: Token | null;
   pairAddress?: string; // Fallback pair address when token doesn't have mint
   chain?: "sol" | "monad"; // Chain to determine which endpoint to use
+  onWalletClick?: (address: string) => void;
 }
 
 // Sort direction type
@@ -446,6 +447,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
   token,
   pairAddress,
   chain = "sol",
+  onWalletClick,
 }) => {
   // Client-side localStorage cache for top traders (persists across page reloads)
   const CACHE_KEY_PREFIX = "codex_top_traders_cache_";
@@ -1284,7 +1286,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({
                           };
 
                           return (
-                            <WalletHoverCard data={hoverData} chain={chain} solPrice={chainPrice}>
+                            <WalletHoverCard data={hoverData} chain={chain} solPrice={chainPrice} onWalletClick={onWalletClick}>
                               <div className="flex items-center gap-1.5">
                                 <span className="font-normal cursor-pointer text-[#86d99f] transition-colors hover:text-[#86d99f]">
                                   {wallet}

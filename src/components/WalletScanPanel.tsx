@@ -621,7 +621,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         <div className="relative flex items-center justify-between border-b border-neutral-800 px-8 pt-6 pb-3">
           <div className="flex items-center gap-4">
             <span className="text-lg font-bold text-pink-400">
-              {wallet.name || "Null"}
+              {wallet.name || ""}
             </span>
             <span className="flex items-center gap-1 font-mono text-sm text-neutral-400">
               {typeof wallet.address === "string" && wallet.address.length >= 10

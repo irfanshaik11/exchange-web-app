@@ -7,6 +7,7 @@ interface CodexHoldersProps {
   pairAddress?: string; // Fallback pair address when token doesn't have mint
   chain?: "sol" | "monad"; // Chain to determine which endpoint to use
   onTotalCountChange?: (count: number) => void; // Callback to pass total count to parent
+  onWalletClick?: (address: string) => void;
 }
 
 const AX = {
@@ -26,6 +27,7 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({
   pairAddress,
   chain = "sol",
   onTotalCountChange,
+  onWalletClick,
 }) => {
   // Use mint if available, fallback to pair_address, then fallback to pairAddress prop
   const mintAddress = token?.mint || token?.pair_address || pairAddress;
@@ -324,6 +326,7 @@ const CodexHolders: React.FC<CodexHoldersProps> = ({
             containerWidth={tableWidth}
             chain={chain}
             onTotalCountChange={onTotalCountChange}
+            onWalletClick={onWalletClick}
           />
         </div>
 
