@@ -889,7 +889,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                       Loading history...
                     </div>
                   </div>
-                ) : goError ? (
+                ) : goError && closedOrders.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="text-red-400">{goError}</div>
                   </div>
@@ -1436,7 +1436,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                       Loading activity...
                     </div>
                   </div>
-                ) : goError ? (
+                ) : goError && activityData.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="text-red-400">{goError}</div>
                   </div>

@@ -435,17 +435,41 @@ export function useWalletScan(
     inflightRef.current?.abort();
     const ac = new AbortController();
     inflightRef.current = ac;
-    setError(null);
-    setSummaryLoading(true);
-    setPositionsLoading(true);
-    setTradesLoading(true);
+
+    // Background-refetch awareness: when we already have data for a resource,
+    // suppress the loading spinner (paint the new data when it arrives) and
+    // swallow transient errors (don't clobber the user's view — the next WS
+    // signal will retry). The "Failed to fetch" wall in the Activity/History
+    // tabs was previously caused by a single flaky refetch overwriting a
+    // perfectly good state.
+    const entry = cache.get(address);
+    const haveSummary = !!entry?.summary;
+    const havePositions = !!entry && entry.positionsTs > 0;
+    const haveTrades = !!entry && entry.tradesTs > 0;
+    const haveAnyData = haveSummary || havePositions || haveTrades;
+
+    if (!haveAnyData) setError(null);
+    if (!haveSummary) setSummaryLoading(true);
+    if (!havePositions) setPositionsLoading(true);
+    if (!haveTrades) setTradesLoading(true);
 
     const onErr = (e: unknown) => {
       if ((e as { name?: string })?.name === "AbortError") return;
-      setError(
-        (prev) =>
-          prev ?? (e instanceof Error ? e.message : "Failed to load wallet"),
-      );
+      // Some browsers surface a fetch abort as TypeError("Failed to fetch")
+      // instead of AbortError. If our controller has been aborted, treat it
+      // the same as AbortError.
+      if (ac.signal.aborted) return;
+      const message =
+        e instanceof Error ? e.message : "Failed to load wallet";
+      if (haveAnyData) {
+        // Background refetch failure — keep the user's view intact.
+        console.warn(
+          "[useWalletScan] background refetch failed, keeping cached data:",
+          message,
+        );
+        return;
+      }
+      setError((prev) => prev ?? message);
     };
 
     // Fire all three in parallel but resolve each independently so a slow
@@ -456,6 +480,7 @@ export function useWalletScan(
         const safe = sanitizeSummary(s);
         setSummary(address, safe);
         setSummaryState(safe);
+        setError(null);
       })
       .catch(onErr)
       .finally(() => {
@@ -471,6 +496,7 @@ export function useWalletScan(
         const guarded = applyResurrectionGuard(p.positions);
         setPositions(address, guarded);
         setPositionsState(guarded);
+        setError(null);
       })
       .catch(onErr)
       .finally(() => {
@@ -485,6 +511,7 @@ export function useWalletScan(
         if (ac.signal.aborted) return;
         setTrades(address, t.trades);
         setTradesState(t.trades);
+        setError(null);
       })
       .catch(onErr)
       .finally(() => {
@@ -555,22 +582,39 @@ export function useWalletScan(
     const ac = new AbortController();
     inflightRef.current = ac;
 
+    // Mirrors fetchAll: if we've seeded any state from a stale cache entry,
+    // a single endpoint failure shouldn't blow away the user's view.
+    const haveAnyData =
+      !!entry?.summary ||
+      (entry?.positions?.length ?? 0) > 0 ||
+      (entry?.trades?.length ?? 0) > 0;
+
     const onErr = (e: unknown) => {
       if ((e as { name?: string })?.name === "AbortError") return;
-      setError(
-        (prev) =>
-          prev ?? (e instanceof Error ? e.message : "Failed to load wallet"),
-      );
+      if (ac.signal.aborted) return;
+      const message =
+        e instanceof Error ? e.message : "Failed to load wallet";
+      if (haveAnyData) {
+        console.warn(
+          "[useWalletScan] stale-cache refresh failed, keeping seeded data:",
+          message,
+        );
+        return;
+      }
+      setError((prev) => prev ?? message);
     };
 
     if (!summaryFresh) {
-      setSummaryLoading(true);
+      // Only show the loading spinner when we have no seeded data to paint.
+      // Stale-seeded data refreshes in the background without disrupting UI.
+      setSummaryLoading(!entry?.summary);
       void getWalletPortfolioSummary(address, ac.signal)
         .then((s) => {
           if (ac.signal.aborted) return;
           const safe = sanitizeSummary(s);
           setSummary(address, safe);
           setSummaryState(safe);
+          setError(null);
         })
         .catch(onErr)
         .finally(() => {
@@ -581,7 +625,7 @@ export function useWalletScan(
     }
 
     if (!positionsFresh) {
-      setPositionsLoading(true);
+      setPositionsLoading(!entry || entry.positions.length === 0);
       void getWalletPortfolioPositions(address, {
         includeClosed: true,
         signal: ac.signal,
@@ -591,6 +635,7 @@ export function useWalletScan(
           const guarded = applyResurrectionGuard(p.positions);
           setPositions(address, guarded);
           setPositionsState(guarded);
+          setError(null);
         })
         .catch(onErr)
         .finally(() => {
@@ -601,7 +646,7 @@ export function useWalletScan(
     }
 
     if (!tradesFresh) {
-      setTradesLoading(true);
+      setTradesLoading(!entry || entry.trades.length === 0);
       void getWalletPortfolioTrades(address, {
         limit: TRADES_LIMIT,
         signal: ac.signal,
@@ -610,6 +655,7 @@ export function useWalletScan(
           if (ac.signal.aborted) return;
           setTrades(address, tr.trades);
           setTradesState(tr.trades);
+          setError(null);
         })
         .catch(onErr)
         .finally(() => {
