@@ -96,8 +96,13 @@ export function toAggregatedPosition(
     p.bought_usd_value > 0 ? p.bought_usd_value : p.bought_sol * solPrice;
   const soldUsd =
     p.sold_usd_value > 0 ? p.sold_usd_value : p.sold_sol * solPrice;
+  // The Go service typed `realized_pnl_usd: number` (never null) but
+  // currently always returns 0 — see wallet-scan-pnl-backend-gap. A
+  // `!= null` check would always be truthy, silently zeroing every
+  // per-position PnL row. Use `!== 0` to fall back to the SOL value
+  // (the only field the backend actually populates).
   const realizedPnl =
-    p.realized_pnl_usd != null
+    p.realized_pnl_usd !== 0
       ? p.realized_pnl_usd
       : p.realized_pnl_sol * solPrice;
 
