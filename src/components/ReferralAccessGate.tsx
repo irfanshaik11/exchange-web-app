@@ -160,8 +160,12 @@ export function ReferralAccessGate({
   const prefillAttemptedRef = useRef(false);
   const silentProcessingAttemptedRef = useRef(false);
 
-  const requireReferralAccess =
-    env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS !== undefined
+  // Public routes that should never be gated by referral access
+  const isPublicRoute = router.pathname === "/learn" || router.pathname === "/support";
+
+  const requireReferralAccess = isPublicRoute
+    ? false
+    : env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS !== undefined
       ? env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS
       : true; // default to true to require access code for new users
 
