@@ -46,7 +46,6 @@ export default function AgentPage() {
 
               <p className="agent-description">
                 Interstate Agent provides advanced market data, high quality analysis, and best-in-class trade execution directly in
-                {' '}<span className="agent-highlight-openai">ChatGPT</span> and
                 {' '}<span className="agent-highlight-claude">Claude</span>.
               </p>
 
