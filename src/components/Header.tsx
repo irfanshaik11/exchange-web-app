@@ -3870,7 +3870,7 @@ export default function Header({
       <ExportWalletModal
         isOpen={showExportWalletModal}
         onClose={() => setShowExportWalletModal(false)}
-        walletId={user?.walletId || walletList?.[0]?.walletId || undefined}
+        walletId={user?.walletId || walletList?.[0]?.id || undefined}
         walletAddress={
           primaryWalletAddresses?.solana ||
           user?.publicKey ||
