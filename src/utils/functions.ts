@@ -440,13 +440,13 @@ export function formatSmartNumber(num: number): string {
     }
   }
   if (abs < 1000) {
-    return parseFloat(num.toFixed(2)).toLocaleString();
+    return parseFloat(num.toFixed(1)).toLocaleString();
   } else if (abs < 1000000) {
-    return parseFloat((num / 1000).toFixed(2)).toLocaleString() + "K";
+    return parseFloat((num / 1000).toFixed(1)).toLocaleString() + "K";
   } else if (Math.abs(num) < 1000000000) {
-    return parseFloat((num / 1000000).toFixed(2)).toLocaleString() + "M";
+    return parseFloat((num / 1000000).toFixed(1)).toLocaleString() + "M";
   } else {
-    return parseFloat((num / 1000000000).toFixed(2)).toLocaleString() + "B";
+    return parseFloat((num / 1000000000).toFixed(1)).toLocaleString() + "B";
   }
 }
 

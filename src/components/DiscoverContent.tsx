@@ -1082,8 +1082,8 @@ export default function DiscoverContent() {
       : '1m';
     const mcNum = Number(t?.market_cap_usd || (t?.marketCapSol ? (t.marketCapSol * 170) : 0));
     const mc = mcNum > 0
-      ? (mcNum >= 1_000_000 ? `$${(mcNum / 1_000_000).toFixed(2)}M`
-         : mcNum >= 1_000 ? `$${(mcNum / 1_000).toFixed(2)}K`
+      ? (mcNum >= 1_000_000 ? `$${(mcNum / 1_000_000).toFixed(1)}M`
+         : mcNum >= 1_000 ? `$${(mcNum / 1_000).toFixed(1)}K`
          : `$${mcNum.toFixed(0)}`)
       : undefined;
     const { cover, avatar } = getCachedImagesForToken(t);

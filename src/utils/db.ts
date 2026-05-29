@@ -222,17 +222,17 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
         return `${num < 0 ? '-' : ''}0.0${sub}${sigDigits}`;
       }
     }
-    return num.toFixed(3);
+    return num.toFixed(1);
   }
 
-  // Handle small values (< $1) with 3 decimal places
+  // Handle small values (< $1) with 1 decimal place
   if (abs < 1) {
-    return num.toFixed(3);
+    return num.toFixed(1);
   }
 
-  // Handle values < $1000 with 3 decimal places
+  // Handle values < $1000 with 1 decimal place
   if (abs < 1000) {
-    return num.toFixed(3);
+    return num.toFixed(1);
   }
 
   const abbreviations = [
@@ -244,15 +244,15 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
 
   for (const { value, suffix } of abbreviations) {
     if (abs >= value) {
-      const formatted = (num / value).toFixed(3);
-      return formatted.endsWith(".000")
+      const formatted = (num / value).toFixed(1);
+      return formatted.endsWith(".0")
         ? `${parseInt(formatted)}${suffix}`
         : `${formatted}${suffix}`;
     }
   }
 
   // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
-  return num.toFixed(3);
+  return num.toFixed(1);
 }
 
 /**
@@ -274,19 +274,19 @@ export function formatMarketCap(val: string | number | null | undefined): string
 
   const abs = Math.abs(num);
 
-  // Handle very small values (< $0.01) with 2 decimal places
+  // Handle very small values (< $0.01) with 1 decimal place
   if (abs > 0 && abs < 0.01) {
-    return num.toFixed(2);
+    return num.toFixed(1);
   }
 
-  // Handle small values (< $1) with 2 decimal places
+  // Handle small values (< $1) with 1 decimal place
   if (abs < 1) {
-    return num.toFixed(2);
+    return num.toFixed(1);
   }
 
-  // Handle values < $1000 with 2 decimal places
+  // Handle values < $1000 with 1 decimal place
   if (abs < 1000) {
-    return num.toFixed(2);
+    return num.toFixed(1);
   }
 
   const abbreviations = [
@@ -298,15 +298,15 @@ export function formatMarketCap(val: string | number | null | undefined): string
 
   for (const { value, suffix } of abbreviations) {
     if (abs >= value) {
-      const formatted = (num / value).toFixed(2);
-      return formatted.endsWith(".00")
+      const formatted = (num / value).toFixed(1);
+      return formatted.endsWith(".0")
         ? `${parseInt(formatted)}${suffix}`
         : `${formatted}${suffix}`;
     }
   }
 
   // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
-  return num.toFixed(2);
+  return num.toFixed(1);
 }
 
 /**
