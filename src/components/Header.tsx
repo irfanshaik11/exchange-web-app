@@ -179,6 +179,7 @@ const navLinks = [
   { name: "Predictions", href: "/predictions" },
   { name: "Airdrop", href: "/airdrop-genesis" },
   { name: "Portfolio", href: "/portfolio" },
+  { name: "Learn", href: "/learn" },
   // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
 ];

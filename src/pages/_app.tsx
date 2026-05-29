@@ -513,30 +513,34 @@ function ReferralTracker() {
 
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
+  const router = useRouter();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  
+
+  // Public routes that should never trigger the forced login modal
+  const isPublicRoute = router.pathname === "/learn" || router.pathname === "/support";
+
   // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
     setIsMounted(true);
   }, []);
-  
+
   useEffect(() => {
     if (!isMounted) return;
-    if (enforceLogin && !userLoading && !user) {
+    if (enforceLogin && !isPublicRoute && !userLoading && !user) {
       setLoginOpen(true);
     }
-    if (user && loginOpen) {
+    if ((user || isPublicRoute) && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
-  
+  }, [user, userLoading, enforceLogin, loginOpen, isMounted, isPublicRoute]);
+
   // Prevent closing if not logged in
   const handleLoginClose = () => {
     if (user) setLoginOpen(false);
   };
-  
-  if (!enforceLogin || !isMounted) return null;
+
+  if (!enforceLogin || isPublicRoute || !isMounted) return null;
   
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
