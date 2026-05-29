@@ -906,17 +906,17 @@ export default function TradePage() {
           c.__optimistic && (c.signature === sigKey || c.transaction_hash === sigKey),
         );
         if (idx >= 0) {
-          // Preserve EVERYTHING from the optimistic row that influences
-          // rendering identity or correctness: `id` and `timestamp` (so the
-          // chart-mark id at line 5374 stays stable across replacement);
-          // `side`/`type`/`is_buy` (so the chart's side detector at lines
-          // 5262-5306 can't disagree with our normalized side because of a
-          // backend-misencoded WS field). Only enrichment fields like
-          // signature, price, amount, etc. flow in from the WS payload.
+          // Preserve identity fields from the optimistic row: `id` (so the
+          // chart-mark id stays stable across replacement) and `side`/`type`/
+          // `is_buy` (so the chart's side detector can't disagree with our
+          // normalized side because of a backend-misencoded WS field).
+          // Let `timestamp` flow from the WS trade so the mark lands on the
+          // correct candle (the one at the actual execution price). Mark-id
+          // stability is maintained via `__optimisticId` in the chart's id
+          // builder, independent of timestamp.
           combined[idx] = {
             ...trade,
             id: combined[idx].id,
-            timestamp: combined[idx].timestamp,
             side: combined[idx].side,
             type: combined[idx].type,
             eventDisplayType: combined[idx].eventDisplayType,
@@ -959,13 +959,12 @@ export default function TradePage() {
           wsSig: sigKey,
           deltaMs: Math.abs((combined[fuzzyIdx].timestamp ?? 0) - tradeTsMs),
         });
-        // Same field-preservation pattern as case 2a above — keep all
-        // rendering-identity fields from the optimistic row, merge only
-        // enrichment from WS.
+        // Same field-preservation pattern as case 2a above — keep identity
+        // fields from the optimistic row, merge enrichment from WS.
+        // Let timestamp flow from WS so the mark lands on the correct candle.
         combined[fuzzyIdx] = {
           ...trade,
           id: combined[fuzzyIdx].id,
-          timestamp: combined[fuzzyIdx].timestamp,
           side: combined[fuzzyIdx].side,
           type: combined[fuzzyIdx].type,
           eventDisplayType: combined[fuzzyIdx].eventDisplayType,

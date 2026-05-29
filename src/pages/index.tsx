@@ -74,18 +74,25 @@ const isDev = process.env.NODE_ENV !== 'production';
 export default function Home() {
   const router = useRouter();
 
-  // Redirect to /pulse if we're on the root path without any query params
+  const { user, loading: userLoading, refreshUser, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+
+  // Redirect based on auth state: logged in → /pulse, not logged in → /learn
   useEffect(() => {
-    if (router.isReady && router.pathname === '/' && !router.query.search && !router.query.chain) {
-      // Use saved chain from localStorage, default to solana
+    if (!router.isReady || userLoading) return;
+    if (router.pathname !== '/' || router.query.search || router.query.chain) return;
+
+    if (user) {
+      // Logged in: go to trenches/pulse
       const savedChain = typeof window !== 'undefined'
         ? localStorage.getItem('selected-chain')
         : null;
       const chainToUse = (savedChain === 'sol' || savedChain === 'monad') ? savedChain : 'sol';
       router.replace(`/pulse?chain=${chainToUse}`, undefined, { shallow: false });
-      return;
+    } else {
+      // Not logged in: go to learn page
+      router.replace('/learn', undefined, { shallow: false });
     }
-  }, [router.isReady, router.pathname, router.query.search, router.query.chain, router]);
+  }, [router.isReady, router.pathname, router.query.search, router.query.chain, router, user, userLoading]);
 
   const [search, setSearch] = useState("");
   // Populate search state if we arrived with ?search= in the URL
@@ -102,7 +109,6 @@ export default function Home() {
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<Timeframe>("1h");
   
-  const { user, loading: userLoading, refreshUser, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
   const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");

@@ -180,6 +180,7 @@ const navLinks = [
   { name: "Predictions", href: "/predictions" },
   { name: "Airdrop", href: "/airdrop-genesis" },
   { name: "Portfolio", href: "/portfolio" },
+  // { name: "Learn", href: "/learn" },
   { name: "Agent", href: "/agent" },
   // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
@@ -3869,7 +3870,7 @@ export default function Header({
       <ExportWalletModal
         isOpen={showExportWalletModal}
         onClose={() => setShowExportWalletModal(false)}
-        walletId={user?.walletId || walletList?.[0]?.walletId || undefined}
+        walletId={user?.walletId || walletList?.[0]?.id || undefined}
         walletAddress={
           primaryWalletAddresses?.solana ||
           user?.publicKey ||

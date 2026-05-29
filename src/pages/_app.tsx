@@ -513,6 +513,7 @@ function ReferralTracker() {
 
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
+  const router = useRouter();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -543,6 +544,7 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   };
 
   if (!isMounted) return null;
+
 
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={false} />
