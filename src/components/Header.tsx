@@ -173,7 +173,6 @@ const PLATFORM_UPDATES = [
 ];
 
 const navLinks = [
-  { name: "Landing", href: "https://interstate.so", external: true },
   { name: "Trenches", href: "/pulse" },
   { name: "Trending", href: "/discover" },
   { name: "Trackers", href: "/trackers" },
