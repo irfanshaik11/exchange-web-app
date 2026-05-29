@@ -7,7 +7,7 @@ export default function AgentPage() {
   const [showClaudeModal, setShowClaudeModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const mcpUrl = 'https://coinvest.liquid.trade';
+  const mcpUrl = 'https://agent.interstate.so';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(mcpUrl);
@@ -134,7 +134,7 @@ export default function AgentPage() {
                 <div className="claude-modal-step">
                   <div className="claude-modal-step-number">3</div>
                   <div className="claude-modal-step-content">
-                    <p className="claude-modal-step-title">Set Name to &quot;Liquid&quot;, paste the URL into &quot;Remote MCP server URL&quot;, then tap Add</p>
+                    <p className="claude-modal-step-title">Set Name to &quot;Interstate&quot;, paste the URL into &quot;Remote MCP server URL&quot;, then tap Add</p>
                   </div>
                 </div>
 
