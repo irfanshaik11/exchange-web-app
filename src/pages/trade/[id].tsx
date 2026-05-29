@@ -66,6 +66,8 @@ const AX = {
   blue: "#3b82f6",
 };
 
+const LOW_LIQUIDITY_MIGRATED_THRESHOLD = 3_000; // USD
+
 /* ===================================================================== */
 
 type SimilarTokenLite = {
@@ -144,6 +146,7 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
+  const [lowLiquidityBannerDismissed, setLowLiquidityBannerDismissed] = useState(false);
   
   // Load instant trade open state from localStorage
   const getInitialInstantTradeState = (): boolean => {
@@ -730,6 +733,30 @@ export default function TradePage() {
       pro_traders: wsTopTraders?.length ?? displayToken.pro_traders,
     };
   }, [displayToken, holderSummary, wsTopTraders, restHoldersData.top10HeldPercentage]);
+
+  // Reset low-liquidity banner dismiss when navigating to a different token
+  useEffect(() => {
+    setLowLiquidityBannerDismissed(false);
+  }, [idString]);
+
+  // Show low-liquidity warning banner for migrated tokens with liquidity < 3K
+  const showLowLiquidityBanner = useMemo(() => {
+    if (lowLiquidityBannerDismissed) return false;
+    const t = enhancedDisplayToken;
+    if (!t) return false;
+    const isMigrated =
+      (t as any)?.is_migrated ||
+      (t as any)?.migrated ||
+      (t as any)?.graduated ||
+      (t as any)?.is_graduated ||
+      ((t?.status || '').toLowerCase().includes('migrated')) ||
+      !!(t as any)?.migrated_time ||
+      !!(wsTokenInfo as any)?.is_migrated ||
+      (wsTokenInfo?.graduation_percent != null && wsTokenInfo.graduation_percent >= 100);
+    if (!isMigrated) return false;
+    const liq = wsTokenInfo?.liquidity_usd ?? (t as any)?.liquidity_usd ?? (t as any)?.total_liquidity_usd;
+    return typeof liq === 'number' && liq < LOW_LIQUIDITY_MIGRATED_THRESHOLD;
+  }, [enhancedDisplayToken, wsTokenInfo, lowLiquidityBannerDismissed]);
 
   // Also use dev_wallet from WebSocket holderSummary for chart dev markers
   useEffect(() => {
@@ -1407,6 +1434,26 @@ export default function TradePage() {
                   onRefreshSupply={refetchSupply}
                 />
               </div>
+
+              {/* Low liquidity warning for migrated tokens */}
+              {showLowLiquidityBanner && (
+                <div
+                  className="flex items-center justify-between px-3 py-1.5 text-xs font-medium"
+                  style={{ backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#eab308' }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>⚠</span>
+                    <span>This token has low liquidity. Trade carefully!</span>
+                  </div>
+                  <button
+                    onClick={() => setLowLiquidityBannerDismissed(true)}
+                    className="ml-2 hover:opacity-70 transition-opacity"
+                    style={{ color: '#eab308', lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
               {/* Separator line after TradeHeader */}
               <div className="px-3" style={{ borderBottom: `1px solid ${AX.border}` }} />
