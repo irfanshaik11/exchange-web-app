@@ -64,21 +64,14 @@ export default function AgentPage() {
               </div>
             </div>
 
-            {/* Right side — video/media */}
+            {/* Right side — glass bloom image */}
             <div className="agent-right">
-              <div className="agent-video-container">
-                <div className="agent-video-badge">
-                  <img src="/interstate/logo.png" alt="Interstate" className="agent-video-badge-logo" />
-                  Interstate
-                </div>
-                <div className="agent-video-overlay">
-                  <span className="agent-video-text">Investing is the hardest</span>
-                </div>
-                <div className="agent-video-placeholder">
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3" fill="rgba(255,255,255,0.1)" />
-                  </svg>
-                </div>
+              <div className="agent-image-container">
+                <img
+                  src="/interstate/glass-bloom.png"
+                  alt="Interstate glass bloom"
+                  className="agent-bloom-image"
+                />
               </div>
             </div>
           </div>
@@ -266,76 +259,20 @@ export default function AgentPage() {
           transform: translateY(-1px);
         }
 
-        /* Video / Media */
-        .agent-video-container {
-          position: relative;
-          width: 100%;
-          max-width: 520px;
-          aspect-ratio: 16 / 10;
-          border-radius: 16px;
-          overflow: hidden;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: #08090c;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(24, 196, 140, 0.04);
-        }
-
-        .agent-video-badge {
-          position: absolute;
-          top: 16px;
-          left: 16px;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          border-radius: 8px;
-          background: rgba(0, 0, 0, 0.6);
-          backdrop-filter: blur(8px);
-          font-size: 12px;
-          font-weight: 600;
-          color: #f4f4f5;
-          z-index: 2;
-        }
-
-        .agent-video-badge-logo {
-          width: 16px;
-          height: 16px;
-          object-fit: contain;
-        }
-
-        .agent-video-overlay {
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          padding: 40px 24px 24px;
-          background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
-          z-index: 2;
-        }
-
-        .agent-video-text {
-          font-size: clamp(18px, 2.5vw, 28px);
-          font-weight: 700;
-          color: #f4f4f5;
-          text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-        }
-
-        .agent-video-placeholder {
-          position: absolute;
-          inset: 0;
+        /* Glass Bloom Image */
+        .agent-image-container {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #0c0e12 0%, #141720 100%);
+          width: 100%;
+          max-width: 520px;
         }
 
-        /* Dot pattern background */
-        .agent-video-placeholder::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background-image: radial-gradient(rgba(24, 196, 140, 0.15) 1px, transparent 1px);
-          background-size: 20px 20px;
-          opacity: 0.5;
+        .agent-bloom-image {
+          width: 100%;
+          max-width: 420px;
+          height: auto;
+          filter: drop-shadow(0 24px 60px rgba(24, 196, 140, 0.25));
         }
 
         /* Responsive */
@@ -351,7 +288,7 @@ export default function AgentPage() {
             justify-content: center;
             width: 100%;
           }
-          .agent-video-container {
+          .agent-image-container {
             max-width: 100%;
           }
         }
