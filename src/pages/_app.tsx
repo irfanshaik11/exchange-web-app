@@ -919,7 +919,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                         </WatchlistProvider>
                       </SearchProvider>
                     </QuickBuyProvider>
-                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                    <GlobalLoginModalManager enforceLogin={false} />
                     <WalletExportGuard />
                     <UserLimitBlockerWrapper />
                   </ThemeProvider>
