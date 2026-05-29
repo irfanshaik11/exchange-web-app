@@ -19,7 +19,7 @@ export default function AgentPage() {
     <>
       <Head>
         <title>Agent | Interstate</title>
-        <meta name="description" content="Interstate Agent — AI-powered trading intelligence directly in ChatGPT and Claude." />
+        <meta name="description" content="Interstate Agent — AI-powered trading intelligence directly in Claude." />
       </Head>
       <div className="min-h-screen bg-[#030304] text-white">
         <div className="relative z-[10000]"><Header /></div>
