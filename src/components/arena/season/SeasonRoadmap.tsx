@@ -11,17 +11,6 @@ import { FiLock } from 'react-icons/fi';
 import { useSeasons } from '~/hooks/useArena';
 import type { Season } from '~/utils/arenaApi';
 
-function fmtDateRange(s: string, e: string): string {
-  const d1 = new Date(s);
-  const d2 = new Date(e);
-  const sameMonth = d1.getMonth() === d2.getMonth();
-  const sameYear = d1.getFullYear() === d2.getFullYear();
-  if (sameMonth && sameYear) {
-    return `${d1.toLocaleDateString(undefined, { month: 'short' })} ${d1.getDate()}–${d2.getDate()}`;
-  }
-  return `${d1.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${d2.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-}
-
 function seasonState(s: Season, nowMs: number): 'past' | 'active' | 'future' {
   if (s.isActive) return 'active';
   if (new Date(s.endsAt).getTime() < nowMs) return 'past';
@@ -112,13 +101,6 @@ export default function SeasonRoadmap() {
                   <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-400" />
                 )}
                 {isActive ? 'Active Now' : isPast ? 'Complete' : 'Upcoming'}
-              </div>
-              <div
-                className={`mt-2.5 text-xs font-medium tabular-nums ${
-                  isActive ? 'text-neutral-200' : 'text-neutral-300'
-                }`}
-              >
-                {fmtDateRange(s.startsAt, s.endsAt)}
               </div>
             </div>
           );

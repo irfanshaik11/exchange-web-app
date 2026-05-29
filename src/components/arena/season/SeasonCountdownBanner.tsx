@@ -48,14 +48,7 @@ export default function SeasonCountdownBanner() {
             </div>
             {next && (
               <div className="mt-0.5 text-xs text-neutral-300">
-                {next.name} begins{' '}
-                <span className="font-medium text-white">
-                  {new Date(next.startsAt).toLocaleDateString(undefined, {
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </span>
-                . Your {active.name} progress is preserved forever.
+                {next.name} begins soon. Your {active.name} progress is preserved forever.
               </div>
             )}
           </div>
