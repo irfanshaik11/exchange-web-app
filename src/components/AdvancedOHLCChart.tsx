@@ -2038,14 +2038,16 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           const shapePromise = chart.createShape(
             { time: adjustedTime, price: axisPrice },
             {
-              shape: isBuy ? "arrow_up" : "arrow_down",
+              shape: "balloon",
               lock: true,
               disableSelection: true,
               disableSave: true,
+              text: isBuy ? "B" : "S",
               overrides: {
-                [isBuy ? "linetoolarrowmarkup.arrowColor" : "linetoolarrowmarkdown.arrowColor"]: isBuy ? "#22c55e" : "#ef4444",
-                [isBuy ? "linetoolarrowmarkup.color" : "linetoolarrowmarkdown.color"]: isBuy ? "#22c55e" : "#ef4444",
-                [isBuy ? "linetoolarrowmarkup.fontsize" : "linetoolarrowmarkdown.fontsize"]: 10,
+                "linetoolballoon.backgroundColor": isBuy ? "#22c55e" : "#ef4444",
+                "linetoolballoon.borderColor": isBuy ? "#22c55e" : "#ef4444",
+                "linetoolballoon.color": "#ffffff",
+                "linetoolballoon.fontsize": 10,
               },
             },
           );
