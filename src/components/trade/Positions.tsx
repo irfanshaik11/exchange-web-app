@@ -55,6 +55,8 @@ interface PositionsProps {
   onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
   isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
   fallbackPositions?: Record<string, PositionRow>; // Optional: overrides for incomplete backend data (Monad)
+  sortByPnl?: boolean; // Optional: whether currently sorting by PnL
+  onToggleSortByPnl?: () => void; // Optional: callback to toggle PnL sorting
 }
 
 function shortAddr(addr: string) {
@@ -101,7 +103,9 @@ const Positions: React.FC<PositionsProps> = ({
   tokenMetadataCache,
   onUpdateCache,
   isCacheValid,
-  fallbackPositions
+  fallbackPositions,
+  sortByPnl = false,
+  onToggleSortByPnl
 }) => {
   const { selectedWalletIds, user, primaryWalletAddresses } = useUser();
   const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
@@ -1507,7 +1511,13 @@ const Positions: React.FC<PositionsProps> = ({
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '18%' }}>Bought</th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '12%' }}>Sold</th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '18%' }}>Remaining</th>
-            <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '15%' }}>PnL</th>
+            <th
+              className={`px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] ${onToggleSortByPnl ? 'cursor-pointer select-none' : ''} ${sortByPnl ? 'text-[#18c48c]' : 'text-white/30'}`}
+              style={{ width: '15%' }}
+              onClick={onToggleSortByPnl}
+            >
+              {onToggleSortByPnl && <span className="mr-1">↑↓</span>}PnL
+            </th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '17%' }}>Actions</th>
           </tr>
         </thead>
