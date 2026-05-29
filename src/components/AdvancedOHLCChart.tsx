@@ -5689,12 +5689,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               // as dev / user / mayhem — avoids double-rendering one trade.
               const kolInfo = !isDev && !isUser && !isMayhem ? KOL_ADDRESS_MAP.get(maker) : null;
 
-              // User trades are rendered as price-positioned shapes (arrow_up/
-              // arrow_down via createShape) so they align with the Avg Entry
-              // line. Skip them from getMarks to avoid double-rendering.
-              if (isUser) return false;
-
-              if (!isDev && !isMayhem && !kolInfo) return false;
+              if (!isDev && !isUser && !isMayhem && !kolInfo) return false;
 
               // Handle different timestamp formats
               let timestamp =
