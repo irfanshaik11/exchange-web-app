@@ -765,100 +765,13 @@ const SearchModalContent = React.memo(function SearchModalContent({
   // No need for filteredTokens since we're searching via API
   const filteredTokens: Token[] = [];
 
-  /**
-   * Calculate composite score for smart sorting
-   * Combines: relevance (0-10K), recency (0-2K), liquidity (0-500), market cap (0-5K), volume (0-3K)
-   * Higher scores = better ranking (max ~20,500)
-   */
-  const calculateSmartScore = (token: Token, searchQuery: string): number => {
-    const q = searchQuery.toLowerCase().trim();
-    const symbol = (token.symbol || "").toLowerCase();
-    const name = (token.name || "").toLowerCase();
-
-    // === RELEVANCE SCORE (0-10000) ===
-    // Exact matches and prefix matches are heavily prioritized
-    let relevanceScore = 0;
-    if (q) {
-      if (symbol === q) {
-        relevanceScore = 10000; // Exact symbol match
-      } else if (symbol.startsWith(q)) {
-        relevanceScore = 7500; // Symbol starts with query
-      } else if (name === q) {
-        relevanceScore = 6000; // Exact name match
-      } else if (name.startsWith(q)) {
-        relevanceScore = 4500; // Name starts with query
-      } else if (symbol.includes(q)) {
-        relevanceScore = 3000; // Symbol contains query
-      } else if (name.includes(q)) {
-        relevanceScore = 1500; // Name contains query
-      } else {
-        relevanceScore = 500; // Fallback (API returned it, so some match)
-      }
-    } else {
-      // No query - all tokens are equally relevant
-      relevanceScore = 5000;
-    }
-
-    // === RECENCY SCORE (0-2000) ===
-    // Newer tokens get a boost, with logarithmic decay
-    const createdAt = token.created_at
-      ? new Date(token.created_at).getTime()
-      : 0;
-    const now = Date.now();
-    const ageMs = now - createdAt;
-    const ageHours = ageMs / (1000 * 60 * 60);
-
-    let recencyScore = 0;
-    if (ageHours < 1) {
-      recencyScore = 2000; // Less than 1 hour old
-    } else if (ageHours < 6) {
-      recencyScore = 1500; // 1-6 hours old
-    } else if (ageHours < 24) {
-      recencyScore = 1000; // 6-24 hours old
-    } else if (ageHours < 72) {
-      recencyScore = 500; // 1-3 days old
-    } else {
-      recencyScore = 100; // Older than 3 days
-    }
-
-    // === LIQUIDITY BONUS (0-500) ===
-    // Tokens with good liquidity are more tradeable
-    const liquidity = token.total_liquidity_usd || 0;
-    let liquidityBonus = 0;
-    if (liquidity >= 50000) {
-      liquidityBonus = 500;
-    } else if (liquidity >= 10000) {
-      liquidityBonus = 300;
-    } else if (liquidity >= 1000) {
-      liquidityBonus = 100;
-    }
-
-    // === MARKET CAP SCORE (0-5000) — continuous log scale ===
-    // log10 scaling: $10K→2800, $100K→3500, $1M→4200, $7.5M→4811, $10M→4900, $100M→5000(cap)
-    const marketCap = token.fully_diluted_value || 0;
-    let marketCapScore = 0;
-    if (marketCap > 0) {
-      marketCapScore = Math.min(5000, Math.log10(marketCap) * 700);
-    }
-
-    // === VOLUME SCORE (0-3000) — continuous log scale ===
-    // log10 scaling: $100/1h→1000, $1K→1500, $10K→2000, $100K→2500, $1M+→3000(cap)
-    // When only 24h volume available, divide by 24 to approximate 1h equivalent
-    const { volume: rawVolume, is24h } = resolveSearchVolume(token);
-    const effectiveVolume = is24h ? rawVolume / 24 : rawVolume;
-    let volumeScore = 0;
-    if (effectiveVolume > 0) {
-      volumeScore = Math.min(3000, Math.log10(effectiveVolume) * 500);
-    }
-
-    return (
-      relevanceScore +
-      recencyScore +
-      liquidityBonus +
-      marketCapScore +
-      volumeScore
-    );
-  };
+  // calculateSmartScore was a client-side weighted scorer that re-ranked
+  // backend results by recency + mcap + liquidity + volume. It is now
+  // dead: token-service returns canonical → active → long_tail tier order
+  // with signal-weighted scoring inside each tier; the frontend should
+  // never override that ordering. The function was removed in the search
+  // relevance fix on 2026-05-18. See sortTokens below — the "smart" case
+  // now returns the backend order unchanged.
 
   // Helper function to sort tokens on the frontend
   const sortTokens = (
@@ -870,11 +783,16 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
     switch (sortBy) {
       case "smart":
-        return sortedTokens.sort(
-          (a, b) =>
-            calculateSmartScore(b, searchQuery) -
-            calculateSmartScore(a, searchQuery),
-        );
+        // Trust the backend tier order: token-service returns canonical →
+        // active → long-tail with signal-weighted scoring within each tier
+        // (typesense.go:scoreSearchResult). Re-sorting client-side via
+        // calculateSmartScore discarded that ordering — a 49-day-old spam
+        // clone with $71K mcap would rank above the canonical Goblin at
+        // $11.7M mcap because the client formula over-weights recency and
+        // ignores tier. The other sort cases (time/market_cap/volume_1h/
+        // liquidity) remain client-side because they are explicit user
+        // choices.
+        return tokens;
       case "time":
         return sortedTokens.sort(
           (a, b) =>
@@ -2451,7 +2369,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                 <div className="w-full max-w-72 min-w-0 flex-1">Token</div>
                 <div className="flex flex-shrink-0 items-center gap-3 sm:text-[11px] md:gap-5">
                   <span className="w-20 text-center">MCap</span>
-                  <span className="w-20 text-center">Vol</span>
+                  <span className="w-20 text-center">Vol 24hr</span>
                   <span className="w-20 text-center">Liq</span>
                 </div>
                 <span

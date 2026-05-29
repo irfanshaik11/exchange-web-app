@@ -7,8 +7,7 @@ import {
   DockedPanelMarginWrapper,
   useDockedPanel,
 } from "../contexts/DockedPanelContext";
-import { getActivePositionsByUser } from "~/utils/functions";
-import type { PositionRow, Wallet } from "~/utils/functions";
+import type { Wallet } from "~/utils/functions";
 import { formatMarketCap } from "~/utils/db";
 import AddWalletModal from "../components/AddWalletModal";
 import WalletRow from "../components/WalletRow";
@@ -22,6 +21,7 @@ import {
   getTrackedWallets,
   getWalletHistory,
   toggleWalletNotifications,
+  toggleAllWalletNotifications,
   WalletTrackerAuthError,
   type WatchWallet,
   type WalletEvent,
@@ -67,6 +67,8 @@ import {
   FiCopy,
   FiBarChart2,
   FiExternalLink,
+  FiHeart,
+  FiRepeat,
 } from "react-icons/fi";
 import { FaXTwitter } from "react-icons/fa6";
 import { SiSolana } from "react-icons/si";
@@ -86,7 +88,14 @@ import { HiLightningBolt } from "react-icons/hi";
 import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 import LiveTradesPanel from "../components/LiveTradesPanel";
+import MonitorPanel from "../components/MonitorPanel";
+import KolScanTrackerContent from "../components/KolScanTrackerContent";
 import kolWalletTrackerData from "../data/kol-wallet-tracker.json";
+import { useSolPrice } from "../components/SolPriceContext";
+import {
+  getWalletPortfolioSummary,
+  type WalletPortfolioSummary,
+} from "~/utils/api";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -162,7 +171,7 @@ type DefaultWalletEntry = {
   isAlertEnabled?: boolean;
 };
 
-const TABS = ["Wallet Manager", "Live Trades", "KOLs"];
+const TABS = ["Wallet Manager", "Live Trades", "Monitor", "KOLs"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const TELEGRAM_TABS = ["Channels", "Messages", "Add Channels"];
 /** Default Telegram channels to track for all users when they have none. */
@@ -319,7 +328,6 @@ export default function TrackersPage() {
     lastActiveMap,
   } = useWalletTracker();
   const [activeTab, setActiveTab] = useState(0);
-  const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddWalletModal, setShowAddWalletModal] = useState(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -344,9 +352,9 @@ export default function TrackersPage() {
   const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "social">(
     "wallets",
   );
-  const [socialPanelTab, setSocialPanelTab] = useState<"twitter" | "telegram">(
-    "twitter",
-  );
+  const [socialPanelTab, setSocialPanelTab] = useState<
+    "twitter" | "telegram" | "kolscan"
+  >("twitter");
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<
     Record<string, WalletEvent[]>
@@ -396,6 +404,12 @@ export default function TrackersPage() {
   const [cachedLiveTrades, setCachedLiveTrades] = useState<TradeEvent[]>([]);
   const fetchedMintsRef = useRef<Set<string>>(new Set());
   const [showUSD, setShowUSD] = useState(false); // Toggle between USD and SOL display
+
+  // Portfolio summaries for total value / unrealized PnL
+  const { solPrice: currentSolPrice } = useSolPrice();
+  const [portfolioSummaries, setPortfolioSummaries] = useState<
+    Record<string, WalletPortfolioSummary>
+  >({});
 
   // Quick Buy functionality
   const { presets, activePreset, setActivePreset } = useQuickBuy();
@@ -722,6 +736,75 @@ export default function TrackersPage() {
     loadWalletsFromBackend();
   }, [user?.id, router.query.chain]);
 
+  // Fetch portfolio summaries for all tracked wallets (total value + unrealized PnL)
+  useEffect(() => {
+    if (!user || wallets.length === 0) {
+      setPortfolioSummaries({});
+      return;
+    }
+    const ac = new AbortController();
+    const BATCH = 10;
+    (async () => {
+      const results: Record<string, WalletPortfolioSummary> = {};
+      for (let i = 0; i < wallets.length; i += BATCH) {
+        if (ac.signal.aborted) return;
+        const batch = wallets.slice(i, i + BATCH);
+        const settled = await Promise.allSettled(
+          batch.map((w) =>
+            getWalletPortfolioSummary(w.address, ac.signal),
+          ),
+        );
+        for (let j = 0; j < settled.length; j++) {
+          const r = settled[j]!;
+          if (r.status === "fulfilled") {
+            results[batch[j]!.address] = r.value;
+          }
+        }
+      }
+      if (!ac.signal.aborted) setPortfolioSummaries({ ...results });
+    })();
+    return () => ac.abort();
+  }, [user, wallets]);
+
+  // Aggregate portfolio metrics across all tracked wallets
+  const aggregatePortfolio = useMemo(() => {
+    const addresses = Object.keys(portfolioSummaries);
+    if (addresses.length === 0) return { totalValue: 0, unrealizedPnl: 0 };
+
+    let totalSolBalance = 0;
+    let totalUnrealizedPnl = 0;
+
+    for (const addr of addresses) {
+      const summary = portfolioSummaries[addr]!;
+      totalUnrealizedPnl += summary.total_unrealized_pnl_usd;
+
+      // SOL balance from context (already in SOL units)
+      const solBal = contextWalletBalances[addr] ?? 0;
+      totalSolBalance += solBal;
+    }
+
+    // Total value = SOL balance in USD + unrealized value (approximated from bought - sold + unrealized)
+    const solBalanceUsd = totalSolBalance * currentSolPrice;
+
+    // Sum up the "remaining value" — total bought minus total sold gives a rough invested amount still in positions
+    // The actual remaining value is the unrealized PnL + cost basis of open positions
+    let totalRemainingPositionValue = 0;
+    for (const addr of addresses) {
+      const summary = portfolioSummaries[addr]!;
+      const boughtSolUsd = summary.total_bought_sol * currentSolPrice;
+      const soldSolUsd = summary.total_sold_sol * currentSolPrice;
+      // cost basis of remaining positions ≈ bought - sold
+      const costBasis = Math.max(0, boughtSolUsd - soldSolUsd);
+      // remaining market value = cost basis + unrealized PnL
+      totalRemainingPositionValue += costBasis + summary.total_unrealized_pnl_usd;
+    }
+
+    return {
+      totalValue: solBalanceUsd + totalRemainingPositionValue,
+      unrealizedPnl: totalUnrealizedPnl,
+    };
+  }, [portfolioSummaries, contextWalletBalances, currentSolPrice]);
+
   // Load Twitter accounts on mount
   useEffect(() => {
     loadTwitterAccounts();
@@ -746,8 +829,7 @@ export default function TrackersPage() {
 
     const incompleteSignature = twitterAccounts
       .filter(
-        (a) =>
-          !Boolean(a.profileImageUrl) || typeof a.followers !== "number",
+        (a) => !Boolean(a.profileImageUrl) || typeof a.followers !== "number",
       )
       .map((a) => a.username.toLowerCase())
       .sort()
@@ -837,7 +919,10 @@ export default function TrackersPage() {
     const decrement = () => {
       if (!counted) return;
       counted = false;
-      perUserFetchInFlight.current = Math.max(0, perUserFetchInFlight.current - 1);
+      perUserFetchInFlight.current = Math.max(
+        0,
+        perUserFetchInFlight.current - 1,
+      );
     };
     const finish = () => {
       decrement();
@@ -1392,40 +1477,50 @@ export default function TrackersPage() {
       return;
     }
 
+    if (!user?.bearerToken) {
+      console.error("Cannot toggle notifications without auth token");
+      return;
+    }
+
+    const newState = !allNotificationsEnabled;
+    const previousWallets = watchedWallets;
+
     setIsTogglingAllNotifications(true);
 
+    // Optimistic update: flip local state immediately so the button feels
+    // instant. We roll back if the bulk call fails.
+    setWatchedWallets((prev) =>
+      prev.map((w) => ({ ...w, notificationsEnabled: newState })),
+    );
+    previousWallets.forEach((wallet) => {
+      localStorage.setItem(
+        `wallet_notifications_${wallet.address}`,
+        JSON.stringify(newState),
+      );
+    });
+
     try {
-      // Determine new state: if all are enabled, disable all. Otherwise, enable all.
-      const newState = !allNotificationsEnabled;
-      isDev &&
-        console.log(
-          `🔔 Toggle all notifications: ${allNotificationsEnabled} → ${newState}`,
-        );
-      isDev && console.log(`📊 Toggling ${watchedWallets.length} wallets`);
-
-      // Toggle each wallet's notifications
-      const togglePromises = watchedWallets.map((wallet) => {
-        return toggleWalletNotifications(
-          wallet.address,
-          newState,
-          wallet.ownerId || undefined,
-          wallet.chain || selectedChain,
-          user?.bearerToken,
-        );
-      });
-
-      const results = await Promise.all(togglePromises);
-      // Update localStorage for each wallet
-      watchedWallets.forEach((wallet) => {
-        const storageKey = `wallet_notifications_${wallet.address}`;
-        localStorage.setItem(storageKey, JSON.stringify(newState));
-      });
-
-      // Reload from backend to refresh state
-      await loadWalletsFromBackend();
-      await refreshWatchedWallets();
+      await toggleAllWalletNotifications(
+        newState,
+        user.bearerToken,
+        selectedChain,
+      );
+      // Sync from backend in the background — don't block the button on it.
+      // loadWalletsFromBackend already calls refreshWatchedWallets internally,
+      // so no second refresh is needed.
+      loadWalletsFromBackend().catch((err) =>
+        console.error("Background wallet refresh failed:", err),
+      );
     } catch (error) {
       console.error("❌ Failed to toggle all notifications:", error);
+      // Rollback optimistic update
+      setWatchedWallets(previousWallets);
+      previousWallets.forEach((wallet) => {
+        localStorage.setItem(
+          `wallet_notifications_${wallet.address}`,
+          JSON.stringify(wallet.notificationsEnabled),
+        );
+      });
     } finally {
       setIsTogglingAllNotifications(false);
     }
@@ -2262,7 +2357,7 @@ export default function TrackersPage() {
                                   </button>
                                 ))}
                                 <div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1 text-[10px] backdrop-blur-sm sm:px-3 sm:py-1.5 sm:text-[11px]">
-                                  {activeTab === 2 ? (
+                                  {activeTab === 3 ? (
                                     <>
                                       <span className="text-neutral-500">
                                         {KOL_TRACKER_ENTRIES.length} KOL
@@ -2318,7 +2413,7 @@ export default function TrackersPage() {
                               </div>
                             </div>
 
-                            {!user && activeTab !== 2 ? (
+                            {!user && activeTab !== 3 ? (
                               <div className="flex min-h-[260px] flex-1 flex-col items-center justify-center px-4 py-12 text-center">
                                 <FiLock className="mb-3 h-10 w-10 text-neutral-700" />
                                 <p className="text-sm font-medium text-neutral-300">
@@ -2443,7 +2538,7 @@ export default function TrackersPage() {
                                 )}
 
                                 {/* Search — KOL directory */}
-                                {activeTab === 2 && (
+                                {activeTab === 3 && (
                                   <div className="border-b border-white/[0.04] px-1 py-3 sm:px-2 sm:py-4">
                                     <input
                                       type="text"
@@ -2456,6 +2551,7 @@ export default function TrackersPage() {
                                     />
                                   </div>
                                 )}
+
 
                                 <div className="-mx-3 min-h-0 flex-1 overflow-y-auto px-3 sm:-mx-5 sm:px-5">
                                   {activeTab === 0 && user ? (
@@ -2559,6 +2655,15 @@ export default function TrackersPage() {
                                       isLoading={isLoadingHistory}
                                     />
                                   ) : activeTab === 2 ? (
+                                    <MonitorPanel
+                                      trades={liveTradesToRender}
+                                      wallets={wallets}
+                                      wsConnected={wsConnected}
+                                      quickBuyAmount={quickBuyAmount}
+                                      onQuickBuy={handleQuickBuy}
+                                      isLoading={isLoadingHistory}
+                                    />
+                                  ) : activeTab === 3 ? (
                                     <div className="flex flex-col pb-2">
                                       {filteredKolEntries.length === 0 ? (
                                         <div className="flex h-48 flex-col items-center justify-center text-center">
@@ -2735,16 +2840,16 @@ export default function TrackersPage() {
                         <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pt-3.5 pb-2.5 sm:pt-4 sm:pb-3">
                           <div className="flex items-center gap-4 sm:gap-5">
                             <button
-                            type="button"
-                            onClick={() => setSocialPanelTab("twitter")}
-                            className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
-                              socialPanelTab === "twitter"
-                                ? "text-[#f4f4f5]"
-                                : "text-[#52525b] hover:text-[#a1a1aa]"
-                            }`}
-                          >
-                            X Tracker
-                          </button>
+                              type="button"
+                              onClick={() => setSocialPanelTab("twitter")}
+                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                                socialPanelTab === "twitter"
+                                  ? "text-[#f4f4f5]"
+                                  : "text-[#52525b] hover:text-[#a1a1aa]"
+                              }`}
+                            >
+                              X Tracker
+                            </button>
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("telegram")}
@@ -2756,8 +2861,22 @@ export default function TrackersPage() {
                             >
                               Telegram Tracker
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => setSocialPanelTab("kolscan")}
+                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                                socialPanelTab === "kolscan"
+                                  ? "text-[#f4f4f5]"
+                                  : "text-[#52525b] hover:text-[#a1a1aa]"
+                              }`}
+                            >
+                              KOLScan
+                            </button>
                           </div>
                         </div>
+                        {socialPanelTab === "kolscan" && (
+                          <KolScanTrackerContent />
+                        )}
                         {socialPanelTab === "telegram" && (
                           <>
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pt-2.5 pb-2.5 sm:gap-3 sm:pt-3 sm:pb-3">
@@ -3102,18 +3221,20 @@ export default function TrackersPage() {
                                   <div className="scrollbar-hide flex-1 overflow-auto">
                                     <table className="w-full min-w-[280px] text-[10px] sm:min-w-[320px] sm:text-xs">
                                       <tbody>
-                                        {visibleTwitterAccounts.map((account) => (
-                                          <TwitterAccountRow
-                                            key={account.username}
-                                            account={account}
-                                            onRemove={
-                                              handleRemoveTwitterAccount
-                                            }
-                                            onViewProfile={
-                                              handleViewTwitterProfile
-                                            }
-                                          />
-                                        ))}
+                                        {visibleTwitterAccounts.map(
+                                          (account) => (
+                                            <TwitterAccountRow
+                                              key={account.username}
+                                              account={account}
+                                              onRemove={
+                                                handleRemoveTwitterAccount
+                                              }
+                                              onViewProfile={
+                                                handleViewTwitterProfile
+                                              }
+                                            />
+                                          ),
+                                        )}
                                       </tbody>
                                     </table>
                                   </div>
@@ -3210,12 +3331,17 @@ export default function TrackersPage() {
                                             </div>
                                           )}
                                         <div className="mt-2.5 flex items-center gap-4 text-[10px] text-[#52525b] sm:text-xs">
-                                          <span>❤️ {tweet.likeCount || 0}</span>
-                                          <span>
-                                            🔄 {tweet.retweetCount || 0}
+                                          <span className="inline-flex items-center gap-1">
+																						<FiHeart className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+																						{tweet.likeCount || 0}
                                           </span>
-                                          <span>
-                                            💬 {tweet.replyCount || 0}
+                                          <span className="inline-flex items-center gap-1">
+                                            <FiRepeat className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                                            {tweet.retweetCount || 0}
+                                          </span>
+                                          <span className="inline-flex items-center gap-1">
+                                            <FiMessageCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                                            {tweet.replyCount || 0}
                                           </span>
                                         </div>
                                       </a>
@@ -3227,12 +3353,12 @@ export default function TrackersPage() {
                                   <div className="my-2.5 flex items-center gap-2 border-b border-white/[0.06] pb-2.5">
                                     <input
                                       type="text"
-                                      placeholder="@ Search handle"
+                                      placeholder="Search handle"
                                       value={approvedHandlesSearch}
                                       onChange={(e) =>
                                         setApprovedHandlesSearch(e.target.value)
                                       }
-                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
+                                      className="w-full flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">

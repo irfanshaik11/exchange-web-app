@@ -394,6 +394,12 @@ export function transformWalletScanToTradeRows(
 }
 
 export function formatSmartNumber(num: number): string {
+  // Guard NaN / Infinity → render an em-dash so the UI never displays
+  // literally "NaN" or "Infinity" to users when an upstream computation
+  // produces a non-finite result.
+  if (!Number.isFinite(num)) {
+    return "—";
+  }
   const abs = Math.abs(num);
   if (abs > 0 && abs < 0.01) {
     const str = abs.toFixed(20);

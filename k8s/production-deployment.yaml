@@ -29,6 +29,23 @@ spec:
               value: "true"
             - name: NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
               value: "f8b3c9d2e1a4b5c6d7e8f9a0b1c2d3e4"  # Replace with your actual WalletConnect Project ID
+            # KOL leaderboard read path — points at the same Neon DB the
+            # wallet-tracker-backend's kolscanPoller writes to.
+            - name: KOL_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kol-db
+                  key: url
+            # Backend poller is the single writer; disable the in-process one.
+            - name: DISABLE_KOL_INPROCESS_CRON
+              value: "true"
+            # Optional Redis cache — degrades silently if secret is absent.
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kol-redis
+                  key: url
+                  optional: true
           resources:
             requests:
               memory: "256Mi"

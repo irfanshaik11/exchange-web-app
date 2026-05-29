@@ -119,10 +119,26 @@ export interface NormalizedTrendingToken {
   price_usd: number;
   fully_diluted_value: number;
   total_liquidity_usd: number;
+  // For the matching trending timeframe (5m/1h/6h), this field carries raw
+  // SOL from the per-token Redis bucket reader — same source as the Trade
+  // page volume / OHLC chart. The volume column multiplies by Pyth SOL/USD
+  // at render time so the same token shows the same volume on Trending and
+  // the Trade page. Non-matching timeframe slots are typically 0 (omitempty
+  // drops them on the wire).
   volume_1h: number;
   volume_5m: number;
   volume_6h: number;
   volume_24h: number;
+  // Interstate-indexed SOL volume from the BE (only DexScreener feed populates
+  // these today, via `enrichWithInterstateVolume` in exchange-token-service).
+  // When present and > 0, InterstateTable.getVolume multiplies by Pyth so the
+  // DEX Screener tab's vol matches the Trade page header for that mint.
+  // When absent / 0, falls back to the USD `volume_{tf}` above (DexScreener's
+  // own number, preserved so fresh un-indexed mints don't render as $0).
+  volume_sol_5m?: number;
+  volume_sol_1h?: number;
+  volume_sol_6h?: number;
+  volume_sol_24h?: number;
   holder_count: number;
   rank: number;
   status: string;
@@ -157,7 +173,9 @@ export interface NormalizedTrendingToken {
   // Pool/pair address for direct trade routing (used by DexScreener tokens)
   pair_address?: string;
   migrated_pool_address?: string;
-  created_at?: string;
+  // string from internal trending feed, number (epoch ms) from DexScreener
+  // proxy. InterstateTable.getTokenAge normalizes both shapes.
+  created_at?: string | number;
   // Mayhem Mode flag — backend sets true on tokens currently inside the
   // 24h Mayhem hot window. Surfaced so the Discover Mayhem chip can filter
   // trending rows the same way PulseFilters does on the new-pairs feed.

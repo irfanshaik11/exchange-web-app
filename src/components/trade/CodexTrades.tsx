@@ -540,6 +540,7 @@ interface CodexTradesProps {
   onTradesUpdate?: (trades: any[]) => void; // Callback to update parent cache when trades change
   pairAddress?: string; // Fallback pair address when token doesn't have it
   chain?: "sol" | "monad"; // Chain to determine which WebSocket to use
+  onWalletClick?: (address: string) => void; // Callback when wallet address is clicked in hover card
 }
 
 function getTimeFromTimestampSec(ts: number) {
@@ -596,7 +597,7 @@ function normalizeTrade(
   let pricePerToken = 0;
   let tokenAmount = 0;
   let solAmount = 0;
-  let maker = trade.maker || trade.trader || "";
+  let maker = trade.maker || trade.trader || trade.trader_wallet || "";
   let timestampSec = Date.now() / 1000;
   let keyPart = "";
 
@@ -615,11 +616,12 @@ function normalizeTrade(
     trade.is_buy !== undefined &&
     (trade.mon_amount !== undefined || trade.token_amount !== undefined);
 
-  if (typeof trade.timestamp === "number") {
-    timestampSec =
-      trade.timestamp < 1e10 ? trade.timestamp : trade.timestamp / 1000;
-  } else if (typeof trade.timestamp === "string") {
-    timestampSec = new Date(trade.timestamp).getTime() / 1000;
+  // Check timestamp, created_at, and block_timestamp fields
+  const rawTs = trade.timestamp ?? trade.created_at ?? trade.block_timestamp;
+  if (typeof rawTs === "number") {
+    timestampSec = rawTs < 1e10 ? rawTs : rawTs / 1000;
+  } else if (typeof rawTs === "string") {
+    timestampSec = new Date(rawTs).getTime() / 1000;
   }
 
   if (hasWsShape) {
@@ -685,8 +687,8 @@ function normalizeTrade(
     keyPart =
       (trade.signature || trade.transaction_hash || trade.id || "") +
       (trade.timestamp || "");
-    // Handle both wallet_address (new format) and trader (old format)
-    maker = trade.wallet_address || trade.trader || "";
+    // Handle wallet_address, trader_wallet, and trader field names
+    maker = trade.wallet_address || trade.trader_wallet || trade.trader || "";
   } else if (hasMonadFormat) {
     // Monad trade format from useMonadTradesWebSocket
     isBuy = trade.is_buy === true;
@@ -705,10 +707,6 @@ function normalizeTrade(
     if (tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
     keyPart = (trade.tx_hash || trade.id || "") + (trade.block_timestamp || "");
     maker = trade.trader_address || "";
-    // Use block_timestamp for Monad trades
-    if (trade.block_timestamp) {
-      timestampSec = Number(trade.block_timestamp);
-    }
   } else {
     isBuy = !!(trade.side === "buy" || trade.type === "BUY");
     color = isBuy ? "text-emerald-400" : "text-red-400";
@@ -801,6 +799,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
   onTradesUpdate,
   pairAddress,
   chain = "sol",
+  onWalletClick,
 }) => {
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = chain === "monad" ? monPrice : solPrice;
@@ -1176,8 +1175,42 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
         }
       }
     }
+
+    // Fallback: aggregate stats from the trades feed for wallets not in holders/topTraders.
+    const authoritativeKeys = new Set(map.keys());
+    const trades = solanaTrades.length > 0 ? solanaTrades : stableInitialTrades;
+    if (trades && trades.length > 0) {
+      for (const t of trades) {
+        const n = normalizeTrade(t, stableToken?.decimals ?? 9, chainPrice);
+        const addr = t.wallet_address || t.maker || t.trader || t.trader_wallet || "";
+        if (!addr) continue;
+        const key = addr.toLowerCase();
+        if (authoritativeKeys.has(key)) continue; // holder/topTrader data takes priority
+
+        let entry = map.get(key);
+        if (!entry) {
+          entry = {
+            walletAddress: addr,
+            totalBoughtSol: 0,
+            buyCount: 0,
+            totalSoldSol: 0,
+            sellCount: 0,
+          };
+          map.set(key, entry);
+        }
+
+        if (n.isBuy) {
+          entry.totalBoughtSol = (entry.totalBoughtSol || 0) + n.solAmount;
+          entry.buyCount = (entry.buyCount || 0) + 1;
+        } else {
+          entry.totalSoldSol = (entry.totalSoldSol || 0) + n.solAmount;
+          entry.sellCount = (entry.sellCount || 0) + 1;
+        }
+      }
+    }
+
     return map;
-  }, [chain, solanaHolders, solanaTopTraders]);
+  }, [chain, solanaHolders, solanaTopTraders, solanaTrades, stableInitialTrades, stableToken?.decimals, chainPrice]);
 
   // Simple holder type lookup for icons (backwards compatible)
   const holderTypeMap = useMemo(() => {
@@ -1224,6 +1257,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
       return;
     }
 
+    const INT_MIN = -2147483648;
+    const INT_MAX = 2147483647;
+
     const baseUrl = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(
       /\/$/,
       "",
@@ -1231,8 +1267,8 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     if (!baseUrl) return;
 
     const params = new URLSearchParams();
-    if (hasMin) params.set("min_usd", String(parseFloat(totalMin)));
-    if (hasMax) params.set("max_usd", String(parseFloat(totalMax)));
+    params.set("min_usd", String(hasMin ? parseFloat(totalMin) : INT_MIN));
+    params.set("max_usd", String(hasMax ? parseFloat(totalMax) : INT_MAX));
     params.set("limit", "50");
 
     const controller = new AbortController();
@@ -1259,9 +1295,63 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     return () => controller.abort();
   }, [chain, stableToken?.mint, totalMin, totalMax]);
 
+  // Server-side wallet/trader filter — when the user enters a wallet address
+  // we hit /v1/token/{mint}/wallet/{address}/trades to get that trader's full history.
+  const [serverWalletTrades, setServerWalletTrades] = React.useState<
+    any[] | null
+  >(null);
+  const [serverWalletLoading, setServerWalletLoading] = React.useState(false);
+  const walletAddress = filters.wallet.address;
+
+  React.useEffect(() => {
+    if (chain !== "sol") return;
+    const mint = stableToken?.mint;
+    if (!mint) return;
+
+    const trimmedAddress = walletAddress.trim();
+    if (!trimmedAddress) {
+      setServerWalletTrades(null);
+      setServerWalletLoading(false);
+      return;
+    }
+
+    const baseUrl = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(
+      /\/$/,
+      "",
+    );
+    if (!baseUrl) return;
+
+    const controller = new AbortController();
+    setServerWalletLoading(true);
+
+    fetch(
+      `${baseUrl}/v1/token/${encodeURIComponent(mint)}/wallet/${encodeURIComponent(trimmedAddress)}/trades?limit=50`,
+      { signal: controller.signal },
+    )
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        const trades = Array.isArray(data)
+          ? data
+          : data?.trades ?? data?.results ?? [];
+        setServerWalletTrades(trades);
+      })
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        console.error("[CodexTrades] wallet trades failed:", err);
+        setServerWalletTrades([]);
+      })
+      .finally(() => setServerWalletLoading(false));
+
+    return () => controller.abort();
+  }, [chain, stableToken?.mint, walletAddress]);
+
   // Preserve trades - once we have trades from WebSocket, always use them
   // This ensures trades don't disappear or change unless new ones arrive
   const displayTrades = React.useMemo(() => {
+    // When server-side wallet filter is active, it's the source of truth.
+    if (serverWalletTrades !== null) {
+      return serverWalletTrades;
+    }
     // When server-side USD filter is active, it's the source of truth.
     if (serverFilteredTrades !== null) {
       return serverFilteredTrades;
@@ -1272,27 +1362,28 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     }
     // Fallback to initial trades only if WebSocket hasn't provided any yet
     return stableInitialTrades;
-  }, [serverFilteredTrades, wsTrades, stableInitialTrades]);
+  }, [serverWalletTrades, serverFilteredTrades, wsTrades, stableInitialTrades]);
 
   // Only show loading if we don't have any trades at all (not even cached ones)
   // If we have cached trades, show them immediately even if WebSocket is still connecting
   const isLoading =
     (wsLoading && displayTrades.length === 0 && stableInitialTrades.length === 0) ||
-    serverFilterLoading;
+    serverFilterLoading ||
+    serverWalletLoading;
 
   // Update parent cache when trades change (for persistence across tab switches).
-  // Skip while a server-side USD filter is active so we don't overwrite the full
+  // Skip while a server-side filter is active so we don't overwrite the full
   // trade cache with a filtered subset.
   React.useEffect(() => {
-    if (serverFilteredTrades !== null) return;
+    if (serverFilteredTrades !== null || serverWalletTrades !== null) return;
     if (onTradesUpdate && displayTrades.length > 0) {
       onTradesUpdate(displayTrades);
     }
-  }, [displayTrades, onTradesUpdate, serverFilteredTrades]);
+  }, [displayTrades, onTradesUpdate, serverFilteredTrades, serverWalletTrades]);
 
   // Save trades to localStorage cache when they update (skip filtered results).
   React.useEffect(() => {
-    if (serverFilteredTrades !== null) return;
+    if (serverFilteredTrades !== null || serverWalletTrades !== null) return;
     if (stableToken?.pair_address && displayTrades.length > 0) {
       saveToCache(displayTrades, stableToken.pair_address);
     }
@@ -1301,6 +1392,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
     stableToken?.pair_address,
     saveToCache,
     serverFilteredTrades,
+    serverWalletTrades,
   ]);
 
   // Helper to extract complete trader address from raw trade data
@@ -1752,7 +1844,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
 
                 return (
                   <>
-                    <WalletHoverCard data={hoverData} chain={chain}>
+                    <WalletHoverCard data={hoverData} chain={chain} onWalletClick={onWalletClick}>
                       <div className="flex items-center gap-1.5">
                         <span className="cursor-pointer truncate text-[13px] whitespace-nowrap text-gray-300 transition-colors hover:text-emerald-400">
                           {shortAddr(n.maker || "")}
@@ -1943,28 +2035,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
           <div className="w-[13%] px-2 py-3 text-left whitespace-nowrap text-[#757e80]">
             <div className="flex items-center gap-1">
               <span className="text-[13px] font-medium">Type</span>
-              <button
-                onClick={handleTypeFilterClick}
-                className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
-                style={{
-                  color: filters.type.filter !== "all" ? AX.mint : "#757e80",
-                }}
-              >
-                <CiFilter size={14} />
-              </button>
-              {filters.type.filter !== "all" && (
-                <span
-                  className="rounded px-1 text-[9px]"
-                  style={{
-                    backgroundColor:
-                      filters.type.filter === "buy" ? "#34d39920" : "#f8717120",
-                    color:
-                      filters.type.filter === "buy" ? "#34d399" : "#f87171",
-                  }}
-                >
-                  {filters.type.filter === "buy" ? "Buy" : "Sell"}
-                </span>
-              )}
             </div>
           </div>
 
@@ -1987,11 +2057,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
                 label=""
                 sortDirection={filters.price.sort}
                 onSort={() => handleSort("price")}
-                hasFilter
-                onFilterClick={(e) => handleFilterClick("price", e)}
-                isFilterActive={
-                  !!filters.price.range.min || !!filters.price.range.max
-                }
               />
             </div>
           </div>
@@ -2002,11 +2067,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
               label="Amount"
               sortDirection={filters.amount.sort}
               onSort={() => handleSort("amount")}
-              hasFilter
-              onFilterClick={(e) => handleFilterClick("amount", e)}
-              isFilterActive={
-                !!filters.amount.range.min || !!filters.amount.range.max
-              }
             />
           </div>
 
@@ -2057,29 +2117,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({
               <button
                 onClick={handleWalletFilterClick}
                 className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
-                style={{
-                  color: isWalletFilterActive ? AX.mint : "#757e80",
-                }}
+                style={{ color: isWalletFilterActive ? AX.mint : "#757e80" }}
               >
                 <CiFilter size={14} />
               </button>
-              {isWalletFilterActive && (
-                <span
-                  className="rounded px-1 text-[9px]"
-                  style={{
-                    backgroundColor: `${AX.mint}20`,
-                    color: AX.mint,
-                  }}
-                >
-                  {filters.wallet.tags.length > 0
-                    ? filters.wallet.tags.length
-                    : ""}
-                  {filters.wallet.address ? "🔍" : ""}
-                  {filters.wallet.txsRange.min || filters.wallet.txsRange.max
-                    ? "📊"
-                    : ""}
-                </span>
-              )}
             </div>
           </div>
         </div>

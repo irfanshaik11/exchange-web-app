@@ -75,6 +75,17 @@ export function toPositionRow(p: WalletPortfolioPosition): PositionRow {
   (row as any).bought_sol = p.bought_sol;
   (row as any).sold_sol = p.sold_sol;
   (row as any).realized_pnl_sol = p.realized_pnl_sol;
+  // total_outflow_sol: indexer-migration-023 chain-truth cost basis (swap +
+  // all fees). When > 0, enrichment uses this instead of bought_sol for the
+  // USD cost-basis calculation, since bought_sol misses 70-95% of the real
+  // cost on small trades with normal network fees. Falls back to bought_sol
+  // when 0 (no migration-aware trades for this position yet).
+  (row as any).total_outflow_sol = (p as any).total_outflow_sol ?? 0;
+  // cost_basis_sol: migration-024 refinement — outflow MINUS recoverable
+  // ATA rent (~0.00204 SOL per new mint). Closer to "what you actually
+  // paid that you can't get back" — what Axiom/GMGN show. Use this for
+  // PnL display when > 0; falls back to total_outflow_sol then bought_sol.
+  (row as any).cost_basis_sol = (p as any).cost_basis_sol ?? 0;
   return row;
 }
 
@@ -301,6 +312,14 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
                   realized_pnl_sol: 0,
                   realized_pnl_usd: 0,
                   unrealized_pnl_usd: 0,
+                  // total_outflow_sol / cost_basis_sol are indexer aggregates
+                  // that don't ride the position_update NOTIFY payload — they
+                  // only arrive via REST. Seed 0 so portfolio enrichment's
+                  // priority chain falls cleanly to bought_sol × solPrice until
+                  // fetchAll() reconciles. Without explicit 0, these are
+                  // `undefined` and any future strict numeric check would fail.
+                  total_outflow_sol: 0,
+                  cost_basis_sol: 0,
                   is_sniper: false,
                   is_insider: false,
                   is_dev: false,
@@ -463,6 +482,18 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
               realized_pnl_usd: 0,
               unrealized_pnl_usd: 0,
               current_price_usd: t.price_usd ?? null,
+              // Chain-derived outflow + cost-basis are aggregates the indexer
+              // computes after the position_update flush; the WS new_trade
+              // payload doesn't carry them. Seed 0 so portfolio enrichment's
+              // boughtUsd fallback chain (cost_basis_sol → total_outflow_sol →
+              // bought_sol) correctly skips both and lands on swap-only until
+              // fetchAll() reconciles in ~2s with authoritative API data.
+              // Without these defaults, the fields are `undefined` and
+              // (p as any).cost_basis_sol ?? 0 still resolves to 0 — but being
+              // explicit prevents future code from accidentally treating
+              // "undefined" as a third state.
+              total_outflow_sol: 0,
+              cost_basis_sol: 0,
               is_sniper: false,
               is_insider: false,
               is_dev: false,
@@ -475,32 +506,45 @@ export function useWalletPortfolio(walletAddress: string | null | undefined): Us
           });
         }
 
-        // Authoritative refetch on TRAILING-edge debounce: wait 2s after the
-        // last new_trade in a burst before refetching. The optimistic update
-        // above is already on screen; the only purpose of fetchAll() here is
-        // to reconcile against the indexer's canonical aggregates.
+        // Authoritative refetch strategy: schedule MULTIPLE fetches at 800ms,
+        // 2.5s, and 5s after a new_trade. This handles two competing concerns:
         //
-        // CRITICAL: this MUST be trailing-edge, not leading-edge. Reason: when
-        // a trade fires, it lands in `solana_trades` immediately, but the
-        // `wallet_holder_positions` aggregate row that powers
-        // /v1/wallet/{addr}/positions can lag the trade insert by hundreds of
-        // ms to several seconds (and even longer when indexer parsers stall
-        // or batch-flush at slow cadence). A leading-edge fetchAll fires
-        // immediately, hits the API before the aggregate has updated, and
-        // gets back STALE data — then setRawPositions(p.positions) clobbers
-        // the optimistic update with that stale list. From the user's POV
-        // the position row "reverts" within a second of trading and stays
-        // that way until they manually refresh — which happens to work only
-        // because by the time they click refresh, the aggregate has caught up.
-        // Trailing-edge with 2s buffer gives the indexer aggregator enough
-        // headroom that fetchAll's response is fresh and merges cleanly.
+        //   (1) Indexer lag — `solana_trades` insert is instant, but the
+        //       `wallet_holder_positions` aggregate row that powers /positions
+        //       can take 100ms-5s to catch up. A leading-edge fetchAll fires
+        //       too early and gets PRE-trade data, then setRawPositions()
+        //       clobbers the optimistic synthetic row with the stale list.
+        //       The retention guard (addedMintsRef) handles the case where
+        //       the API misses the mint entirely, but it doesn't help when
+        //       the API returns the row with pre-trade aggregates.
+        //
+        //   (2) Cost-basis fields (cost_basis_sol, total_outflow_sol) are
+        //       only populated via REST, not via WS NOTIFY. The synthetic
+        //       row created here has them as 0, so portfolio enrichment
+        //       displays a swap-only PnL (~0% on a fresh buy) until fetchAll
+        //       reconciles. Old single trailing-edge 2s debounce was too
+        //       slow because subsequent WS events kept resetting the timer,
+        //       leaving users at 0% PnL until they manually refreshed.
+        //
+        // Strategy: kick off 3 staggered fetches. Each one replaces the
+        // synthetic with API data IF the aggregate has caught up. First
+        // fetch at 800ms catches the fast path (typical aggregator latency).
+        // 2.5s catches the slow path. 5s catches indexer-stall pathological
+        // cases. After any successful reconcile, the position has correct
+        // cost_basis_sol and enrichment renders the chain-truth PnL.
+        //
+        // Why not debounce: bursts of WS events kept resetting the timer
+        // indefinitely on busy wallets, deferring reconciliation forever.
+        // Multiple absolute timers fire regardless.
         if (refetchDebounceRef.current) {
           clearTimeout(refetchDebounceRef.current);
         }
-        refetchDebounceRef.current = setTimeout(() => {
-          refetchDebounceRef.current = null;
-          void fetchAll();
-        }, 2000);
+        const scheduleReconcile = (delay: number) => {
+          setTimeout(() => { void fetchAll(); }, delay);
+        };
+        scheduleReconcile(800);
+        scheduleReconcile(2500);
+        scheduleReconcile(5000);
         break;
       }
       case "pong":

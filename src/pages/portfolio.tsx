@@ -599,13 +599,30 @@ export default function PortfolioPage() {
     const enriched = wp.positions
       .filter((p) => p.remaining > 0.001)
       .map((p) => {
-        // Prefer backend-supplied USD values when present; fall back to SOL × solPrice.
-        const boughtSol = (p as any).bought_sol ?? 0;  // raw fields preserved on PositionRow via spread
+        // Cost basis priority order (highest to lowest):
+        //   1. p.boughtUsdValue from backend (currently always 0; indexer doesn't
+        //      stamp USD-at-trade-time yet, so this branch is rarely taken)
+        //   2. cost_basis_sol × solPrice — migration-024 truth: outflow MINUS
+        //      recoverable ATA rent. This is the non-recoverable amount the user
+        //      actually paid. Matches Axiom/GMGN semantics. Use this when > 0.
+        //   3. total_outflow_sol × solPrice — migration-023 raw outflow including
+        //      ATA rent. Over-pessimistic (treats recoverable rent as cost) but
+        //      better than swap-only. Used when cost_basis_sol is 0 (e.g., pre-
+        //      migration-024 rows).
+        //   4. bought_sol × solPrice — swap-only fallback for positions composed
+        //      entirely of pre-migration-023 trades. Understates by 70-95%.
+        const boughtSol = (p as any).bought_sol ?? 0;
         const soldSol = (p as any).sold_sol ?? 0;
         const realizedSol = (p as any).realized_pnl_sol ?? 0;
+        const totalOutflowSol = (p as any).total_outflow_sol ?? 0;
+        const costBasisSol = (p as any).cost_basis_sol ?? 0;
         const boughtUsd = p.boughtUsdValue && p.boughtUsdValue > 0
           ? p.boughtUsdValue
-          : boughtSol * solPrice;
+          : costBasisSol > 0
+            ? costBasisSol * solPrice
+            : totalOutflowSol > 0
+              ? totalOutflowSol * solPrice
+              : boughtSol * solPrice;
         const soldUsd = p.soldUsdValue && p.soldUsdValue > 0
           ? p.soldUsdValue
           : soldSol * solPrice;
@@ -671,6 +688,7 @@ export default function PortfolioPage() {
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
+  const [sortByPnl, setSortByPnl] = useState(false);
   // Calculate native price for current chain
   const nativePriceForDisplay = useMemo(() => {
     if (currentChain === 'monad') {
@@ -1682,6 +1700,17 @@ export default function PortfolioPage() {
       );
     });
   }, [searchQuery, top100Positions, tokenNames, tokenMetadataCache]);
+
+  // Apply PnL sorting when enabled
+  const sortedPositions = useMemo(() => {
+    if (!sortByPnl) return filteredPositions;
+    return [...filteredPositions].sort((a, b) => b.pnl - a.pnl);
+  }, [filteredPositions, sortByPnl]);
+
+  const sortedTop100Positions = useMemo(() => {
+    if (!sortByPnl) return filteredTop100Positions;
+    return [...filteredTop100Positions].sort((a, b) => b.pnl - a.pnl);
+  }, [filteredTop100Positions, sortByPnl]);
 
   const filteredTradeHistory = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -3887,6 +3916,13 @@ export default function PortfolioPage() {
                       Show Hidden
                     </button>
                     <button
+                      onClick={() => setSortByPnl(!sortByPnl)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer border text-xs ${sortByPnl ? 'border-[#18c48c]/30 text-[#18c48c] bg-[#18c48c]/10' : 'border-white/[0.06] hover:border-white/[0.1] text-[#71717a] hover:text-[#a1a1aa]'}`}
+                    >
+                      <span className="text-xs">↑↓</span>
+                      PnL
+                    </button>
+                    <button
                       onClick={() => setSortByUSD(!sortByUSD)}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer border border-white/[0.06] hover:border-white/[0.1] text-[#71717a] hover:text-[#a1a1aa] text-xs"
                     >
@@ -3922,8 +3958,8 @@ export default function PortfolioPage() {
                         // For Monad: keep existing behavior — let Positions fetch internally.
                         preloadedPositions={
                           currentChain === "sol"
-                            ? (searchQuery.trim() !== "" ? filteredPositions : positions)
-                            : (searchQuery.trim() !== "" ? filteredPositions : undefined)
+                            ? (searchQuery.trim() !== "" || sortByPnl ? sortedPositions : positions)
+                            : (searchQuery.trim() !== "" || sortByPnl ? sortedPositions : undefined)
                         }
                         skipFetch={currentChain === "sol" || searchQuery.trim() !== ""}
                         showHidden={showHidden}
@@ -3970,9 +4006,9 @@ export default function PortfolioPage() {
                         // skipFetch=true unconditionally for sol since wp owns the data.
                         preloadedPositions={
                           currentChain === "sol"
-                            ? (searchQuery.trim() ? filteredTop100Positions : top100Positions)
-                            : (searchQuery.trim()
-                                ? filteredTop100Positions
+                            ? (searchQuery.trim() || sortByPnl ? sortedTop100Positions : top100Positions)
+                            : (searchQuery.trim() || sortByPnl
+                                ? sortedTop100Positions
                                 : top100Positions.length > 0
                                   ? top100Positions
                                   : undefined)

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { FiHeart, FiMessageCircle, FiRepeat } from "react-icons/fi";
 import { useUser } from "./UserContext";
 import AddTwitterHandleModal from "./AddTwitterHandleModal";
 import TwitterAccountRow from "./TwitterAccountRow";
@@ -612,9 +613,18 @@ export default function TwitterTrackerContent() {
 
                     {/* Tweet Stats */}
                     <div className="flex flex-wrap items-center gap-4 text-xs text-neutral-400">
-                      <span>💬 {tweet.replyCount || 0}</span>
-                      <span>🔁 {tweet.retweetCount || 0}</span>
-                      <span>❤️ {tweet.likeCount || 0}</span>
+                      <span className="inline-flex items-center gap-1">
+                        <FiMessageCircle className="h-3.5 w-3.5" />
+                        {tweet.replyCount || 0}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <FiRepeat className="h-3.5 w-3.5" />
+                        {tweet.retweetCount || 0}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <FiHeart className="h-3.5 w-3.5" />
+                        {tweet.likeCount || 0}
+                      </span>
                       {tweet.url && (
                         <a
                           href={tweet.url}

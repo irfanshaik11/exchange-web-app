@@ -8,7 +8,7 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt, FaTrophy, FaDice, FaUsers, FaChartBar, FaCrown, FaCrosshairs, FaFire, FaWallet, FaCheck } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
-import { createLimitOrder, tradeBuy, tradeSellPercentage, getLimitOrderExecutionResult, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { createLimitOrder, tradeBuy, tradeSellPercentage, getLimitOrderExecutionResult, SOL_MINT_ADDRESS, ApiError, getWalletPortfolioPositions } from "~/utils/api";
 import {
   addPendingTrade,
   removePendingTrade,
@@ -1151,6 +1151,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }
   const [tradeHistory, setTradeHistory] = useState<TradeHistoryAggregate | null>(null);
 
+  // RPC-derived on-chain balance and cost basis for accurate unrealized PnL
+  interface RpcPositionData {
+    onChainBalance: number;
+    boughtUsd: number;
+    soldUsd: number;
+    boughtTokens: number;
+    soldTokens: number;
+    realizedPnlUsd: number;
+  }
+  const [rpcPosition, setRpcPosition] = useState<RpcPositionData | null>(null);
+
   // PnL display mode — 'unrealized' = live mark-to-market on the holding (default,
   // GMGN-style); 'realized' = profit locked in from closed sells only. Toggled by
   // clicking the PnL tile. Persisted to localStorage so the choice sticks across
@@ -1476,6 +1487,52 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     return () => clearInterval(interval);
   }, [user?.id, token?.mint]);
 
+  // Fetch on-chain balance from RPC via wallet portfolio endpoint for accurate
+  // unrealized PnL. The trade history above only knows bought-sold; the RPC
+  // balance accounts for airdrops, transfers, and dust.
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchRpcPosition = async () => {
+      if (!user?.publicKey || !token?.mint) {
+        setRpcPosition(null);
+        return;
+      }
+      try {
+        const resp = await getWalletPortfolioPositions(user.publicKey, {
+          signal: controller.signal,
+        });
+        const mint = token.mint.toLowerCase();
+        const pos = resp.positions?.find(
+          (p) => p.token_mint.toLowerCase() === mint,
+        );
+        if (pos) {
+          const onChainBalance = pos.on_chain_token_balance ?? pos.remaining_tokens;
+          setRpcPosition({
+            onChainBalance,
+            boughtUsd: pos.bought_usd_value,
+            soldUsd: pos.sold_usd_value,
+            boughtTokens: pos.bought_tokens,
+            soldTokens: pos.sold_tokens,
+            realizedPnlUsd: pos.realized_pnl_usd,
+          });
+        } else {
+          setRpcPosition(null);
+        }
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          console.error('Error fetching RPC position:', err);
+        }
+      }
+    };
+
+    fetchRpcPosition();
+    const interval = setInterval(fetchRpcPosition, 10000);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [user?.publicKey, token?.mint]);
+
   // Live price source for the unrealized PnL calc. Prefer the `livePriceUsd`
   // prop — that's the same chart OHLC stream the candlesticks render from, so
   // the PnL tile updates at the same cadence as the chart. Falls back to
@@ -1489,61 +1546,69 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       : Number((token as any)?.price_usd) || 0;
   const deferredPriceUsd = useDeferredValue(rawPriceUsd);
 
-  // Derived position data — recomputes on every trade-history change AND every
-  // price tick, giving the PnL tile live mark-to-market behavior.
+  // Derived position data — recomputes on every trade-history change, RPC
+  // balance update, AND every price tick, giving the PnL tile live
+  // mark-to-market behavior.
   //
-  // The `unrealizedPnl` formula is `soldUsdValue + remainingMarketValue - boughtUsdValue`.
-  // This mirrors the Active Positions implementation — see
-  // `exchange-web-app/src/components/trade/Positions.tsx` (~lines 1468-1496) —
-  // so both surfaces define "unrealized PnL" the same way (realized + live paper gain).
+  // Unrealized PnL uses the RPC on-chain balance (not bought-sold) so it
+  // accounts for airdrops, transfers, and dust correctly. Falls back to
+  // trade-history remaining when RPC data isn't available yet.
   const positionData = useMemo(() => {
     if (!tradeHistory) return null;
     const { bought, boughtUsdValue, sold, soldUsdValue } = tradeHistory;
 
-    // Raw remaining may go negative if the user sold tokens they received from
-    // somewhere other than Interstate (airdrop, inbound transfer). We preserve
-    // the signed value for the Holding tile (matches prior behavior) but clamp
-    // to zero for the PnL math so a negative holding doesn't silently subtract
-    // from reported PnL at current market price.
-    const remaining = bought - sold;
-    const safeRemaining = Math.max(0, remaining);
-
-    const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
-    // `deferredPriceUsd` is already coerced to a finite number ≥ 0 above.
     const currentPrice = deferredPriceUsd > 0 ? deferredPriceUsd : 0;
 
-    // Realized PnL — profit locked in from closed sells. Algebraically equivalent
-    // to the previously-shipped formula `(soldUsdValue + remaining*avgBoughtPrice) - boughtUsdValue`
-    // (cancels to `soldUsdValue - sold*avgBoughtPrice` when bought > 0).
-    const realizedPnl = soldUsdValue - (sold * avgBoughtPrice);
-    const realizedPnlPercentage = boughtUsdValue > 0 ? (realizedPnl / boughtUsdValue) * 100 : 0;
+    // Use RPC on-chain balance when available, fall back to trade-derived
+    const rpcBalance = rpcPosition?.onChainBalance;
+    const hasRpc = rpcBalance != null && rpcBalance >= 0;
+    const remaining = hasRpc ? rpcBalance : bought - sold;
+    const safeRemaining = Math.max(0, remaining);
 
-    // Unrealized PnL — mark-to-market. Falls back to cost basis when the WS
-    // hasn't delivered a price yet, so the tile degrades gracefully to the
-    // old behavior during the first few hundred ms of the page load.
-    const remainingMarketValue = currentPrice > 0
+    // Use RPC-sourced values when available for accuracy
+    const effectiveBoughtUsd = hasRpc ? (rpcPosition!.boughtUsd || boughtUsdValue) : boughtUsdValue;
+    const effectiveSoldUsd = hasRpc ? (rpcPosition!.soldUsd || soldUsdValue) : soldUsdValue;
+    const effectiveBoughtTokens = hasRpc ? (rpcPosition!.boughtTokens || bought) : bought;
+    const effectiveSoldTokens = hasRpc ? (rpcPosition!.soldTokens || sold) : sold;
+
+    const avgBoughtPrice = effectiveBoughtTokens > 0 ? effectiveBoughtUsd / effectiveBoughtTokens : 0;
+
+    // Realized PnL — use RPC value if available, otherwise derive from trades
+    const realizedPnl = hasRpc
+      ? rpcPosition!.realizedPnlUsd
+      : effectiveSoldUsd - (effectiveSoldTokens * avgBoughtPrice);
+    const realizedPnlPercentage = effectiveBoughtUsd > 0 ? (realizedPnl / effectiveBoughtUsd) * 100 : 0;
+
+    // Unrealized PnL — mark-to-market of on-chain balance minus cost basis
+    // of the remaining (unsold) portion using avg-cost pro-rata.
+    const soldFraction = effectiveBoughtTokens > 0
+      ? Math.min(effectiveSoldTokens / effectiveBoughtTokens, 1)
+      : 0;
+    const costBasis = effectiveBoughtUsd * Math.max(0, 1 - soldFraction);
+    const marketValue = currentPrice > 0
       ? safeRemaining * currentPrice
       : safeRemaining * avgBoughtPrice;
-    const unrealizedPnl = (soldUsdValue + remainingMarketValue) - boughtUsdValue;
-    const unrealizedPnlPercentage = boughtUsdValue > 0 ? (unrealizedPnl / boughtUsdValue) * 100 : 0;
+    const unrealizedPnl = safeRemaining > 0.001 ? marketValue - costBasis : 0;
+    const unrealizedPnlPercentage = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
 
-    // Holding tile value — preserves prior behavior (cost-basis USD valuation
-    // for the remaining holding). Out of scope to mark this to market here.
-    const remainingUsdValue = remaining * avgBoughtPrice;
+    // Holding tile value — mark-to-market when price is available
+    const remainingUsdValue = currentPrice > 0
+      ? safeRemaining * currentPrice
+      : safeRemaining * avgBoughtPrice;
 
     return {
-      bought,
-      boughtUsdValue,
-      sold,
-      soldUsdValue,
-      remaining,
+      bought: effectiveBoughtTokens,
+      boughtUsdValue: effectiveBoughtUsd,
+      sold: effectiveSoldTokens,
+      soldUsdValue: effectiveSoldUsd,
+      remaining: safeRemaining,
       remainingUsdValue,
       realizedPnl,
       realizedPnlPercentage,
       unrealizedPnl,
       unrealizedPnlPercentage,
     };
-  }, [tradeHistory, deferredPriceUsd]);
+  }, [tradeHistory, rpcPosition, deferredPriceUsd]);
   
   // Use external QuickBuy settings if available, otherwise use internal context
   const settings = externalQuickBuySettings || (

@@ -26,12 +26,12 @@ const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({ i
   };
 
   const getInitialTransactionSounds = (): boolean => {
-    if (typeof window === 'undefined') return true;
+    if (typeof window === 'undefined') return false;
     try {
       const saved = localStorage.getItem('transaction-sounds-enabled');
-      return saved !== 'false';
+      return saved === 'true';
     } catch {
-      return true;
+      return false;
     }
   };
 

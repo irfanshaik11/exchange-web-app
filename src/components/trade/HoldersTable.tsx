@@ -122,6 +122,7 @@ interface HoldersTableProps {
   containerWidth?: number;
   chain?: "sol" | "monad"; // Chain to determine which endpoint to use
   onTotalCountChange?: (count: number) => void; // Callback to pass total count to parent
+  onWalletClick?: (address: string) => void;
 }
 
 interface HolderWithBalance {
@@ -684,6 +685,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   containerWidth = 1000,
   chain = "sol",
   onTotalCountChange,
+  onWalletClick,
 }) => {
   // Get SOL price for USD/SOL conversion
   const { solPrice, monPrice } = useSolPrice();
@@ -1462,27 +1464,6 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
               >
                 <div className="flex items-center gap-1">
                   <span className="text-[13px] font-normal">Wallet</span>
-                  <button
-                    onClick={handleWalletFilterClick}
-                    className="hover:bg-opacity-20 rounded p-0.5 transition-colors"
-                    style={{ color: isWalletFilterActive ? AX.mint : AX.muted }}
-                  >
-                    <CiFilter size={14} />
-                  </button>
-                  {isWalletFilterActive && (
-                    <span
-                      className="rounded px-1 text-[9px]"
-                      style={{
-                        backgroundColor: `${AX.mint}20`,
-                        color: AX.mint,
-                      }}
-                    >
-                      {walletFilter.tags.length > 0
-                        ? walletFilter.tags.length
-                        : ""}
-                      {walletFilter.address ? "🔍" : ""}
-                    </span>
-                  )}
                 </div>
               </th>
 
@@ -1495,18 +1476,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     label={chain === "monad" ? "MON Bal" : "SOL Bal"}
                     sortDirection={filters.solBal.sort}
                     onSort={() => handleSort("solBal")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("solBal", e)}
-                    isFilterActive={hasActiveRange(filters.solBal.range)}
                   />
                   <span className='!text-[#757e80]'>/</span>
                   <SortableHeader
                     label="Last Active"
                     sortDirection={filters.lastActive.sort}
                     onSort={() => handleSort("lastActive")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("lastActive", e)}
-                    isFilterActive={hasActiveRange(filters.lastActive.range)}
                   />
                 </div>
               </th>
@@ -1520,18 +1495,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     label="Bought"
                     sortDirection={filters.bought.sort}
                     onSort={() => handleSort("bought")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("bought", e)}
-                    isFilterActive={hasActiveRange(filters.bought.range)}
                   />
                   <span className='text-[#757e80]'>/</span>
                   <SortableHeader
                     label="Avg Buy"
                     sortDirection={filters.avgBuy.sort}
                     onSort={() => handleSort("avgBuy")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("avgBuy", e)}
-                    isFilterActive={hasActiveRange(filters.avgBuy.range)}
                   />
                 </div>
               </th>
@@ -1545,18 +1514,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     label="Sold"
                     sortDirection={filters.sold.sort}
                     onSort={() => handleSort("sold")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("sold", e)}
-                    isFilterActive={hasActiveRange(filters.sold.range)}
                   />
                   <span className='text-[#757e80]'>/</span>
                   <SortableHeader
                     label="Avg Sell"
                     sortDirection={filters.avgSell.sort}
                     onSort={() => handleSort("avgSell")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("avgSell", e)}
-                    isFilterActive={hasActiveRange(filters.avgSell.range)}
                   />
                 </div>
               </th>
@@ -1569,9 +1532,6 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                   label="PNL"
                   sortDirection={filters.pnl.sort}
                   onSort={() => handleSort("pnl")}
-                  hasFilter
-                  onFilterClick={(e) => handleFilterClick("pnl", e)}
-                  isFilterActive={hasActiveRange(filters.pnl.range)}
                 />
               </th>
 
@@ -1584,9 +1544,6 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     label="Remaining"
                     sortDirection={filters.remaining.sort}
                     onSort={() => handleSort("remaining")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("remaining", e)}
-                    isFilterActive={hasActiveRange(filters.remaining.range)}
                   />
                   <button
                     onClick={() => setShowRemainingInSol(!showRemainingInSol)}
@@ -1619,18 +1576,12 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                     label="Funding"
                     sortDirection={filters.funding.sort}
                     onSort={() => handleSort("funding")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("funding", e)}
-                    isFilterActive={hasActiveRange(filters.funding.range)}
                   />
                   <span className='text-[#757e80]'>/</span>
                   <SortableHeader
                     label="TF Amt"
                     sortDirection={filters.tfAmount.sort}
                     onSort={() => handleSort("tfAmount")}
-                    hasFilter
-                    onFilterClick={(e) => handleFilterClick("tfAmount", e)}
-                    isFilterActive={hasActiveRange(filters.tfAmount.range)}
                   />
                 </div>
               </th>
@@ -1715,7 +1666,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                           };
 
                           return (
-                            <WalletHoverCard data={hoverData} chain={chain} solPrice={chainPrice}>
+                            <WalletHoverCard data={hoverData} chain={chain} solPrice={chainPrice} onWalletClick={onWalletClick}>
                               <div className="flex items-center gap-1.5">
                                 <a
                                   href={`https://solscan.io/account/${holder.address}`}

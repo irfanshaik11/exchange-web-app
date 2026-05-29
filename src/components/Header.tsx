@@ -180,6 +180,7 @@ const navLinks = [
   { name: "Predictions", href: "/predictions" },
   { name: "Airdrop", href: "/airdrop-genesis" },
   { name: "Portfolio", href: "/portfolio" },
+  { name: "Agent", href: "/agent" },
   // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
 ];
@@ -2033,7 +2034,51 @@ export default function Header({
                       router.pathname.startsWith("/trade/")) ||
                     (link.name === "Airdrop" &&
                       (router.pathname === "/airdrop-genesis" ||
-                        router.pathname === "/referrals")));
+                        router.pathname === "/referrals"));
+                  const isAgent = link.name === "Agent";
+
+                  if (isAgent) {
+                    return (
+                      <Link
+                        key={link.name}
+                        href={chainAwareHref(link.href)}
+                        className={`relative flex min-h-[44px] flex-shrink-0 items-center gap-1.5 px-3 py-2 text-xs font-semibold whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
+                        style={{
+                          color: isActive ? "#0A0A0A" : AX.mint,
+                          background: isActive
+                            ? `linear-gradient(135deg, ${AX.mint}, #58B890)`
+                            : "transparent",
+                          border: `1px solid ${AX.mint}`,
+                          borderRadius: "9999px",
+                          position: "relative",
+                          zIndex: 1001,
+                          pointerEvents: "auto",
+                          cursor: "pointer",
+                          transition: "all 150ms cubic-bezier(0.16, 1, 0.3, 1)",
+                          boxShadow: isActive
+                            ? `0 0 16px ${AX.mintGlow}`
+                            : `0 0 8px ${AX.mintGlow}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.color = "#0A0A0A";
+                            e.currentTarget.style.background = `linear-gradient(135deg, ${AX.mint}, #58B890)`;
+                            e.currentTarget.style.boxShadow = `0 0 16px ${AX.mintGlow}`;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.color = AX.mint;
+                            e.currentTarget.style.background = "transparent";
+                            e.currentTarget.style.boxShadow = `0 0 8px ${AX.mintGlow}`;
+                          }
+                        }}
+                      >
+                        {link.name}
+                      </Link>
+                    );
+                  }
+
                   return (
                     <Link
                       key={link.name}

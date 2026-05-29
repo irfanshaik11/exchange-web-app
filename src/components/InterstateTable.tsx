@@ -292,61 +292,34 @@ const getNumber = (obj: any, key: string): number => {
   return 0;
 };
 
-const getVolume = (token: Token, timeframe: string): number => {
-  // Helper to get volume from a specific timeframe, including buy/sell calculation
-  const getVolumeForTimeframe = (tf: string): number => {
-    // First try direct volume field
-    let vol = getNumber(token as any, `volume_${tf}`);
-
-    // If 0, try calculating from buy/sell volumes
-    if (vol === 0) {
-      const buyVol = getNumber(token as any, `total_buy_volume_${tf}`);
-      const sellVol = getNumber(token as any, `total_sell_volume_${tf}`);
-      vol = buyVol + sellVol;
+const getVolume = (
+  token: Token,
+  timeframe: string,
+  solPrice: number = 0,
+  tableType?: string,
+): number => {
+  // DEX Screener tab: BE enriches each mint with Interstate's per-mint SOL
+  // volume (same source as Trade page) under `volume_sol_{tf}`. When present
+  // and positive, multiply by Pyth so the displayed vol matches the Trade
+  // page header exactly for that mint. When absent (mint not yet in
+  // Interstate's indexer — common for fresh pump.fun mints), fall back to
+  // DexScreener's own USD value on `volume_{tf}` so we show something real
+  // rather than $0. Pyth dead during fallback path stays correct (USD is
+  // already USD).
+  if (tableType === "dexscreener") {
+    const sol = getNumber(token as any, `volume_sol_${timeframe}`);
+    if (sol > 0 && Number.isFinite(solPrice) && solPrice > 0) {
+      return sol * solPrice;
     }
-
-    return vol;
-  };
-
-  // Try the requested timeframe first
-  let volume = getVolumeForTimeframe(timeframe);
-
-  // If still 0, try all other timeframes in order of preference
-  if (volume === 0) {
-    const timeframes = ["1h", "6h", "24h", "5m"];
-    for (const tf of timeframes) {
-      if (tf !== timeframe) {
-        volume = getVolumeForTimeframe(tf);
-        if (volume > 0) {
-          // Found volume in another timeframe, use it
-          break;
-        }
-      }
-    }
+    return getNumber(token as any, `volume_${timeframe}`);
   }
-
-  // Last resort: if we have 24h volume, estimate for the requested timeframe
-  if (volume === 0) {
-    const vol24h = getVolumeForTimeframe("24h");
-    if (vol24h > 0) {
-      switch (timeframe) {
-        case "5m":
-          volume = vol24h / 288;
-          break;
-        case "1h":
-          volume = vol24h / 24;
-          break;
-        case "6h":
-          volume = vol24h / 4;
-          break;
-        case "24h":
-          volume = vol24h;
-          break;
-      }
-    }
-  }
-
-  return volume;
+  // Internal trending: BE ships SOL in `volume_{tf}` for the timeframe that
+  // ranks the trending list — same source as /v1/ws/token/{mint} (Trade
+  // page volume + OHLC chart). Multiply by live Pyth SOL/USD to render USD
+  // identical to the Trade page header. Trending supports 5m / 1h / 6h.
+  if (!Number.isFinite(solPrice) || solPrice <= 0) return 0;
+  const sol = getNumber(token as any, `volume_${timeframe}`);
+  return sol * solPrice;
 };
 
 // PulseTable-style volume for new pairs: try all timeframes (24h→6h→1h→5m),
@@ -477,10 +450,15 @@ const getSortableValue = (
   token: Token,
   key: string,
   selectedTimeframe?: string,
+  solPrice: number = 0,
+  tableType?: string,
 ): number => {
-  // Handle volume calculation for sorting
+  // Handle volume calculation for sorting. tableType is threaded through so
+  // the DexScreener branch in getVolume fires for sort, not just display —
+  // otherwise Volume-column sort silently re-breaks with the same solPrice
+  // early-return that the display path used to hit.
   if (key === "volume" && selectedTimeframe) {
-    return getVolume(token, selectedTimeframe);
+    return getVolume(token, selectedTimeframe, solPrice, tableType);
   }
 
   // Handle TXNS calculation for sorting
@@ -1782,178 +1760,183 @@ const TokenInfo: React.FC<{
         </div>
       </div>
 
-      {showXPreview && buttonPosition && typeof document !== "undefined" && createPortal(
-        <div
-          className="fixed"
-          style={(() => {
-            const POPUP_W = 280;
-            const POPUP_H_EST = 220;
-            const vw = typeof window !== "undefined" ? window.innerWidth : 1920;
-            const vh = typeof window !== "undefined" ? window.innerHeight : 1080;
-            let left = buttonPosition.left + 20;
-            let top = buttonPosition.top;
-            if (left + POPUP_W + 8 > vw) {
-              left = Math.max(8, buttonPosition.left - POPUP_W - 20);
-            }
-            if (top + POPUP_H_EST + 8 > vh) {
-              top = Math.max(8, vh - POPUP_H_EST - 8);
-            }
-            return {
-              left: `${left}px`,
-              top: `${top}px`,
-              width: `${POPUP_W}px`,
-              zIndex: 999999,
-            };
-          })()}
-          onMouseEnter={() => {
-            isOverXPreview.current = true;
-          }}
-          onMouseLeave={() => {
-            isOverXPreview.current = false;
-            setTimeout(() => {
-              if (!isOverXPreview.current && !isOverXButton.current) {
-                setShowXPreview(false);
-              }
-            }, 200);
-          }}
-        >
+      {showXPreview &&
+        buttonPosition &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            className="overflow-hidden rounded-xl"
-            style={{
-              backgroundColor: AX.surface,
-              border: `1px solid ${AX.border}`,
-              boxShadow: `0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px ${AX.glowBlue}`,
-              backdropFilter: "blur(10px)",
+            className="fixed"
+            style={(() => {
+              const POPUP_W = 280;
+              const POPUP_H_EST = 220;
+              const vw =
+                typeof window !== "undefined" ? window.innerWidth : 1920;
+              const vh =
+                typeof window !== "undefined" ? window.innerHeight : 1080;
+              let left = buttonPosition.left + 20;
+              let top = buttonPosition.top;
+              if (left + POPUP_W + 8 > vw) {
+                left = Math.max(8, buttonPosition.left - POPUP_W - 20);
+              }
+              if (top + POPUP_H_EST + 8 > vh) {
+                top = Math.max(8, vh - POPUP_H_EST - 8);
+              }
+              return {
+                left: `${left}px`,
+                top: `${top}px`,
+                width: `${POPUP_W}px`,
+                zIndex: 999999,
+              };
+            })()}
+            onMouseEnter={() => {
+              isOverXPreview.current = true;
+            }}
+            onMouseLeave={() => {
+              isOverXPreview.current = false;
+              setTimeout(() => {
+                if (!isOverXPreview.current && !isOverXButton.current) {
+                  setShowXPreview(false);
+                }
+              }, 200);
             }}
           >
-            {/* X Icon Header */}
             <div
-              className="flex items-center border-b px-4 py-3"
-              style={{ borderColor: "#2f3336" }}
+              className="overflow-hidden rounded-xl"
+              style={{
+                backgroundColor: AX.surface,
+                border: `1px solid ${AX.border}`,
+                boxShadow: `0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px ${AX.glowBlue}`,
+                backdropFilter: "blur(10px)",
+              }}
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className="flex h-7 w-7 items-center justify-center rounded-full"
-                  style={{ backgroundColor: "#1d9bf0" }}
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    style={{ color: "#ffffff" }}
+              {/* X Icon Header */}
+              <div
+                className="flex items-center border-b px-4 py-3"
+                style={{ borderColor: "#2f3336" }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-full"
+                    style={{ backgroundColor: "#1d9bf0" }}
                   >
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                </div>
-                <div className="text-sm font-bold text-white">X Profile</div>
-              </div>
-            </div>
-
-            {/* X Profile Content */}
-            <div className="px-4 py-3">
-              {/* Profile Header */}
-              <div className="mb-3 flex items-center gap-3">
-                <div
-                  className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full"
-                  style={{ backgroundColor: "#1a1a1a" }}
-                >
-                  <img
-                    src={
-                      tokenImage
-                        ? computeHashImageUrl(tokenImage) || ""
-                        : `https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=48&background=1a1a1a&color=ffffff&bold=true`
-                    }
-                    alt={`${token.symbol} profile`}
-                    className="h-full w-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        `https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=48&background=1a1a1a&color=ffffff&bold=true`;
-                    }}
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm font-bold text-white">
-                      {token.name || token.symbol}
-                    </span>
                     <svg
-                      className="h-4 w-4 text-[#1d9bf0]"
+                      width="16"
+                      height="16"
                       viewBox="0 0 24 24"
                       fill="currentColor"
+                      style={{ color: "#ffffff" }}
                     >
-                      <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z" />
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                     </svg>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    @{twitterHandle || token.symbol?.toLowerCase()}
+                  <div className="text-sm font-bold text-white">X Profile</div>
+                </div>
+              </div>
+
+              {/* X Profile Content */}
+              <div className="px-4 py-3">
+                {/* Profile Header */}
+                <div className="mb-3 flex items-center gap-3">
+                  <div
+                    className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full"
+                    style={{ backgroundColor: "#1a1a1a" }}
+                  >
+                    <img
+                      src={
+                        tokenImage
+                          ? computeHashImageUrl(tokenImage) || ""
+                          : `https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=48&background=1a1a1a&color=ffffff&bold=true`
+                      }
+                      alt={`${token.symbol} profile`}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          `https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=48&background=1a1a1a&color=ffffff&bold=true`;
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm font-bold text-white">
+                        {token.name || token.symbol}
+                      </span>
+                      <svg
+                        className="h-4 w-4 text-[#1d9bf0]"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .494.083.964.237 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z" />
+                      </svg>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      @{twitterHandle || token.symbol?.toLowerCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bio/Description */}
+                <p className="mb-2 text-sm leading-relaxed text-white">
+                  {meta?.description ||
+                    token.description ||
+                    `Official ${token.symbol} token`}
+                </p>
+                {hasWebsite && (
+                  <a
+                    href={socialLinks.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mb-3 block truncate text-sm text-[#1d9bf0] hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {socialLinks.website}
+                  </a>
+                )}
+              </div>
+
+              {/* CTA Button */}
+              <div className="px-4 pb-4">
+                <button
+                  className="w-full rounded-full border border-[#536471] py-2 text-sm font-semibold text-[#1d9bf0] transition-colors hover:bg-[#1d9bf0]/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(socialLinks.twitter, "_blank");
+                  }}
+                >
+                  See Profile on X
+                </button>
+              </div>
+
+              {/* Join Date Section */}
+              <div className="px-4 pb-3">
+                <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  <span>
+                    Joined{" "}
+                    {new Date().toLocaleDateString("en-US", {
+                      month: "short",
+                      year: "numeric",
+                    })}
                   </span>
                 </div>
               </div>
-
-              {/* Bio/Description */}
-              <p className="mb-2 text-sm leading-relaxed text-white">
-                {meta?.description ||
-                  token.description ||
-                  `Official ${token.symbol} token`}
-              </p>
-              {hasWebsite && (
-                <a
-                  href={socialLinks.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mb-3 block truncate text-sm text-[#1d9bf0] hover:underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {socialLinks.website}
-                </a>
-              )}
             </div>
-
-            {/* CTA Button */}
-            <div className="px-4 pb-4">
-              <button
-                className="w-full rounded-full border border-[#536471] py-2 text-sm font-semibold text-[#1d9bf0] transition-colors hover:bg-[#1d9bf0]/10"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(socialLinks.twitter, "_blank");
-                }}
-              >
-                See Profile on X
-              </button>
-            </div>
-
-            {/* Join Date Section */}
-            <div className="px-4 pb-3">
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8" y1="2" x2="8" y2="6" />
-                  <line x1="3" y1="10" x2="21" y2="10" />
-                </svg>
-                <span>
-                  Joined{" "}
-                  {new Date().toLocaleDateString("en-US", {
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };
@@ -2942,11 +2925,13 @@ const TableRow: React.FC<{
       [onQuickBuy, token, onClick],
     );
 
-    // For newPairs, use PulseTable-style volume: try all timeframes, sum buy+sell, convert SOL→USD
+    // For newPairs, use PulseTable-style volume: try all timeframes, sum buy+sell, convert SOL→USD.
+    // For DexScreener (USD-native wire), getVolume reads volume_{tf} directly.
+    // For trending/top/gainers (SOL-native wire), getVolume does SOL × Pyth.
     const volume =
       tableType === "newPairs" && solPrice > 0
         ? getNewPairVolume(token, solPrice)
-        : getVolume(token, selectedTimeframe);
+        : getVolume(token, selectedTimeframe, solPrice, tableType);
 
     // Debug volume calculation
     // console.log('Volume calculation debug:', {
@@ -3095,11 +3080,17 @@ const TableRow: React.FC<{
                     }),
               }}
             >
-              {/* Show "0" on discover page, "-" on other pages when volume is 0 */}
+              {/* DexScreener tab renders "—" on zero so a BE regression
+                  (missing volume_{tf} field, unit mismatch) is visible at a
+                  glance rather than masquerading as $0. Other tabs keep the
+                  existing $0/- behavior because their feeds legitimately
+                  emit zero for inactive windows. */}
               {volume === 0
-                ? isDiscoverPage
-                  ? "$0"
-                  : "-"
+                ? tableType === "dexscreener"
+                  ? "—"
+                  : isDiscoverPage
+                    ? "$0"
+                    : "-"
                 : `$${formatSmartNumber(volume)}`}
             </div>
           </td>
@@ -3232,8 +3223,20 @@ export default function InterstateTable({
     if (!sortKey) return filteredRows;
 
     return [...filteredRows].sort((a, b) => {
-      const aVal = getSortableValue(a.token, sortKey, selectedTimeframe);
-      const bVal = getSortableValue(b.token, sortKey, selectedTimeframe);
+      const aVal = getSortableValue(
+        a.token,
+        sortKey,
+        selectedTimeframe,
+        solPrice,
+        tableType,
+      );
+      const bVal = getSortableValue(
+        b.token,
+        sortKey,
+        selectedTimeframe,
+        solPrice,
+        tableType,
+      );
       const diff = aVal - bVal;
       if (diff === 0) {
         // Stable tiebreaker to reduce jitter between polls
@@ -3243,6 +3246,11 @@ export default function InterstateTable({
       }
       return sortDirection === "asc" ? diff : -diff;
     });
+    // solPrice intentionally NOT in deps: it's a positive scalar applied to
+    // every volume cell equally, so it can never change relative ordering
+    // — only magnitudes. Including it would re-sort the entire table on
+    // every Pyth tick (multiple times per second) for no observable change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, sortKey, sortDirection, filter.amms, selectedTimeframe]);
 
   // Price animation effect

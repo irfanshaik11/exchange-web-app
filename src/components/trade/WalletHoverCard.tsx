@@ -38,6 +38,7 @@ interface WalletHoverCardProps {
   chain?: 'sol' | 'monad';
   children: React.ReactNode;
   solPrice?: number;
+  onWalletClick?: (address: string) => void;
 }
 
 // Helper to format duration
@@ -72,7 +73,7 @@ function shortAddr(addr: string): string {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
 
-export default function WalletHoverCard({ data, chain = 'sol', children, solPrice }: WalletHoverCardProps) {
+export default function WalletHoverCard({ data, chain = 'sol', children, solPrice, onWalletClick }: WalletHoverCardProps) {
   const { solPrice: contextSolPrice, monPrice } = useSolPrice();
   const effectiveSolPrice = solPrice ?? ((chain === 'monad' ? monPrice : contextSolPrice) || 0);
 
@@ -210,7 +211,10 @@ export default function WalletHoverCard({ data, chain = 'sol', children, solPric
         <div className="px-3 py-2 border-b" style={{ borderColor: '#2a2b33', backgroundColor: '#141517' }}>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[12px] font-mono text-white truncate">
+              <span
+                className={`text-[12px] font-mono truncate ${onWalletClick ? 'text-emerald-400 cursor-pointer hover:underline' : 'text-white'}`}
+                onClick={onWalletClick ? (e) => { e.stopPropagation(); e.preventDefault(); setIsVisible(false); onWalletClick(data.walletAddress); } : undefined}
+              >
                 {shortAddr(data.walletAddress)}
               </span>
               {/* Holder type icons */}
@@ -372,6 +376,7 @@ export default function WalletHoverCard({ data, chain = 'sol', children, solPric
         className="inline-flex"
         onMouseEnter={handleTriggerEnter}
         onMouseLeave={handleTriggerLeave}
+        onClick={onWalletClick ? (e) => { e.stopPropagation(); setIsVisible(false); onWalletClick(data.walletAddress); } : undefined}
       >
         {children}
       </div>
