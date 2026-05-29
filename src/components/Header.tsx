@@ -2027,13 +2027,12 @@ export default function Header({
               >
                 {navLinks.map((link) => {
                   const isActive =
-                    !link.external && (
                     router.pathname === link.href ||
                     (link.name === "Trenches" &&
                       router.pathname.startsWith("/trade/")) ||
                     (link.name === "Airdrop" &&
                       (router.pathname === "/airdrop-genesis" ||
-                        router.pathname === "/referrals")));
+                        router.pathname === "/referrals"));
                   const isAgent = link.name === "Agent";
 
                   if (isAgent) {
@@ -2081,8 +2080,7 @@ export default function Header({
                   return (
                     <Link
                       key={link.name}
-                      href={link.external ? link.href : chainAwareHref(link.href)}
-                      {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      href={chainAwareHref(link.href)}
                       className={`relative flex min-h-[44px] flex-shrink-0 items-center px-3 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
@@ -3519,18 +3517,16 @@ export default function Header({
             <nav className="flex flex-1 flex-col overflow-y-auto py-2">
               {navLinks.map((link) => {
                 const isActive =
-                  !link.external && (
                   router.pathname === link.href ||
                   (link.name === "Trenches" &&
                     router.pathname.startsWith("/trade/")) ||
                   (link.name === "Airdrop" &&
                     (router.pathname === "/airdrop-genesis" ||
-                      router.pathname === "/referrals")));
+                      router.pathname === "/referrals"));
                 return (
                   <Link
                     key={link.name}
-                    href={link.external ? link.href : chainAwareHref(link.href)}
-                    {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                    href={chainAwareHref(link.href)}
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex items-center rounded-none px-4 py-3 text-base font-medium transition-colors"
                     style={{
