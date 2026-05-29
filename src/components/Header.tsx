@@ -96,6 +96,7 @@ import BlockchainSwitcher from "./BlockchainSwitcher";
 import FastImage from "./FastImage";
 import UpdatesModal from "./UpdatesModal";
 import UsernameEditModal from "./UsernameEditModal";
+import ExportWalletModal from "./ExportWalletModal";
 import NotificationDropdown from "./NotificationDropdown";
 import { useReferralStats } from "~/hooks/useArena";
 import type { Timeframe } from "../pages/index";
@@ -180,6 +181,7 @@ const navLinks = [
   { name: "Airdrop", href: "/airdrop-genesis" },
   { name: "Portfolio", href: "/portfolio" },
   { name: "Learn", href: "/learn" },
+  { name: "Agent", href: "/agent" },
   // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
 ];
@@ -707,6 +709,7 @@ export default function Header({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [showExportWalletModal, setShowExportWalletModal] = useState(false);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -2033,6 +2036,50 @@ export default function Header({
                     (link.name === "Airdrop" &&
                       (router.pathname === "/airdrop-genesis" ||
                         router.pathname === "/referrals"));
+                  const isAgent = link.name === "Agent";
+
+                  if (isAgent) {
+                    return (
+                      <Link
+                        key={link.name}
+                        href={chainAwareHref(link.href)}
+                        className={`relative flex min-h-[44px] flex-shrink-0 items-center gap-1.5 px-3 py-2 text-xs font-semibold whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
+                        style={{
+                          color: isActive ? "#0A0A0A" : AX.mint,
+                          background: isActive
+                            ? `linear-gradient(135deg, ${AX.mint}, #58B890)`
+                            : "transparent",
+                          border: `1px solid ${AX.mint}`,
+                          borderRadius: "9999px",
+                          position: "relative",
+                          zIndex: 1001,
+                          pointerEvents: "auto",
+                          cursor: "pointer",
+                          transition: "all 150ms cubic-bezier(0.16, 1, 0.3, 1)",
+                          boxShadow: isActive
+                            ? `0 0 16px ${AX.mintGlow}`
+                            : `0 0 8px ${AX.mintGlow}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.color = "#0A0A0A";
+                            e.currentTarget.style.background = `linear-gradient(135deg, ${AX.mint}, #58B890)`;
+                            e.currentTarget.style.boxShadow = `0 0 16px ${AX.mintGlow}`;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.color = AX.mint;
+                            e.currentTarget.style.background = "transparent";
+                            e.currentTarget.style.boxShadow = `0 0 8px ${AX.mintGlow}`;
+                          }
+                        }}
+                      >
+                        {link.name}
+                      </Link>
+                    );
+                  }
+
                   return (
                     <Link
                       key={link.name}
@@ -2996,6 +3043,43 @@ export default function Header({
                           Edit Username
                         </button>
 
+                        {/* Export Wallet Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            setShowExportWalletModal(true);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                          style={{
+                            color: AX.text,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                            />
+                          </svg>
+                          Export Wallet
+                        </button>
+
                         {/* Logout Button */}
                         <button
                           onClick={() => {
@@ -3037,29 +3121,38 @@ export default function Header({
               </div>
             ) : (
               !userLoading && (
-                <button
-                  className="ml-0.5 flex h-10 min-h-[44px] flex-shrink-0 items-center justify-center rounded-md border-none px-3 py-2 text-sm font-medium text-black transition-all duration-300 ease-out sm:ml-1 sm:h-8 sm:min-h-0 sm:py-1.5 md:ml-1.5 md:px-3 lg:ml-2"
-                  style={{
-                    backgroundColor: AX.mint,
-                  }}
-                  onClick={() => {
-                    const event = new CustomEvent("open-login-modal");
-                    window.dispatchEvent(event);
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "#58B890";
-                    e.currentTarget.style.boxShadow =
-                      "0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)";
-                    e.currentTarget.style.transform = "scale(1.02)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = AX.mint;
-                    e.currentTarget.style.boxShadow = "none";
-                    e.currentTarget.style.transform = "scale(1)";
-                  }}
-                >
-                  Login
-                </button>
+                <div className="ml-0.5 flex flex-shrink-0 items-center gap-2 sm:ml-1 md:ml-1.5 lg:ml-2">
+                  <button
+                    className="flex h-10 min-h-[44px] items-center justify-center rounded-lg border border-[#333] px-4 py-2 text-sm font-medium text-white transition-all duration-200 sm:h-8 sm:min-h-0 sm:py-1.5"
+                    style={{ backgroundColor: "#1a1a1a" }}
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent("open-login-modal"));
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = "#2a2a2a";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = "#1a1a1a";
+                    }}
+                  >
+                    Sign Up
+                  </button>
+                  <button
+                    className="flex h-10 min-h-[44px] items-center justify-center rounded-lg border-none px-4 py-2 text-sm font-medium text-black transition-all duration-200 sm:h-8 sm:min-h-0 sm:py-1.5"
+                    style={{ backgroundColor: "#ffffff" }}
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent("open-login-modal"));
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = "#e5e5e5";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = "#ffffff";
+                    }}
+                  >
+                    Log In
+                  </button>
+                </div>
               )
             )}
           </div>
@@ -3771,6 +3864,19 @@ export default function Header({
         onSuccess={() => {
           // User context will be refreshed by the modal
         }}
+      />
+
+      {/* Export Wallet Modal */}
+      <ExportWalletModal
+        isOpen={showExportWalletModal}
+        onClose={() => setShowExportWalletModal(false)}
+        walletId={user?.walletId || walletList?.[0]?.walletId || undefined}
+        walletAddress={
+          primaryWalletAddresses?.solana ||
+          user?.publicKey ||
+          walletList?.[0]?.solanaAddress ||
+          undefined
+        }
       />
     </>
   );

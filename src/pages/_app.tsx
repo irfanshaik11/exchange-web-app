@@ -517,33 +517,37 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Public routes that should never trigger the forced login modal
-  const isPublicRoute = router.pathname === "/learn" || router.pathname === "/support";
-
   // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Listen for "open-login-modal" custom events (from Header login button, trade panels, etc.)
   useEffect(() => {
     if (!isMounted) return;
-    if (enforceLogin && !isPublicRoute && !userLoading && !user) {
-      setLoginOpen(true);
-    }
-    if ((user || isPublicRoute) && loginOpen) {
+    const handler = () => {
+      if (!user) setLoginOpen(true);
+    };
+    window.addEventListener("open-login-modal", handler);
+    return () => window.removeEventListener("open-login-modal", handler);
+  }, [isMounted, user]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    if (user && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin, loginOpen, isMounted, isPublicRoute]);
+  }, [user, loginOpen, isMounted]);
 
-  // Prevent closing if not logged in
   const handleLoginClose = () => {
-    if (user) setLoginOpen(false);
+    setLoginOpen(false);
   };
 
-  if (!enforceLogin || isPublicRoute || !isMounted) return null;
-  
+  if (!isMounted) return null;
+
+
   return (
-    <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
+    <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={false} />
   );
 }
 
@@ -917,7 +921,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                         </WatchlistProvider>
                       </SearchProvider>
                     </QuickBuyProvider>
-                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                    <GlobalLoginModalManager enforceLogin={false} />
                     <WalletExportGuard />
                     <UserLimitBlockerWrapper />
                   </ThemeProvider>

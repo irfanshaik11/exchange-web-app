@@ -122,6 +122,7 @@ interface HoldersTableProps {
   containerWidth?: number;
   chain?: "sol" | "monad"; // Chain to determine which endpoint to use
   onTotalCountChange?: (count: number) => void; // Callback to pass total count to parent
+  onWalletClick?: (address: string) => void;
 }
 
 interface HolderWithBalance {
@@ -684,6 +685,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
   containerWidth = 1000,
   chain = "sol",
   onTotalCountChange,
+  onWalletClick,
 }) => {
   // Get SOL price for USD/SOL conversion
   const { solPrice, monPrice } = useSolPrice();
@@ -1664,7 +1666,7 @@ const HoldersTable: React.FC<HoldersTableProps> = ({
                           };
 
                           return (
-                            <WalletHoverCard data={hoverData} chain={chain} solPrice={chainPrice}>
+                            <WalletHoverCard data={hoverData} chain={chain} solPrice={chainPrice} onWalletClick={onWalletClick}>
                               <div className="flex items-center gap-1.5">
                                 <a
                                   href={`https://solscan.io/account/${holder.address}`}

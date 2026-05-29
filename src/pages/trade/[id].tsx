@@ -46,6 +46,7 @@ const CodexTrades = dynamic(() => import("../../components/trade/CodexTrades"), 
 const CodexTopTraders = dynamic(() => import("../../components/trade/CodexTopTraders"), { ssr: false });
 const CodexDevTokens = dynamic(() => import("../../components/trade/CodexDevTokens"), { ssr: false });
 const CodexHolders = dynamic(() => import("../../components/trade/CodexHolders"), { ssr: false });
+const WalletScanPanel = dynamic(() => import("../../components/WalletScanPanel"), { ssr: false });
 
 /* ---------- AXIOM palette (refined) ---------- */
 const AX = {
@@ -139,6 +140,7 @@ export default function TradePage() {
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [devTokensCount, setDevTokensCount] = useState<number | undefined>(undefined);
   const [holdersCount, setHoldersCount] = useState<number | undefined>(undefined);
+  const [scannedWalletAddress, setScannedWalletAddress] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
@@ -1354,7 +1356,9 @@ export default function TradePage() {
         }}
       >
         {/* Top global header */}
-        <Header search={search} setSearch={setSearch} />
+        <div className="relative z-[10000]">
+          <Header search={search} setSearch={setSearch} />
+        </div>
 
         {/* Hydrating status hidden from users - data loads silently in background */}
 
@@ -1561,6 +1565,7 @@ export default function TradePage() {
                     onTradesUpdate={updateTradesCache}
                     pairAddress={resolvedPairAddress}
                     chain="sol"
+                    onWalletClick={setScannedWalletAddress}
                   />
                 </div>
                 <div className={`flex flex-col h-full ${selectedTab === "Orders" ? "" : "hidden"}`}>
@@ -1571,7 +1576,7 @@ export default function TradePage() {
                 </div>
                 <div className={`flex flex-col h-full ${selectedTab === "Top Traders" ? "" : "hidden"}`}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                    <CodexTopTraders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" />
+                    <CodexTopTraders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" onWalletClick={setScannedWalletAddress} />
                   </React.Suspense>
                 </div>
                 {/* BANDAID PERF: conditionally mount the Holders tab body instead of
@@ -1583,7 +1588,7 @@ export default function TradePage() {
                 {selectedTab === "Holders" && (
                   <div className="flex flex-col h-full">
                     <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
-                      <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" onTotalCountChange={setHoldersCount} />
+                      <CodexHolders token={displayToken} pairAddress={idString || resolvedPairAddress} chain="sol" onTotalCountChange={setHoldersCount} onWalletClick={setScannedWalletAddress} />
                     </React.Suspense>
                   </div>
                 )}
@@ -1774,6 +1779,14 @@ export default function TradePage() {
         token={validatedCorrectTokenData || displayToken}
         liveLiquidityUsd={wsTokenInfo?.liquidity_usd}
       />
+
+      {/* Wallet Scan Panel - opens when clicking wallet address in hover card */}
+      {scannedWalletAddress && (
+        <WalletScanPanel
+          wallet={{ address: scannedWalletAddress, name: "", createdAt: Date.now() }}
+          onClose={() => setScannedWalletAddress(null)}
+        />
+      )}
     </>
   );
 }

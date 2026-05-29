@@ -688,6 +688,7 @@ export default function PortfolioPage() {
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
+  const [sortByPnl, setSortByPnl] = useState(false);
   // Calculate native price for current chain
   const nativePriceForDisplay = useMemo(() => {
     if (currentChain === 'monad') {
@@ -790,13 +791,14 @@ export default function PortfolioPage() {
       wallets.find((w) => w.isPrimary) ||
       wallets[0];
 
-    if (primary) {
-      setExportWalletId(primary.walletId || primary.id);
-      setExportWalletAddress(getAddressForChain(primary, "sol"));
-      setForceExportChain("sol");
-      setShowExportModal(true);
-      posthog.capture("wallet_export_initiated", { chain: currentChain });
-    }
+    // Disabled: export secret phrase modal
+    // if (primary) {
+    //   setExportWalletId(primary.walletId || primary.id);
+    //   setExportWalletAddress(getAddressForChain(primary, "sol"));
+    //   setForceExportChain("sol");
+    //   setShowExportModal(true);
+    //   posthog.capture("wallet_export_initiated", { chain: currentChain });
+    // }
   }, [currentChain, showExportModal, user?.id, wallets]);
 
   // Save cache to localStorage when it changes (debounced)
@@ -1699,6 +1701,17 @@ export default function PortfolioPage() {
       );
     });
   }, [searchQuery, top100Positions, tokenNames, tokenMetadataCache]);
+
+  // Apply PnL sorting when enabled
+  const sortedPositions = useMemo(() => {
+    if (!sortByPnl) return filteredPositions;
+    return [...filteredPositions].sort((a, b) => b.pnl - a.pnl);
+  }, [filteredPositions, sortByPnl]);
+
+  const sortedTop100Positions = useMemo(() => {
+    if (!sortByPnl) return filteredTop100Positions;
+    return [...filteredTop100Positions].sort((a, b) => b.pnl - a.pnl);
+  }, [filteredTop100Positions, sortByPnl]);
 
   const filteredTradeHistory = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -2998,10 +3011,12 @@ export default function PortfolioPage() {
     
     const address = getAddressForChain(wallet, currentChain);
     // Use the Turnkey walletId, not the database id
-    setExportWalletId(wallet.walletId);
-    setExportWalletAddress(address);
-    setForceExportChain(null);
-    setShowExportModal(true);
+    // Disabled: export secret phrase modal
+    // setExportWalletId(wallet.walletId);
+    // setExportWalletAddress(address);
+    // setForceExportChain(null);
+    // setShowExportModal(true);
+    return;
   };
 
   const handleExported = useCallback(() => {
@@ -3904,6 +3919,13 @@ export default function PortfolioPage() {
                       Show Hidden
                     </button>
                     <button
+                      onClick={() => setSortByPnl(!sortByPnl)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer border text-xs ${sortByPnl ? 'border-[#18c48c]/30 text-[#18c48c] bg-[#18c48c]/10' : 'border-white/[0.06] hover:border-white/[0.1] text-[#71717a] hover:text-[#a1a1aa]'}`}
+                    >
+                      <span className="text-xs">↑↓</span>
+                      PnL
+                    </button>
+                    <button
                       onClick={() => setSortByUSD(!sortByUSD)}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer border border-white/[0.06] hover:border-white/[0.1] text-[#71717a] hover:text-[#a1a1aa] text-xs"
                     >
@@ -3939,8 +3961,8 @@ export default function PortfolioPage() {
                         // For Monad: keep existing behavior — let Positions fetch internally.
                         preloadedPositions={
                           currentChain === "sol"
-                            ? (searchQuery.trim() !== "" ? filteredPositions : positions)
-                            : (searchQuery.trim() !== "" ? filteredPositions : undefined)
+                            ? (searchQuery.trim() !== "" || sortByPnl ? sortedPositions : positions)
+                            : (searchQuery.trim() !== "" || sortByPnl ? sortedPositions : undefined)
                         }
                         skipFetch={currentChain === "sol" || searchQuery.trim() !== ""}
                         showHidden={showHidden}
@@ -3987,9 +4009,9 @@ export default function PortfolioPage() {
                         // skipFetch=true unconditionally for sol since wp owns the data.
                         preloadedPositions={
                           currentChain === "sol"
-                            ? (searchQuery.trim() ? filteredTop100Positions : top100Positions)
-                            : (searchQuery.trim()
-                                ? filteredTop100Positions
+                            ? (searchQuery.trim() || sortByPnl ? sortedTop100Positions : top100Positions)
+                            : (searchQuery.trim() || sortByPnl
+                                ? sortedTop100Positions
                                 : top100Positions.length > 0
                                   ? top100Positions
                                   : undefined)
