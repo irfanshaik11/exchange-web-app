@@ -1357,7 +1357,9 @@ export default function TradePage() {
         }}
       >
         {/* Top global header */}
-        <Header search={search} setSearch={setSearch} />
+        <div className="relative z-[10000]">
+          <Header search={search} setSearch={setSearch} />
+        </div>
 
         {/* Hydrating status hidden from users - data loads silently in background */}
 
