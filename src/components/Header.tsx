@@ -2034,7 +2034,7 @@ export default function Header({
                       router.pathname.startsWith("/trade/")) ||
                     (link.name === "Airdrop" &&
                       (router.pathname === "/airdrop-genesis" ||
-                        router.pathname === "/referrals"));
+                        router.pathname === "/referrals")));
                   const isAgent = link.name === "Agent";
 
                   if (isAgent) {
