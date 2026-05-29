@@ -2369,7 +2369,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                 <div className="w-full max-w-72 min-w-0 flex-1">Token</div>
                 <div className="flex flex-shrink-0 items-center gap-3 sm:text-[11px] md:gap-5">
                   <span className="w-20 text-center">MCap</span>
-                  <span className="w-20 text-center">Vol</span>
+                  <span className="w-20 text-center">Vol 24hr</span>
                   <span className="w-20 text-center">Liq</span>
                 </div>
                 <span
