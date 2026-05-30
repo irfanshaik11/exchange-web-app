@@ -491,6 +491,12 @@ function connectGlobal() {
                 // Merge update into existing token
                 const updated: NormalizedTrendingToken = {
                   ...existing,
+                  // Carry backend rank forward. The delta broadcaster emits `rank` whenever
+                  // a token's position changes (every ~5s); rank now drives the Trending
+                  // display order, so without this the order would freeze at the initial
+                  // snapshot rank until the next full snapshot/reconnect. `??` keeps the
+                  // existing rank on deltas that don't include a rank change.
+                  rank: update.rank ?? existing.rank,
                   price_usd: update.price_usd ?? existing.price_usd,
                   priceUsd: update.price_usd ?? existing.priceUsd,
                   fully_diluted_value:
