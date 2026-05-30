@@ -11,8 +11,6 @@ import QuickBuy from "../QuickBuy";
 import { createLimitOrder, tradeBuy, tradeSellPercentage, getLimitOrderExecutionResult, SOL_MINT_ADDRESS, ApiError, getWalletPortfolioPositions } from "~/utils/api";
 import {
   addPendingTrade,
-  removePendingTrade,
-  updatePendingTrade,
   verifyTxAndRollbackMarker,
 } from "~/utils/pendingTradeMarkers";
 import { getTradeActivityByUser } from "~/utils/functions";
@@ -2874,14 +2872,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
         const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
-        // Optimistic chart marker — declared outside try so the catch block
-        // can reference it for cleanup on failure.
+        // Chart marker id — inserted only after we get a txHash (post-signature).
         const sellMarkerId =
           `pend_${
             (typeof crypto !== "undefined" && crypto.randomUUID?.()) ||
             Math.random().toString(36).slice(2)
           }`;
-        let sellMarkerInserted = false;
 
         try {
           // Estimate SOL credit for the optimistic header update.
@@ -2893,21 +2889,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 liveSolPrice
               : 0;
           const primarySolAddr = primaryWalletAddresses.solana || "";
-
-          if (primarySolAddr && token.mint) {
-            addPendingTrade({
-              id: sellMarkerId,
-              mint: token.mint,
-              walletAddress: primarySolAddr.toLowerCase(),
-              side: "sell",
-              amountToken: sellPercentage,
-              priceUsd: token.usd_price,
-              timestamp: Date.now() - 1500,
-              status: "pending",
-              createdAt: Date.now(),
-            });
-            sellMarkerInserted = true;
-          }
 
           const sellResult = await tradeSellPercentage(
             {
@@ -2934,15 +2915,20 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           }
 
           if (sellResult?.hash) {
-            // Stamp signature on the optimistic marker so the chart's
-            // reconciliation can dedupe it against the real WS trade.
-            if (sellMarkerInserted) {
-              updatePendingTrade(sellMarkerId, {
-                signature: sellResult.hash,
+            // Post-signature chart marker: only insert after we have a real txHash.
+            if (primarySolAddr && token.mint) {
+              addPendingTrade({
+                id: sellMarkerId,
+                mint: token.mint,
+                walletAddress: primarySolAddr.toLowerCase(),
+                side: "sell",
+                amountToken: sellPercentage,
+                priceUsd: token.usd_price,
+                timestamp: Date.now() - 1500,
                 status: "confirmed",
+                signature: sellResult.hash,
+                createdAt: Date.now(),
               });
-              // Fire-and-forget: verify the tx actually succeeded on-chain.
-              // If meta.err is set the marker is silently removed.
               verifyTxAndRollbackMarker(sellMarkerId, sellResult.hash);
             }
 
@@ -3023,9 +3009,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             return { success: true, txHash: sellResult.hash };
           } else {
             // Sell returned but no hash
-            if (sellMarkerInserted) {
-              removePendingTrade(sellMarkerId);
-            }
             pendingSolanaToastRef.current = null;
             transformToastToError(uniqueToastId, sellResult?.message || 'Sell failed', tokenImage, tokenName);
             setSuccessMessage(null);
@@ -3033,9 +3016,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             return { success: false };
           }
         } catch (error: any) {
-          if (sellMarkerInserted) {
-            removePendingTrade(sellMarkerId);
-          }
           tradeErrored = true;
           cleanupTradeListener();
           // Stop timer on error
@@ -3206,35 +3186,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       const cleanupTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
-      // Optimistic chart marker — declared outside try so the catch block
-      // can reference it for cleanup on failure.
+      // Chart marker id — inserted only after we get a txHash (post-signature).
       const buyMarkerId =
         `pend_${
           (typeof crypto !== "undefined" && crypto.randomUUID?.()) ||
           Math.random().toString(36).slice(2)
         }`;
-      let buyMarkerInserted = false;
 
       try {
         const poolAddress = resolvedPoolAddress;
         const baseMint = token.mint || '';
         const quoteMint = SOL_MINT_ADDRESS;
-
         const buyMarkerPrimaryAddr = primaryWalletAddresses.solana || "";
-        if (buyMarkerPrimaryAddr && baseMint) {
-          addPendingTrade({
-            id: buyMarkerId,
-            mint: baseMint,
-            walletAddress: buyMarkerPrimaryAddr.toLowerCase(),
-            side: "buy",
-            amountSol: buyAmount,
-            priceUsd: token.usd_price,
-            timestamp: Date.now() - 1500,
-            status: "pending",
-            createdAt: Date.now(),
-          });
-          buyMarkerInserted = true;
-        }
 
         notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
         const multiResult = await executeSolanaMultiBuy({
@@ -3278,22 +3241,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             .map((r: any) => (r.result as any)?.hash || (r.result as any)?.txid)
             .find(Boolean);
 
-        // Stamp signature on the optimistic marker so the chart's
-        // reconciliation can dedupe it against the real WS trade.
-        // If no txHash returned, the trade was rejected by a soft pre-flight
-        // check (insufficient SOL, low liquidity, etc.) — remove the marker.
-        if (buyMarkerInserted) {
-          if (firstTxHash) {
-            updatePendingTrade(buyMarkerId, {
-              signature: firstTxHash,
-              status: "confirmed",
-            });
-            // Fire-and-forget: verify the tx actually succeeded on-chain.
-            // If meta.err is set the marker is silently removed.
-            verifyTxAndRollbackMarker(buyMarkerId, firstTxHash);
-          } else {
-            removePendingTrade(buyMarkerId);
-          }
+        // Post-signature chart marker: only insert after we have a real txHash.
+        if (firstTxHash && buyMarkerPrimaryAddr && baseMint) {
+          addPendingTrade({
+            id: buyMarkerId,
+            mint: baseMint,
+            walletAddress: buyMarkerPrimaryAddr.toLowerCase(),
+            side: "buy",
+            amountSol: buyAmount,
+            priceUsd: token.usd_price,
+            timestamp: Date.now() - 1500,
+            status: "confirmed",
+            signature: firstTxHash,
+            createdAt: Date.now(),
+          });
+          verifyTxAndRollbackMarker(buyMarkerId, firstTxHash);
         }
 
         if (firstTxHash && !isMultiWallet) {
@@ -3353,9 +3315,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         setIsLoading(false);
         return { success: true };
       } catch (error: any) {
-        if (buyMarkerInserted) {
-          removePendingTrade(buyMarkerId);
-        }
         tradeErrored = true;
         cleanupTradeListener();
         // Stop timer on error

@@ -44,9 +44,9 @@ import {
 } from "~/utils/searchHistory";
 import { useUser } from "./UserContext";
 import {
-  confirmOptimisticMarker,
   insertOptimisticMarker,
-  rollbackOptimisticMarker,
+  confirmOptimisticMarker,
+  verifyTxAndRollbackMarker,
 } from "~/utils/pendingTradeMarkers";
 import { useSolPrice } from "./SolPriceContext";
 import { HiLightningBolt } from "react-icons/hi";
@@ -1315,21 +1315,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
         "solana",
       );
 
-      let __markId = "";
-
       try {
         const baseMint = tokenMint;
         const quoteMint = SOL_MINT_ADDRESS;
-
-        __markId = insertOptimisticMarker({
-          mint: baseMint,
-          walletAddress:
-            walletList?.find((w) => w.isPrimary)?.solanaAddress ??
-            walletList?.[0]?.solanaAddress,
-          side: "buy",
-          amountSol: buyAmount,
-          priceUsd: (token as any).usd_price,
-        }).id;
 
         notifyTradePending({
           tokenAddress: baseMint,
@@ -1389,7 +1377,22 @@ const SearchModalContent = React.memo(function SearchModalContent({
             (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
           )?.result?.txid;
 
-        confirmOptimisticMarker(__markId, firstTxHash);
+        // Post-signature chart marker: only insert after we have a real txHash.
+        if (firstTxHash) {
+          const { id: __markId, inserted } = insertOptimisticMarker({
+            mint: baseMint,
+            walletAddress:
+              walletList?.find((w) => w.isPrimary)?.solanaAddress ??
+              walletList?.[0]?.solanaAddress,
+            side: "buy",
+            amountSol: buyAmount,
+            priceUsd: (token as any).usd_price,
+          });
+          if (inserted) {
+            confirmOptimisticMarker(__markId, firstTxHash);
+            verifyTxAndRollbackMarker(__markId, firstTxHash);
+          }
+        }
 
         if (firstTxHash && !isMultiWallet) {
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -1416,7 +1419,6 @@ const SearchModalContent = React.memo(function SearchModalContent({
         }
         dispatchBalanceRefresh("sol");
       } catch (error: any) {
-        rollbackOptimisticMarker(__markId);
         tradeErrored = true;
         cleanupTradeListener();
         if (timerHandle) {

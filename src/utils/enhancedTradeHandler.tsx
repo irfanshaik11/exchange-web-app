@@ -37,8 +37,6 @@ import { broadcastTradeCompleted } from "./tradeEvents";
 import { dispatchBalanceRefresh } from "./balanceEvents";
 import {
   addPendingTrade,
-  removePendingTrade,
-  updatePendingTrade,
   verifyTxAndRollbackMarker,
 } from "./pendingTradeMarkers";
 import {
@@ -232,20 +230,22 @@ export async function executeEnhancedTrade(
     queueMicrotask(() => dispatchOptimisticRollback(__optimisticTradeId));
   };
 
-  // Optimistic chart marker id — function-scoped so success/error paths can update/remove it.
-  // Inserted only for Solana primary-wallet trades (see logic in the `chain === "sol"` block).
+  // Chart marker id — function-scoped so the success path can insert it.
+  // Markers are only inserted AFTER the trade returns a txHash (post-signature),
+  // so phantom markers from failed pre-flight checks are impossible.
   const pendingMarkerId =
     `pend_${
       (typeof crypto !== "undefined" && crypto.randomUUID?.()) ||
       Math.random().toString(36).slice(2)
     }`;
-  let pendingMarkerInserted = false;
-  if (chain === "sol") {
-    const primaryAddrForOptimistic =
-      params.walletContext?.walletList?.find((w) => w.isPrimary)
+  // Resolve primary wallet address for optimistic balance + chart marker.
+  const primaryAddrForOptimistic = chain === "sol"
+    ? (params.walletContext?.walletList?.find((w) => w.isPrimary)
         ?.solanaAddress ||
       params.walletContext?.walletList?.[0]?.solanaAddress ||
-      null;
+      null)
+    : null;
+  if (chain === "sol" && primaryAddrForOptimistic) {
     let deltaSol = 0;
     if (side === "buy") {
       // Lean estimate: swap amount + Jito bribe. Priority-fee actual
@@ -263,7 +263,7 @@ export async function executeEnhancedTrade(
     ) {
       deltaSol = +params.optimisticSolOut;
     }
-    if (primaryAddrForOptimistic && deltaSol !== 0) {
+    if (deltaSol !== 0) {
       __optimisticDispatched = true;
       queueMicrotask(() =>
         dispatchOptimisticBalance({
@@ -276,31 +276,6 @@ export async function executeEnhancedTrade(
           expiresAt: Date.now() + 15_000,
         }),
       );
-    }
-
-    // Optimistic chart marker. We insert whenever we have a primary wallet
-    // address — the chart's getMarks() isUser filter will hide markers whose
-    // wallet doesn't match the active primary, so an over-eager insert just
-    // sits invisible in the store and gets pruned by the TTL. Better than
-    // a too-strict gate that silently drops markers the user expected.
-    if (primaryAddrForOptimistic && token?.mint) {
-      // Subtract 1.5s from the timestamp so the marker reliably falls inside
-      // the chart's cached visible-range `to` value. Real WS trades arrive
-      // with indexer timestamps slightly in the past for the same reason.
-      const markerTs = Date.now() - 1500;
-      addPendingTrade({
-        id: pendingMarkerId,
-        mint: token.mint,
-        walletAddress: primaryAddrForOptimistic.toLowerCase(),
-        side,
-        amountSol: side === "buy" ? amount : undefined,
-        amountToken: side === "sell" ? amount : undefined,
-        priceUsd: token.usd_price,
-        timestamp: markerTs,
-        status: "pending",
-        createdAt: Date.now(),
-      });
-      pendingMarkerInserted = true;
     }
   }
 
@@ -885,10 +860,6 @@ export async function executeEnhancedTrade(
         duration: 6000,
       });
 
-      if (pendingMarkerInserted) {
-        removePendingTrade(pendingMarkerId);
-      }
-
       if (onError) onError(enhancedError);
 
       __rollbackOptimistic();
@@ -984,12 +955,21 @@ export async function executeEnhancedTrade(
       // Dispatch balance-refresh event as fallback for callers that don't pass refreshBalance
       dispatchBalanceRefresh(chain === "monad" ? "monad" : "sol");
 
-      // Stamp signature on the optimistic marker so the chart's reconciliation
-      // path can dedupe it against the real WS trade once it echoes.
-      if (pendingMarkerInserted && txHash) {
-        updatePendingTrade(pendingMarkerId, {
-          signature: txHash,
+      // Post-signature chart marker: only insert after we have a real txHash,
+      // so phantom markers from pre-flight failures are impossible.
+      if (txHash && primaryAddrForOptimistic && token?.mint) {
+        addPendingTrade({
+          id: pendingMarkerId,
+          mint: token.mint,
+          walletAddress: primaryAddrForOptimistic.toLowerCase(),
+          side,
+          amountSol: side === "buy" ? amount : undefined,
+          amountToken: side === "sell" ? amount : undefined,
+          priceUsd: token.usd_price,
+          timestamp: Date.now() - 1500,
           status: "confirmed",
+          signature: txHash,
+          createdAt: Date.now(),
         });
         // Fire-and-forget: verify the tx actually succeeded on-chain.
         // If meta.err is set the marker is silently removed.
@@ -1104,10 +1084,6 @@ export async function executeEnhancedTrade(
       showExplorerLink: false, // Explicitly don't show Solscan link for errors
       duration: 6000, // 6s for errors with actions/suggestions (needs time to read)
     });
-
-    if (pendingMarkerInserted) {
-      removePendingTrade(pendingMarkerId);
-    }
 
     if (onError) onError(enhancedError);
 

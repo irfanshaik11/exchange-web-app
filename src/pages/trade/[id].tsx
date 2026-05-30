@@ -894,6 +894,7 @@ export default function TradePage() {
               : undefined,
         __optimistic: true,
         __optimisticId: p.id,
+        __optimisticStatus: p.status,
         // createdAt — used by fuzzy-match guard to reject WS trades older
         // than the click (those can't be the echo of a click that just
         // happened, so they shouldn't dedupe against this optimistic row).
@@ -955,6 +956,7 @@ export default function TradePage() {
             __optimistic: true,
             __optimisticId: combined[idx].__optimisticId,
             __optimisticCreatedAt: combined[idx].__optimisticCreatedAt,
+            __wsMatched: true,
           };
         }
         continue;
@@ -1003,6 +1005,7 @@ export default function TradePage() {
           __optimistic: true,
           __optimisticId: combined[fuzzyIdx].__optimisticId,
           __optimisticCreatedAt: combined[fuzzyIdx].__optimisticCreatedAt,
+          __wsMatched: true,
         };
         seen.add(sigKey);
         continue;

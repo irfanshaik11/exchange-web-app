@@ -39,9 +39,9 @@ import {
 } from "~/utils/createSolanaToastHandler";
 import { useUser } from "~/components/UserContext";
 import {
-  confirmOptimisticMarker,
   insertOptimisticMarker,
-  rollbackOptimisticMarker,
+  confirmOptimisticMarker,
+  verifyTxAndRollbackMarker,
 } from "~/utils/pendingTradeMarkers";
 import PumpLive, {
   type PumpItem,
@@ -2962,21 +2962,9 @@ export function DiscoverPageContent({
       "solana",
     );
 
-    let __markId = "";
-
     try {
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
-
-      __markId = insertOptimisticMarker({
-        mint: baseMint,
-        walletAddress:
-          walletList?.find((w) => w.isPrimary)?.solanaAddress ??
-          walletList?.[0]?.solanaAddress,
-        side: "buy",
-        amountSol: buyAmount,
-        priceUsd: (token as any).usd_price,
-      }).id;
 
       notifyTradePending({
         tokenAddress: baseMint,
@@ -3036,7 +3024,22 @@ export function DiscoverPageContent({
           (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
         )?.result?.txid;
 
-      confirmOptimisticMarker(__markId, firstTxHash);
+      // Post-signature chart marker: only insert after we have a real txHash.
+      if (firstTxHash) {
+        const { id: __markId, inserted } = insertOptimisticMarker({
+          mint: baseMint,
+          walletAddress:
+            walletList?.find((w) => w.isPrimary)?.solanaAddress ??
+            walletList?.[0]?.solanaAddress,
+          side: "buy",
+          amountSol: buyAmount,
+          priceUsd: (token as any).usd_price,
+        });
+        if (inserted) {
+          confirmOptimisticMarker(__markId, firstTxHash);
+          verifyTxAndRollbackMarker(__markId, firstTxHash);
+        }
+      }
 
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -3080,7 +3083,6 @@ export function DiscoverPageContent({
 
       return { success: true };
     } catch (error: any) {
-      rollbackOptimisticMarker(__markId);
       tradeErrored = true;
       cleanupSolanaTradeListener();
       // Stop timer on error
@@ -3287,23 +3289,11 @@ export function DiscoverPageContent({
       "solana",
     );
 
-    let __markId = "";
-
     try {
       // For PumpLive tokens, use the bonding_curve as the pool address
       const poolAddress = token.bonding_curve || "";
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
-
-      __markId = insertOptimisticMarker({
-        mint: baseMint,
-        walletAddress:
-          walletList?.find((w) => w.isPrimary)?.solanaAddress ??
-          walletList?.[0]?.solanaAddress,
-        side: "buy",
-        amountSol: buyAmount,
-        priceUsd: (token as any).usd_price,
-      }).id;
 
       notifyTradePending({
         tokenAddress: baseMint,
@@ -3363,7 +3353,22 @@ export function DiscoverPageContent({
           (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
         )?.result?.txid;
 
-      confirmOptimisticMarker(__markId, firstTxHash);
+      // Post-signature chart marker: only insert after we have a real txHash.
+      if (firstTxHash) {
+        const { id: __markId, inserted } = insertOptimisticMarker({
+          mint: baseMint,
+          walletAddress:
+            walletList?.find((w) => w.isPrimary)?.solanaAddress ??
+            walletList?.[0]?.solanaAddress,
+          side: "buy",
+          amountSol: buyAmount,
+          priceUsd: (token as any).usd_price,
+        });
+        if (inserted) {
+          confirmOptimisticMarker(__markId, firstTxHash);
+          verifyTxAndRollbackMarker(__markId, firstTxHash);
+        }
+      }
 
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -3407,7 +3412,6 @@ export function DiscoverPageContent({
 
       return { success: true };
     } catch (error: any) {
-      rollbackOptimisticMarker(__markId);
       tradeErrored = true;
       cleanupPumpLiveTradeListener();
       // Stop timer on error
