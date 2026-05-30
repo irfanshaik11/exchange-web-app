@@ -439,7 +439,10 @@ export function DiscoverPageContent({
     | "timestamp"
     // Sort by price % change for the currently selected timeframe. Used by
     // the Gainers tab as its default sort.
-    | "priceChange";
+    | "priceChange"
+    // Backend-assigned rank (ascending). Trending tab default — renders the
+    // server's computed order instead of the client-side composite score.
+    | "rank";
 
   const [sortKey, setSortKey] = useState<SortKey>(() => {
     if (typeof window !== "undefined") {
@@ -450,7 +453,7 @@ export function DiscoverPageContent({
         if (savedTab === "gainers") return "priceChange";
       } catch {}
     }
-    return "score";
+    return "rank";
   });
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
@@ -469,7 +472,7 @@ export function DiscoverPageContent({
   const tabUiStateRef = useRef<
     Record<"trending" | "top" | "gainers", TabUiState>
   >({
-    trending: { tf: "1h", sk: "score", sd: "desc" },
+    trending: { tf: "1h", sk: "rank", sd: "asc" },
     top: { tf: "6h", sk: "volume", sd: "desc" },
     gainers: { tf: "1h", sk: "priceChange", sd: "desc" },
   });
@@ -4049,6 +4052,15 @@ export function DiscoverPageContent({
         // Final safety check in sort
         if (!a || !b || isWrappedSol(a) || isWrappedSol(b)) {
           return 0;
+        }
+
+        // Backend rank: always ascending (rank 1 = top); unranked (0/missing) sink to
+        // the bottom. Independent of sortDirection — there is no rank column header to
+        // toggle and Trending defaults to rank/asc, so the server order renders verbatim.
+        if (sortKey === "rank") {
+          const ar = Number((a as any).rank) || 999999;
+          const br = Number((b as any).rank) || 999999;
+          return ar - br;
         }
 
         let aVal = 0,

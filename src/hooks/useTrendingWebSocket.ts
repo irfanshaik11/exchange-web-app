@@ -456,7 +456,7 @@ function connectGlobal() {
                   filteredCount++;
                   return;
                 }
-                const normalized = normalizeToken(token);
+                const normalized = normalizeToken(token, tf);
                 globalTokenMaps[tf].set(normalized.mint, normalized);
               });
               // Save to localStorage cache for instant display on tab switch
@@ -599,7 +599,7 @@ function connectGlobal() {
                 if (isBlacklisted(token.mint)) return;
                 // Skip established tokens older than the trending window
                 if (isTooOldForTrending(token)) return;
-                const normalized = normalizeToken(token);
+                const normalized = normalizeToken(token, topic);
                 globalTokenMaps[topic].set(normalized.mint, normalized);
                 hasChanges = true;
               });
@@ -726,7 +726,12 @@ export function useTrendingWebSocket(
   const tokens = useMemo<NormalizedTrendingToken[]>(() => {
     const arr = Array.from(globalTokenMaps[timeframe].values());
     arr.sort((a, b) => {
-      if (a.rank && b.rank) return a.rank - b.rank;
+      // rank=0/undefined means "unranked": the old `a.rank && b.rank` guard was falsy
+      // for rank 0, so an unranked token sorted against a ranked one by FDV and could
+      // float to the top. Compare with > 0 and always sink unranked tokens below ranked.
+      if (a.rank > 0 && b.rank > 0) return a.rank - b.rank;
+      if (a.rank > 0) return -1;
+      if (b.rank > 0) return 1;
       return (b.fully_diluted_value || 0) - (a.fully_diluted_value || 0);
     });
     return arr;
