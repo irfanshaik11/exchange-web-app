@@ -2083,17 +2083,22 @@ const MarketCapCell: React.FC<{
           return `$${formatMarketCap(token.fully_diluted_value)}`;
         })()}
       </div>
-      {/* Commented out percentage display per user request */}
-      {/* <div
+      {/* Numeric price-% for the selected timeframe — GMGN/Axiom/Trojan all show this.
+          Re-enabled now that the momentum relay populates price_percent_change_{tf}
+          (it was hidden while that field was always 0). */}
+      <div
         className={`text-xs font-semibold ${
           isPositive ? "text-emerald-400" : "text-red-400"
         } ${
-          animationState[percentFieldKey] === 'up' ? 'price-animate-up' : 
-          animationState[percentFieldKey] === 'down' ? 'price-animate-down' : ''
+          animationState[percentFieldKey] === "up"
+            ? "price-animate-up"
+            : animationState[percentFieldKey] === "down"
+              ? "price-animate-down"
+              : ""
         }`}
       >
         {formatPercentChange(percentChange)}%
-      </div> */}
+      </div>
     </div>
   );
 };
