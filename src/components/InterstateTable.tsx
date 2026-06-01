@@ -2083,17 +2083,28 @@ const MarketCapCell: React.FC<{
           return `$${formatMarketCap(token.fully_diluted_value)}`;
         })()}
       </div>
-      {/* Commented out percentage display per user request */}
-      {/* <div
-        className={`text-xs font-semibold ${
-          isPositive ? "text-emerald-400" : "text-red-400"
-        } ${
-          animationState[percentFieldKey] === 'up' ? 'price-animate-up' : 
-          animationState[percentFieldKey] === 'down' ? 'price-animate-down' : ''
-        }`}
-      >
-        {formatPercentChange(percentChange)}%
-      </div> */}
+      {/* Numeric price-% for the selected timeframe — GMGN/Axiom/Trojan all show this.
+          Only rendered when NON-ZERO: the momentum relay (#238/#243) populates 5m + 1h
+          only, so price_percent_change_6h is always 0 — rendering it would show a fake
+          green "+0.00%" on the 6h tab. A genuine flat 0% is also hidden (adds no info).
+          When 6h momentum is relayed later, the 6h column lights up automatically. This
+          guard is surface-agnostic: Discover/watchlist (which DO have real 6h data) still
+          show their non-zero values. */}
+      {percentChange !== 0 && (
+        <div
+          className={`text-xs font-semibold ${
+            isPositive ? "text-emerald-400" : "text-red-400"
+          } ${
+            animationState[percentFieldKey] === "up"
+              ? "price-animate-up"
+              : animationState[percentFieldKey] === "down"
+                ? "price-animate-down"
+                : ""
+          }`}
+        >
+          {formatPercentChange(percentChange)}%
+        </div>
+      )}
     </div>
   );
 };
