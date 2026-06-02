@@ -37,16 +37,12 @@ export default function AgentPage() {
                 Introducing
                 <br />
                 <span className="agent-headline-brand">
-                  <svg className="agent-sparkle" width="36" height="36" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 2L14.09 8.26L20 9.27L15.55 13.97L16.91 20L12 16.9L7.09 20L8.45 13.97L4 9.27L9.91 8.26L12 2Z" fill="#18c48c" />
-                  </svg>
                   Interstate Agent
                 </span>
               </h1>
 
               <p className="agent-description">
                 Interstate Agent provides advanced market data, high quality analysis, and best-in-class trade execution directly in
-                {' '}<span className="agent-highlight-openai">ChatGPT</span> and
                 {' '}<span className="agent-highlight-claude">Claude</span>.
               </p>
 

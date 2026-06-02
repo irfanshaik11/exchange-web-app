@@ -1601,6 +1601,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   const metricsThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const metricsUpdatePendingRef = useRef(false);
   const latestTradeDataRef = useRef<any[]>(tradeData || []);
+  // Sync refs during render (not useEffect) so they're ready before rAF
+  // callbacks fire — critical for sub-frame optimistic marker appearance.
+  latestTradeDataRef.current = tradeData || [];
   const latestCreatorAddressRef = useRef<string | null>(creatorAddress || null);
   const latestUserWalletRef = useRef<string | null>(userWalletAddress || null);
   const latestTokenSymbolRef = useRef<string | null>(tokenSymbol || null);
@@ -1871,9 +1874,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     };
   }, []);
 
-  useEffect(() => {
-    latestTradeDataRef.current = tradeData || [];
-  }, [tradeData]);
+  // latestTradeDataRef is now updated synchronously during render (line ~1605).
 
   useEffect(() => {
     latestCreatorAddressRef.current = creatorAddress || null;
@@ -1968,107 +1969,13 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             } catch {}
           });
         }
-      }, 800);
+      }, 100);
     }
     return () => { if (refreshMarksTimeoutRef.current) clearTimeout(refreshMarksTimeoutRef.current); };
   }, [tradeData]);
 
-  // Sync price-positioned shapes for user trade markers. getMarks only
-  // supports time-based positioning (marks sit on the candle), so we render
-  // user trades as arrow_up / arrow_down shapes at the exact { time, price }
-  // coordinate so they align with the Avg Entry price line.
-  useEffect(() => {
-    const widget = widgetRef.current;
-    if (!widget) return;
-    const userWallet = latestUserWalletRef.current?.toLowerCase();
-    if (!userWallet || !tradeData || tradeData.length === 0) return;
-
-    const doSync = () => {
-      try {
-        const chart = widget.activeChart?.() || widget.chart?.();
-        if (!chart || typeof chart.createShape !== "function") return;
-
-        // Remove old user trade shapes
-        for (const [key, shapeId] of Object.entries(userTradeShapesRef.current)) {
-          try { chart.removeEntity(shapeId); } catch {}
-        }
-        userTradeShapesRef.current = {};
-
-        const mode = displayModeRef.current;
-        const isMarketCap = mode === "MC";
-
-        for (const trade of tradeData) {
-          const maker = (trade.maker || trade.user || trade.wallet_address || "").toLowerCase();
-          if (maker !== userWallet) continue;
-
-          // Extract price (mirrors computeTradeDisplayValues logic)
-          const parsedPrice = parseFloat(trade.price);
-          const fallbackPrice = parseFloat(
-            String(trade.price_usd || trade.priceUsd || 0),
-          );
-          const price = Number.isFinite(parsedPrice) ? parsedPrice : fallbackPrice;
-          if (!Number.isFinite(price) || price <= 0) continue;
-
-          // Convert to axis price (MC mode multiplies by circulating supply)
-          const axisPrice = isMarketCap ? price * multiplierRef.current : price;
-
-          // Parse timestamp
-          let timestamp = trade.timestamp || trade.created_at || trade.unix_time;
-          if (!timestamp) continue;
-          let timeSeconds: number;
-          if (typeof timestamp === "string") {
-            timeSeconds = Math.floor(new Date(timestamp).getTime() / 1000);
-          } else if (timestamp > 10000000000) {
-            timeSeconds = Math.floor(timestamp / 1000);
-          } else {
-            timeSeconds = timestamp;
-          }
-          const adjustedTime = realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000;
-
-          // Detect buy/sell
-          const rawSide = String(trade.side || trade.type || trade.eventDisplayType || "").toLowerCase();
-          const isBuy = trade.is_buy === true || trade.is_buy === 1 || trade.is_buy === "1"
-            || rawSide.includes("buy") || rawSide === "bid";
-
-          // Stable key for this trade
-          const tradeKey = trade.__optimisticId
-            || trade.signature || trade.transaction_hash || trade.tx_hash
-            || `${timeSeconds}_${maker}`;
-
-          const shapePromise = chart.createShape(
-            { time: adjustedTime, price: axisPrice },
-            {
-              shape: isBuy ? "arrow_up" : "arrow_down",
-              lock: true,
-              disableSelection: true,
-              disableSave: true,
-              overrides: {
-                [isBuy ? "linetoolarrowmarkup.arrowColor" : "linetoolarrowmarkdown.arrowColor"]: isBuy ? "#22c55e" : "#ef4444",
-                [isBuy ? "linetoolarrowmarkup.color" : "linetoolarrowmarkdown.color"]: isBuy ? "#22c55e" : "#ef4444",
-                [isBuy ? "linetoolarrowmarkup.fontsize" : "linetoolarrowmarkdown.fontsize"]: 10,
-              },
-            },
-          );
-
-          // Handle both Promise and direct ID returns
-          const storeId = (id: any) => {
-            if (id && typeof id === "string") {
-              userTradeShapesRef.current[tradeKey] = id;
-            }
-          };
-          if (shapePromise && typeof shapePromise.then === "function") {
-            shapePromise.then(storeId);
-          } else {
-            storeId(shapePromise);
-          }
-        }
-      } catch (err) {
-        console.error("[AdvancedOHLCChart] Error syncing user trade shapes:", err);
-      }
-    };
-
-    widget.onChartReady?.(() => doSync());
-  }, [tradeData, displayMode]);
+  // User trade markers now use the same getMarks circle style as dev markers
+  // (with "B"/"S" labels) — no separate balloon shapes needed.
 
   // Single cancellable retry chain shared by both refresh paths (the chart's
   // direct store subscription below, and the imperative `refreshMarksNow` API
@@ -2124,14 +2031,12 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   // race the chart's widget initialization. Subscribing here too means even
   // if the parent's path silently no-ops (because chartRef wasn't ready), the
   // chart itself triggers a refresh as soon as its widget comes online.
-  // Two rAFs of defer to ensure the parent's React render has committed and
-  // `latestTradeDataRef` is populated before refreshMarks reads it.
+  // Single rAF defer — latestTradeDataRef is now updated synchronously during
+  // render, so one frame is enough for the React commit to flush.
   useEffect(() => {
     return subscribePendingTradeMarkers(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scheduleRefreshMarks();
-        });
+        scheduleRefreshMarks();
       });
     });
   }, [scheduleRefreshMarks]);
@@ -5783,12 +5688,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               // as dev / user / mayhem — avoids double-rendering one trade.
               const kolInfo = !isDev && !isUser && !isMayhem ? KOL_ADDRESS_MAP.get(maker) : null;
 
-              // User trades are rendered as price-positioned shapes (arrow_up/
-              // arrow_down via createShape) so they align with the Avg Entry
-              // line. Skip them from getMarks to avoid double-rendering.
-              if (isUser) return false;
-
-              if (!isDev && !isMayhem && !kolInfo) return false;
+              if (!isDev && !isUser && !isMayhem && !kolInfo) return false;
 
               // Handle different timestamp formats
               let timestamp =
@@ -5970,6 +5870,19 @@ Maker: ${walletAddress}`;
             // For optimistic (user) trades, use __optimisticId for a stable
             // mark id that doesn't change when the timestamp updates from
             // click-time → actual execution time after WS merge.
+
+            // Pending visual state: optimistic markers that haven't been
+            // confirmed by the WS feed yet render with muted color, square
+            // shape, and a "?" suffix so the user can tell they're unverified.
+            const isUnverified = trade.__optimistic && !trade.__wsMatched && isUser;
+            let markerShape = "circle";
+            if (isUnverified) {
+              markColor = isBuy ? "darkseagreen" : "rosybrown";
+              label = label + "?";
+              markerShape = "square";
+              markerText = "PENDING CONFIRMATION\n" + markerText;
+            }
+
             const markId = trade.__optimisticId
               ? `user_trade_${trade.__optimisticId}`
               : `${isDev ? "dev" : isUser ? "user" : isMayhem ? "mayhem" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`;
@@ -5983,7 +5896,7 @@ Maker: ${walletAddress}`;
               labelFontColor: "white",
               minSize: 24,
               size: 1,
-              shape: "circle",
+              shape: markerShape,
               // Branded artwork for the in-bar circle: KOLs get their avatar,
               // Mayhem Bot gets the dedicated /mayhem bot.png. TradingView's
               // imageUrl renders inside the colored circle and falls back to

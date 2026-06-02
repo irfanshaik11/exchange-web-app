@@ -27,9 +27,9 @@ import { broadcastTradeCompleted, TRADE_COMPLETED_EVENT, type TradeCompletedDeta
 import { formatMonadError } from '~/utils/monadError';
 import { useUser } from '../UserContext';
 import {
-  confirmOptimisticMarker,
   insertOptimisticMarker,
-  rollbackOptimisticMarker,
+  confirmOptimisticMarker,
+  verifyTxAndRollbackMarker,
 } from "~/utils/pendingTradeMarkers";
 import { useSolPrice } from '../SolPriceContext';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
@@ -55,6 +55,8 @@ interface PositionsProps {
   onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
   isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
   fallbackPositions?: Record<string, PositionRow>; // Optional: overrides for incomplete backend data (Monad)
+  sortByPnl?: boolean; // Optional: whether currently sorting by PnL
+  onToggleSortByPnl?: () => void; // Optional: callback to toggle PnL sorting
 }
 
 function shortAddr(addr: string) {
@@ -101,7 +103,9 @@ const Positions: React.FC<PositionsProps> = ({
   tokenMetadataCache,
   onUpdateCache,
   isCacheValid,
-  fallbackPositions
+  fallbackPositions,
+  sortByPnl = false,
+  onToggleSortByPnl
 }) => {
   const { selectedWalletIds, user, primaryWalletAddresses } = useUser();
   const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
@@ -513,10 +517,6 @@ const Positions: React.FC<PositionsProps> = ({
 
       const toastControls = createQuickTradeToast(tokenImage, tokenName, isMonad ? 'monad' : 'solana', position.tokenAddress);
 
-      // Optimistic chart marker — declared outside try so the catch can roll
-      // back. Only set for the Solana branch (Monad isn't covered by this feature).
-      let __sellMarkId = "";
-
       try {
         if (isMonad) {
           const tokenAddress =
@@ -593,13 +593,6 @@ const Positions: React.FC<PositionsProps> = ({
               : 0;
           const primarySolAddr = primaryWalletAddresses.solana || "";
 
-          __sellMarkId = insertOptimisticMarker({
-            mint: position.tokenAddress,
-            walletAddress: primarySolAddr,
-            side: "sell",
-            amountToken: percent,
-          }).id;
-
           const sellResult = await tradeSellPercentage(
             {
               tokenAddress: position.tokenAddress,
@@ -619,7 +612,19 @@ const Positions: React.FC<PositionsProps> = ({
               : undefined,
           );
 
-          confirmOptimisticMarker(__sellMarkId, sellResult?.hash);
+          // Post-signature chart marker: only insert after we have a real txHash.
+          if (sellResult?.hash) {
+            const { id: __sellMarkId, inserted } = insertOptimisticMarker({
+              mint: position.tokenAddress,
+              walletAddress: primarySolAddr,
+              side: "sell",
+              amountToken: percent,
+            });
+            if (inserted) {
+              confirmOptimisticMarker(__sellMarkId, sellResult.hash);
+              verifyTxAndRollbackMarker(__sellMarkId, sellResult.hash);
+            }
+          }
 
           const explorerUrl = sellResult?.hash ? `https://solscan.io/tx/${sellResult.hash}` : undefined;
           toastControls.markSuccess(explorerUrl);
@@ -663,7 +668,6 @@ const Positions: React.FC<PositionsProps> = ({
           // which handles debounced refetch — no need for redundant refreshPositions() here
         }
       } catch (error: any) {
-        rollbackOptimisticMarker(__sellMarkId);
         // Check for POOL_GRADUATED error (bonding curve completed, liquidity migrated)
         const errorCode = error?.code || error?.response?.data?.code;
         const errorMessage = error?.message || error?.error || error?.response?.data?.error;
@@ -1507,7 +1511,13 @@ const Positions: React.FC<PositionsProps> = ({
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '18%' }}>Bought</th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '12%' }}>Sold</th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '18%' }}>Remaining</th>
-            <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '15%' }}>PnL</th>
+            <th
+              className={`px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] ${onToggleSortByPnl ? 'cursor-pointer select-none' : ''} ${sortByPnl ? 'text-[#18c48c]' : 'text-white/30'}`}
+              style={{ width: '15%' }}
+              onClick={onToggleSortByPnl}
+            >
+              {onToggleSortByPnl && <span className="mr-1">↑↓</span>}PnL
+            </th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '17%' }}>Actions</th>
           </tr>
         </thead>
@@ -1760,7 +1770,7 @@ const Positions: React.FC<PositionsProps> = ({
                         {metadata?.name || shortAddr(displayAddress)}
                       </button>
                       <div className="text-xs text-neutral-400 font-mono truncate" title={displayAddress}>
-                        {shortAddr(displayAddress)}
+                        {metadata?.symbol ? `$${metadata.symbol}` : shortAddr(displayAddress)}
                       </div>
                     </div>
                   </div>

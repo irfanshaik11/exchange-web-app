@@ -31,9 +31,9 @@ import {
 import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
 import {
-  confirmOptimisticMarker,
   insertOptimisticMarker,
-  rollbackOptimisticMarker,
+  confirmOptimisticMarker,
+  verifyTxAndRollbackMarker,
 } from "~/utils/pendingTradeMarkers";
 import { useCreditsSummary } from "~/hooks/useArena";
 import { useSolPrice } from "./SolPriceContext";
@@ -1539,21 +1539,9 @@ export default function Header({
       "solana",
     );
 
-    let __markId = "";
-
     try {
       const baseMint = tokenMint;
       const quoteMint = SOL_MINT_ADDRESS;
-
-      __markId = insertOptimisticMarker({
-        mint: baseMint,
-        walletAddress:
-          walletList?.find((w) => w.isPrimary)?.solanaAddress ??
-          walletList?.[0]?.solanaAddress,
-        side: "buy",
-        amountSol: quickBuyAmount,
-        priceUsd: token.usd_price,
-      }).id;
 
       notifyTradePending({
         tokenAddress: baseMint,
@@ -1615,7 +1603,22 @@ export default function Header({
           (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
         )?.result?.txid;
 
-      confirmOptimisticMarker(__markId, firstTxHash);
+      // Post-signature chart marker: only insert after we have a real txHash.
+      if (firstTxHash) {
+        const { id: __markId, inserted } = insertOptimisticMarker({
+          mint: baseMint,
+          walletAddress:
+            walletList?.find((w) => w.isPrimary)?.solanaAddress ??
+            walletList?.[0]?.solanaAddress,
+          side: "buy",
+          amountSol: quickBuyAmount,
+          priceUsd: token.usd_price,
+        });
+        if (inserted) {
+          confirmOptimisticMarker(__markId, firstTxHash);
+          verifyTxAndRollbackMarker(__markId, firstTxHash);
+        }
+      }
 
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -1639,7 +1642,6 @@ export default function Header({
       }
       dispatchBalanceRefresh("sol");
     } catch (error: any) {
-      rollbackOptimisticMarker(__markId);
       tradeErrored = true;
       cleanupTradeListener();
       if (timerHandle) cancelAnimationFrame(timerHandle);
