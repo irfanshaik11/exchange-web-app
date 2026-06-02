@@ -112,7 +112,7 @@ interface InterstateTableProps {
   sortKey?: string;
   sortDirection?: "asc" | "desc";
   setSort?: (key: string) => void;
-  selectedTimeframe: "5m" | "1h" | "6h" | "24h";
+  selectedTimeframe: "1m" | "5m" | "30m" | "1h";
   quickBuyAmount?: number | string;
   skeletonRowCount?: number;
   isDiscoverPage?: boolean;
@@ -131,7 +131,7 @@ interface HeaderConfig {
 // Constants
 const TABLE_HEADERS: HeaderConfig[] = [
   { key: "name", label: "Pair Info", align: "left", width: "w-64" },
-  { key: null, label: "24h", align: "center", width: "w-32" }, // Mini sparkline
+  { key: null, label: "1h", align: "center", width: "w-32" }, // Mini sparkline
   {
     key: "fully_diluted_value",
     label: "Market Cap",
@@ -158,7 +158,7 @@ const TABLE_HEADERS: HeaderConfig[] = [
 // breathing room so its buy/sell numbers stop visually colliding with Volume.
 const TRENDING_TABLE_HEADERS: HeaderConfig[] = [
   { key: "name", label: "Token", align: "left", width: "w-72" },
-  { key: null, label: "24h", align: "center", width: "w-28" },
+  { key: null, label: "1h", align: "center", width: "w-28" },
   {
     key: "fully_diluted_value",
     label: "Market Cap",
@@ -316,23 +316,23 @@ const getVolume = (
   // Internal trending: BE ships SOL in `volume_{tf}` for the timeframe that
   // ranks the trending list — same source as /v1/ws/token/{mint} (Trade
   // page volume + OHLC chart). Multiply by live Pyth SOL/USD to render USD
-  // identical to the Trade page header. Trending supports 5m / 1h / 6h.
+  // identical to the Trade page header. Trending supports 1m / 5m / 30m / 1h.
   if (!Number.isFinite(solPrice) || solPrice <= 0) return 0;
   const sol = getNumber(token as any, `volume_${timeframe}`);
   return sol * solPrice;
 };
 
-// PulseTable-style volume for new pairs: try all timeframes (24h→6h→1h→5m),
+// PulseTable-style volume for new pairs: try all timeframes (1h→30m→5m→1m),
 // sum buy+sell volumes, multiply by solPrice to convert SOL→USD
 const getNewPairVolume = (token: Token, solPrice: number): number => {
-  for (const tf of ["24h", "6h", "1h", "5m"]) {
+  for (const tf of ["1h", "30m", "5m", "1m"]) {
     const bv = getNumber(token as any, `total_buy_volume_${tf}`);
     const sv = getNumber(token as any, `total_sell_volume_${tf}`);
     const sum = bv + sv;
     if (sum > 0) return sum * solPrice;
   }
   // Fallback: try pre-computed volume fields
-  for (const tf of ["24h", "6h", "1h", "5m"]) {
+  for (const tf of ["1h", "30m", "5m", "1m"]) {
     const vol = getNumber(token as any, `volume_${tf}`);
     if (vol > 0) return vol;
   }
@@ -349,20 +349,20 @@ const getTxns = (
   const codexBuyKey =
     timeframe === "1h"
       ? "buyCount1"
-      : timeframe === "6h"
-        ? "buyCount6"
-        : timeframe === "24h"
-          ? "buyCount24"
+      : timeframe === "30m"
+        ? "buyCount30m"
+        : timeframe === "1m"
+          ? "buyCount1m"
           : timeframe === "5m"
             ? "buyCount5m"
             : "";
   const codexSellKey =
     timeframe === "1h"
       ? "sellCount1"
-      : timeframe === "6h"
-        ? "sellCount6"
-        : timeframe === "24h"
-          ? "sellCount24"
+      : timeframe === "30m"
+        ? "sellCount30m"
+        : timeframe === "1m"
+          ? "sellCount1m"
           : timeframe === "5m"
             ? "sellCount5m"
             : "";
@@ -390,27 +390,27 @@ const getTxns = (
     return { total: txnCount, buys: estimatedBuys, sells: estimatedSells };
   }
 
-  // Fallback 2: try 24h data if specific timeframe doesn't have data
-  if (timeframe !== "24h") {
-    const buys24h = getNumber(token as any, "total_buys_24h");
-    const sells24h = getNumber(token as any, "total_sells_24h");
-    if (buys24h > 0 || sells24h > 0) {
-      return { total: buys24h + sells24h, buys: buys24h, sells: sells24h };
+  // Fallback 2: try 1h data (longest window) if specific timeframe doesn't have data
+  if (timeframe !== "1h") {
+    const buys1h = getNumber(token as any, "total_buys_1h");
+    const sells1h = getNumber(token as any, "total_sells_1h");
+    if (buys1h > 0 || sells1h > 0) {
+      return { total: buys1h + sells1h, buys: buys1h, sells: sells1h };
     }
 
-    // Also try txnCount24h as fallback
-    const txnCount24h =
-      getNumber(token as any, "txnCount24h") ||
-      getNumber(token as any, "txnCount24");
-    if (txnCount24h > 0) {
-      const estimatedBuys = Math.round(txnCount24h * 0.6);
-      const estimatedSells = Math.round(txnCount24h * 0.4);
-      return { total: txnCount24h, buys: estimatedBuys, sells: estimatedSells };
+    // Also try txnCount1h as fallback
+    const txnCount1h =
+      getNumber(token as any, "txnCount1h") ||
+      getNumber(token as any, "txnCount1");
+    if (txnCount1h > 0) {
+      const estimatedBuys = Math.round(txnCount1h * 0.6);
+      const estimatedSells = Math.round(txnCount1h * 0.4);
+      return { total: txnCount1h, buys: estimatedBuys, sells: estimatedSells };
     }
   }
 
-  // Fallback 3: try other timeframes in order of preference (24h, 12h, 6h, 1h, 5m)
-  const fallbackTimeframes = ["24h", "12h", "6h", "1h", "5m"].filter(
+  // Fallback 3: try other timeframes in order of preference (1h, 30m, 5m, 1m)
+  const fallbackTimeframes = ["1h", "30m", "5m", "1m"].filter(
     (tf) => tf !== timeframe,
   );
   for (const tf of fallbackTimeframes) {
@@ -647,7 +647,7 @@ const TableHeader: React.FC<{
   onSort,
   isDiscoverPage = false,
   tableType = "trending",
-  selectedTimeframe = "24h",
+  selectedTimeframe = "1h",
 }) => {
   const isTrending = tableType === "trending";
   const headers = isTrending ? TRENDING_TABLE_HEADERS : TABLE_HEADERS;
@@ -664,17 +664,17 @@ const TableHeader: React.FC<{
           let label = header.label;
           // For trending and dexscreener, the sparkline column tracks the
           // user-selected timeframe — surface that in the header so the chart
-          // and label stay in sync (5M / 1H / 6H / 24H).
+          // and label stay in sync (1M / 5M / 30M / 1H).
           if (
             (isTrending || tableType === "dexscreener") &&
-            header.label === "24h"
+            header.label === "1h"
           ) {
-            label = (selectedTimeframe || "24h").toUpperCase();
+            label = (selectedTimeframe || "1h").toUpperCase();
           }
-          // Hide 24h sparkline column for newPairs only. DexScreener shows
+          // Hide the sparkline column for newPairs only. DexScreener shows
           // the chart (axiom-style) — sparkline tracks selectedTimeframe via
           // the same MiniSparkline as Trending uses.
-          if (header.label === "24h" && tableType === "newPairs") {
+          if (header.label === "1h" && tableType === "newPairs") {
             return null;
           }
           // Hide Token Info / Holders column for newPairs and dexscreener
@@ -2085,11 +2085,11 @@ const MarketCapCell: React.FC<{
       </div>
       {/* Numeric price-% for the selected timeframe — GMGN/Axiom/Trojan all show this.
           Only rendered when NON-ZERO: the momentum relay (#238/#243) populates 5m + 1h
-          only, so price_percent_change_6h is always 0 — rendering it would show a fake
-          green "+0.00%" on the 6h tab. A genuine flat 0% is also hidden (adds no info).
-          When 6h momentum is relayed later, the 6h column lights up automatically. This
-          guard is surface-agnostic: Discover/watchlist (which DO have real 6h data) still
-          show their non-zero values. */}
+          only, so price_percent_change_1m/30m can be 0 — rendering it would show a fake
+          green "+0.00%" on those tabs. A genuine flat 0% is also hidden (adds no info).
+          When the remaining windows are relayed later, those columns light up
+          automatically. This guard is surface-agnostic: Discover/watchlist (which DO
+          have real per-window data) still show their non-zero values. */}
       {percentChange !== 0 && (
         <div
           className={`text-xs font-semibold ${
@@ -2232,25 +2232,21 @@ const TxnsCell: React.FC<{
 };
 
 // Mini Sparkline Chart Component - shows price movement for the selected
-// timeframe (5m / 1h / 6h / 24h), matching every other column on Trending.
+// timeframe (1m / 5m / 30m / 1h), matching every other column on Trending.
 //
-// Previously this hard-coded `?interval=1h&timeframe=24h`, but the API handler
-// silently fell through to 5m candles (INTERVAL_MAP didn't know `24h`) and the
-// fetch never passed from/to, so the curve was effectively the last few hours
-// of 5m candles regardless of what the column header said. Now driven by the
-// user-selected timeframe with a real time-bounded window.
-// 5m uses 1s candles to give the sparkline real density (~300 points).
-// At 1m candles the 5-min window only has ~5 points and the polyline
-// renders as 1–2 line segments — looks like a flat diagonal even on
+// Driven by the user-selected timeframe with a real time-bounded window.
+// 1m and 5m use 1s candles to give the sparkline real density (~60 / ~300
+// points). At 1m candles a short window only has a handful of points and the
+// polyline renders as 1–2 line segments — looks like a flat diagonal even on
 // tokens that actually moved during the window.
 const TIMEFRAME_CONFIG: Record<
   string,
   { windowSec: number; interval: string; label: string }
 > = {
+  "1m": { windowSec: 60, interval: "1s", label: "1M" }, // ~60 candles
   "5m": { windowSec: 5 * 60, interval: "1s", label: "5M" }, // ~300 candles
+  "30m": { windowSec: 1800, interval: "1m", label: "30M" }, // ~30 candles
   "1h": { windowSec: 60 * 60, interval: "1m", label: "1H" }, // ~60 candles
-  "6h": { windowSec: 6 * 60 * 60, interval: "5m", label: "6H" }, // ~72 candles
-  "24h": { windowSec: 24 * 60 * 60, interval: "30m", label: "24H" }, // ~48 candles
 };
 
 // Cache keyed by mint+timeframe so switching timeframes doesn't reuse stale
@@ -2264,19 +2260,19 @@ const SPARKLINE_CACHE_TTL_MS = 5 * 60 * 1000;
 // When OHLCV data is missing for a token (common for newly-trending pump.fun
 // mints not yet indexed by token-service), synthesize a 5-point trajectory
 // from the per-timeframe percent-change fields the upstream payload already
-// carries. Points oldest → newest: 24h, 6h, 1h, 5m, now. Returns null when
+// carries. Points oldest → newest: 1h, 30m, 5m, 1m, now. Returns null when
 // the token doesn't have these fields populated or every change is zero.
 function synthesizeSparklineFromPriceChanges(token: Token): number[] | null {
+  const c1m = Number(token.price_percent_change_1m);
   const c5m = Number(token.price_percent_change_5m);
+  const c30m = Number(token.price_percent_change_30m);
   const c1h = Number(token.price_percent_change_1h);
-  const c6h = Number(token.price_percent_change_6h);
-  const c24h = Number(token.price_percent_change_24h);
-  if (![c5m, c1h, c6h, c24h].every(Number.isFinite)) return null;
-  if (!c5m && !c1h && !c6h && !c24h) return null;
+  if (![c1m, c5m, c30m, c1h].every(Number.isFinite)) return null;
+  if (!c1m && !c5m && !c30m && !c1h) return null;
   // Derive each historic price from now's price by reversing the % change.
   // priceNow / (1 + chg/100) = priceThen. Normalise priceNow = 1.
   const ratio = (chg: number) => 1 / (1 + chg / 100);
-  return [ratio(c24h), ratio(c6h), ratio(c1h), ratio(c5m), 1];
+  return [ratio(c1h), ratio(c30m), ratio(c5m), ratio(c1m), 1];
 }
 
 const MiniSparkline: React.FC<{
@@ -2284,7 +2280,7 @@ const MiniSparkline: React.FC<{
   width?: number;
   height?: number;
   selectedTimeframe?: string;
-}> = ({ token, width = 80, height = 32, selectedTimeframe = "24h" }) => {
+}> = ({ token, width = 80, height = 32, selectedTimeframe = "1h" }) => {
   const [priceData, setPriceData] = useState<number[]>([]);
   const [priceChange, setPriceChange] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -2292,13 +2288,13 @@ const MiniSparkline: React.FC<{
     token.mint || (token as any).contractAddress || (token as any).address;
 
   const tfConfig =
-    TIMEFRAME_CONFIG[selectedTimeframe] || TIMEFRAME_CONFIG["24h"];
+    TIMEFRAME_CONFIG[selectedTimeframe] || TIMEFRAME_CONFIG["1h"];
   const cacheKey = `${mintAddress}|${selectedTimeframe}`;
 
   // Use existing price change from token data as a placeholder direction hint
   const existingPriceChange =
     (token as any)[`price_percent_change_${selectedTimeframe}`] ||
-    (token as any).price_percent_change_24h ||
+    (token as any).price_percent_change_1h ||
     (token as any).priceChange24h ||
     0;
 
@@ -3003,7 +2999,7 @@ const TableRow: React.FC<{
         </td>
 
         {/* Sparkline column — trending and dexscreener follow the user-selected
-            timeframe (5m/1h/6h/24h); other tabs keep legacy 24h behaviour. */}
+            timeframe (1m/5m/30m/1h); other tabs keep legacy 1h behaviour. */}
         {tableType !== "newPairs" && (
           <td
             className={`${isTrending ? "w-28" : "w-32"} px-2 py-2.5 align-middle`}
@@ -3016,7 +3012,7 @@ const TableRow: React.FC<{
                 selectedTimeframe={
                   isTrending || tableType === "dexscreener"
                     ? selectedTimeframe
-                    : "24h"
+                    : "1h"
                 }
               />
             </div>

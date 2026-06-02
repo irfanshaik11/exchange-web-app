@@ -13,7 +13,7 @@ function getTrendingWsUrl(): string {
 
 // Cache key and version for localStorage persistence
 const TRENDING_CACHE_KEY = "trending_ws_cache";
-const TRENDING_CACHE_VERSION = "v3"; // Bumped to invalidate caches that contained established tokens (TRUMP/PENGU/USD1)
+const TRENDING_CACHE_VERSION = "v4"; // Bumped to invalidate old 6h/24h-keyed caches after switching to Axiom-style 1m/5m/30m/1h windows
 
 // Maximum token age allowed on the memecoin trending feed.
 // The backend sometimes ranks established/major tokens (TRUMP at 465d, PENGU at 153d,
@@ -108,7 +108,7 @@ function isTooOldForTrending(token: {
 }
 
 // Timeframe type
-export type TrendingTimeframe = "5m" | "1h" | "6h";
+export type TrendingTimeframe = "1m" | "5m" | "30m" | "1h";
 
 // Normalized token for InterstateTable compatibility
 export interface NormalizedTrendingToken {
@@ -119,26 +119,26 @@ export interface NormalizedTrendingToken {
   price_usd: number;
   fully_diluted_value: number;
   total_liquidity_usd: number;
-  // For the matching trending timeframe (5m/1h/6h), this field carries raw
+  // For the matching trending timeframe (1m/5m/30m/1h), this field carries raw
   // SOL from the per-token Redis bucket reader — same source as the Trade
   // page volume / OHLC chart. The volume column multiplies by Pyth SOL/USD
   // at render time so the same token shows the same volume on Trending and
   // the Trade page. Non-matching timeframe slots are typically 0 (omitempty
   // drops them on the wire).
-  volume_1h: number;
+  volume_1m: number;
   volume_5m: number;
-  volume_6h: number;
-  volume_24h: number;
+  volume_30m: number;
+  volume_1h: number;
   // Interstate-indexed SOL volume from the BE (only DexScreener feed populates
   // these today, via `enrichWithInterstateVolume` in exchange-token-service).
   // When present and > 0, InterstateTable.getVolume multiplies by Pyth so the
   // DEX Screener tab's vol matches the Trade page header for that mint.
   // When absent / 0, falls back to the USD `volume_{tf}` above (DexScreener's
   // own number, preserved so fresh un-indexed mints don't render as $0).
+  volume_sol_1m?: number;
   volume_sol_5m?: number;
+  volume_sol_30m?: number;
   volume_sol_1h?: number;
-  volume_sol_6h?: number;
-  volume_sol_24h?: number;
   holder_count: number;
   rank: number;
   status: string;
@@ -156,17 +156,17 @@ export interface NormalizedTrendingToken {
   // Transaction counts for TXNS column
   total_buys_5m: number;
   total_sells_5m: number;
+  total_buys_1m?: number;
+  total_sells_1m?: number;
+  total_buys_30m?: number;
+  total_sells_30m?: number;
   total_buys_1h?: number;
   total_sells_1h?: number;
-  total_buys_6h?: number;
-  total_sells_6h?: number;
-  total_buys_24h?: number;
-  total_sells_24h?: number;
   // Price % change per timeframe (Price % column)
+  price_percent_change_1m?: number;
   price_percent_change_5m?: number;
+  price_percent_change_30m?: number;
   price_percent_change_1h?: number;
-  price_percent_change_6h?: number;
-  price_percent_change_24h?: number;
   // Protocol/launchpad info for trade routing (critical for quick buy!)
   launchpad_protocol?: string;
   protocol?: string;
@@ -197,14 +197,14 @@ interface UseTrendingWebSocketOptions {
 }
 
 // Resolve a price-change percentage for a token in a given timeframe slot.
-// The trending feed groups tokens by timeframe (snapshot.{5m,1h,6h}), and the
+// The trending feed groups tokens by timeframe (snapshot.{1m,5m,30m,1h}), and the
 // upstream Codex format emits a single `change` field per token whose meaning
 // is implied by which array it came from. `change` is a fraction (0.05 = 5%),
 // so we multiply by 100. Per-timeframe explicit fields take precedence when
 // present.
 function pickPriceChangePct(
   raw: any,
-  slotTimeframe: "5m" | "1h" | "6h" | "24h",
+  slotTimeframe: "1m" | "5m" | "30m" | "1h",
   rawTimeframe?: TrendingTimeframe,
 ): number | undefined {
   const explicit =
@@ -253,10 +253,10 @@ function normalizeToken(
     // collapses all four timeframes to the same arbitrary number. If the
     // backend omits a window (omitempty when value is 0), default to 0 — that
     // accurately means "no activity in this window."
+    volume_1m: raw.volume_1m ?? 0,
     volume_5m: raw.volume_5m ?? 0,
+    volume_30m: raw.volume_30m ?? 0,
     volume_1h: raw.volume_1h ?? 0,
-    volume_6h: raw.volume_6h ?? 0,
-    volume_24h: raw.volume_24h ?? 0,
     holder_count: raw.holder_count || raw.holderCount || 0,
     rank: raw.rank || 0,
     status: raw.status || "ACTIVE",
@@ -287,14 +287,26 @@ function normalizeToken(
     // per-window fields, or a single Codex `change` field whose timeframe is
     // implied by which array (`timeframe` arg) the token came from. See
     // pickPriceChangePct for details.
+    price_percent_change_1m: pickPriceChangePct(raw, "1m", timeframe) ?? 0,
     price_percent_change_5m: pickPriceChangePct(raw, "5m", timeframe) ?? 0,
+    price_percent_change_30m: pickPriceChangePct(raw, "30m", timeframe) ?? 0,
     price_percent_change_1h: pickPriceChangePct(raw, "1h", timeframe) ?? 0,
-    price_percent_change_6h: pickPriceChangePct(raw, "6h", timeframe) ?? 0,
-    price_percent_change_24h: pickPriceChangePct(raw, "24h", timeframe) ?? 0,
     // Transaction counts for TXNS column. Server has historically used several
     // shapes for these fields (total_buys_5m, buys_5m, buyCount5m, total_buyers_5m
     // for unique buyers, etc.) — read from each so the trending feed reliably
     // populates the column regardless of which backend variant is live.
+    total_buys_1m:
+      raw.total_buys_1m ??
+      raw.buys_1m ??
+      raw.buyCount1m ??
+      raw.total_buyers_1m ??
+      0,
+    total_sells_1m:
+      raw.total_sells_1m ??
+      raw.sells_1m ??
+      raw.sellCount1m ??
+      raw.total_sellers_1m ??
+      0,
     total_buys_5m:
       raw.total_buys_5m ??
       raw.buys_5m ??
@@ -307,6 +319,18 @@ function normalizeToken(
       raw.sellCount5m ??
       raw.total_sellers_5m ??
       0,
+    total_buys_30m:
+      raw.total_buys_30m ??
+      raw.buys_30m ??
+      raw.buyCount30m ??
+      raw.total_buyers_30m ??
+      0,
+    total_sells_30m:
+      raw.total_sells_30m ??
+      raw.sells_30m ??
+      raw.sellCount30m ??
+      raw.total_sellers_30m ??
+      0,
     total_buys_1h:
       raw.total_buys_1h ??
       raw.buys_1h ??
@@ -318,32 +342,6 @@ function normalizeToken(
       raw.sells_1h ??
       raw.sellCount1 ??
       raw.total_sellers_1h ??
-      0,
-    total_buys_6h:
-      raw.total_buys_6h ??
-      raw.buys_6h ??
-      raw.buyCount6 ??
-      raw.buyCount4 ??
-      raw.total_buyers_6h ??
-      0,
-    total_sells_6h:
-      raw.total_sells_6h ??
-      raw.sells_6h ??
-      raw.sellCount6 ??
-      raw.sellCount4 ??
-      raw.total_sellers_6h ??
-      0,
-    total_buys_24h:
-      raw.total_buys_24h ??
-      raw.buys_24h ??
-      raw.buyCount24 ??
-      raw.total_buyers_24h ??
-      0,
-    total_sells_24h:
-      raw.total_sells_24h ??
-      raw.sells_24h ??
-      raw.sellCount24 ??
-      raw.total_sellers_24h ??
       0,
     // CRITICAL: Preserve launchpad_protocol for pool type detection in quick buy
     // Without this, backend has to do expensive pool discovery (~6 seconds)
@@ -363,9 +361,10 @@ let globalTokenMaps: Record<
   TrendingTimeframe,
   Map<string, NormalizedTrendingToken>
 > = {
+  "1m": new Map(),
   "5m": new Map(),
+  "30m": new Map(),
   "1h": new Map(),
-  "6h": new Map(),
 };
 let globalListeners = new Set<(timeframe: TrendingTimeframe) => void>();
 let globalReconnectTimeout: NodeJS.Timeout | null = null;
@@ -438,10 +437,10 @@ function connectGlobal() {
         const message = JSON.parse(event.data);
 
         if (message.type === "snapshot") {
-          // Snapshot contains all timeframes: { "5m": [...], "1h": [...], "6h": [...] }
+          // Snapshot contains all timeframes: { "1m": [...], "5m": [...], "30m": [...], "1h": [...] }
           const data = message.data;
           // Process each timeframe
-          (["5m", "1h", "6h"] as TrendingTimeframe[]).forEach((tf) => {
+          (["1m", "5m", "30m", "1h"] as TrendingTimeframe[]).forEach((tf) => {
             if (Array.isArray(data[tf])) {
               globalTokenMaps[tf].clear();
               let filteredCount = 0;
@@ -510,8 +509,9 @@ function connectGlobal() {
                   // (matches normalizeToken; see comment there).
                   volume_1h:
                     update.volume_1h ?? update.volume_usd ?? existing.volume_1h,
+                  volume_1m: update.volume_1m ?? existing.volume_1m,
                   volume_5m: update.volume_5m ?? existing.volume_5m,
-                  volume_6h: update.volume_6h ?? existing.volume_6h,
+                  volume_30m: update.volume_30m ?? existing.volume_30m,
                   bundle_percent:
                     update.bundle_percent ?? existing.bundle_percent,
                   top10_holders_percent:
@@ -527,20 +527,32 @@ function connectGlobal() {
                   // pickPriceChangePct returns undefined when the field is absent
                   // from the update, so `??` correctly preserves existing on partial
                   // updates while still allowing a real 0% to overwrite.
+                  price_percent_change_1m:
+                    pickPriceChangePct(update, "1m", topic) ??
+                    existing.price_percent_change_1m,
                   price_percent_change_5m:
                     pickPriceChangePct(update, "5m", topic) ??
                     existing.price_percent_change_5m,
+                  price_percent_change_30m:
+                    pickPriceChangePct(update, "30m", topic) ??
+                    existing.price_percent_change_30m,
                   price_percent_change_1h:
                     pickPriceChangePct(update, "1h", topic) ??
                     existing.price_percent_change_1h,
-                  price_percent_change_6h:
-                    pickPriceChangePct(update, "6h", topic) ??
-                    existing.price_percent_change_6h,
-                  price_percent_change_24h:
-                    pickPriceChangePct(update, "24h", topic) ??
-                    existing.price_percent_change_24h,
                   // Transaction counts (try every known field-name variant the
                   // backend has used so partial updates still reflect in the UI).
+                  total_buys_1m:
+                    update.total_buys_1m ??
+                    update.buys_1m ??
+                    update.buyCount1m ??
+                    update.total_buyers_1m ??
+                    existing.total_buys_1m,
+                  total_sells_1m:
+                    update.total_sells_1m ??
+                    update.sells_1m ??
+                    update.sellCount1m ??
+                    update.total_sellers_1m ??
+                    existing.total_sells_1m,
                   total_buys_5m:
                     update.total_buys_5m ??
                     update.buys_5m ??
@@ -553,6 +565,18 @@ function connectGlobal() {
                     update.sellCount5m ??
                     update.total_sellers_5m ??
                     existing.total_sells_5m,
+                  total_buys_30m:
+                    update.total_buys_30m ??
+                    update.buys_30m ??
+                    update.buyCount30m ??
+                    update.total_buyers_30m ??
+                    existing.total_buys_30m,
+                  total_sells_30m:
+                    update.total_sells_30m ??
+                    update.sells_30m ??
+                    update.sellCount30m ??
+                    update.total_sellers_30m ??
+                    existing.total_sells_30m,
                   total_buys_1h:
                     update.total_buys_1h ??
                     update.buys_1h ??
@@ -565,33 +589,6 @@ function connectGlobal() {
                     update.sellCount1 ??
                     update.total_sellers_1h ??
                     existing.total_sells_1h,
-                  total_buys_6h:
-                    update.total_buys_6h ??
-                    update.buys_6h ??
-                    update.buyCount6 ??
-                    update.buyCount4 ??
-                    update.total_buyers_6h ??
-                    existing.total_buys_6h,
-                  total_sells_6h:
-                    update.total_sells_6h ??
-                    update.sells_6h ??
-                    update.sellCount6 ??
-                    update.sellCount4 ??
-                    update.total_sellers_6h ??
-                    existing.total_sells_6h,
-                  total_buys_24h:
-                    update.total_buys_24h ??
-                    update.buys_24h ??
-                    update.buyCount24 ??
-                    update.total_buyers_24h ??
-                    existing.total_buys_24h,
-                  total_sells_24h:
-                    update.total_sells_24h ??
-                    update.sells_24h ??
-                    update.sellCount24 ??
-                    update.total_sellers_24h ??
-                    existing.total_sells_24h,
-                  volume_24h: update.volume_24h ?? existing.volume_24h,
                 };
                 globalTokenMaps[topic].set(mint, updated);
                 hasChanges = true;

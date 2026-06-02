@@ -1,16 +1,16 @@
-import React from 'react';
-import Image from 'next/image';
-import { withImageFallback } from '~/utils/images';
-import AvatarImage from '~/components/AvatarImage';
-import type { Token } from '~/utils/db';
-import { formatSmartNumber } from '~/utils/functions';
-import InterstateButton from '../InterstateButton';
-import InterstateTooltip from '../InterstateTooltip';
+import React from "react";
+import Image from "next/image";
+import { withImageFallback } from "~/utils/images";
+import AvatarImage from "~/components/AvatarImage";
+import type { Token } from "~/utils/db";
+import { formatSmartNumber } from "~/utils/functions";
+import InterstateButton from "../InterstateButton";
+import InterstateTooltip from "../InterstateTooltip";
 
 interface TableRowProps {
   token: Token;
   i: number;
-  selectedTimeframe: '1m' | '5m' | '30m' | '1h';
+  selectedTimeframe: "1m" | "5m" | "30m" | "1h";
   onQuickBuy?: (token: Token) => void;
   quickBuyAmount?: number | string;
   animationState?: Record<string, string>;
@@ -20,23 +20,23 @@ interface TableRowProps {
 }
 
 function formatPercentChange(val: number): string {
-  if (val === 0) return '0.00';
-  const sign = val > 0 ? '+' : '';
+  if (val === 0) return "0.00";
+  const sign = val > 0 ? "+" : "";
   return sign + formatSmartNumber(val);
 }
 
-export default function TableRow({ 
-  token, 
-  i, 
-  selectedTimeframe, 
-  onQuickBuy, 
+export default function TableRow({
+  token,
+  i,
+  selectedTimeframe,
+  onQuickBuy,
   quickBuyAmount = 0.05,
   animationState = {},
-  onClick 
+  onClick,
 }: TableRowProps) {
   return (
     <tr
-      className={`cursor-pointer transition hover:bg-neutral-800/60 ${animationState[token.pair_address] || ''}`}
+      className={`cursor-pointer transition hover:bg-neutral-800/60 ${animationState[token.pair_address] || ""}`}
       onClick={onClick}
     >
       {/* Pair Info */}
@@ -56,7 +56,7 @@ export default function TableRow({
                     symbol={token.symbol}
                     width={200}
                     height={200}
-                    className="border border-neutral-700 rounded"
+                    className="rounded border border-neutral-700"
                   />
                 </div>
 
@@ -65,11 +65,16 @@ export default function TableRow({
                   <div className="text-xl font-bold text-white">
                     {token.name}
                   </div>
-                  <div className="text-base font-medium text-neutral-400 mb-2">
+                  <div className="mb-2 text-base font-medium text-neutral-400">
                     ({token.symbol})
                   </div>
                   <p className="text-lg font-semibold text-white">
-                    ${formatSmartNumber(token.usd_price)} <span className={`text-base ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatPercentChange(token.price_percent_change_1h)}%</span>
+                    ${formatSmartNumber(token.usd_price)}{" "}
+                    <span
+                      className={`text-base ${token.price_percent_change_1h >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                    >
+                      {formatPercentChange(token.price_percent_change_1h)}%
+                    </span>
                   </p>
                 </div>
               </div>
@@ -85,12 +90,8 @@ export default function TableRow({
             />
           </InterstateTooltip>
           <div>
-            <div className="font-medium text-white">
-              {token.name}
-            </div>
-            <div className="text-sm text-neutral-400">
-              {token.symbol}
-            </div>
+            <div className="font-medium text-white">{token.name}</div>
+            <div className="text-sm text-neutral-400">{token.symbol}</div>
           </div>
         </div>
       </td>
@@ -98,9 +99,15 @@ export default function TableRow({
       {/* Market Cap */}
       <td className="px-3 py-2">
         <div className="font-medium text-white">
-          ${formatSmartNumber((token as any).fully_diluted_value ?? (token as any).total_fully_diluted_valuation)}
+          $
+          {formatSmartNumber(
+            (token as any).fully_diluted_value ??
+              (token as any).total_fully_diluted_valuation,
+          )}
         </div>
-        <div className={`text-sm ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+        <div
+          className={`text-sm ${token.price_percent_change_1h >= 0 ? "text-emerald-400" : "text-red-400"}`}
+        >
           {formatPercentChange(token.price_percent_change_1h)}%
         </div>
       </td>
@@ -115,7 +122,12 @@ export default function TableRow({
       {/* Volume */}
       <td className="px-3 py-2">
         <div className="font-medium text-white">
-          ${formatSmartNumber((token as any)[`volume_${selectedTimeframe}`] || (token as any).volume_24h || 0)}
+          $
+          {formatSmartNumber(
+            (token as any)[`volume_${selectedTimeframe}`] ||
+              (token as any).volume_24h ||
+              0,
+          )}
         </div>
       </td>
 
@@ -123,34 +135,42 @@ export default function TableRow({
       <td className="px-3 py-2">
         {(() => {
           // For Birdeye tokens, show rank and volume change % instead of txns
-          const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
+          const birdeyeRank =
+            (token as any).birdeye_rank || (token as any).rank;
           const volumeChangePercent = (token as any).volume24hChangePercent;
-          
+
           if (birdeyeRank && birdeyeRank > 0) {
             // Show Birdeye rank and volume change %
             return (
               <>
-                <div className="font-medium text-white">
-                  #{birdeyeRank}
-                </div>
+                <div className="font-medium text-white">#{birdeyeRank}</div>
                 {volumeChangePercent != null && (
-                  <div className={`text-sm ${volumeChangePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <div
+                    className={`text-sm ${volumeChangePercent >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                  >
                     {formatPercentChange(volumeChangePercent)}% vol
                   </div>
                 )}
               </>
             );
           }
-          
+
           // Default: show transaction count (for non-Birdeye tokens)
-          const txCount = ((token as any)[`total_buys_${selectedTimeframe}`] || 0) + ((token as any)[`total_sells_${selectedTimeframe}`] || 0);
+          const txCount =
+            ((token as any)[`total_buys_${selectedTimeframe}`] || 0) +
+            ((token as any)[`total_sells_${selectedTimeframe}`] || 0);
           return (
             <>
               <div className="font-medium text-white">
                 {formatSmartNumber(txCount)}
               </div>
               <div className="text-sm text-neutral-400">
-                {formatSmartNumber((token as any)[`unique_wallets_${selectedTimeframe}`] || token.unique_wallets_24h || 0)} buyers
+                {formatSmartNumber(
+                  (token as any)[`unique_wallets_${selectedTimeframe}`] ||
+                    token.unique_wallets_1h ||
+                    0,
+                )}{" "}
+                buyers
               </div>
             </>
           );
@@ -160,7 +180,7 @@ export default function TableRow({
       {/* Audit Log */}
       <td className="px-3 py-2">
         <div className="text-sm text-neutral-400">
-          {token.description || 'No audit data'}
+          {token.description || "No audit data"}
         </div>
       </td>
 
@@ -181,4 +201,4 @@ export default function TableRow({
       </td>
     </tr>
   );
-} 
+}

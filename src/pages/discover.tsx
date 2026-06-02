@@ -105,7 +105,7 @@ import {
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 const isDev = process.env.NODE_ENV !== "production";
 
-export type Timeframe = "5m" | "1h" | "6h" | "24h";
+export type Timeframe = "1m" | "5m" | "30m" | "1h";
 
 // Extend Token with optional flags
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
@@ -272,29 +272,25 @@ export function DiscoverPageContent({
     activeTab === "trending" || activeTab === "gainers" || activeTab === "top";
   const [selectedTimeframe, _setSelectedTimeframe] = useState<Timeframe>(() => {
     // Match the saved tab's per-tab default so the first snapshot taken by
-    // switchToDataTab captures the correct timeframe (Top → 6h, Gainers →
+    // switchToDataTab captures the correct timeframe (Top → 30m, Gainers →
     // 1h). Without this, reloading on Top would snapshot a "1h" timeframe
-    // for Top, overwriting its 6h default the next time the user returns.
+    // for Top, overwriting its 30m default the next time the user returns.
     if (typeof window !== "undefined") {
       try {
         const savedTab = localStorage.getItem("discover_tab_v4");
-        if (savedTab === "top") return "6h";
+        if (savedTab === "top") return "30m";
         if (savedTab === "gainers") return "1h";
       } catch {}
     }
     return "1h";
   });
-  // Wrap setSelectedTimeframe to coerce "24h" → "6h". The 24h chip was
-  // removed because the sparkline can't render 24h windows for tokens
-  // younger than 24h (it would fall back to a hardcoded placeholder
-  // diagonal). Any in-memory or stored state still trying to set "24h"
-  // is silently mapped to 6h so no UI ends up in a state with no active
-  // chip.
+  // Timeframe setter. The trending pills now expose Axiom-style windows
+  // (1m/5m/30m/1h) and every value is a valid TrendingTimeframe, so there's
+  // no dead chip to coerce away — pass the value through unchanged.
   const setSelectedTimeframe = useCallback(
     (tf: Timeframe | ((prev: Timeframe) => Timeframe)) => {
       _setSelectedTimeframe((prev) => {
-        const next = typeof tf === "function" ? tf(prev) : tf;
-        return next === "24h" ? "6h" : next;
+        return typeof tf === "function" ? tf(prev) : tf;
       });
     },
     [],
@@ -461,8 +457,8 @@ export function DiscoverPageContent({
   // Gainers). Each tab opens to its own default and remembers user overrides
   // until the page reloads. On tab switch, snapshot the outgoing tab's
   // current (window, sortKey, direction), then restore the incoming tab's.
-  // Trending opens to backend rank/1h (rank ascending); Top opens to 24h volume ("biggest
-  // 24h volume"); Gainers opens to 1h % change with strict default filters
+  // Trending opens to backend rank/1h (rank ascending); Top opens to 30m volume ("biggest
+  // 30m volume"); Gainers opens to 1h % change with strict default filters
   // applied via useDiscoverFilters.
   type TabUiState = {
     tf: Timeframe;
@@ -473,7 +469,7 @@ export function DiscoverPageContent({
     Record<"trending" | "top" | "gainers", TabUiState>
   >({
     trending: { tf: "1h", sk: "rank", sd: "asc" },
-    top: { tf: "6h", sk: "volume", sd: "desc" },
+    top: { tf: "30m", sk: "volume", sd: "desc" },
     gainers: { tf: "1h", sk: "priceChange", sd: "desc" },
   });
   // Store new pairs data per chain to preserve data when switching chains
@@ -826,10 +822,10 @@ export function DiscoverPageContent({
   });
 
   // Use WebSocket for Solana trending - real-time updates!
-  // Server sends all timeframes (5m, 1h, 6h) in one snapshot, so we just filter by selected
-  const trendingWsTimeframe = (
-    selectedTimeframe === "24h" ? "6h" : selectedTimeframe
-  ) as TrendingTimeframe;
+  // Server sends all timeframes (1m, 5m, 30m, 1h) in one snapshot, so we just
+  // filter by selected. Every Timeframe value is now a valid TrendingTimeframe,
+  // so pass it straight through (no dead-chip coercion needed).
+  const trendingWsTimeframe = selectedTimeframe as TrendingTimeframe;
   const {
     tokens: wsTokens,
     loading: wsLoading,
@@ -854,19 +850,20 @@ export function DiscoverPageContent({
     currentChain === "sol" && activeTab === "trending2",
   );
 
-  // Map FE timeframe pill ("5m" | "1h" | "6h" | "24h") to backend TF key.
-  // Today all four backend lists are identical (BE chromedp scraper falling
-  // back to legacy boost API); when BE returns real per-TF rankings the UI
-  // already differentiates without further FE changes.
+  // Map FE timeframe pill ("1m" | "5m" | "30m" | "1h") to the nearest DexScreener
+  // interval key. DexScreener only exposes M5/H1/H6/H24 buckets, so collapse the
+  // sub-5m windows onto M5 and the 30m/1h windows onto H1. Today all backend
+  // lists are identical anyway (BE chromedp scraper falling back to legacy boost
+  // API); when BE returns real per-TF rankings the UI already differentiates.
   const dexScreenerTimeframeTokens = useMemo(() => {
     const tfKey =
-      selectedTimeframe === "5m"
+      selectedTimeframe === "1m"
         ? "M5"
-        : selectedTimeframe === "1h"
-          ? "H1"
-          : selectedTimeframe === "6h"
-            ? "H6"
-            : "H24";
+        : selectedTimeframe === "5m"
+          ? "M5"
+          : selectedTimeframe === "30m"
+            ? "H1"
+            : "H1";
     const list = dsTokensByTimeframe?.[tfKey];
     return list && list.length > 0 ? list : dexScreenerTokens;
   }, [dsTokensByTimeframe, dexScreenerTokens, selectedTimeframe]);
@@ -1000,16 +997,21 @@ export function DiscoverPageContent({
                 total_liquidity_usd: token.liquidity_usd || 0,
                 liquidity_usd: token.liquidity_usd || 0,
                 // Volume fields for different timeframes (both with and without _usd suffix for compatibility)
+                // Axiom-style windows: 24h → 1m, 6h → 30m (nearest available bucket).
                 volume_24h_usd: token.volume_24h_usd || 0,
+                volume_1m: token.volume_24h_usd || 0,
                 volume_24h: token.volume_24h_usd || 0, // Without _usd for getVolume function
                 volume_5m_usd: token.volume_5m_usd || 0,
                 volume_5m: token.volume_5m_usd || 0, // Without _usd for getVolume function
                 volume_1h_usd: token.volume_1h_usd || 0,
                 volume_1h: token.volume_1h_usd || 0, // Without _usd for getVolume function
                 volume_6h_usd: token.volume_6h_usd || 0,
+                volume_30m: token.volume_6h_usd || 0,
                 volume_6h: token.volume_6h_usd || 0, // Without _usd for getVolume function
                 volume24hUSD: token.volume_24h_usd || 0,
                 price_change_24h: token.price_change_24h || 0,
+                price_percent_change_1m:
+                  token.price_percent_change_24h || token.price_change_24h || 0,
                 price_percent_change_24h:
                   token.price_percent_change_24h || token.price_change_24h || 0,
                 // Transaction fields - use lifetime totals (Monad tokens don't have timeframe-specific counts)
@@ -1018,16 +1020,21 @@ export function DiscoverPageContent({
                 total_sells: token.total_sells || 0,
                 // Map to timeframe-specific fields for compatibility with InterstateTable
                 // Use lifetime totals as fallback since Monad tokens don't have timeframe-specific breakdowns
+                total_buys_1m: token.total_buys || 0,
+                total_sells_1m: token.total_sells || 0,
                 total_buys_24h: token.total_buys || 0,
                 total_sells_24h: token.total_sells || 0,
                 total_buys_1h: token.total_buys || 0,
                 total_sells_1h: token.total_sells || 0,
+                total_buys_30m: token.total_buys || 0,
+                total_sells_30m: token.total_sells || 0,
                 total_buys_6h: token.total_buys || 0,
                 total_sells_6h: token.total_sells || 0,
                 total_buys_5m: token.total_buys || 0,
                 total_sells_5m: token.total_sells || 0,
                 // Unique traders
                 unique_traders: token.unique_traders || 0,
+                unique_wallets_1m: token.unique_traders || 0,
                 unique_wallets_24h: token.unique_traders || 0,
                 // Age/Launch time fields - map created_at for age display
                 created_at: token.created_at || null,
@@ -1535,12 +1542,14 @@ export function DiscoverPageContent({
               token.total_buy_volume_24h,
               token.total_sell_volume_24h,
             );
-            normalized.volume_24h =
+            // Axiom-style windows: 24h → 1m, 6h → 30m (nearest available bucket).
+            normalized.volume_1m =
               sum24h > 0
                 ? sum24h
                 : vol24h !== undefined && vol24h !== null
                   ? toNumber(vol24h)
                   : 0;
+            normalized.volume_24h = normalized.volume_1m;
 
             const vol6h =
               token.volume_6h_usd ?? token.volume_6h ?? token.volume6h;
@@ -1548,12 +1557,13 @@ export function DiscoverPageContent({
               token.total_buy_volume_6h,
               token.total_sell_volume_6h,
             );
-            normalized.volume_6h =
+            normalized.volume_30m =
               sum6h > 0
                 ? sum6h
                 : vol6h !== undefined && vol6h !== null
                   ? toNumber(vol6h)
                   : 0;
+            normalized.volume_6h = normalized.volume_30m;
 
             const vol1h =
               token.volume_1h_usd ?? token.volume_1h ?? token.volume1h;
@@ -1586,17 +1596,21 @@ export function DiscoverPageContent({
               return Number.isFinite(num) ? num : 0;
             };
 
-            normalized.price_percent_change_24h = normalizePercent(
+            normalized.price_percent_change_1m = normalizePercent(
               token.price_percent_change_24h ??
                 token.price_change_24h ??
                 token.priceChange24h ??
                 token.price24hChangePercent, // Birdeye format
             );
-            normalized.price_percent_change_6h = normalizePercent(
+            normalized.price_percent_change_24h =
+              normalized.price_percent_change_1m;
+            normalized.price_percent_change_30m = normalizePercent(
               token.price_percent_change_6h ??
                 token.price_change_6h ??
                 token.priceChange6h,
             );
+            normalized.price_percent_change_6h =
+              normalized.price_percent_change_30m;
             normalized.price_percent_change_1h = normalizePercent(
               token.price_percent_change_1h ??
                 token.price_change_1h ??
@@ -1846,7 +1860,10 @@ export function DiscoverPageContent({
                 uri: token.image_url || token.uri,
                 imageUrl: token.image_url || token.imageUrl || token.logoURI,
                 // Map Monad volume fields (Monad uses volume_24h_usd, volume_1h_usd, etc.)
+                // Axiom-style windows: 24h → 1m, 6h → 30m (nearest available bucket).
+                volume_1m: token.volume_24h_usd || token.volume_24h || 0,
                 volume_24h: token.volume_24h_usd || token.volume_24h || 0,
+                volume_30m: token.volume_6h_usd || token.volume_6h || 0,
                 volume_6h: token.volume_6h_usd || token.volume_6h || 0,
                 volume_1h: token.volume_1h_usd || token.volume_1h || 0,
                 volume_5m: token.volume_5m_usd || token.volume_5m || 0,
@@ -1855,15 +1872,19 @@ export function DiscoverPageContent({
                 total_buy_volume_24h: token.total_buy_volume_mon || 0,
                 total_sell_volume_24h: token.total_sell_volume_mon || 0,
                 // Map transaction fields
-                // Monad provides total counts (not timeframe-specific), map them to 24h fields
-                // InterstateTable expects timeframe-specific fields like total_buys_24h, total_sells_24h
+                // Monad provides total counts (not timeframe-specific), map them to timeframe fields
+                // InterstateTable expects timeframe-specific fields like total_buys_<tf>
                 total_transactions: token.total_transactions || 0,
                 unique_traders: token.unique_traders || 0,
                 total_buys: token.total_buys || 0,
                 total_sells: token.total_sells || 0,
-                // Map total counts to 24h fields (InterstateTable looks for total_buys_24h, total_sells_24h)
+                // Map total counts to timeframe fields (InterstateTable looks for total_buys_<tf>)
+                total_buys_1m: token.total_buys || 0,
+                total_sells_1m: token.total_sells || 0,
                 total_buys_24h: token.total_buys || 0,
                 total_sells_24h: token.total_sells || 0,
+                total_buys_30m: token.total_buys || 0, // Use total as fallback
+                total_sells_30m: token.total_sells || 0,
                 total_buys_6h: token.total_buys || 0, // Use total as fallback
                 total_sells_6h: token.total_sells || 0,
                 total_buys_1h: token.total_buys || 0, // Use total as fallback
@@ -1898,9 +1919,14 @@ export function DiscoverPageContent({
                 market_cap_usd: token.marketcap,
                 fully_diluted_value: token.fdv,
                 total_liquidity_usd: token.liquidity,
+                // Birdeye only exposes 24h; map onto the surviving 1m slot too.
+                volume_1m: token.volume24hUSD,
                 volume_24h: token.volume24hUSD,
+                price_percent_change_1m: token.price24hChangePercent,
                 price_percent_change_24h: token.price24hChangePercent,
                 // Birdeye doesn't provide transaction data, so set defaults
+                total_buys_1m: 0,
+                total_sells_1m: 0,
                 total_buys_24h: 0,
                 total_sells_24h: 0,
                 total_buy_volume_24h: 0,
@@ -2202,17 +2228,22 @@ export function DiscoverPageContent({
         total_liquidity_usd: liquidity,
         price_usd: toNumber(result.priceUSD || "0"),
 
-        // Volumes
+        // Volumes — Axiom-style windows mapped from nearest Codex buckets:
+        // 24h → 1m, 4h/12h → 30m. Legacy keys kept for any other consumers.
+        volume_1m: volume24h,
         volume_24h: volume24h,
         volume_12h: volume12h,
+        volume_30m: volume4h > 0 ? volume4h : volume12h / 2,
         volume_6h: volume4h > 0 ? volume4h : volume12h / 2, // Use volume4 if available, otherwise estimate from volume12
         volume_4h: volume4h,
         volume_1h: volume1h,
         volume_5m: volume5m,
 
         // Price changes
+        price_percent_change_1m: change24h * 100,
         price_percent_change_24h: change24h * 100, // Convert to percentage
         price_percent_change_12h: change12h * 100,
+        price_percent_change_30m: change4h * 100,
         price_percent_change_6h: change4h * 100, // Use change4 for 6h
         price_percent_change_4h: change4h * 100,
         price_percent_change_1h: change1h * 100,
@@ -2238,14 +2269,18 @@ export function DiscoverPageContent({
         // Transaction counts - map Codex fields to frontend expected format
         // Codex provides: buyCount1, buyCount4, buyCount12, buyCount24, buyCount5m
         // Frontend expects: total_buys_1h, total_buys_6h, total_buys_12h, total_buys_24h, total_buys_5m
+        total_buys_1m: toNumber(result.buyCount24 || "0"), // 24h → 1m slot
         total_buys_1h: toNumber(result.buyCount1 || "0"),
+        total_buys_30m: toNumber(result.buyCount4 || "0"), // Using 4h as approximation for 30m
         total_buys_6h: toNumber(result.buyCount4 || "0"), // Using 4h as approximation for 6h
         total_buys_12h: toNumber(result.buyCount12 || "0"),
         total_buys_24h: toNumber(result.buyCount24 || "0"),
         total_buys_5m: toNumber(result.buyCount5m || "0"),
 
         // Same for sells
+        total_sells_1m: toNumber(result.sellCount24 || "0"), // 24h → 1m slot
         total_sells_1h: toNumber(result.sellCount1 || "0"),
+        total_sells_30m: toNumber(result.sellCount4 || "0"), // Using 4h as approximation for 30m
         total_sells_6h: toNumber(result.sellCount4 || "0"), // Using 4h as approximation for 6h
         total_sells_12h: toNumber(result.sellCount12 || "0"),
         total_sells_24h: toNumber(result.sellCount24 || "0"),
@@ -2253,7 +2288,9 @@ export function DiscoverPageContent({
 
         // Total transaction counts for fallback (txnCount = buyCount + sellCount)
         // These are useful when buyCount/sellCount are 0 but txnCount has data
+        txnCount1m: toNumber(result.txnCount24 || "0"),
         txnCount1h: toNumber(result.txnCount1 || "0"),
+        txnCount30m: toNumber(result.txnCount4 || "0"), // Using 4h as approximation for 30m
         txnCount6h: toNumber(result.txnCount4 || "0"), // Using 4h as approximation for 6h
         txnCount12h: toNumber(result.txnCount12 || "0"),
         txnCount24h: toNumber(result.txnCount24 || "0"),
@@ -3509,10 +3546,10 @@ export function DiscoverPageContent({
   const getTxnsForTimeframe = useCallback((t: any, tf: Timeframe) => {
     // Map timeframe to field suffix
     const tfMap: Record<Timeframe, string> = {
+      "1m": "1m",
       "5m": "5m",
+      "30m": "30m",
       "1h": "1h",
-      "6h": "6h",
-      "24h": "24h",
     };
     const suffix = tfMap[tf] || "5m";
 
@@ -3533,10 +3570,10 @@ export function DiscoverPageContent({
   // return 0 so they sink to the bottom of the score.
   const getBuyPressureForTimeframe = useCallback((t: any, tf: Timeframe) => {
     const tfMap: Record<Timeframe, string> = {
+      "1m": "1m",
       "5m": "5m",
+      "30m": "30m",
       "1h": "1h",
-      "6h": "6h",
-      "24h": "24h",
     };
     const suffix = tfMap[tf] || "5m";
     const buys = Number(t?.[`total_buys_${suffix}`]) || 0;
@@ -3743,20 +3780,20 @@ export function DiscoverPageContent({
         getTxns: (t) => getTxnsForTimeframe(t, selectedTimeframe),
         getBuys: (t) => {
           const tfMap: Record<string, string> = {
+            "1m": "1m",
             "5m": "5m",
+            "30m": "30m",
             "1h": "1h",
-            "6h": "6h",
-            "24h": "24h",
           };
           const suffix = tfMap[selectedTimeframe] || "5m";
           return Number(t?.[`total_buys_${suffix}`]) || 0;
         },
         getSells: (t) => {
           const tfMap: Record<string, string> = {
+            "1m": "1m",
             "5m": "5m",
+            "30m": "30m",
             "1h": "1h",
-            "6h": "6h",
-            "24h": "24h",
           };
           const suffix = tfMap[selectedTimeframe] || "5m";
           return Number(t?.[`total_sells_${suffix}`]) || 0;
@@ -4269,12 +4306,13 @@ export function DiscoverPageContent({
             ),
         );
 
-        // Calculate ranks for all tokens based on 24h volume
+        // Calculate ranks for all tokens based on 1h volume (longest window now
+        // that 6h/24h have been dropped from the Axiom-style timeframe set)
         const allTokensForRanking = [...featuredInList, ...regularInList];
         const tokensWithVolume = allTokensForRanking
           .map((token, index) => ({
             token,
-            volume: getVolumeForTimeframe(token, "24h"),
+            volume: getVolumeForTimeframe(token, "1h"),
             originalIndex: index,
           }))
           .sort((a, b) => b.volume - a.volume); // Sort by volume descending
@@ -5075,23 +5113,21 @@ export function DiscoverPageContent({
               <div
                 className={`relative h-8 min-w-[110px] items-center justify-center gap-0.5 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-1 backdrop-blur-xl ${variant === "popup" ? "flex" : "hidden sm:flex"}`}
               >
-                {/* Only 5m / 1h / 6h. The 24h sparkline depends on
-                    /api/token-service/ohlc returning 24 hours of 30m
-                    candles, which most newly-trending memecoins simply
-                    don't have (they're younger than 24h), so the 24h
-                    column rendered the same hardcoded placeholder line
-                    for every row. Drop the chip until the sparkline can
-                    handle short-lived tokens at long windows; Top now
-                    defaults to 6h instead. */}
-                {(["5m", "1h", "6h"] as Timeframe[]).map((tf: Timeframe) => (
-                  <button
-                    key={tf}
-                    className={`relative flex h-6 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[#18c48c]/15 text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.15)]" : "text-[#71717a] hover:text-[#a1a1aa]"}`}
-                    onClick={() => handleTimeframeClick(tf)}
-                  >
-                    {tf}
-                  </button>
-                ))}
+                {/* Axiom-style windows: 1m / 5m / 30m / 1h. Mirrors the
+                    backend trending snapshot keys; the long 6h/24h chips were
+                    dropped because the sparkline can't render those windows for
+                    tokens younger than the window. Top now defaults to 30m. */}
+                {(["1m", "5m", "30m", "1h"] as Timeframe[]).map(
+                  (tf: Timeframe) => (
+                    <button
+                      key={tf}
+                      className={`relative flex h-6 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[#18c48c]/15 text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.15)]" : "text-[#71717a] hover:text-[#a1a1aa]"}`}
+                      onClick={() => handleTimeframeClick(tf)}
+                    >
+                      {tf}
+                    </button>
+                  ),
+                )}
               </div>
             )}
 
