@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { FaTimes } from "react-icons/fa";
@@ -303,6 +303,28 @@ export default function DiscoverFilterModal({
   // Mayhem mode. Lets us restore their selection when they toggle Mayhem
   // back off, rather than silently clobbering it to ['All'].
   const preMayhemProtocolsRef = useRef<string[] | null>(null);
+  // Dialog container — used to move focus into the modal on open so keyboard
+  // users land inside it, matching expected dialog behaviour.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // Escape-to-close. Bound only while open so we don't leak listeners.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
+
+  // Move focus into the dialog when it opens so Tab/Escape work immediately
+  // and screen readers announce the dialog context.
+  useEffect(() => {
+    if (isOpen) dialogRef.current?.focus();
+  }, [isOpen]);
 
   if (!isOpen || typeof document === "undefined") return null;
 
@@ -317,7 +339,12 @@ export default function DiscoverFilterModal({
 
       {/* Modal - Axiom style */}
       <div
-        className="filter-modal fixed top-1/2 left-1/2 flex max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform flex-col overflow-hidden rounded-xl border shadow-2xl"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Trending filters"
+        tabIndex={-1}
+        className="filter-modal fixed top-1/2 left-1/2 flex max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform flex-col overflow-hidden rounded-xl border shadow-2xl outline-none"
         style={{
           backgroundColor: AX.surface,
           borderColor: AX.border,
@@ -705,6 +732,43 @@ export default function DiscoverFilterModal({
                 label="Holders"
                 minKey="holdersMin"
                 maxKey="holdersMax"
+                pendingFilters={pendingFilters}
+                onChange={onPendingFilterChange}
+              />
+              {/* ── Audit % gates ──
+                  Distribution-health filters keyed off fields the trending WS
+                  feed reliably carries (sniper_percent / insider_percent /
+                  top10_holders_percent / bundle_percent on
+                  NormalizedTrendingToken). These are typically used as a Max
+                  cap (e.g. "Top-10 < 50%") to screen out concentrated /
+                  manipulated supply, but Min is offered too for symmetry.
+                  Dev % is intentionally absent — it is NOT on the trending
+                  token shape, so a Dev % filter would silently match nothing. */}
+              <MinMaxRow
+                label="Top 10 Holders %"
+                minKey="top10HoldersPercentMin"
+                maxKey="top10HoldersPercentMax"
+                pendingFilters={pendingFilters}
+                onChange={onPendingFilterChange}
+              />
+              <MinMaxRow
+                label="Snipers %"
+                minKey="snipersPercentMin"
+                maxKey="snipersPercentMax"
+                pendingFilters={pendingFilters}
+                onChange={onPendingFilterChange}
+              />
+              <MinMaxRow
+                label="Insiders %"
+                minKey="insidersPercentMin"
+                maxKey="insidersPercentMax"
+                pendingFilters={pendingFilters}
+                onChange={onPendingFilterChange}
+              />
+              <MinMaxRow
+                label="Bundlers %"
+                minKey="bundlePercentMin"
+                maxKey="bundlePercentMax"
                 pendingFilters={pendingFilters}
                 onChange={onPendingFilterChange}
               />

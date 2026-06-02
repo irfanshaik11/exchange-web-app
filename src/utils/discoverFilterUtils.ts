@@ -94,11 +94,27 @@ export function tokenMatchesProtocolFilter(token: any, protocols: string[]): boo
   });
 }
 
-/** Helper: parse a numeric filter string, returning undefined for empty/NaN. */
+/**
+ * Helper: parse a numeric filter string, returning undefined for empty/NaN.
+ * Accepts human shorthand — `k`/`m`/`b` suffixes (×1e3 / 1e6 / 1e9) and a
+ * leading `$` or thousands commas — so a pasted/typed `5k`, `$1.2m`, `2,000`
+ * reads the way it appears in the table. Plain numbers fall through unchanged
+ * via the parseFloat fallback, so no existing filter value changes meaning.
+ */
 function parseNum(val: string | undefined): number | undefined {
-  if (!val || val.trim() === '') return undefined;
-  const n = parseFloat(val);
-  return isNaN(n) ? undefined : n;
+  if (val === undefined || val === null) return undefined;
+  const s = String(val).trim().replace(/[$,\s]/g, '');
+  if (s === '') return undefined;
+  const match = /^(-?\d*\.?\d+)([kmb])?$/i.exec(s);
+  if (!match) {
+    const fallback = parseFloat(s);
+    return isNaN(fallback) ? undefined : fallback;
+  }
+  const base = parseFloat(match[1]!);
+  if (isNaN(base)) return undefined;
+  const suffix = (match[2] || '').toLowerCase();
+  const multiplier = suffix === 'k' ? 1e3 : suffix === 'm' ? 1e6 : suffix === 'b' ? 1e9 : 1;
+  return base * multiplier;
 }
 
 /** Convert an age value + unit to minutes for comparison. */
@@ -280,7 +296,10 @@ export function applyDiscoverFilters(
     const minTop10 = parseNum(filters.top10HoldersPercentMin);
     const maxTop10 = parseNum(filters.top10HoldersPercentMax) ?? (filters.top10HoldersPercent ? parseNum(filters.top10HoldersPercent) : undefined);
     if (minTop10 !== undefined || maxTop10 !== undefined) {
-      const pct = Number(token.top10_holders_pct ?? token.top10HoldersPct ?? 0) || 0;
+      // Trending WS feed emits `top10_holders_percent` (NormalizedTrendingToken);
+      // the older `_pct`/camelCase names are New Pairs fallbacks. Reading only the
+      // old names made this gate a no-op on the trending board (always 0).
+      const pct = Number(token.top10_holders_percent ?? token.top10_holders_pct ?? token.top10HoldersPct ?? 0) || 0;
       if (minTop10 !== undefined && pct < minTop10) return false;
       if (maxTop10 !== undefined && pct > maxTop10) return false;
     }
