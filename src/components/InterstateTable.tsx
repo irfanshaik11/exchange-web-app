@@ -153,32 +153,34 @@ const TABLE_HEADERS: HeaderConfig[] = [
   { key: null, label: "Quick Buy", align: "center", width: "w-32" },
 ];
 
-// Trending-only headers. Wider Token + Holders columns so long symbols don't
-// truncate (CZGOBLINS) and 5 holder-metric chips fit on one row. TXNS gets
-// breathing room so its buy/sell numbers stop visually colliding with Volume.
+// Trending-only headers. Token stays wide for long symbols (CZGOBLINS). The six
+// data columns share ONE width (w-32) so the table spaces them evenly instead of
+// the old w-28/w-32/w-64 mix that made the gaps look lopsided. Holders is trimmed
+// from w-64 to w-40 — still room for its metric chips (flex-wrap is the safety net
+// for the rare 5-chip token), but no longer a 2x outlier hogging the middle.
 const TRENDING_TABLE_HEADERS: HeaderConfig[] = [
   { key: "name", label: "Token", align: "left", width: "w-72" },
-  { key: null, label: "1h", align: "center", width: "w-28" },
+  { key: null, label: "1h", align: "center", width: "w-32" },
   {
     key: "fully_diluted_value",
     label: "Market Cap",
     align: "right",
-    width: "w-28",
+    width: "w-32",
   },
   {
     key: "total_liquidity_usd",
     label: "Liquidity",
     align: "right",
-    width: "w-28",
+    width: "w-32",
   },
-  { key: "volume", label: "Volume", align: "right", width: "w-28" },
+  { key: "volume", label: "Volume", align: "right", width: "w-32" },
   // TXNS data is "buys / sells" — much wider than the 4-letter label, so
   // right-aligning the header parks it in the corner while the data extends
   // visually leftward. Centering the header puts it over the data's visual
   // middle so they read as belonging together.
   { key: "txns", label: "TXNS", align: "center", width: "w-32" },
-  { key: null, label: "Holders", align: "center", width: "w-64" },
-  { key: null, label: "Buy", align: "center", width: "w-28" },
+  { key: null, label: "Holders", align: "center", width: "w-40" },
+  { key: null, label: "Buy", align: "center", width: "w-32" },
 ];
 
 // Sniper Icon component
