@@ -13,7 +13,7 @@ import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { showCenteredErrorToast } from "~/utils/toast";
 import type { Token } from "~/utils/db";
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 /* ---- Enhanced Axiom AI Palette (matching PulseTable) ---- */
 const AX = {
@@ -47,14 +47,14 @@ export type PumpItem = {
   name: string;
   symbol?: string;
   desc?: string;
-  age: string;           // right-side age (e.g., "22m")
-  chipAge?: string;      // small green chip (e.g., "2h")
-  mc?: string;           // market cap text (e.g., "$7.26K")
-  coverUrl?: string;     // big left thumbnail
-  avatarUrl?: string;    // tiny avatar next to name
-  verified?: boolean;    // verification dot
-  hot?: boolean;         // orange status ring
-  comments?: number;     // mini comments count
+  age: string; // right-side age (e.g., "22m")
+  chipAge?: string; // small green chip (e.g., "2h")
+  mc?: string; // market cap text (e.g., "$7.26K")
+  coverUrl?: string; // big left thumbnail
+  avatarUrl?: string; // tiny avatar next to name
+  verified?: boolean; // verification dot
+  hot?: boolean; // orange status ring
+  comments?: number; // mini comments count
   // Raw token data for backfill
   _rawToken?: any;
 };
@@ -65,12 +65,24 @@ function getDummyMc(seed: string) {
   // deterministic tiny dummy based on id
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const buckets = ["$5.41K", "$5.44K", "$5.53K", "$6.59K", "$7.14K", "$9.86K", "$10.8K"];
+  const buckets = [
+    "$5.41K",
+    "$5.44K",
+    "$5.53K",
+    "$6.59K",
+    "$7.14K",
+    "$9.86K",
+    "$10.8K",
+  ];
   return buckets[h % buckets.length];
 }
 
 function getInitial(name?: string, symbol?: string) {
-  return (symbol?.trim()?.charAt(0) || name?.trim()?.charAt(0) || "?").toUpperCase();
+  return (
+    symbol?.trim()?.charAt(0) ||
+    name?.trim()?.charAt(0) ||
+    "?"
+  ).toUpperCase();
 }
 
 function truncateMiddle(text: string, maxLength: number = 30): string {
@@ -99,12 +111,12 @@ function getMarketCapColor(item: PumpItem): string {
   // Get market cap value from raw token
   const rawToken = item._rawToken;
   if (!rawToken) {
-    return '#52c6ff'; // Default to blue if no data (matches PulseTable for unknown/zero)
+    return "#52c6ff"; // Default to blue if no data (matches PulseTable for unknown/zero)
   }
 
   // Try to get market cap in USD
   let mc = rawToken.market_cap_usd;
-  
+
   // If not available, try to calculate from marketCapSol
   if (!mc && rawToken.marketCapSol) {
     mc = rawToken.marketCapSol * 170; // Rough SOL price conversion
@@ -112,15 +124,15 @@ function getMarketCapColor(item: PumpItem): string {
 
   // If still no value, default to 0
   if (!mc || isNaN(mc)) {
-    return '#52c6ff'; // Blue for unknown/zero
+    return "#52c6ff"; // Blue for unknown/zero
   }
 
   // Apply PulseTable color tiers (values in thousands):
   // 0–20k: blue, 20k–30k: purple, 30k–100k: yellow, 100k+: green
-  if (mc >= 100_000) return '#31e3ac';  // Green: 100k+
-  if (mc >= 30_000) return '#ddc13d';   // Yellow: 30k–100k
-  if (mc >= 20_000) return '#526ffe';   // Purple: 20k–30k
-  return '#52c6ff';                     // Blue: <20k
+  if (mc >= 100_000) return "#31e3ac"; // Green: 100k+
+  if (mc >= 30_000) return "#ddc13d"; // Yellow: 30k–100k
+  if (mc >= 20_000) return "#526ffe"; // Purple: 20k–30k
+  return "#52c6ff"; // Blue: <20k
 }
 
 function BlueIconRow({
@@ -134,7 +146,10 @@ function BlueIconRow({
 }) {
   // X Profile Preview state - moved here since it's used in this component
   const [showXPreview, setShowXPreview] = useState(false);
-  const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
+  const [buttonPosition, setButtonPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Cleanup timeout on unmount
@@ -150,7 +165,7 @@ function BlueIconRow({
     <div className="mt-2 flex items-center gap-3 text-xs">
       {/* token age */}
       <span
-        className="font-semibold text-xs"
+        className="text-xs font-semibold"
         style={{ color: AX.aiGreen }}
         title="Token age"
       >
@@ -162,10 +177,10 @@ function BlueIconRow({
         {/* person icon - X profile with preview */}
         <div className="relative">
           <button
-            className="transition-colors duration-200 cursor-pointer"
-            style={{ color: '#5ebcff' }}
+            className="cursor-pointer transition-colors duration-200"
+            style={{ color: "#5ebcff" }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#5ebcff'; // Keep the same color on hover
+              e.currentTarget.style.color = "#5ebcff"; // Keep the same color on hover
               // Clear any existing timeout
               if (previewTimeoutRef.current) {
                 clearTimeout(previewTimeoutRef.current);
@@ -175,12 +190,12 @@ function BlueIconRow({
               const buttonRect = e.currentTarget.getBoundingClientRect();
               setButtonPosition({
                 left: buttonRect.left + buttonRect.width / 2,
-                top: buttonRect.top - 20
+                top: buttonRect.top - 20,
               });
               setShowXPreview(true);
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#5ebcff';
+              e.currentTarget.style.color = "#5ebcff";
               // Delay hiding to allow mouse to move to popup
               previewTimeoutRef.current = setTimeout(() => {
                 setShowXPreview(false);
@@ -190,216 +205,276 @@ function BlueIconRow({
               e.stopPropagation();
               e.preventDefault();
               // Open X profile in new tab
-              const symbol = item?.symbol || item?.name?.toLowerCase() || 'search';
+              const symbol =
+                item?.symbol || item?.name?.toLowerCase() || "search";
               const profileUrl = `https://twitter.com/${symbol.toLowerCase()}`;
-              window.open(profileUrl, '_blank');
+              window.open(profileUrl, "_blank");
             }}
             title="View X Profile"
           >
             <IoPersonOutline size={14} />
           </button>
-          
+
           {/* X Profile Preview - positioned near button */}
-          {showXPreview && buttonPosition && typeof window !== 'undefined' && createPortal(
-            <div 
-              className="fixed"
-              style={{
-                left: `${buttonPosition.left}px`,
-                top: `${buttonPosition.top - 300}px`,
-                transform: 'translate(-50%, 0)',
-                width: '280px',
-                zIndex: 99999999,
-                pointerEvents: 'auto'
-              }}
-              onMouseEnter={() => {
-                // Clear timeout to keep popup open when hovering over it
-                if (previewTimeoutRef.current) {
-                  clearTimeout(previewTimeoutRef.current);
-                  previewTimeoutRef.current = null;
-                }
-              }}
-              onMouseLeave={() => {
-                // Hide popup when leaving the popup area
-                if (previewTimeoutRef.current) {
-                  clearTimeout(previewTimeoutRef.current);
-                }
-                setShowXPreview(false);
-              }}
-            >
-              <div 
-                className="rounded-xl overflow-hidden"
+          {showXPreview &&
+            buttonPosition &&
+            typeof window !== "undefined" &&
+            createPortal(
+              <div
+                className="fixed"
                 style={{
-                  backgroundColor: AX.surface,
-                  border: `1px solid ${AX.border}`,
-                  backdropFilter: 'blur(10px)'
+                  left: `${buttonPosition.left}px`,
+                  top: `${buttonPosition.top - 300}px`,
+                  transform: "translate(-50%, 0)",
+                  width: "280px",
+                  zIndex: 99999999,
+                  pointerEvents: "auto",
+                }}
+                onMouseEnter={() => {
+                  // Clear timeout to keep popup open when hovering over it
+                  if (previewTimeoutRef.current) {
+                    clearTimeout(previewTimeoutRef.current);
+                    previewTimeoutRef.current = null;
+                  }
+                }}
+                onMouseLeave={() => {
+                  // Hide popup when leaving the popup area
+                  if (previewTimeoutRef.current) {
+                    clearTimeout(previewTimeoutRef.current);
+                  }
+                  setShowXPreview(false);
                 }}
               >
-                {/* X Icon Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: '#2f3336' }}>
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-7 h-7 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: '#1d9bf0' }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#ffffff' }}>
-                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-white">X Profile</div>
-                      <div className="text-xs text-gray-400">Live Preview</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span className="text-xs text-gray-400">Live</span>
-                  </div>
-                </div>
-
-                {/* Official X Profile Layout */}
-                <div className="px-4 py-4">
-                  {/* Profile Picture */}
-                  <div className="flex justify-center mb-4">
-                    <div 
-                      className="w-20 h-20 rounded-full overflow-hidden"
-                      style={{ 
-                        backgroundColor: '#1a1a1a',
-                        border: `3px solid #2f3336`
-                      }}
-                    >
-                      <img
-                        src={`https://ui-avatars.com/api/?name=${item.symbol || item.name || 'Token'}&size=80&background=1a1a1a&color=ffffff&bold=true`}
-                        alt={`${item.symbol || item.name} profile`}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const fallback = target.nextElementSibling as HTMLElement;
-                          if (fallback) fallback.style.display = 'flex';
-                        }}
-                      />
-                      <div 
-                        className="w-full h-full flex items-center justify-center font-bold text-xl"
-                        style={{ 
-                          backgroundColor: '#1a1a1a',
-                          color: '#ffffff',
-                          display: 'none'
-                        }}
+                <div
+                  className="overflow-hidden rounded-xl"
+                  style={{
+                    backgroundColor: AX.surface,
+                    border: `1px solid ${AX.border}`,
+                    backdropFilter: "blur(10px)",
+                  }}
+                >
+                  {/* X Icon Header */}
+                  <div
+                    className="flex items-center justify-between border-b px-4 py-3"
+                    style={{ borderColor: "#2f3336" }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="flex h-7 w-7 items-center justify-center rounded-full"
+                        style={{ backgroundColor: "#1d9bf0" }}
                       >
-                        {(item.symbol || item.name || '??').slice(0, 2).toUpperCase()}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Profile Info */}
-                  <div className="text-center mb-4">
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      <h3 className="text-xl font-bold text-white" title={item.symbol || item.name || 'Unknown'}>
-                        {truncateMiddle(item.symbol || item.name || 'Unknown', 20)}
-                      </h3>
-                      {/* Verified Badge */}
-                      <div 
-                        className="w-6 h-6 rounded-full flex items-center justify-center"
-                        style={{ backgroundColor: '#1d9bf0' }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M9 12l2 2 4-4"/>
-                          <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          style={{ color: "#ffffff" }}
+                        >
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                         </svg>
                       </div>
+                      <div>
+                        <div className="text-sm font-bold text-white">
+                          X Profile
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          Live Preview
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-400 mb-3">
-                      @{(item.symbol || item.name || 'unknown').toLowerCase()}
-                    </p>
-                    <p className="text-sm text-white leading-relaxed px-2">
-                      {item.desc || `Official ${item.symbol || item.name || 'token'} community. Join the conversation!`}
-                    </p>
+                    <div className="flex items-center gap-1">
+                      <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                      <span className="text-xs text-gray-400">Live</span>
+                    </div>
                   </div>
-                  
-                  {/* Follow Button */}
-                  <div className="flex justify-center mb-4">
+
+                  {/* Official X Profile Layout */}
+                  <div className="px-4 py-4">
+                    {/* Profile Picture */}
+                    <div className="mb-4 flex justify-center">
+                      <div
+                        className="h-20 w-20 overflow-hidden rounded-full"
+                        style={{
+                          backgroundColor: "#1a1a1a",
+                          border: `3px solid #2f3336`,
+                        }}
+                      >
+                        <img
+                          src={`https://ui-avatars.com/api/?name=${item.symbol || item.name || "Token"}&size=80&background=1a1a1a&color=ffffff&bold=true`}
+                          alt={`${item.symbol || item.name} profile`}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                            const fallback =
+                              target.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = "flex";
+                          }}
+                        />
+                        <div
+                          className="flex h-full w-full items-center justify-center text-xl font-bold"
+                          style={{
+                            backgroundColor: "#1a1a1a",
+                            color: "#ffffff",
+                            display: "none",
+                          }}
+                        >
+                          {(item.symbol || item.name || "??")
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Profile Info */}
+                    <div className="mb-4 text-center">
+                      <div className="mb-1 flex items-center justify-center gap-2">
+                        <h3
+                          className="text-xl font-bold text-white"
+                          title={item.symbol || item.name || "Unknown"}
+                        >
+                          {truncateMiddle(
+                            item.symbol || item.name || "Unknown",
+                            20,
+                          )}
+                        </h3>
+                        {/* Verified Badge */}
+                        <div
+                          className="flex h-6 w-6 items-center justify-center rounded-full"
+                          style={{ backgroundColor: "#1d9bf0" }}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#ffffff"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M9 12l2 2 4-4" />
+                            <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <p className="mb-3 text-sm text-gray-400">
+                        @{(item.symbol || item.name || "unknown").toLowerCase()}
+                      </p>
+                      <p className="px-2 text-sm leading-relaxed text-white">
+                        {item.desc ||
+                          `Official ${item.symbol || item.name || "token"} community. Join the conversation!`}
+                      </p>
+                    </div>
+
+                    {/* Follow Button */}
+                    <div className="mb-4 flex justify-center">
+                      <button
+                        className="rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200"
+                        style={{
+                          backgroundColor: "#ffffff",
+                          color: "#000000",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "#e7e9ea";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = "#ffffff";
+                        }}
+                      >
+                        Follow
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Join Date Section */}
+                  <div className="px-4 pb-3">
+                    <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect
+                          x="3"
+                          y="4"
+                          width="18"
+                          height="18"
+                          rx="2"
+                          ry="2"
+                        />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                      <span>
+                        Joined{" "}
+                        {new Date().toLocaleDateString("en-US", {
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="px-4 pb-4">
                     <button
-                      className="px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200"
+                      className="w-full rounded-full px-4 py-3 text-sm font-semibold transition-all duration-200"
                       style={{
-                        backgroundColor: '#ffffff',
-                        color: '#000000'
+                        backgroundColor: "#1d9bf0",
+                        color: "#ffffff",
+                        border: "1px solid #1d9bf0",
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#e7e9ea';
+                        e.currentTarget.style.backgroundColor = "#1a8cd8";
+                        e.currentTarget.style.borderColor = "#1a8cd8";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#ffffff';
+                        e.currentTarget.style.backgroundColor = "#1d9bf0";
+                        e.currentTarget.style.borderColor = "#1d9bf0";
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const symbol =
+                          item?.symbol || item?.name?.toLowerCase() || "search";
+                        const profileUrl = `https://twitter.com/${symbol.toLowerCase()}`;
+                        window.open(profileUrl, "_blank");
                       }}
                     >
-                      Follow
+                      See profile on X
                     </button>
                   </div>
                 </div>
-
-                {/* Join Date Section */}
-                <div className="px-4 pb-3">
-                  <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="16" y1="2" x2="16" y2="6"/>
-                      <line x1="8" y1="2" x2="8" y2="6"/>
-                      <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    <span>Joined {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
-                  </div>
-                </div>
-
-                {/* Action Button */}
-                <div className="px-4 pb-4">
-                  <button
-                    className="w-full py-3 px-4 rounded-full text-sm font-semibold transition-all duration-200"
-                    style={{
-                      backgroundColor: '#1d9bf0',
-                      color: '#ffffff',
-                      border: '1px solid #1d9bf0'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#1a8cd8';
-                      e.currentTarget.style.borderColor = '#1a8cd8';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#1d9bf0';
-                      e.currentTarget.style.borderColor = '#1d9bf0';
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const symbol = item?.symbol || item?.name?.toLowerCase() || 'search';
-                      const profileUrl = `https://twitter.com/${symbol.toLowerCase()}`;
-                      window.open(profileUrl, '_blank');
-                    }}
-                  >
-                    See profile on X
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body
-          )}
+              </div>,
+              document.body,
+            )}
         </div>
-        
+
         {/* Pump.fun Link - only show for pump tokens */}
         {(() => {
           const mint = item._rawToken?.mint || item.id;
-          const isPumpToken = mint && typeof mint === 'string' && mint.slice(-4) === "pump";
-          
+          const isPumpToken =
+            mint && typeof mint === "string" && mint.slice(-4) === "pump";
+
           if (!isPumpToken) return null;
-          
+
           return (
             <Link
               target="_blank"
               href={`https://pump.fun/coin/${mint}`}
-              className="transition-colors duration-200 relative"
-              style={{ color: '#86f0ad' }}
+              className="relative transition-colors duration-200"
+              style={{ color: "#86f0ad" }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#86f0ad';
+                e.currentTarget.style.color = "#86f0ad";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = '#86f0ad';
+                e.currentTarget.style.color = "#86f0ad";
               }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -410,13 +485,13 @@ function BlueIconRow({
             </Link>
           );
         })()}
-        
+
         {/* globe icon - open website/search */}
         <button
-          className="transition-colors duration-200 cursor-pointer"
+          className="cursor-pointer transition-colors duration-200"
           style={{ color: AX.muted }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#06B6D4'; // aiCyan color
+            e.currentTarget.style.color = "#06B6D4"; // aiCyan color
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.color = AX.muted;
@@ -425,21 +500,22 @@ function BlueIconRow({
             e.stopPropagation();
             e.preventDefault();
             // Search on Twitter/X
-            const searchQuery = `${item?.symbol || ''} ${item?.name || ''}`.trim();
+            const searchQuery =
+              `${item?.symbol || ""} ${item?.name || ""}`.trim();
             const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-            window.open(twitterUrl, '_blank');
+            window.open(twitterUrl, "_blank");
           }}
           title="Search on Twitter"
         >
           <FaGlobe size={14} />
         </button>
-        
+
         {/* search icon - Twitter search */}
         <button
-          className="transition-colors duration-200 cursor-pointer"
+          className="cursor-pointer transition-colors duration-200"
           style={{ color: AX.muted }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#06B6D4'; // aiCyan color
+            e.currentTarget.style.color = "#06B6D4"; // aiCyan color
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.color = AX.muted;
@@ -448,9 +524,10 @@ function BlueIconRow({
             e.stopPropagation();
             e.preventDefault();
             // Search on Twitter
-            const searchQuery = `${item?.symbol || ''} ${item?.name || ''}`.trim();
+            const searchQuery =
+              `${item?.symbol || ""} ${item?.name || ""}`.trim();
             const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-            window.open(twitterUrl, '_blank');
+            window.open(twitterUrl, "_blank");
           }}
           title="Search on Twitter"
         >
@@ -479,15 +556,21 @@ export function PumpRow({
   isRightColumn?: boolean;
 }) {
   const mcText = item.mc ?? getDummyMc(item.id);
-  const initial = useMemo(() => getInitial(item.name, item.symbol), [item.name, item.symbol]);
+  const initial = useMemo(
+    () => getInitial(item.name, item.symbol),
+    [item.name, item.symbol],
+  );
 
   // Whether we should show actual images (start true if url exists; switch to false onError)
   const [showCoverImg, setShowCoverImg] = useState<boolean>(!!item.coverUrl);
   const [showAvatarImg, setShowAvatarImg] = useState<boolean>(!!item.avatarUrl);
-  
+
   // Avatar hover preview state
   const [showAvatarPreview, setShowAvatarPreview] = useState(false);
-  const [avatarButtonPosition, setAvatarButtonPosition] = useState<{left: number, top: number} | null>(null);
+  const [avatarButtonPosition, setAvatarButtonPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const avatarPreviewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Cleanup timeout on unmount
@@ -500,20 +583,20 @@ export function PumpRow({
   }, []);
 
   // prefer remote if provided (we'll *not* fall back to static JPGs; instead show initial blocks)
-  const coverSrc = item.coverUrl || FALLBACK_COVER;   // still defined, but we gate with showCoverImg
+  const coverSrc = item.coverUrl || FALLBACK_COVER; // still defined, but we gate with showCoverImg
   const avatarSrc = item.avatarUrl || FALLBACK_AVATAR;
 
   // Border color for avatar - yellow for right column, green for left
-  const avatarBorderColor = isRightColumn ? '#e8b714B3' : `${AX.aiGreen}B3`;
+  const avatarBorderColor = isRightColumn ? "#e8b714B3" : `${AX.aiGreen}B3`;
 
   return (
     <div
-      className="flex items-center gap-3 px-4 py-4 cursor-pointer hover:opacity-90 transition"
+      className="flex cursor-pointer items-center gap-3 px-4 py-4 transition hover:opacity-90"
       onClick={() => onAction?.(item.id, item._rawToken)}
     >
       {/* Left media (tablet-sized thumbnail) */}
       <div
-        className="relative rounded-md overflow-hidden flex-shrink-0"
+        className="relative flex-shrink-0 overflow-hidden rounded-md"
         style={{
           width: 120,
           height: 72,
@@ -532,11 +615,11 @@ export function PumpRow({
             loading="lazy"
             decoding="async"
             fetchPriority="low"
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
             onError={() => setShowCoverImg(false)}
           />
         ) : (
-          <div className="w-full h-full grid place-items-center">
+          <div className="grid h-full w-full place-items-center">
             <div
               className="rounded-md font-bold"
               style={{
@@ -560,7 +643,7 @@ export function PumpRow({
           <div
             className="relative flex-shrink-0"
             style={{
-              width: 44,  // Larger to accommodate border
+              width: 44, // Larger to accommodate border
               height: 44,
             }}
             onMouseEnter={(e) => {
@@ -570,7 +653,7 @@ export function PumpRow({
               const rect = e.currentTarget.getBoundingClientRect();
               setAvatarButtonPosition({
                 left: rect.left + rect.width / 2,
-                top: rect.top
+                top: rect.top,
               });
               avatarPreviewTimeoutRef.current = setTimeout(() => {
                 setShowAvatarPreview(true);
@@ -585,17 +668,17 @@ export function PumpRow({
             }}
           >
             {/* Outer border container matching PulseTable style */}
-            <div 
-              className="relative rounded-sm cursor-pointer"
+            <div
+              className="relative cursor-pointer rounded-sm"
               style={{
                 border: `1px solid ${avatarBorderColor}`, // Yellow border for right column, green for left
-                padding: '2px',
-                backgroundColor: AX.bg
+                padding: "2px",
+                backgroundColor: AX.bg,
               }}
             >
               {/* Image container */}
-              <div 
-                className="relative rounded-sm overflow-hidden"
+              <div
+                className="relative overflow-hidden rounded-sm"
                 style={{ width: 40, height: 40 }}
               >
                 {showAvatarImg && item.avatarUrl ? (
@@ -608,11 +691,11 @@ export function PumpRow({
                     loading="lazy"
                     decoding="async"
                     fetchPriority="low"
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                     onError={() => setShowAvatarImg(false)}
                   />
                 ) : (
-                  <div className="w-full h-full grid place-items-center bg-neutral-900">
+                  <div className="grid h-full w-full place-items-center bg-neutral-900">
                     <span
                       className="font-bold"
                       style={{ color: AX.text, fontSize: 12 }}
@@ -625,64 +708,81 @@ export function PumpRow({
                 )}
               </div>
             </div>
-            
+
             {/* Avatar Preview Popup */}
-            {showAvatarPreview && avatarButtonPosition && showAvatarImg && item.avatarUrl && typeof window !== 'undefined' && createPortal(
-              <div 
-                className="fixed pointer-events-none"
-                style={{
-                  left: `${avatarButtonPosition.left}px`,
-                  top: `${avatarButtonPosition.top - 200}px`,
-                  transform: 'translate(-50%, 0)',
-                  zIndex: 99999999,
-                  pointerEvents: 'auto'
-                }}
-                onMouseEnter={() => {
-                  if (avatarPreviewTimeoutRef.current) {
-                    clearTimeout(avatarPreviewTimeoutRef.current);
-                    avatarPreviewTimeoutRef.current = null;
-                  }
-                }}
-                onMouseLeave={() => {
-                  if (avatarPreviewTimeoutRef.current) {
-                    clearTimeout(avatarPreviewTimeoutRef.current);
-                  }
-                  setShowAvatarPreview(false);
-                }}
-              >
-                <div 
-                  className="rounded overflow-hidden"
+            {showAvatarPreview &&
+              avatarButtonPosition &&
+              showAvatarImg &&
+              item.avatarUrl &&
+              typeof window !== "undefined" &&
+              createPortal(
+                <div
+                  className="pointer-events-none fixed"
                   style={{
-                    backgroundColor: AX.surface,
-                    border: `1px solid ${AX.border}`,
-                    width: '200px',
-                    height: '200px',
-                    backdropFilter: 'blur(10px)'
+                    left: `${avatarButtonPosition.left}px`,
+                    top: `${avatarButtonPosition.top - 200}px`,
+                    transform: "translate(-50%, 0)",
+                    zIndex: 99999999,
+                    pointerEvents: "auto",
+                  }}
+                  onMouseEnter={() => {
+                    if (avatarPreviewTimeoutRef.current) {
+                      clearTimeout(avatarPreviewTimeoutRef.current);
+                      avatarPreviewTimeoutRef.current = null;
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (avatarPreviewTimeoutRef.current) {
+                      clearTimeout(avatarPreviewTimeoutRef.current);
+                    }
+                    setShowAvatarPreview(false);
                   }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={avatarSrc}
-                    alt={item.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </div>
-              </div>,
-              document.body
-            )}
+                  <div
+                    className="overflow-hidden rounded"
+                    style={{
+                      backgroundColor: AX.surface,
+                      border: `1px solid ${AX.border}`,
+                      width: "200px",
+                      height: "200px",
+                      backdropFilter: "blur(10px)",
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={avatarSrc}
+                      alt={item.name}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </div>
+                </div>,
+                document.body,
+              )}
           </div>
 
           {/* name + symbol + copy icon */}
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="font-semibold min-w-0 flex items-center gap-1" style={{ color: AX.text }}>
-              <span className="truncate" title={item.name}>{truncateMiddle(item.name, 25)}</span>
-              {item.symbol ? <span className="opacity-70 font-normal whitespace-nowrap" title={item.symbol}>{truncateMiddle(item.symbol, 15)}</span> : null}
+          <div className="flex min-w-0 items-center gap-2">
+            <div
+              className="flex min-w-0 items-center gap-1 font-semibold"
+              style={{ color: AX.text }}
+            >
+              <span className="truncate" title={item.name}>
+                {truncateMiddle(item.name, 25)}
+              </span>
+              {item.symbol ? (
+                <span
+                  className="font-normal whitespace-nowrap opacity-70"
+                  title={item.symbol}
+                >
+                  {truncateMiddle(item.symbol, 15)}
+                </span>
+              ) : null}
             </div>
             {(item._rawToken?.mint || item.id) && (
               <button
-                className="transition-colors duration-200 flex-shrink-0 cursor-pointer"
+                className="flex-shrink-0 cursor-pointer transition-colors duration-200"
                 style={{ color: AX.muted }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.color = AX.aiBlue;
@@ -690,23 +790,23 @@ export function PumpRow({
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.color = AX.muted;
-                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.boxShadow = "none";
                 }}
                 onClick={async (e) => {
                   e.stopPropagation();
                   e.preventDefault();
                   const mintAddress = item._rawToken?.mint || item.id;
                   if (!mintAddress) {
-                    console.error('No mint address or ID available');
+                    console.error("No mint address or ID available");
                     return;
                   }
-                  
+
                   try {
                     await navigator.clipboard.writeText(mintAddress);
                     if (showCopyToast) {
                       showCopyToast();
                     } else {
-                      console.warn('[PumpLive] showCopyToast is not available');
+                      console.warn("[PumpLive] showCopyToast is not available");
                     }
                     // Show success feedback
                     const button = e.currentTarget as HTMLButtonElement;
@@ -720,33 +820,39 @@ export function PumpRow({
                       }, 1000);
                     }
                   } catch (err) {
-                    console.error('[PumpLive] Failed to copy to clipboard:', err);
+                    console.error(
+                      "[PumpLive] Failed to copy to clipboard:",
+                      err,
+                    );
                     // Fallback for older browsers
-                    const textArea = document.createElement('textarea');
+                    const textArea = document.createElement("textarea");
                     textArea.value = mintAddress;
-                    textArea.style.position = 'fixed';
-                    textArea.style.left = '-999999px';
-                    textArea.style.top = '-999999px';
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-999999px";
+                    textArea.style.top = "-999999px";
                     document.body.appendChild(textArea);
                     textArea.focus();
                     textArea.select();
                     try {
-                      const successful = document.execCommand('copy');
+                      const successful = document.execCommand("copy");
                       if (showCopyToast) {
                         showCopyToast();
                       }
-                    const button = e.currentTarget as HTMLButtonElement;
-                    if (button && button.style) {
-                      const originalColor = button.style.color || AX.muted;
-                      button.style.color = AX.aiGreen;
-                      setTimeout(() => {
-                        if (button && button.style) {
-                          button.style.color = originalColor;
-                        }
-                      }, 1000);
-                    }
+                      const button = e.currentTarget as HTMLButtonElement;
+                      if (button && button.style) {
+                        const originalColor = button.style.color || AX.muted;
+                        button.style.color = AX.aiGreen;
+                        setTimeout(() => {
+                          if (button && button.style) {
+                            button.style.color = originalColor;
+                          }
+                        }, 1000);
+                      }
                     } catch (fallbackErr) {
-                      console.error('[PumpLive] Fallback copy failed:', fallbackErr);
+                      console.error(
+                        "[PumpLive] Fallback copy failed:",
+                        fallbackErr,
+                      );
                     }
                     document.body.removeChild(textArea);
                   }
@@ -757,11 +863,11 @@ export function PumpRow({
               </button>
             )}
           </div>
-          
+
           {/* description - right under token name */}
           {item.desc ? (
             <div
-              className="mt-1 text-xs line-clamp-2"
+              className="mt-1 line-clamp-2 text-xs"
               style={{ color: AX.muted, maxWidth: "42ch" }}
               title={item.desc}
             >
@@ -771,23 +877,28 @@ export function PumpRow({
         </div>
 
         {/* blue icon row + comments */}
-        <BlueIconRow chipText={item.chipAge || item.age} comments={item.comments ?? 0} item={item} />
+        <BlueIconRow
+          chipText={item.chipAge || item.age}
+          comments={item.comments ?? 0}
+          item={item}
+        />
       </div>
 
       {/* Right: MC + lightning */}
       <div className="flex flex-col items-end gap-2">
         {/* Market Cap - displayed above quick buy button */}
         <div className="text-right">
-          <div className="flex items-center gap-2 justify-end">
+          <div className="flex items-center justify-end gap-2">
             <span className="text-xs opacity-60" style={{ color: AX.text }}>
               MC
             </span>
-            <span 
-              className="font-semibold" 
-              style={{ 
+            <span
+              className="font-semibold"
+              style={{
                 color: getMarketCapColor(item),
-                fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-                fontWeight: '400'
+                fontFamily:
+                  'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                fontWeight: "400",
               }}
             >
               {mcText}
@@ -798,21 +909,21 @@ export function PumpRow({
         {/* Quick Buy Button */}
         {onQuickBuy && item._rawToken && (
           <button
-            className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold transition-all duration-200 ease-out opacity-100 shadow-sm"
-            style={{ 
+            className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-100 shadow-sm transition-all duration-200 ease-out"
+            style={{
               backgroundColor: AX.aiGreen,
-              color: '#000000',
-              border: '1px solid rgba(0,0,0,0.15)'
+              color: "#000000",
+              border: "1px solid rgba(0,0,0,0.15)",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = AX.aiGreenHover;
-              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.transform = "translateY(-1px)";
               e.currentTarget.style.boxShadow = `0 4px 14px ${AX.glowGreen}`;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = AX.aiGreen;
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "none";
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -820,24 +931,27 @@ export function PumpRow({
               // Convert PumpItem to Token format for handleQuickBuy - exactly like trending tab
               const rawToken = item._rawToken;
               if (rawToken && onQuickBuy) {
-                isDev && console.log('[PumpLive] Raw token data:', {
-                  mint: rawToken.mint,
-                  pair_address: rawToken.pair_address,
-                  protocol: rawToken.protocol,
-                  launchpad_protocol: rawToken.launchpad_protocol,
-                });
-                
+                isDev &&
+                  console.log("[PumpLive] Raw token data:", {
+                    mint: rawToken.mint,
+                    pair_address: rawToken.pair_address,
+                    protocol: rawToken.protocol,
+                    launchpad_protocol: rawToken.launchpad_protocol,
+                  });
+
                 // Calculate market cap from available data
-                const marketCapUsd = rawToken.market_cap_usd || (rawToken.marketCapSol ? rawToken.marketCapSol * 170 : 0);
+                const marketCapUsd =
+                  rawToken.market_cap_usd ||
+                  (rawToken.marketCapSol ? rawToken.marketCapSol * 170 : 0);
                 const fullyDilutedValue = marketCapUsd;
-                
+
                 // CRITICAL: Determine pool address exactly like handleQuickBuy does
                 // handleQuickBuy uses: effectivePoolAddress = token.migrated_pool_address || token.pair_address
                 // So we need:
                 // - token.pair_address = original pair address (bondingCurveKey for pre-migration)
                 // - token.migrated_pool_address = migrated pool if available
                 // - payload.poolAddress = migrated_pool_address || pair_address
-                
+
                 // Get the original pair_address (bondingCurveKey for pre-migration tokens)
                 const originalPairAddress = getFirstString(
                   rawToken.pair_address,
@@ -863,7 +977,10 @@ export function PumpRow({
                   rawToken.pool_address,
                   rawToken.amm_id,
                   rawToken.ammId,
-                  typeof rawToken.pool === 'string' && rawToken.pool.length >= 32 ? rawToken.pool : undefined,
+                  typeof rawToken.pool === "string" &&
+                    rawToken.pool.length >= 32
+                    ? rawToken.pool
+                    : undefined,
                 );
                 // Effective pool address (what handleQuickBuy will use)
                 const effectivePoolAddress = getFirstString(
@@ -871,9 +988,12 @@ export function PumpRow({
                   originalPairAddress,
                   fallbackPoolAddress,
                 );
-                
-                if (!effectivePoolAddress || effectivePoolAddress.trim() === '') {
-                  console.error('[PumpLive] ❌ No valid pool address found!', {
+
+                if (
+                  !effectivePoolAddress ||
+                  effectivePoolAddress.trim() === ""
+                ) {
+                  console.error("[PumpLive] ❌ No valid pool address found!", {
                     migrated_pool_address: rawToken.migrated_pool_address,
                     bondingCurveKey: rawToken.bondingCurveKey,
                     pair_address: rawToken.pair_address,
@@ -882,63 +1002,69 @@ export function PumpRow({
                     fallbackPoolAddress,
                     itemId: item.id,
                   });
-                  showCenteredErrorToast('Invalid token: No pool address available');
+                  showCenteredErrorToast(
+                    "Invalid token: No pool address available",
+                  );
                   return;
                 }
-                
-                isDev && console.log('[PumpLive] Pool address selection:', {
-                  effectivePoolAddress,
-                  isMigrated: !!migratedPoolAddress
-                });
-                
+
+                isDev &&
+                  console.log("[PumpLive] Pool address selection:", {
+                    effectivePoolAddress,
+                    isMigrated: !!migratedPoolAddress,
+                  });
+
                 const token: Token = {
                   id: 0,
                   mint: rawToken.mint || item.id,
-                  standard: '',
+                  standard: "",
                   name: item.name,
-                  symbol: item.symbol || '',
-                  logo: item.avatarUrl || item.coverUrl || rawToken.image || '',
-                  decimals: typeof rawToken.decimals === 'number' ? rawToken.decimals : 6,
+                  symbol: item.symbol || "",
+                  logo: item.avatarUrl || item.coverUrl || rawToken.image || "",
+                  decimals:
+                    typeof rawToken.decimals === "number"
+                      ? rawToken.decimals
+                      : 6,
                   metaplex: null,
                   fully_diluted_value: fullyDilutedValue,
                   total_supply: 0,
                   total_supply_formatted: 0,
                   links: null,
-                  description: item.desc || '',
+                  description: item.desc || "",
                   is_verified_contract: false,
                   possible_spam: false,
+                  total_buy_volume_1m: 0,
                   total_buy_volume_5m: 0,
+                  total_buy_volume_30m: 0,
                   total_buy_volume_1h: 0,
-                  total_buy_volume_6h: 0,
-                  total_buy_volume_24h: 0,
+                  total_sell_volume_1m: 0,
                   total_sell_volume_5m: 0,
+                  total_sell_volume_30m: 0,
                   total_sell_volume_1h: 0,
-                  total_sell_volume_6h: 0,
-                  total_sell_volume_24h: 0,
+                  total_buyers_1m: 0,
                   total_buyers_5m: 0,
+                  total_buyers_30m: 0,
                   total_buyers_1h: 0,
-                  total_buyers_6h: 0,
-                  total_buyers_24h: 0,
+                  total_sellers_1m: 0,
                   total_sellers_5m: 0,
+                  total_sellers_30m: 0,
                   total_sellers_1h: 0,
-                  total_sellers_6h: 0,
-                  total_sellers_24h: 0,
+                  total_buys_1m: 0,
                   total_buys_5m: 0,
+                  total_buys_30m: 0,
                   total_buys_1h: 0,
-                  total_buys_6h: 0,
-                  total_buys_24h: 0,
+                  total_sells_1m: 0,
                   total_sells_5m: 0,
+                  total_sells_30m: 0,
                   total_sells_1h: 0,
-                  total_sells_6h: 0,
-                  total_sells_24h: 0,
+                  unique_wallets_1m: 0,
                   unique_wallets_5m: 0,
+                  unique_wallets_30m: 0,
                   unique_wallets_1h: 0,
-                  unique_wallets_6h: 0,
-                  unique_wallets_24h: 0,
+                  price_percent_change_1m: 0,
                   price_percent_change_5m: 0,
+                  price_percent_change_30m: 0,
                   price_percent_change_1h: 0,
-                  price_percent_change_6h: 0,
-                  price_percent_change_24h: 0,
                   sol_price: 0,
                   usd_price: 0,
                   market_cap_usd: marketCapUsd,
@@ -952,28 +1078,33 @@ export function PumpRow({
                   total_holders: 0,
                   created_at: rawToken.created_at || new Date().toISOString(),
                   updated_at: new Date().toISOString(),
-                  bonding_curve_progress: rawToken.bonding_curve_progress || rawToken.bondingCurveProgress || 0,
+                  bonding_curve_progress:
+                    rawToken.bonding_curve_progress ||
+                    rawToken.bondingCurveProgress ||
+                    0,
                   uri: rawToken.uri || rawToken.metadata_uri || item.coverUrl,
                   // For pump.fun tokens, protocol is typically 'pump' or 'pump.fun'
-                  launchpad_protocol: getFirstString(
-                    rawToken.launchpad_protocol,
-                    rawToken.protocol,
-                    rawToken.pool,
-                  ) || 'pump',
-                  protocol: getFirstString(
-                    rawToken.protocol,
-                    rawToken.pool,
-                  ) || 'pump',
-                  amm_id: getFirstString(rawToken.amm_id, rawToken.ammId) || undefined,
+                  launchpad_protocol:
+                    getFirstString(
+                      rawToken.launchpad_protocol,
+                      rawToken.protocol,
+                      rawToken.pool,
+                    ) || "pump",
+                  protocol:
+                    getFirstString(rawToken.protocol, rawToken.pool) || "pump",
+                  amm_id:
+                    getFirstString(rawToken.amm_id, rawToken.ammId) ||
+                    undefined,
                 };
-                
-                isDev && console.log('[PumpLive] Constructed Token:', {
-                  mint: token.mint,
-                  pair_address: token.pair_address,
-                  launchpad_protocol: token.launchpad_protocol,
-                  protocol: rawToken.protocol,
-                });
-                
+
+                isDev &&
+                  console.log("[PumpLive] Constructed Token:", {
+                    mint: token.mint,
+                    pair_address: token.pair_address,
+                    launchpad_protocol: token.launchpad_protocol,
+                    protocol: rawToken.protocol,
+                  });
+
                 // Call handleQuickBuy exactly like Trending does
                 onQuickBuy(token);
               }
@@ -981,7 +1112,7 @@ export function PumpRow({
             title={`Quick Buy ${quickBuyAmount || 0} SOL`}
           >
             <HiLightningBolt className="text-black" size={14} />
-            <span>{quickBuyAmount || '0'} SOL</span>
+            <span>{quickBuyAmount || "0"} SOL</span>
           </button>
         )}
       </div>
@@ -1029,20 +1160,26 @@ export default function PumpLive({
   };
 
   // Memoized filtered items
-  const filteredLeftItems = useMemo(() => filterItems(leftItems, leftSearch), [leftItems, leftSearch]);
-  const filteredRightItems = useMemo(() => filterItems(rightItems, rightSearch), [rightItems, rightSearch]);
+  const filteredLeftItems = useMemo(
+    () => filterItems(leftItems, leftSearch),
+    [leftItems, leftSearch],
+  );
+  const filteredRightItems = useMemo(
+    () => filterItems(rightItems, rightSearch),
+    [rightItems, rightSearch],
+  );
 
   return (
     <>
       {/* Copy Success Toast */}
       {showToast && (
-        <div 
-          className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[9999] px-4 py-2 rounded-lg shadow-lg transition-all duration-300 ease-out"
+        <div
+          className="fixed top-20 left-1/2 z-[9999] -translate-x-1/2 transform rounded-lg px-4 py-2 shadow-lg transition-all duration-300 ease-out"
           style={{
             backgroundColor: AX.surface,
             color: AX.aiGreen,
             border: `1px solid ${AX.aiGreen}`,
-            boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 8px ${AX.glowGreen}`
+            boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 8px ${AX.glowGreen}`,
           }}
         >
           <div className="flex items-center gap-2">
@@ -1052,113 +1189,150 @@ export default function PumpLive({
         </div>
       )}
 
-    <div className="mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6" style={{ maxWidth: 1800 }}>
-      {/* LEFT: New Streams */}
-      <section
-        className="rounded overflow-hidden mx-auto"
-        style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}`, maxWidth: 900, width: "100%" }}
+      <div
+        className="mx-auto grid grid-cols-1 gap-6 lg:grid-cols-2"
+        style={{ maxWidth: 1800 }}
       >
-        <header
-          className="flex items-center justify-between px-4 py-3"
-          style={{ borderBottom: `1px solid ${AX.border}` }}
+        {/* LEFT: New Streams */}
+        <section
+          className="mx-auto overflow-hidden rounded"
+          style={{
+            backgroundColor: AX.surface2,
+            border: `1px solid ${AX.border}`,
+            maxWidth: 900,
+            width: "100%",
+          }}
         >
-          <div className="text-sm font-semibold" style={{ color: AX.text }}>
-            New Streams
-          </div>
-          {/* search input */}
-          <input
-            type="text"
-            placeholder="Search by ticker or name"
-            value={leftSearch}
-            onChange={(e) => setLeftSearch(e.target.value)}
-            className="text-xs px-3 py-1 rounded-full bg-transparent outline-none transition-colors"
-            style={{
-              backgroundColor: AX.surface,
-              color: AX.text,
-              border: `1px solid ${AX.border}`,
-              width: '180px',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = AX.aiBlue;
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = AX.border;
-            }}
-          />
-        </header>
-
-        <div style={{ maxHeight: 600, overflowY: "auto" }} className="p-0">
-          {filteredLeftItems.length > 0 ? (
-            filteredLeftItems.map((it, index) => (
-              <div 
-                key={it.id} 
-                className={index < filteredLeftItems.length - 1 ? "border-b" : ""}
-                style={{ borderColor: AX.border }}
-              >
-                <PumpRow item={it} onAction={onAction} showCopyToast={showCopyToast} quickBuyAmount={quickBuyAmount} onQuickBuy={onQuickBuy} isRightColumn={false} />
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-8 text-sm px-3" style={{ color: AX.muted }}>
-              No tokens found matching "{leftSearch}"
+          <header
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderBottom: `1px solid ${AX.border}` }}
+          >
+            <div className="text-sm font-semibold" style={{ color: AX.text }}>
+              New Streams
             </div>
-          )}
-        </div>
-      </section>
+            {/* search input */}
+            <input
+              type="text"
+              placeholder="Search by ticker or name"
+              value={leftSearch}
+              onChange={(e) => setLeftSearch(e.target.value)}
+              className="rounded-full bg-transparent px-3 py-1 text-xs transition-colors outline-none"
+              style={{
+                backgroundColor: AX.surface,
+                color: AX.text,
+                border: `1px solid ${AX.border}`,
+                width: "180px",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = AX.aiBlue;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = AX.border;
+              }}
+            />
+          </header>
 
-      {/* RIGHT: Top Stream Tokens */}
-      <section
-        className="rounded overflow-hidden mx-auto"
-        style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}`, maxWidth: 900, width: "100%" }}
-      >
-        <header
-          className="flex items-center justify-between px-4 py-3"
-          style={{ borderBottom: `1px solid ${AX.border}` }}
+          <div style={{ maxHeight: 600, overflowY: "auto" }} className="p-0">
+            {filteredLeftItems.length > 0 ? (
+              filteredLeftItems.map((it, index) => (
+                <div
+                  key={it.id}
+                  className={
+                    index < filteredLeftItems.length - 1 ? "border-b" : ""
+                  }
+                  style={{ borderColor: AX.border }}
+                >
+                  <PumpRow
+                    item={it}
+                    onAction={onAction}
+                    showCopyToast={showCopyToast}
+                    quickBuyAmount={quickBuyAmount}
+                    onQuickBuy={onQuickBuy}
+                    isRightColumn={false}
+                  />
+                </div>
+              ))
+            ) : (
+              <div
+                className="px-3 py-8 text-center text-sm"
+                style={{ color: AX.muted }}
+              >
+                No tokens found matching "{leftSearch}"
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* RIGHT: Top Stream Tokens */}
+        <section
+          className="mx-auto overflow-hidden rounded"
+          style={{
+            backgroundColor: AX.surface2,
+            border: `1px solid ${AX.border}`,
+            maxWidth: 900,
+            width: "100%",
+          }}
         >
-          <div className="text-sm font-semibold" style={{ color: AX.text }}>
-            Top Stream Tokens
-          </div>
-          {/* search input */}
-          <input
-            type="text"
-            placeholder="Search by ticker or name"
-            value={rightSearch}
-            onChange={(e) => setRightSearch(e.target.value)}
-            className="text-xs px-3 py-1 rounded-full bg-transparent outline-none transition-colors"
-            style={{
-              backgroundColor: AX.surface,
-              color: AX.text,
-              border: `1px solid ${AX.border}`,
-              width: '180px',
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = AX.aiBlue;
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = AX.border;
-            }}
-          />
-        </header>
-
-        <div style={{ maxHeight: 600, overflowY: "auto" }} className="p-0">
-          {filteredRightItems.length > 0 ? (
-            filteredRightItems.map((it, index) => (
-              <div 
-                key={it.id} 
-                className={index < filteredRightItems.length - 1 ? "border-b" : ""}
-                style={{ borderColor: AX.border }}
-              >
-                <PumpRow item={it} onAction={onAction} showCopyToast={showCopyToast} quickBuyAmount={quickBuyAmount} onQuickBuy={onQuickBuy} isRightColumn={true} />
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-8 text-sm px-3" style={{ color: AX.muted }}>
-              No tokens found matching "{rightSearch}"
+          <header
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderBottom: `1px solid ${AX.border}` }}
+          >
+            <div className="text-sm font-semibold" style={{ color: AX.text }}>
+              Top Stream Tokens
             </div>
-          )}
-        </div>
-      </section>
-    </div>
+            {/* search input */}
+            <input
+              type="text"
+              placeholder="Search by ticker or name"
+              value={rightSearch}
+              onChange={(e) => setRightSearch(e.target.value)}
+              className="rounded-full bg-transparent px-3 py-1 text-xs transition-colors outline-none"
+              style={{
+                backgroundColor: AX.surface,
+                color: AX.text,
+                border: `1px solid ${AX.border}`,
+                width: "180px",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = AX.aiBlue;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = AX.border;
+              }}
+            />
+          </header>
+
+          <div style={{ maxHeight: 600, overflowY: "auto" }} className="p-0">
+            {filteredRightItems.length > 0 ? (
+              filteredRightItems.map((it, index) => (
+                <div
+                  key={it.id}
+                  className={
+                    index < filteredRightItems.length - 1 ? "border-b" : ""
+                  }
+                  style={{ borderColor: AX.border }}
+                >
+                  <PumpRow
+                    item={it}
+                    onAction={onAction}
+                    showCopyToast={showCopyToast}
+                    quickBuyAmount={quickBuyAmount}
+                    onQuickBuy={onQuickBuy}
+                    isRightColumn={true}
+                  />
+                </div>
+              ))
+            ) : (
+              <div
+                className="px-3 py-8 text-center text-sm"
+                style={{ color: AX.muted }}
+              >
+                No tokens found matching "{rightSearch}"
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
     </>
   );
 }

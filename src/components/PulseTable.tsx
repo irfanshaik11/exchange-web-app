@@ -169,31 +169,31 @@ const AX = {
   surface2: "#0c0e12",
   surfaceHover: "#10131a",
   card: "#141720",
-  
+
   // Borders
   border: "rgba(255,255,255,0.06)",
   borderHover: "rgba(255,255,255,0.10)",
   borderStrong: "rgba(255,255,255,0.14)",
-  
+
   // Text hierarchy
   text: "#f4f4f5",
   textSecondary: "#a1a1aa",
   muted: "#71717a",
   textDim: "#52525b",
-  
+
   // Accent colors - Emerald/Mint
   mint: "#18c48c",
   mintBright: "#22d99a",
   mintHover: "#14a877",
   mintGlow: "rgba(24, 196, 140, 0.15)",
   mintGlowStrong: "rgba(24, 196, 140, 0.25)",
-  
+
   // Status colors
   success: "#22c55e",
   sell: "#ef4444",
   danger: "#ef4444",
   warning: "#f59e0b",
-  
+
   // Legacy compatibility
   aiBlue: "#18c48c",
   aiBlueHover: "#14a877",
@@ -204,7 +204,7 @@ const AX = {
   glowBlue: "rgba(24, 196, 140, 0.2)",
   glowGreen: "rgba(34, 197, 94, 0.2)",
   glowCyan: "rgba(6, 182, 212, 0.2)",
-  
+
   // Risk-based semantic colors
   riskHigh: "#ef4444",
   riskHighBg: "rgba(239, 68, 68, 0.08)",
@@ -212,7 +212,7 @@ const AX = {
   riskMediumBg: "rgba(245, 158, 11, 0.08)",
   riskLow: "#22c55e",
   riskLowBg: "rgba(34, 197, 94, 0.08)",
-  
+
   // Badge backgrounds
   badgeBg: "rgba(255,255,255,0.04)",
   twitterBlue: "#1DA1F2",
@@ -303,15 +303,15 @@ const getBuySellData = (token: Token): { buys: number; sells: number } => {
   const sells1h = safeNum(token.total_sells_1h);
   if (buys1h + sells1h > 0) return { buys: buys1h, sells: sells1h };
 
-  // Fallback to 6h
-  const buys6h = safeNum(token.total_buys_6h);
-  const sells6h = safeNum(token.total_sells_6h);
-  if (buys6h + sells6h > 0) return { buys: buys6h, sells: sells6h };
+  // Fallback to 30m
+  const buys30m = safeNum(token.total_buys_30m);
+  const sells30m = safeNum(token.total_sells_30m);
+  if (buys30m + sells30m > 0) return { buys: buys30m, sells: sells30m };
 
-  // Finally try 24h
+  // Finally try 1m
   return {
-    buys: safeNum(token.total_buys_24h),
-    sells: safeNum(token.total_sells_24h),
+    buys: safeNum(token.total_buys_1m),
+    sells: safeNum(token.total_sells_1m),
   };
 };
 
@@ -885,10 +885,7 @@ function TokenMetrics({
   // Real data from token - prioritize holder_count and kol_count from WebSocket
   const rawMetrics = {
     holders:
-      token.holder_count ??
-      token.total_holders ??
-      token.unique_wallets_24h ??
-      0,
+      token.holder_count ?? token.total_holders ?? token.unique_wallets_1h ?? 0,
     kols: token.kol_count ?? 0,
     trades: token.unique_wallets_5m || token.unique_wallets_1h || 0,
     rank: "0/1",

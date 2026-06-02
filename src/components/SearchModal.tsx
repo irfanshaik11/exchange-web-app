@@ -1495,8 +1495,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
         name: token.name,
         logo: token.logo,
         total_fully_diluted_valuation: token.fully_diluted_value || 0,
-        total_buy_volume_24h: token.total_buy_volume_1h || 0,
-        total_sell_volume_24h: token.total_sell_volume_1h || 0,
+        total_buy_volume_1m: token.total_buy_volume_1h || 0,
+        total_sell_volume_1m: token.total_sell_volume_1h || 0,
         total_liquidity_usd: token.total_liquidity_usd || 0,
         pair_address: token.pair_address,
         fully_diluted_value: token.fully_diluted_value,
@@ -2118,9 +2118,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               total_liquidity_usd:
                                 item.total_liquidity_usd || 0,
                               total_buy_volume_1h:
-                                item.total_buy_volume_24h || 0,
+                                item.total_buy_volume_1m || 0,
                               total_sell_volume_1h:
-                                item.total_sell_volume_24h || 0,
+                                item.total_sell_volume_1m || 0,
                               created_at: "",
                               bonding_curve_progress: "0%",
                               amm: "",
@@ -2251,9 +2251,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                                 total_liquidity_usd:
                                   item.total_liquidity_usd || 0,
                                 total_buy_volume_1h:
-                                  item.total_buy_volume_24h || 0,
+                                  item.total_buy_volume_1m || 0,
                                 total_sell_volume_1h:
-                                  item.total_sell_volume_24h || 0,
+                                  item.total_sell_volume_1m || 0,
                                 created_at: "",
                                 bonding_curve_progress: "0%",
                                 amm: "",

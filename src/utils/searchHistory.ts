@@ -3,7 +3,17 @@ import type { Token } from "~/utils/db";
 export const SEARCH_HISTORY_KEY = "searchHistory";
 
 // Extended type to include additional fields needed for display
-export type SearchHistoryItem = Pick<Token, "mint" | "symbol" | "name" | "logo" | "total_fully_diluted_valuation" | "total_buy_volume_24h" | "total_sell_volume_24h" | "total_liquidity_usd"> & {
+export type SearchHistoryItem = Pick<
+  Token,
+  | "mint"
+  | "symbol"
+  | "name"
+  | "logo"
+  | "total_fully_diluted_valuation"
+  | "total_buy_volume_1m"
+  | "total_sell_volume_1m"
+  | "total_liquidity_usd"
+> & {
   // Additional fields for proper navigation
   pair_address?: string;
   fully_diluted_value?: number;
@@ -49,7 +59,11 @@ export function getHistory(userId?: string): SearchHistoryItem[] {
  * @param userId - Optional user ID for per-user history
  * @param maxEntries - Maximum number of entries to keep (default: 10)
  */
-export function addToHistory(item: SearchHistoryItem, userId?: string, maxEntries = 10) {
+export function addToHistory(
+  item: SearchHistoryItem,
+  userId?: string,
+  maxEntries = 10,
+) {
   if (typeof window === "undefined") return;
   const key = getStorageKey(userId);
   const current = getHistory(userId).filter((t) => t.mint !== item.mint);

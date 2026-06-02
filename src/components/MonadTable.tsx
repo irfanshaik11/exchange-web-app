@@ -80,7 +80,10 @@ import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
-import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
+import {
+  broadcastTradeCompleted,
+  notifyTradePending,
+} from "~/utils/tradeEvents";
 import { useSolPrice } from "~/components/SolPriceContext";
 import {
   tradeBuy,
@@ -110,9 +113,15 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import toast from "react-hot-toast";
 import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
-import { validateMonadBuy, showTradeValidationError } from "~/utils/preTradeValidation";
+import {
+  validateMonadBuy,
+  showTradeValidationError,
+} from "~/utils/preTradeValidation";
 import { formatMonadError } from "~/utils/monadError";
-import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import {
+  listenForTradeEvents,
+  transformToastToError,
+} from "~/utils/createSolanaToastHandler";
 import { TradeSocialIcons } from "./TradeSocialIcons";
 
 /* ---- Enhanced Monad Green Palette (matching PulseTable) ---- */
@@ -540,7 +549,7 @@ function TokenMetrics({
   const rawMetrics = {
     users:
       token.total_holders ||
-      token.unique_wallets_24h ||
+      token.unique_wallets_1h ||
       (token as any).unique_traders ||
       0,
     trades: token.unique_wallets_5m || token.unique_wallets_1h || 0,
@@ -922,14 +931,25 @@ function TokenImage({
     const protocol = ((t as any).launchpad_protocol || "").toLowerCase();
     if (!protocol) return "nad.fun";
     if (protocol.includes("nad.fun") || protocol === "nadfun") return "nad.fun";
-    if (protocol.includes("flap.sh") || protocol.includes("flapsh")) return "flap.sh";
+    if (protocol.includes("flap.sh") || protocol.includes("flapsh"))
+      return "flap.sh";
     if (protocol.includes("kuru")) return "Kuru";
     if (protocol.includes("clanker")) return "Clanker";
-    if (protocol.includes("pump")) return protocol.includes("pump_amm") || protocol.includes("pumpamm") || protocol.includes("pumpswap") ? "Pump AMM" : "Pump";
+    if (protocol.includes("pump"))
+      return protocol.includes("pump_amm") ||
+        protocol.includes("pumpamm") ||
+        protocol.includes("pumpswap")
+        ? "Pump AMM"
+        : "Pump";
     if (protocol.includes("meteora")) return "Meteora AMM";
     if (protocol.includes("raydium")) return "Raydium";
     if (protocol.includes("boop")) return "Boop";
-    if (protocol.includes("moonit") || protocol.includes("moonshot") || protocol.includes("moonshoot")) return "Moonit";
+    if (
+      protocol.includes("moonit") ||
+      protocol.includes("moonshot") ||
+      protocol.includes("moonshoot")
+    )
+      return "Moonit";
     if (protocol.includes("bonk")) return "Bonk";
     if (protocol.includes("bags")) return "Bags";
     if (protocol.includes("launch")) return "LaunchLab";
@@ -1128,8 +1148,20 @@ function TokenImage({
             border: `1px solid ${protocolColor}`,
             boxShadow: `0 0 4px ${protocolColor}60`,
           }}
-          onMouseEnter={(e) => { const tip = ammBubbleTipRef.current; if (tip) { const r = e.currentTarget.getBoundingClientRect(); tip.style.left = `${r.left + r.width / 2}px`; tip.style.top = `${r.top - 6}px`; tip.style.transform = "translate(-50%, -100%)"; tip.style.opacity = "1"; } }}
-          onMouseLeave={() => { const tip = ammBubbleTipRef.current; if (tip) tip.style.opacity = "0"; }}
+          onMouseEnter={(e) => {
+            const tip = ammBubbleTipRef.current;
+            if (tip) {
+              const r = e.currentTarget.getBoundingClientRect();
+              tip.style.left = `${r.left + r.width / 2}px`;
+              tip.style.top = `${r.top - 6}px`;
+              tip.style.transform = "translate(-50%, -100%)";
+              tip.style.opacity = "1";
+            }
+          }}
+          onMouseLeave={() => {
+            const tip = ammBubbleTipRef.current;
+            if (tip) tip.style.opacity = "0";
+          }}
         >
           <img
             src={tokenIcon}
@@ -1141,11 +1173,17 @@ function TokenImage({
           <div
             ref={ammBubbleTipRef}
             className="pointer-events-none fixed z-[9999] rounded px-2 py-1 text-[10px] font-medium whitespace-nowrap"
-            style={{ backgroundColor: "rgba(31, 41, 55, 0.95)", color: "#e5e7eb", border: "1px solid rgba(107, 114, 128, 0.3)", opacity: 0, transition: "opacity 150ms" }}
+            style={{
+              backgroundColor: "rgba(31, 41, 55, 0.95)",
+              color: "#e5e7eb",
+              border: "1px solid rgba(107, 114, 128, 0.3)",
+              opacity: 0,
+              transition: "opacity 150ms",
+            }}
           >
             {getAmmDisplayName(token)}
           </div>,
-          document.body
+          document.body,
         )}
         {/* Camera icon overlay - minimal grey - only shows on image hover */}
         <div
@@ -1952,7 +1990,6 @@ function MonadTable({
               error,
             );
           }
-
         } else {
           console.error(
             `[MonadTable ${title}] ❌ Failed to fetch Monad tokens: ${response.status}`,
@@ -2567,9 +2604,19 @@ function MonadTable({
     const totalSelectedWallets = selectedMonadWalletIds.length || 1;
 
     // Pre-validate before showing toast (handles multi-wallet)
-    const monadValidation = validateMonadBuy(buyAmount, walletBalances, walletList, selectedMonadWalletIds, gasPrice);
+    const monadValidation = validateMonadBuy(
+      buyAmount,
+      walletBalances,
+      walletList,
+      selectedMonadWalletIds,
+      gasPrice,
+    );
     if (!monadValidation.valid) {
-      showTradeValidationError(monadValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
+      showTradeValidationError(
+        monadValidation.error,
+        getResolvedTokenImage(token as any),
+        token.symbol || token.name || "Token",
+      );
       return;
     }
 
@@ -2609,7 +2656,10 @@ function MonadTable({
             id={`check-${uniqueToastId}`}
             className="flex-shrink-0"
             size={16}
-            style={{ color: "#31e3ac", display: timerFinished && !tradeErrored ? "block" : "none" }}
+            style={{
+              color: "#31e3ac",
+              display: timerFinished && !tradeErrored ? "block" : "none",
+            }}
           />
           {tokenImage && (
             <img
@@ -2677,7 +2727,14 @@ function MonadTable({
       }
     }, 50);
 
-    const cleanupTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'monad');
+    const cleanupTradeListener = listenForTradeEvents(
+      tokenAddress,
+      uniqueToastId,
+      (v) => {
+        tradeErrored = v;
+      },
+      "monad",
+    );
 
     // Store pending toast info for WebSocket instant update (including timer)
     pendingQuickBuyToastRef.current = {
@@ -2692,7 +2749,7 @@ function MonadTable({
     };
 
     try {
-      notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
+      notifyTradePending({ tokenAddress, tradeType: "buy", chain: "monad" });
       const { results, totalConsidered } = await executeMonadMultiBuy({
         tokenAddress,
         amountMON: buyAmount,
@@ -2735,7 +2792,15 @@ function MonadTable({
           });
         }, 1000);
         broadcastMonadQuickTrade(tokenAddress, "buy");
-        broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
+        broadcastTradeCompleted({
+          tokenAddress,
+          tradeType: "buy",
+          chain: "monad",
+          tokenName: token?.name,
+          tokenSymbol: token?.symbol,
+          imageUrl: tokenImage || undefined,
+          solAmountSpent: buyAmount,
+        });
         return { success: true, txHash: txHashes[0] };
       } else {
         tradeErrored = true;
@@ -3643,7 +3708,7 @@ function MonadTable({
   };
   return (
     <div
-      className={`num flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-[300px] gap-2`}
+      className={`num flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden lg:min-w-[300px]`}
     >
       <div
         className="group relative flex items-center justify-between rounded-lg px-2.5 py-1 text-sm font-medium"
@@ -5777,13 +5842,17 @@ function MonadTable({
           </div>
         </div>
       </div>
-      {monadTokens.length === 0 && (loading || isFetchingMonad || hadDataRef.current) ? (
+      {monadTokens.length === 0 &&
+      (loading || isFetchingMonad || hadDataRef.current) ? (
         <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           {Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
               key={idx}
               className="flex shrink-0 animate-pulse flex-row items-start rounded-lg p-2"
-              style={{ backgroundColor: "#13151b", border: "1px solid #1e2028" }}
+              style={{
+                backgroundColor: "#13151b",
+                border: "1px solid #1e2028",
+              }}
             >
               {/* Profile Picture & Address skeleton */}
               <div className="mr-2 flex w-20 flex-col items-center">
@@ -5890,356 +5959,384 @@ function MonadTable({
           items={filteredTokensForDisplay}
           itemSize={MONAD_ROW_HEIGHT}
           renderRow={(token: any, idx: number, style: React.CSSProperties) => {
-              // Use mint if available, otherwise fallback to pair_address
-              const pairAddress =
-                (token as any)?.mint || (token as any)?.pair_address;
+            // Use mint if available, otherwise fallback to pair_address
+            const pairAddress =
+              (token as any)?.mint || (token as any)?.pair_address;
 
-              // Build query params for optimistic UI + cache lookup
-              // Include chain parameter to preserve chain selection
-              // Use prop from parent (more reliable) or fallback to router.query
-              const currentChain =
-                chainProp || (router.query.chain as string) || "sol";
-              const queryParams = new URLSearchParams({
-                _name: (token as any)?.name || (token as any)?.symbol || "",
-                _symbol: (token as any)?.symbol || "",
-                _price: String(
-                  (token as any)?.price_usd || (token as any)?.priceUsd || "",
-                ),
-                _mcap: String(
-                  (token as any)?.market_cap_usd ||
-                    (token as any)?.marketCapUSD ||
-                    "",
-                ),
-                _image: extractTokenImage(token as any) || "",
-                _mint: (token as any)?.mint || "",
-                chain: currentChain,
-              });
-              if ((token as any)?.launchpad_protocol) queryParams.set('_launchpad_protocol', (token as any).launchpad_protocol);
-              if ((token as any)?.total_liquidity_usd) queryParams.set('_liquidity', String((token as any).total_liquidity_usd));
-              if ((token as any)?.created_at) queryParams.set('_created_at', String((token as any).created_at));
-              const queryParamsStr = queryParams.toString();
+            // Build query params for optimistic UI + cache lookup
+            // Include chain parameter to preserve chain selection
+            // Use prop from parent (more reliable) or fallback to router.query
+            const currentChain =
+              chainProp || (router.query.chain as string) || "sol";
+            const queryParams = new URLSearchParams({
+              _name: (token as any)?.name || (token as any)?.symbol || "",
+              _symbol: (token as any)?.symbol || "",
+              _price: String(
+                (token as any)?.price_usd || (token as any)?.priceUsd || "",
+              ),
+              _mcap: String(
+                (token as any)?.market_cap_usd ||
+                  (token as any)?.marketCapUSD ||
+                  "",
+              ),
+              _image: extractTokenImage(token as any) || "",
+              _mint: (token as any)?.mint || "",
+              chain: currentChain,
+            });
+            if ((token as any)?.launchpad_protocol)
+              queryParams.set(
+                "_launchpad_protocol",
+                (token as any).launchpad_protocol,
+              );
+            if ((token as any)?.total_liquidity_usd)
+              queryParams.set(
+                "_liquidity",
+                String((token as any).total_liquidity_usd),
+              );
+            if ((token as any)?.created_at)
+              queryParams.set("_created_at", String((token as any).created_at));
+            const queryParamsStr = queryParams.toString();
 
-              return (
-                <div key={pairAddress} style={style}>
-                <div style={{ paddingBottom: '4px' }}>
-                <Link
-                  href={`/trade/monad/${pairAddress}?${queryParamsStr}`}
-                  className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-hidden rounded-lg px-2 py-1.5 text-sm"
-                  style={{
-                    color: AX.text,
-                    backgroundColor: "#13151b",
-                    border: "1px solid #1e2028",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.classList.add('row-hovered');
+            return (
+              <div key={pairAddress} style={style}>
+                <div style={{ paddingBottom: "4px" }}>
+                  <Link
+                    href={`/trade/monad/${pairAddress}?${queryParamsStr}`}
+                    className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-hidden rounded-lg px-2 py-1.5 text-sm"
+                    style={{
+                      color: AX.text,
+                      backgroundColor: "#13151b",
+                      border: "1px solid #1e2028",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.classList.add("row-hovered");
 
-                    preloadTradeChart({
-                      mint: (token as any)?.mint || "",
-                      pairAddress,
-                      chain: 'monad',
-                      name: (token as any)?.name,
-                      symbol: (token as any)?.symbol,
-                      priceUsd: (token as any)?.price_usd || (token as any)?.priceUsd,
-                      marketCapUsd: (token as any)?.market_cap_usd || (token as any)?.marketCapUSD,
-                      image: extractTokenImage(token as any) || "",
-                      launchpadProtocol: (token as any)?.launchpad_protocol,
-                    }, { router, tradeUrl: `/trade/monad/${pairAddress}?${queryParamsStr}` });
+                      preloadTradeChart(
+                        {
+                          mint: (token as any)?.mint || "",
+                          pairAddress,
+                          chain: "monad",
+                          name: (token as any)?.name,
+                          symbol: (token as any)?.symbol,
+                          priceUsd:
+                            (token as any)?.price_usd ||
+                            (token as any)?.priceUsd,
+                          marketCapUsd:
+                            (token as any)?.market_cap_usd ||
+                            (token as any)?.marketCapUSD,
+                          image: extractTokenImage(token as any) || "",
+                          launchpadProtocol: (token as any)?.launchpad_protocol,
+                        },
+                        {
+                          router,
+                          tradeUrl: `/trade/monad/${pairAddress}?${queryParamsStr}`,
+                        },
+                      );
 
-                    // Show the status popup via CSS class
-                    const popup = e.currentTarget.querySelector(
-                      ".status-popup",
-                    ) as HTMLElement;
-                    if (popup) {
-                      popup.classList.add('popup-visible');
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    // PHASE 3: Use CSS class instead of inline style
-                    e.currentTarget.classList.remove('row-hovered');
-                    // Hide the status popup via CSS class
-                    const popup = e.currentTarget.querySelector(
-                      ".status-popup",
-                    ) as HTMLElement;
-                    if (popup) {
-                      popup.classList.remove('popup-visible');
-                    }
-                  }}
-                >
-                  {/* Subtle wave animation for top 3 final stretch tokens */}
-                  {waveTokens.has(idx) && (
-                    <div className="pointer-events-none absolute inset-0 z-[2] overflow-hidden rounded-lg">
-                      <div
-                        className="absolute top-0 left-0 h-full w-full"
-                        style={{
-                          background:
-                            "linear-gradient(90deg, transparent, rgba(49, 227, 172, 0.2), rgba(49, 227, 172, 0.4), rgba(49, 227, 172, 0.2), transparent)",
-                          animation: "subtleWaveFlow 3s ease-in-out infinite",
-                          filter: "blur(0.5px)",
-                        }}
-                      ></div>
-                    </div>
-                  )}
+                      // Show the status popup via CSS class
+                      const popup = e.currentTarget.querySelector(
+                        ".status-popup",
+                      ) as HTMLElement;
+                      if (popup) {
+                        popup.classList.add("popup-visible");
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      // PHASE 3: Use CSS class instead of inline style
+                      e.currentTarget.classList.remove("row-hovered");
+                      // Hide the status popup via CSS class
+                      const popup = e.currentTarget.querySelector(
+                        ".status-popup",
+                      ) as HTMLElement;
+                      if (popup) {
+                        popup.classList.remove("popup-visible");
+                      }
+                    }}
+                  >
+                    {/* Subtle wave animation for top 3 final stretch tokens */}
+                    {waveTokens.has(idx) && (
+                      <div className="pointer-events-none absolute inset-0 z-[2] overflow-hidden rounded-lg">
+                        <div
+                          className="absolute top-0 left-0 h-full w-full"
+                          style={{
+                            background:
+                              "linear-gradient(90deg, transparent, rgba(49, 227, 172, 0.2), rgba(49, 227, 172, 0.4), rgba(49, 227, 172, 0.2), transparent)",
+                            animation: "subtleWaveFlow 3s ease-in-out infinite",
+                            filter: "blur(0.5px)",
+                          }}
+                        ></div>
+                      </div>
+                    )}
 
-                  {/* Status popout on hover */}
-                  {(() => {
-                    // Determine token status based on title and token data
-                    const isNewPairs = title.toLowerCase().includes("new");
-                    const isFinalStretch =
-                      title.toLowerCase().includes("final") ||
-                      title.toLowerCase().includes("stretch");
-                    const isMigrated = title.toLowerCase().includes("migrated");
+                    {/* Status popout on hover */}
+                    {(() => {
+                      // Determine token status based on title and token data
+                      const isNewPairs = title.toLowerCase().includes("new");
+                      const isFinalStretch =
+                        title.toLowerCase().includes("final") ||
+                        title.toLowerCase().includes("stretch");
+                      const isMigrated = title
+                        .toLowerCase()
+                        .includes("migrated");
 
-                    // Get launchpad protocol
-                    const launchpadProtocol =
-                      (token as any).launchpad_protocol?.toLowerCase() || "";
+                      // Get launchpad protocol
+                      const launchpadProtocol =
+                        (token as any).launchpad_protocol?.toLowerCase() || "";
 
-                    return (
-                      <span
-                        className="status-popup absolute -top-8 left-1/2 -translate-x-1/2 border px-2 py-1 text-xs"
-                        style={{
-                          pointerEvents: "none",
-                          backgroundColor: AX.surface,
-                          borderColor: AX.border,
-                          color: AX.text,
-                          zIndex: 9999,
-                          borderRadius: "6px",
-                          fontSize: "11px",
-                          fontWeight: "500",
-                        }}
-                      >
-                        {(() => {
-                          if (isNewPairs) {
-                            // Show bonding curve progress for tokens in new pairs
-                            // bonding_pct is already in 0-100 range from backend (percentages)
-                            const bondingProgress =
-                              typeof token.bonding_pct === "number"
-                                ? Math.round(token.bonding_pct)
-                                : Math.round(
-                                    parseFloat(token.bonding_pct || "0"),
-                                  );
+                      return (
+                        <span
+                          className="status-popup absolute -top-8 left-1/2 -translate-x-1/2 border px-2 py-1 text-xs"
+                          style={{
+                            pointerEvents: "none",
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            zIndex: 9999,
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            fontWeight: "500",
+                          }}
+                        >
+                          {(() => {
+                            if (isNewPairs) {
+                              // Show bonding curve progress for tokens in new pairs
+                              // bonding_pct is already in 0-100 range from backend (percentages)
+                              const bondingProgress =
+                                typeof token.bonding_pct === "number"
+                                  ? Math.round(token.bonding_pct)
+                                  : Math.round(
+                                      parseFloat(token.bonding_pct || "0"),
+                                    );
 
-                            return (
-                              <span style={{ color: AX.aiGreen }}>
-                                Bonding Curve: {bondingProgress}%
-                              </span>
-                            );
-                          } else if (isFinalStretch) {
-                            // Show "Migrating" for final stretch tokens
-                            return (
-                              <span style={{ color: AX.aiCyan }}>
-                                Migrating
-                              </span>
-                            );
-                          } else if (isMigrated) {
-                            // Show protocol-specific text for migrated tokens
-                            if (launchpadProtocol.includes("meteora")) {
                               return (
-                                <span style={{ color: AX.aiBlue }}>
-                                  Virtual Curve
+                                <span style={{ color: AX.aiGreen }}>
+                                  Bonding Curve: {bondingProgress}%
                                 </span>
                               );
-                            } else if (launchpadProtocol.includes("pump")) {
+                            } else if (isFinalStretch) {
+                              // Show "Migrating" for final stretch tokens
                               return (
-                                <span style={{ color: AX.aiBlue }}>PumpV1</span>
-                              );
-                            } else if (
-                              launchpadProtocol.includes("bonk") ||
-                              launchpadProtocol.includes("raydium") ||
-                              launchpadProtocol.includes("launchlab")
-                            ) {
-                              return (
-                                <span style={{ color: AX.aiBlue }}>
-                                  LaunchLab
+                                <span style={{ color: AX.aiCyan }}>
+                                  Migrating
                                 </span>
                               );
+                            } else if (isMigrated) {
+                              // Show protocol-specific text for migrated tokens
+                              if (launchpadProtocol.includes("meteora")) {
+                                return (
+                                  <span style={{ color: AX.aiBlue }}>
+                                    Virtual Curve
+                                  </span>
+                                );
+                              } else if (launchpadProtocol.includes("pump")) {
+                                return (
+                                  <span style={{ color: AX.aiBlue }}>
+                                    PumpV1
+                                  </span>
+                                );
+                              } else if (
+                                launchpadProtocol.includes("bonk") ||
+                                launchpadProtocol.includes("raydium") ||
+                                launchpadProtocol.includes("launchlab")
+                              ) {
+                                return (
+                                  <span style={{ color: AX.aiBlue }}>
+                                    LaunchLab
+                                  </span>
+                                );
+                              } else {
+                                // Fallback to "Migrated" for unknown protocols
+                                return (
+                                  <span style={{ color: AX.aiBlue }}>
+                                    Migrated
+                                  </span>
+                                );
+                              }
                             } else {
-                              // Fallback to "Migrated" for unknown protocols
+                              // Fallback to bonding curve progress
+                              const bondingProgress =
+                                typeof token.bonding_curve_progress === "number"
+                                  ? Math.round(token.bonding_curve_progress)
+                                  : Math.round(
+                                      parseFloat(
+                                        token.bonding_curve_progress || "0",
+                                      ),
+                                    );
                               return (
-                                <span style={{ color: AX.aiBlue }}>
-                                  Migrated
+                                <span style={{ color: AX.aiGreen }}>
+                                  Bonding: {bondingProgress}%
                                 </span>
                               );
                             }
-                          } else {
-                            // Fallback to bonding curve progress
-                            const bondingProgress =
-                              typeof token.bonding_curve_progress === "number"
-                                ? Math.round(token.bonding_curve_progress)
-                                : Math.round(
-                                    parseFloat(
-                                      token.bonding_curve_progress || "0",
-                                    ),
-                                  );
-                            return (
-                              <span style={{ color: AX.aiGreen }}>
-                                Bonding: {bondingProgress}%
-                              </span>
-                            );
-                          }
-                        })()}
-                      </span>
-                    );
-                  })()}
-                  <div className="flex w-full max-w-full flex-col gap-2 overflow-hidden">
-                    <div className="flex w-full max-w-full flex-row gap-2">
-                  {/* Profile Picture & Address */}
-                  <div
-                    className="relative flex flex-shrink-0 flex-col items-center"
-                    style={{
-                      width: "70px",
-                      minWidth: "70px",
-                      maxWidth: "70px",
-                    }}
-                  >
-                    <TokenImage
-                      token={token}
-                      priority={title === "New Pairs"}
-                      isNewPairs={title === "New Pairs"}
-                      columnType={
-                        title.toLowerCase().includes("migrated")
-                          ? "migrated"
-                          : title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch")
-                            ? "final-stretch"
-                            : "new"
-                      }
-                    />
-                    {/* Token Metrics */}
-                    {/* <div className="absolute bottom-16 -right-49">
+                          })()}
+                        </span>
+                      );
+                    })()}
+                    <div className="flex w-full max-w-full flex-col gap-2 overflow-hidden">
+                      <div className="flex w-full max-w-full flex-row gap-2">
+                        {/* Profile Picture & Address */}
+                        <div
+                          className="relative flex flex-shrink-0 flex-col items-center"
+                          style={{
+                            width: "70px",
+                            minWidth: "70px",
+                            maxWidth: "70px",
+                          }}
+                        >
+                          <TokenImage
+                            token={token}
+                            priority={title === "New Pairs"}
+                            isNewPairs={title === "New Pairs"}
+                            columnType={
+                              title.toLowerCase().includes("migrated")
+                                ? "migrated"
+                                : title.toLowerCase().includes("final") ||
+                                    title.toLowerCase().includes("stretch")
+                                  ? "final-stretch"
+                                  : "new"
+                            }
+                          />
+                          {/* Token Metrics */}
+                          {/* <div className="absolute bottom-16 -right-49">
                     <TokenMetrics 
                       token={token} 
                       rank={idx + 1} 
                       totalTokens={memoizedTokens.length} 
                     />
                   </div> */}
-                    <span
-                      className="mt-2 mb-1 max-w-[60px] truncate font-mono text-[9px] lg:max-w-[70px] lg:text-[10px]"
-                      style={{ color: AX.muted }}
-                    >
-                      {shortAddr(token)}
-                    </span>
-                  </div>
-                  {/* Main Info Section */}
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    {/* Top Row */}
-                    <div className="flex flex-row justify-between gap-2">
-                      {/* Left: Token Info & Socials */}
-                      <div className="flex min-w-0 flex-col">
-                        <div className="flex min-w-0 items-center gap-1.5">
                           <span
-                            className="flex-shrink-0 text-sm font-semibold"
-                            style={{ color: AX.text }}
-                          >
-                            {token.symbol}
-                          </span>
-                          <span
-                            className="truncate text-xs"
+                            className="mt-2 mb-1 max-w-[60px] truncate font-mono text-[9px] lg:max-w-[70px] lg:text-[10px]"
                             style={{ color: AX.muted }}
                           >
-                            {token.name}
+                            {shortAddr(token)}
                           </span>
-                          <div className="relative">
-                            <button
-                              className="transition-colors duration-200"
-                              style={{ color: AX.muted }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = AX.aiBlue;
-                                e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
-                                const tooltip = document.getElementById(
-                                  `shared-copy-tooltip`,
-                                ) as HTMLElement;
-                                if (tooltip) {
-                                  const rect =
-                                    e.currentTarget.getBoundingClientRect();
-                                  tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                  tooltip.style.top = `${rect.top - 10}px`;
-                                  tooltip.style.opacity = "1";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = AX.muted;
-                                e.currentTarget.style.boxShadow = "none";
-                                const tooltip = document.getElementById(
-                                  `shared-copy-tooltip`,
-                                ) as HTMLElement;
-                                if (tooltip) tooltip.style.opacity = "0";
-                              }}
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                try {
-                                  await navigator.clipboard.writeText(
-                                    token.mint,
-                                  );
-                                  showCenteredSuccessToast(
-                                    "Copied to clipboard",
-                                  );
-                                  // Show success feedback
-                                  const button =
-                                    e.currentTarget as HTMLButtonElement;
-                                  if (button && button.style) {
-                                    const originalColor =
-                                      button.style.color || AX.muted;
-                                    button.style.color = AX.aiGreen;
-                                    setTimeout(() => {
-                                      if (button && button.style) {
-                                        button.style.color = originalColor;
-                                      }
-                                    }, 1000);
-                                  }
-                                } catch (err) {
-                                  console.error(
-                                    "Failed to copy to clipboard:",
-                                    err,
-                                  );
-                                  // Fallback for older browsers
-                                  const textArea =
-                                    document.createElement("textarea");
-                                  textArea.value = token.mint;
-                                  document.body.appendChild(textArea);
-                                  textArea.select();
-                                  try {
-                                    document.execCommand("copy");
-                                    showCenteredSuccessToast(
-                                      "Copied to clipboard",
-                                    );
-                                    const button =
-                                      e.currentTarget as HTMLButtonElement;
-                                    if (button && button.style) {
-                                      const originalColor =
-                                        button.style.color || AX.muted;
-                                      button.style.color = AX.aiGreen;
-                                      setTimeout(() => {
-                                        if (button && button.style) {
-                                          button.style.color = originalColor;
-                                        }
-                                      }, 1000);
-                                    }
-                                  } catch (fallbackErr) {
-                                    console.error(
-                                      "Fallback copy failed:",
-                                      fallbackErr,
-                                    );
-                                  }
-                                  document.body.removeChild(textArea);
-                                }
-                              }}
-                            >
-                              <FaRegCopy size={10} className="lg:h-3 lg:w-3" />
-                            </button>
-                          </div>
                         </div>
-                        <div className="flex items-center gap-1 text-xs lg:gap-1.5">
-                          <span
-                            className="flex items-center gap-1 text-[10px] lg:gap-1"
-                            style={{ color: "#31e3ac" }}
-                          >
-                            {getAgeLabel(token)}
-                          </span>
-                          {/* Socials */}
-                          <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1.5">
-                            {/* Pump.fun Link - only show for pump tokens */}
-                            {/* {token.mint.slice(-4) === "pump" && (
+                        {/* Main Info Section */}
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          {/* Top Row */}
+                          <div className="flex flex-row justify-between gap-2">
+                            {/* Left: Token Info & Socials */}
+                            <div className="flex min-w-0 flex-col">
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <span
+                                  className="flex-shrink-0 text-sm font-semibold"
+                                  style={{ color: AX.text }}
+                                >
+                                  {token.symbol}
+                                </span>
+                                <span
+                                  className="truncate text-xs"
+                                  style={{ color: AX.muted }}
+                                >
+                                  {token.name}
+                                </span>
+                                <div className="relative">
+                                  <button
+                                    className="transition-colors duration-200"
+                                    style={{ color: AX.muted }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.color = AX.aiBlue;
+                                      e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
+                                      const tooltip = document.getElementById(
+                                        `shared-copy-tooltip`,
+                                      ) as HTMLElement;
+                                      if (tooltip) {
+                                        const rect =
+                                          e.currentTarget.getBoundingClientRect();
+                                        tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                        tooltip.style.top = `${rect.top - 10}px`;
+                                        tooltip.style.opacity = "1";
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.color = AX.muted;
+                                      e.currentTarget.style.boxShadow = "none";
+                                      const tooltip = document.getElementById(
+                                        `shared-copy-tooltip`,
+                                      ) as HTMLElement;
+                                      if (tooltip) tooltip.style.opacity = "0";
+                                    }}
+                                    onClick={async (e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      try {
+                                        await navigator.clipboard.writeText(
+                                          token.mint,
+                                        );
+                                        showCenteredSuccessToast(
+                                          "Copied to clipboard",
+                                        );
+                                        // Show success feedback
+                                        const button =
+                                          e.currentTarget as HTMLButtonElement;
+                                        if (button && button.style) {
+                                          const originalColor =
+                                            button.style.color || AX.muted;
+                                          button.style.color = AX.aiGreen;
+                                          setTimeout(() => {
+                                            if (button && button.style) {
+                                              button.style.color =
+                                                originalColor;
+                                            }
+                                          }, 1000);
+                                        }
+                                      } catch (err) {
+                                        console.error(
+                                          "Failed to copy to clipboard:",
+                                          err,
+                                        );
+                                        // Fallback for older browsers
+                                        const textArea =
+                                          document.createElement("textarea");
+                                        textArea.value = token.mint;
+                                        document.body.appendChild(textArea);
+                                        textArea.select();
+                                        try {
+                                          document.execCommand("copy");
+                                          showCenteredSuccessToast(
+                                            "Copied to clipboard",
+                                          );
+                                          const button =
+                                            e.currentTarget as HTMLButtonElement;
+                                          if (button && button.style) {
+                                            const originalColor =
+                                              button.style.color || AX.muted;
+                                            button.style.color = AX.aiGreen;
+                                            setTimeout(() => {
+                                              if (button && button.style) {
+                                                button.style.color =
+                                                  originalColor;
+                                              }
+                                            }, 1000);
+                                          }
+                                        } catch (fallbackErr) {
+                                          console.error(
+                                            "Fallback copy failed:",
+                                            fallbackErr,
+                                          );
+                                        }
+                                        document.body.removeChild(textArea);
+                                      }
+                                    }}
+                                  >
+                                    <FaRegCopy
+                                      size={10}
+                                      className="lg:h-3 lg:w-3"
+                                    />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs lg:gap-1.5">
+                                <span
+                                  className="flex items-center gap-1 text-[10px] lg:gap-1"
+                                  style={{ color: "#31e3ac" }}
+                                >
+                                  {getAgeLabel(token)}
+                                </span>
+                                {/* Socials */}
+                                <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1.5">
+                                  {/* Pump.fun Link - only show for pump tokens */}
+                                  {/* {token.mint.slice(-4) === "pump" && (
                               <Link
                                 target="_blank"
                                 href={`https://pump.fun/coin/${token.mint}`}
@@ -6266,8 +6363,8 @@ function MonadTable({
                               </Link>
                             )}  */}
 
-                            {/* Search on Twitter Button - show for all tokens */}
-                            {/* <button
+                                  {/* Search on Twitter Button - show for all tokens */}
+                                  {/* <button
                               className="cursor-pointer transition-colors duration-200"
                               style={{ color: AX.muted }}
                               onMouseEnter={(e) => {
@@ -6305,881 +6402,1053 @@ function MonadTable({
                                 style={{ strokeWidth: "3" }}
                               />
                             </button> */}
-                            <TradeSocialIcons token={token} />
-                            {/* X Profile Preview Button */}
-                            {false && (
-                              <div className="relative">
-                                <button
-                                  className="flex items-center justify-center rounded transition-colors duration-200"
-                                  style={{
-                                    backgroundColor: "#111214",
-                                    padding: "2px",
-                                    width: "18px",
-                                    height: "18px",
-                                    color: "#36d8ff",
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.color = "#36d8ff";
-                                    const tooltip = document.getElementById(
-                                      `shared-profile-tooltip`,
-                                    ) as HTMLElement;
-                                    if (tooltip) {
-                                      const rect =
-                                        e.currentTarget.getBoundingClientRect();
-                                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                      tooltip.style.top = `${rect.top - 10}px`;
-                                      tooltip.style.opacity = "1";
-                                    }
-                                    // Show X profile preview
-                                    setShowXPreview(idx);
-                                    // Store button position for popup positioning
-                                    const buttonRect =
-                                      e.currentTarget.getBoundingClientRect();
-                                    setButtonPosition({
-                                      left:
-                                        buttonRect.left + buttonRect.width / 2,
-                                      top: buttonRect.top - 20,
-                                    });
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.color = "#36d8ff";
-                                    const tooltip = document.getElementById(
-                                      `shared-profile-tooltip`,
-                                    ) as HTMLElement;
-                                    if (tooltip) tooltip.style.opacity = "0";
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault(); // Prevent Link navigation
-                                    // Open X profile in new tab
-                                    const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                                    window.open(profileUrl, "_blank");
-                                  }}
-                                >
-                                  <IoPersonOutline
-                                    size={12}
-                                    style={{ strokeWidth: "2" }}
-                                  />
-                                </button>
+                                  <TradeSocialIcons token={token} />
+                                  {/* X Profile Preview Button */}
+                                  {false && (
+                                    <div className="relative">
+                                      <button
+                                        className="flex items-center justify-center rounded transition-colors duration-200"
+                                        style={{
+                                          backgroundColor: "#111214",
+                                          padding: "2px",
+                                          width: "18px",
+                                          height: "18px",
+                                          color: "#36d8ff",
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.color =
+                                            "#36d8ff";
+                                          const tooltip =
+                                            document.getElementById(
+                                              `shared-profile-tooltip`,
+                                            ) as HTMLElement;
+                                          if (tooltip) {
+                                            const rect =
+                                              e.currentTarget.getBoundingClientRect();
+                                            tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                            tooltip.style.top = `${rect.top - 10}px`;
+                                            tooltip.style.opacity = "1";
+                                          }
+                                          // Show X profile preview
+                                          setShowXPreview(idx);
+                                          // Store button position for popup positioning
+                                          const buttonRect =
+                                            e.currentTarget.getBoundingClientRect();
+                                          setButtonPosition({
+                                            left:
+                                              buttonRect.left +
+                                              buttonRect.width / 2,
+                                            top: buttonRect.top - 20,
+                                          });
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.color =
+                                            "#36d8ff";
+                                          const tooltip =
+                                            document.getElementById(
+                                              `shared-profile-tooltip`,
+                                            ) as HTMLElement;
+                                          if (tooltip)
+                                            tooltip.style.opacity = "0";
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          e.preventDefault(); // Prevent Link navigation
+                                          // Open X profile in new tab
+                                          const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                                          window.open(profileUrl, "_blank");
+                                        }}
+                                      >
+                                        <IoPersonOutline
+                                          size={12}
+                                          style={{ strokeWidth: "2" }}
+                                        />
+                                      </button>
 
-                                {/* Small X Profile Preview - positioned near token */}
-                                {/* {showXPreview === idx && (
+                                      {/* Small X Profile Preview - positioned near token */}
+                                      {/* {showXPreview === idx && (
                                 <SocialIconsWithMetadata
                                   token={token}
                                 />
                               )} */}
-                              </div>
-                            )}
+                                    </div>
+                                  )}
 
-                            {/* People Icon - Total Holders */}
-                            <div className="relative flex items-center gap-1">
-                              <div
-                                className="flex cursor-help items-center justify-center rounded"
-                                style={{
-                                  backgroundColor: "#111214",
-                                  padding: "2px",
-                                  width: "18px",
-                                  height: "18px",
-                                }}
-                                title="Holders"
-                              >
-                                <GoPeople
-                                  size={12}
-                                  style={{ color: "#36d8ff", strokeWidth: "3" }}
-                                />
-                              </div>
-                              <span
-                                className="text-xs"
-                                style={{ color: AX.text }}
-                              >
-                                {(() => {
-                                  const holders =
-                                    token.total_holders ||
-                                    token.unique_wallets_24h ||
-                                    (token as any).unique_traders ||
-                                    0;
-                                  if (holders >= 1e9)
-                                    return `${(holders / 1e9).toFixed(1)}B`;
-                                  if (holders >= 1e6)
-                                    return `${(holders / 1e6).toFixed(1)}M`;
-                                  if (holders >= 1e3)
-                                    return `${(holders / 1e3).toFixed(1)}K`;
-                                  return holders.toString();
-                                })()}
-                              </span>
-                            </div>
-
-                            {/* Pump.fun Tooltip */}
-                            {token.mint.slice(-4) === "pump" && (
-                              <div
-                                className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                                style={{
-                                  zIndex: 4000,
-                                  backgroundColor: AX.surface,
-                                  color: AX.text,
-                                  border: `1px solid ${AX.border}`,
-                                  boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-                                }}
-                              >
-                                View on Pump.fun
-                                {/* Tooltip arrow */}
-                                <div
-                                  className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                                  style={{ borderTopColor: AX.surface }}
-                                ></div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Right: MC, V, F, TX */}
-                      <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-0.5 text-right lg:min-w-[130px]">
-                        <div
-                          className={"justify-right flex flex-col text-xs"}
-                        >
-                          <div
-                            className="flex items-end gap-1"
-                            style={{ color: AX.muted }}
-                          >
-                            <span className="mb-[2px] text-xs">MC </span>
-                            {(() => {
-                              const isFinalStretchColumn =
-                                title.toLowerCase().includes("final") ||
-                                title.toLowerCase().includes("stretch");
-                              const lp = (
-                                (token as any).launchpad_protocol || ""
-                              ).toLowerCase();
-                              const bonding = (token as any).bonding_pct ?? 0;
-                              const hasGreenWave =
-                                isFinalStretchColumn &&
-                                lp.includes("meteora") &&
-                                bonding > 98.6;
-                              const mcVal =
-                                (token as any).fully_diluted_value ??
-                                (token as any).market_cap_usd ??
-                                0;
-                              if (hasGreenWave) {
-                                return (
-                                  <span
-                                    className="number-font text-sm font-medium"
-                                    style={{ color: "#31e3ac" }}
-                                  >
-                                    ${formatMarketCap(mcVal)}
-                                  </span>
-                                );
-                              }
-                              return (
-                                <SmartColor
-                                  token={token}
-                                  metricType="marketCap"
-                                  className="number-font text-sm font-medium"
-                                >
-                                  ${formatMarketCap(mcVal)}
-                                </SmartColor>
-                              );
-                            })()}
-                          </div>
-                          <div
-                            style={{ color: AX.muted }}
-                            className="flex items-end gap-1"
-                          >
-                            <span className="mb-[1px] ml-auto text-xs">V</span>{" "}
-                            <span
-                              className="number-font text-xs font-medium"
-                              style={{
-                                color: "#ffffff",
-                              }}
-                            >
-                              {(() => {
-                                const vol = (token as any).volume_24h || (token as any).volume_24h_usd || 0;
-                                const rounded = Math.round(vol);
-                                if (rounded >= 1e12) return `$${Math.round(rounded / 1e12)}T`;
-                                if (rounded >= 1e9) return `$${Math.round(rounded / 1e9)}B`;
-                                if (rounded >= 1e6) return `$${Math.round(rounded / 1e6)}M`;
-                                if (rounded >= 1e3) return `$${Math.round(rounded / 1e3)}K`;
-                                return `$${rounded}`;
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-end gap-2 text-xs">
-                          <div
-                            className="flex flex-row items-center gap-1"
-                            style={{ color: AX.muted }}
-                          >
-                            <span className="text-xs">TX</span>{" "}
-                            <span
-                              className="number-font text-xs font-medium"
-                              style={{
-                                color: "#ffffff",
-                              }}
-                            >
-                              {(() => {
-                                // Use total_transactions if available, otherwise sum buys/sells
-                                const totalTxns = (token as any).total_transactions ?? 0;
-                                if (totalTxns > 0) return Math.round(totalTxns);
-                                const buys = (token as any).total_buys_24h ?? (token as any).total_buys ?? 0;
-                                const sells = (token as any).total_sells_24h ?? (token as any).total_sells ?? 0;
-                                return Math.round(buys + sells);
-                              })()}
-                            </span>
-                            <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
-                              <div
-                                className="h-full"
-                                style={{
-                                  backgroundColor: "#31e3ac", // Green for buys
-                                  width: `${(() => {
-                                    // Monad API returns total_buys/total_sells (not timeframe-specific)
-                                    // Prioritize total_buys/total_sells over _24h suffixed versions
-                                    const buys =
-                                      (token as any).total_buys ??
-                                      (token as any).total_buys_24h ??
-                                      0;
-                                    const sells =
-                                      (token as any).total_sells ??
-                                      (token as any).total_sells_24h ??
-                                      0;
-                                    const total = Math.max(1, buys + sells);
-                                    const percent = (buys / total) * 100;
-                                    return Math.min(100, Math.max(0, percent));
-                                  })()}%`,
-                                }}
-                              ></div>
-                              <div
-                                className="h-full"
-                                style={{
-                                  backgroundColor: "#d11f3a", // Red for sells
-                                  width: `${(() => {
-                                    // Monad API returns total_buys/total_sells (not timeframe-specific)
-                                    // Prioritize total_buys/total_sells over _24h suffixed versions
-                                    const buys =
-                                      (token as any).total_buys ??
-                                      (token as any).total_buys_24h ??
-                                      0;
-                                    const sells =
-                                      (token as any).total_sells ??
-                                      (token as any).total_sells_24h ??
-                                      0;
-                                    const total = Math.max(1, buys + sells);
-                                    const percent = (sells / total) * 100;
-                                    return Math.min(100, Math.max(0, percent));
-                                  })()}%`,
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold opacity-0 transition-all duration-150 ease-out group-hover:opacity-100"
-                          style={{
-                            backgroundColor: "#1a1b1f",
-                            color: "#86efac",
-                          }}
-                          title={`Quick Buy ${thunderAmount || "0"} MON`}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "#86efac";
-                            e.currentTarget.style.color = "#000000";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = "#1a1b1f";
-                            e.currentTarget.style.color = "#86efac";
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault(); // Prevent Link navigation
-                            // For migrated column, don't check bonding/snipe logic - just quick buy
-                            const isMigratedColumn = title
-                              .toLowerCase()
-                              .includes("migrated");
-
-                            if (isMigratedColumn) {
-                              handleQuickBuy(token);
-                            } else {
-                              // For other columns, check for high bonding Meteora tokens
-                              const launchpadProtocol =
-                                (
-                                  token as any
-                                ).launchpad_protocol?.toLowerCase() || "";
-                              const isMeteora =
-                                launchpadProtocol.includes("meteora");
-                              const bondingPct =
-                                (token as any).bonding_pct ?? 0;
-                              const isHighBondingMeteora =
-                                isMeteora && bondingPct > 98.6;
-
-                              if (isHighBondingMeteora) {
-                                setSelectedToken(token);
-                                setShowSnipeModal(true);
-                              } else {
-                                handleQuickBuy(token);
-                              }
-                            }
-                          }}
-                        >
-                          <HiLightningBolt className="buy-icon" size={14} style={{ color: "inherit" }} />
-                          <span className="number-font">{thunderAmount || "0"}</span>
-                          <span>Buy</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Bottom Row - Metrics Badges */}
-                  <div className="badges-scroll absolute right-2 bottom-1 left-[80px] flex flex-row items-center gap-3 overflow-x-auto overflow-y-hidden">
-                    {/* Top 10% Holders percentage */}
-                    {(() => {
-                      const value = (token as any).top10_hold_percent ?? 0;
-                      const displayValue = value > 0 ? value.toFixed(2) : "0";
-                      // Risk thresholds for Top 10 Holders: safe < 40%, risky > 60%
-                      const riskLevel = value <= 40 ? "safe" : value >= 60 ? "risky" : "caution";
-                      const riskColors = {
-                        safe: { bg: "#0f2419", text: "#31e3ac", border: "#1a3d2a" },
-                        caution: { bg: "#2a2314", text: "#f59e0b", border: "#3d351f" },
-                        risky: { bg: "#2a1419", text: "#ef4444", border: "#3d1f24" },
-                      };
-                      const colors = riskColors[riskLevel];
-                      return (
-                    <div className="relative flex-shrink-0">
-                      <span
-                        className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
-                        style={{
-                          color: colors.text,
-                          fontSize: "11px",
-                          fontWeight: "500",
-                          borderColor: colors.border,
-                          backgroundColor: "transparent",
-                          whiteSpace: "nowrap",
-                          minWidth: "62px",
-                          height: "24px",
-                        }}
-                        onMouseEnter={() => setShowTop10Tooltip(token.id)}
-                        onMouseLeave={() => setShowTop10Tooltip(null)}
-                      >
-                        <span className="flex h-[13px] w-[13px] items-center justify-center">
-                          <BsPersonGear size={13} />
-                        </span>
-                        <span className="number-font">{displayValue}%</span>
-                      </span>
-
-                      {/* Top 10% Tooltip */}
-                      {showTop10Tooltip === token.id && (
-                        <div
-                          className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
-                          style={{
-                            backgroundColor: AX.surface,
-                            color: AX.text,
-                            border: `1px solid ${AX.border}`,
-                            minWidth: "240px",
-                            // Keep above row controls (quick buy at z-10) but below header popout
-                            zIndex: 15,
-                          }}
-                          onMouseEnter={() => setShowTop10Tooltip(token.id)}
-                          onMouseLeave={() => setShowTop10Tooltip(null)}
-                        >
-                          <div className="mb-2">
-                            <div
-                              className="mb-1 text-sm font-semibold"
-                              style={{ color: AX.aiGreen }}
-                            >
-                              Top 10% Holders:{" "}
-                              {(() => {
-                                const value =
-                                  (token as any).top10_hold_percent ?? 0;
-                                return value > 0
-                                  ? `${value.toFixed(2)}%`
-                                  : "0%";
-                              })()}
-                            </div>
-                          </div>
-
-                          {/* Tooltip arrow */}
-                          <div
-                            className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
-                            style={{ borderBottomColor: AX.surface }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                      );
-                    })()}
-
-                    {/* Dev Hold indicator - with risk-based colors */}
-                    {(() => {
-                      const devHoldPercent =
-                        (token as any).dev_hold_percent ??
-                        (token as any).dev_percent ??
-                        0;
-                      const devWallet =
-                        (token as any).dev_wallet ??
-                        (token as any).creator_address;
-                      const hasDevInfo = devHoldPercent > 0 || devWallet;
-                      const isFinalStretch =
-                        title.toLowerCase().includes("final") ||
-                        title.toLowerCase().includes("stretch");
-
-                      // Show for tokens with dev info OR for final stretch tokens
-                      if (!hasDevInfo && !isFinalStretch) return null;
-
-                      // Risk thresholds for Dev Holding: safe < 5%, risky > 10%
-                      const riskLevel = devHoldPercent <= 5 ? "safe" : devHoldPercent >= 10 ? "risky" : "caution";
-                      const riskColors = {
-                        safe: { bg: "#0f2419", text: "#31e3ac", border: "#1a3d2a" },
-                        caution: { bg: "#2a2314", text: "#f59e0b", border: "#3d351f" },
-                        risky: { bg: "#2a1419", text: "#ef4444", border: "#3d1f24" },
-                      };
-                      const colors = riskColors[riskLevel];
-                      const displayValue = devHoldPercent > 0 ? devHoldPercent.toFixed(2) : "0";
-
-                      return (
-                        <div className="relative flex-shrink-0">
-                          <span
-                            className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
-                            style={{
-                              color: colors.text,
-                              fontSize: "10px",
-                              fontWeight: "500",
-                              borderColor: colors.border,
-                              backgroundColor: "transparent",
-                              whiteSpace: "nowrap",
-                              minWidth: "58px",
-                              height: "22px",
-                            }}
-                            onMouseEnter={() => setShowDevTooltip(token.id)}
-                            onMouseLeave={() => setShowDevTooltip(null)}
-                          >
-                            <span className="flex h-[13px] w-[13px] items-center justify-center">
-                              <LuChefHat size={13} />
-                            </span>
-                            <span className="number-font">{displayValue}%</span>
-                          </span>
-
-                          {/* Dev Info Tooltip */}
-                          {showDevTooltip === token.id && (
-                            <div
-                              className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
-                              style={{
-                                backgroundColor: AX.surface,
-                                color: AX.text,
-                                border: `1px solid ${AX.border}`,
-                                minWidth: "240px",
-                                zIndex: 4000,
-                              }}
-                              onMouseEnter={() => setShowDevTooltip(token.id)}
-                              onMouseLeave={() => setShowDevTooltip(null)}
-                            >
-                              {/* DEV Holds X% */}
-                              <div className="mb-2">
-                                <div
-                                  className="mb-1 text-sm font-semibold"
-                                  style={{
-                                    color:
-                                      devHoldPercent > 0 ? AX.aiGreen : AX.text,
-                                  }}
-                                >
-                                  DEV Holds{" "}
-                                  {devHoldPercent > 0
-                                    ? `${devHoldPercent.toFixed(2)}%`
-                                    : "0%"}
-                                </div>
-                              </div>
-
-                              {/* Dev Wallet */}
-                              {devWallet && (
-                                <div className="mb-2 flex items-center gap-2">
-                                  <span
-                                    className="text-xs"
-                                    style={{ color: AX.muted }}
-                                  >
-                                    Dev Wallet
-                                  </span>
-                                  <div className="flex items-center gap-1">
+                                  {/* People Icon - Total Holders */}
+                                  <div className="relative flex items-center gap-1">
+                                    <div
+                                      className="flex cursor-help items-center justify-center rounded"
+                                      style={{
+                                        backgroundColor: "#111214",
+                                        padding: "2px",
+                                        width: "18px",
+                                        height: "18px",
+                                      }}
+                                      title="Holders"
+                                    >
+                                      <GoPeople
+                                        size={12}
+                                        style={{
+                                          color: "#36d8ff",
+                                          strokeWidth: "3",
+                                        }}
+                                      />
+                                    </div>
                                     <span
-                                      className="font-mono text-xs"
+                                      className="text-xs"
                                       style={{ color: AX.text }}
                                     >
-                                      {devWallet.length > 10
-                                        ? `${devWallet.slice(0, 4)}...${devWallet.slice(-4)}`
-                                        : devWallet}
+                                      {(() => {
+                                        const holders =
+                                          token.total_holders ||
+                                          token.unique_wallets_24h ||
+                                          (token as any).unique_traders ||
+                                          0;
+                                        if (holders >= 1e9)
+                                          return `${(holders / 1e9).toFixed(1)}B`;
+                                        if (holders >= 1e6)
+                                          return `${(holders / 1e6).toFixed(1)}M`;
+                                        if (holders >= 1e3)
+                                          return `${(holders / 1e3).toFixed(1)}K`;
+                                        return holders.toString();
+                                      })()}
                                     </span>
-                                    <FaRegCopy
-                                      size={10}
-                                      className="cursor-pointer hover:opacity-70"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigator.clipboard.writeText(
-                                          devWallet,
-                                        );
-                                      }}
-                                      style={{ color: AX.muted }}
-                                    />
                                   </div>
-                                </div>
-                              )}
 
-                              {/* Bought */}
-                              {((token as any).dev_bought_usd !== undefined ||
-                                (token as any).dev_bought_count !==
-                                  undefined) && (
-                                <div className="mb-2 flex items-center justify-between">
-                                  <span
-                                    className="text-xs"
-                                    style={{ color: AX.muted }}
-                                  >
-                                    Bought
-                                  </span>
-                                  <span
-                                    className="text-xs font-semibold"
-                                    style={{ color: AX.aiGreen }}
-                                  >
-                                    $
-                                    {(
-                                      (token as any).dev_bought_usd ?? 0
-                                    ).toFixed(3)}{" "}
-                                    / {(token as any).dev_bought_count ?? 0}TXs
-                                  </span>
+                                  {/* Pump.fun Tooltip */}
+                                  {token.mint.slice(-4) === "pump" && (
+                                    <div
+                                      className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                      style={{
+                                        zIndex: 4000,
+                                        backgroundColor: AX.surface,
+                                        color: AX.text,
+                                        border: `1px solid ${AX.border}`,
+                                        boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+                                      }}
+                                    >
+                                      View on Pump.fun
+                                      {/* Tooltip arrow */}
+                                      <div
+                                        className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                                        style={{ borderTopColor: AX.surface }}
+                                      ></div>
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-
-                              {/* Sold */}
-                              {((token as any).dev_sold_usd !== undefined ||
-                                (token as any).dev_sold_count !==
-                                  undefined) && (
-                                <div className="mb-2 flex items-center justify-between">
+                              </div>
+                            </div>
+                            {/* Right: MC, V, F, TX */}
+                            <div className="items-right justify-right flex min-w-[100px] flex-col items-end gap-0.5 text-right lg:min-w-[130px]">
+                              <div
+                                className={
+                                  "justify-right flex flex-col text-xs"
+                                }
+                              >
+                                <div
+                                  className="flex items-end gap-1"
+                                  style={{ color: AX.muted }}
+                                >
+                                  <span className="mb-[2px] text-xs">MC </span>
+                                  {(() => {
+                                    const isFinalStretchColumn =
+                                      title.toLowerCase().includes("final") ||
+                                      title.toLowerCase().includes("stretch");
+                                    const lp = (
+                                      (token as any).launchpad_protocol || ""
+                                    ).toLowerCase();
+                                    const bonding =
+                                      (token as any).bonding_pct ?? 0;
+                                    const hasGreenWave =
+                                      isFinalStretchColumn &&
+                                      lp.includes("meteora") &&
+                                      bonding > 98.6;
+                                    const mcVal =
+                                      (token as any).fully_diluted_value ??
+                                      (token as any).market_cap_usd ??
+                                      0;
+                                    if (hasGreenWave) {
+                                      return (
+                                        <span
+                                          className="number-font text-sm font-medium"
+                                          style={{ color: "#31e3ac" }}
+                                        >
+                                          ${formatMarketCap(mcVal)}
+                                        </span>
+                                      );
+                                    }
+                                    return (
+                                      <SmartColor
+                                        token={token}
+                                        metricType="marketCap"
+                                        className="number-font text-sm font-medium"
+                                      >
+                                        ${formatMarketCap(mcVal)}
+                                      </SmartColor>
+                                    );
+                                  })()}
+                                </div>
+                                <div
+                                  style={{ color: AX.muted }}
+                                  className="flex items-end gap-1"
+                                >
+                                  <span className="mb-[1px] ml-auto text-xs">
+                                    V
+                                  </span>{" "}
                                   <span
-                                    className="text-xs"
-                                    style={{ color: AX.muted }}
-                                  >
-                                    Sold
-                                  </span>
-                                  <span
-                                    className="text-xs font-semibold"
+                                    className="number-font text-xs font-medium"
                                     style={{
-                                      color:
-                                        ((token as any).dev_sold_usd ?? 0) > 0
-                                          ? AX.sell
-                                          : AX.text,
+                                      color: "#ffffff",
                                     }}
                                   >
-                                    $
-                                    {((token as any).dev_sold_usd ?? 0).toFixed(
-                                      3,
-                                    )}{" "}
-                                    / {(token as any).dev_sold_count ?? 0}TXs
-                                  </span>
-                                </div>
-                              )}
-
-                              {/* Balance */}
-                              {(token as any).dev_balance_usd !== undefined && (
-                                <div className="mb-2 flex items-center justify-between">
-                                  <span
-                                    className="text-xs"
-                                    style={{ color: AX.muted }}
-                                  >
-                                    Balance
-                                  </span>
-                                  <span
-                                    className="text-xs font-semibold"
-                                    style={{ color: AX.text }}
-                                  >
-                                    $
-                                    {(
-                                      (token as any).dev_balance_usd ?? 0
-                                    ).toFixed(3)}
-                                  </span>
-                                </div>
-                              )}
-
-                              {/* Funding (using dev_wallet as funding address) */}
-                              {devWallet && (
-                                <div className="mb-2 flex items-center gap-2">
-                                  <span
-                                    className="text-xs"
-                                    style={{ color: AX.muted }}
-                                  >
-                                    Funding
-                                  </span>
-                                  <div className="flex items-center gap-1">
-                                    <span
-                                      className="font-mono text-xs"
-                                      style={{ color: AX.text }}
-                                    >
-                                      {devWallet.length > 10
-                                        ? `${devWallet.slice(0, 4)}...${devWallet.slice(-4)}`
-                                        : devWallet}
-                                    </span>
-                                    <FaRegCopy
-                                      size={10}
-                                      className="cursor-pointer hover:opacity-70"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigator.clipboard.writeText(
-                                          devWallet,
-                                        );
-                                      }}
-                                      style={{ color: AX.muted }}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Time (dev_first_trade_at) */}
-                              {(token as any).dev_first_trade_at && (
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className="text-xs"
-                                    style={{ color: AX.muted }}
-                                  >
-                                    Time
-                                  </span>
-                                  <span
-                                    className="font-mono text-xs"
-                                    style={{ color: AX.text }}
-                                  >
                                     {(() => {
-                                      const date = new Date(
-                                        (token as any).dev_first_trade_at,
-                                      );
-                                      const year = date.getFullYear();
-                                      const month = String(
-                                        date.getMonth() + 1,
-                                      ).padStart(2, "0");
-                                      const day = String(
-                                        date.getDate(),
-                                      ).padStart(2, "0");
-                                      const hours = String(
-                                        date.getHours(),
-                                      ).padStart(2, "0");
-                                      const minutes = String(
-                                        date.getMinutes(),
-                                      ).padStart(2, "0");
-                                      const seconds = String(
-                                        date.getSeconds(),
-                                      ).padStart(2, "0");
-                                      return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+                                      const vol =
+                                        (token as any).volume_24h ||
+                                        (token as any).volume_24h_usd ||
+                                        0;
+                                      const rounded = Math.round(vol);
+                                      if (rounded >= 1e12)
+                                        return `$${Math.round(rounded / 1e12)}T`;
+                                      if (rounded >= 1e9)
+                                        return `$${Math.round(rounded / 1e9)}B`;
+                                      if (rounded >= 1e6)
+                                        return `$${Math.round(rounded / 1e6)}M`;
+                                      if (rounded >= 1e3)
+                                        return `$${Math.round(rounded / 1e3)}K`;
+                                      return `$${rounded}`;
                                     })()}
                                   </span>
                                 </div>
-                              )}
+                              </div>
+                              <div className="flex items-center justify-end gap-2 text-xs">
+                                <div
+                                  className="flex flex-row items-center gap-1"
+                                  style={{ color: AX.muted }}
+                                >
+                                  <span className="text-xs">TX</span>{" "}
+                                  <span
+                                    className="number-font text-xs font-medium"
+                                    style={{
+                                      color: "#ffffff",
+                                    }}
+                                  >
+                                    {(() => {
+                                      // Use total_transactions if available, otherwise sum buys/sells
+                                      const totalTxns =
+                                        (token as any).total_transactions ?? 0;
+                                      if (totalTxns > 0)
+                                        return Math.round(totalTxns);
+                                      const buys =
+                                        (token as any).total_buys_24h ??
+                                        (token as any).total_buys ??
+                                        0;
+                                      const sells =
+                                        (token as any).total_sells_24h ??
+                                        (token as any).total_sells ??
+                                        0;
+                                      return Math.round(buys + sells);
+                                    })()}
+                                  </span>
+                                  <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
+                                    <div
+                                      className="h-full"
+                                      style={{
+                                        backgroundColor: "#31e3ac", // Green for buys
+                                        width: `${(() => {
+                                          // Monad API returns total_buys/total_sells (not timeframe-specific)
+                                          // Prioritize total_buys/total_sells over _24h suffixed versions
+                                          const buys =
+                                            (token as any).total_buys ??
+                                            (token as any).total_buys_24h ??
+                                            0;
+                                          const sells =
+                                            (token as any).total_sells ??
+                                            (token as any).total_sells_24h ??
+                                            0;
+                                          const total = Math.max(
+                                            1,
+                                            buys + sells,
+                                          );
+                                          const percent = (buys / total) * 100;
+                                          return Math.min(
+                                            100,
+                                            Math.max(0, percent),
+                                          );
+                                        })()}%`,
+                                      }}
+                                    ></div>
+                                    <div
+                                      className="h-full"
+                                      style={{
+                                        backgroundColor: "#d11f3a", // Red for sells
+                                        width: `${(() => {
+                                          // Monad API returns total_buys/total_sells (not timeframe-specific)
+                                          // Prioritize total_buys/total_sells over _24h suffixed versions
+                                          const buys =
+                                            (token as any).total_buys ??
+                                            (token as any).total_buys_24h ??
+                                            0;
+                                          const sells =
+                                            (token as any).total_sells ??
+                                            (token as any).total_sells_24h ??
+                                            0;
+                                          const total = Math.max(
+                                            1,
+                                            buys + sells,
+                                          );
+                                          const percent = (sells / total) * 100;
+                                          return Math.min(
+                                            100,
+                                            Math.max(0, percent),
+                                          );
+                                        })()}%`,
+                                      }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold opacity-0 transition-all duration-150 ease-out group-hover:opacity-100"
+                                style={{
+                                  backgroundColor: "#1a1b1f",
+                                  color: "#86efac",
+                                }}
+                                title={`Quick Buy ${thunderAmount || "0"} MON`}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#86efac";
+                                  e.currentTarget.style.color = "#000000";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#1a1b1f";
+                                  e.currentTarget.style.color = "#86efac";
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault(); // Prevent Link navigation
+                                  // For migrated column, don't check bonding/snipe logic - just quick buy
+                                  const isMigratedColumn = title
+                                    .toLowerCase()
+                                    .includes("migrated");
 
-                              {/* Tooltip arrow */}
-                              <div
-                                className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
-                                style={{ borderBottomColor: AX.surface }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
+                                  if (isMigratedColumn) {
+                                    handleQuickBuy(token);
+                                  } else {
+                                    // For other columns, check for high bonding Meteora tokens
+                                    const launchpadProtocol =
+                                      (
+                                        token as any
+                                      ).launchpad_protocol?.toLowerCase() || "";
+                                    const isMeteora =
+                                      launchpadProtocol.includes("meteora");
+                                    const bondingPct =
+                                      (token as any).bonding_pct ?? 0;
+                                    const isHighBondingMeteora =
+                                      isMeteora && bondingPct > 98.6;
 
-                    {/* Sniper Hold percentage - with risk-based colors */}
-                    {(() => {
-                      const sniperValue = (token as any).sniper_hold_percent ?? 0;
-                      const displayValue = sniperValue > 0 ? sniperValue.toFixed(2) : "0";
-                      // Risk thresholds for Sniper Holding: safe < 3%, risky > 8%
-                      const riskLevel = sniperValue <= 3 ? "safe" : sniperValue >= 8 ? "risky" : "caution";
-                      const riskColors = {
-                        safe: { bg: "#0f2419", text: "#31e3ac", border: "#1a3d2a" },
-                        caution: { bg: "#2a2314", text: "#f59e0b", border: "#3d351f" },
-                        risky: { bg: "#2a1419", text: "#ef4444", border: "#3d1f24" },
-                      };
-                      const colors = riskColors[riskLevel];
-                      return (
-                    <div className="relative flex-shrink-0">
-                      <span
-                        className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
-                        style={{
-                          color: colors.text,
-                          fontSize: "11px",
-                          fontWeight: "500",
-                          borderColor: colors.border,
-                          backgroundColor: "transparent",
-                          whiteSpace: "nowrap",
-                          minWidth: "62px",
-                          height: "24px",
-                        }}
-                        onMouseEnter={() => setShowSniperTooltip(token.id)}
-                        onMouseLeave={() => setShowSniperTooltip(null)}
-                      >
-                        <span className="flex h-[13px] w-[13px] items-center justify-center">
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                        >
-                          <circle
-                            cx="12"
-                            cy="12"
-                            r="8"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            fill="none"
-                          />
-                          <line
-                            x1="12"
-                            y1="4"
-                            x2="12"
-                            y2="8"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                          />
-                          <line
-                            x1="12"
-                            y1="16"
-                            x2="12"
-                            y2="20"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                          />
-                          <line
-                            x1="4"
-                            y1="12"
-                            x2="8"
-                            y2="12"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                          />
-                          <line
-                            x1="16"
-                            y1="12"
-                            x2="20"
-                            y2="12"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                          />
-                          <circle
-                            cx="12"
-                            cy="12"
-                            r="2"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            fill="none"
-                          />
-                        </svg>
-                        </span>
-                        <span className="number-font">{displayValue}%</span>
-                      </span>
-
-                      {/* Sniper Hold Tooltip */}
-                      {showSniperTooltip === token.id && (
-                        <div
-                          className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
-                          style={{
-                            backgroundColor: AX.surface,
-                            color: AX.text,
-                            border: `1px solid ${AX.border}`,
-                            minWidth: "240px",
-                            zIndex: 4000,
-                          }}
-                          onMouseEnter={() => setShowSniperTooltip(token.id)}
-                          onMouseLeave={() => setShowSniperTooltip(null)}
-                        >
-                          <div className="mb-2">
-                            <div
-                              className="mb-1 text-sm font-semibold"
-                              style={{ color: "#f26681" }}
-                            >
-                              Sniper Hold:{" "}
-                              {(() => {
-                                const value =
-                                  (token as any).sniper_hold_percent ?? 0;
-                                return value > 0
-                                  ? `${value.toFixed(2)}%`
-                                  : "0%";
-                              })()}
-                            </div>
-                          </div>
-
-                          {/* Tooltip arrow */}
-                          <div
-                            className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
-                            style={{ borderBottomColor: AX.surface }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                      );
-                    })()}
-
-                    {/* Insider Hold percentage - with risk-based colors */}
-                    {(() => {
-                      const insiderValue = (token as any).insider_hold_percent ?? 0;
-                      const displayValue = insiderValue > 0 ? insiderValue.toFixed(2) : "0";
-                      // Risk thresholds for Insider Holding: safe < 10%, risky > 20%
-                      const riskLevel = insiderValue <= 10 ? "safe" : insiderValue >= 20 ? "risky" : "caution";
-                      const riskColors = {
-                        safe: { bg: "#0f2419", text: "#31e3ac", border: "#1a3d2a" },
-                        caution: { bg: "#2a2314", text: "#f59e0b", border: "#3d351f" },
-                        risky: { bg: "#2a1419", text: "#ef4444", border: "#3d1f24" },
-                      };
-                      const colors = riskColors[riskLevel];
-                      return (
-                    <div className="relative flex-shrink-0">
-                      <span
-                        className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
-                        style={{
-                          color: colors.text,
-                          fontSize: "11px",
-                          fontWeight: "500",
-                          borderColor: colors.border,
-                          backgroundColor: "transparent",
-                          whiteSpace: "nowrap",
-                          minWidth: "62px",
-                          height: "24px",
-                        }}
-                        onMouseEnter={() => setShowInsiderTooltip(token.id)}
-                        onMouseLeave={() => setShowInsiderTooltip(null)}
-                      >
-                        <span className="flex h-[13px] w-[13px] items-center justify-center">
-                          <RiGhostLine size={13} />
-                        </span>
-                        <span className="number-font">{displayValue}%</span>
-                      </span>
-
-                      {/* Insider Hold Tooltip */}
-                      {showInsiderTooltip === token.id && (
-                        <div
-                          className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
-                          style={{
-                            backgroundColor: AX.surface,
-                            color: AX.text,
-                            border: `1px solid ${AX.border}`,
-                            minWidth: "240px",
-                            zIndex: 4000,
-                          }}
-                          onMouseEnter={() => setShowInsiderTooltip(token.id)}
-                          onMouseLeave={() => setShowInsiderTooltip(null)}
-                        >
-                          <div className="mb-2">
-                            <div
-                              className="mb-1 text-sm font-semibold"
-                              style={{ color: AX.aiGreen }}
-                            >
-                              Insider Hold:{" "}
-                              {(() => {
-                                const value =
-                                  (token as any).insider_hold_percent ?? 0;
-                                return value > 0
-                                  ? `${value.toFixed(2)}%`
-                                  : "0%";
-                              })()}
+                                    if (isHighBondingMeteora) {
+                                      setSelectedToken(token);
+                                      setShowSnipeModal(true);
+                                    } else {
+                                      handleQuickBuy(token);
+                                    }
+                                  }
+                                }}
+                              >
+                                <HiLightningBolt
+                                  className="buy-icon"
+                                  size={14}
+                                  style={{ color: "inherit" }}
+                                />
+                                <span className="number-font">
+                                  {thunderAmount || "0"}
+                                </span>
+                                <span>Buy</span>
+                              </button>
                             </div>
                           </div>
-
-                          {/* Tooltip arrow */}
-                          <div
-                            className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
-                            style={{ borderBottomColor: AX.surface }}
-                          />
                         </div>
-                      )}
-                    </div>
-                      );
-                    })()}
+                        {/* Bottom Row - Metrics Badges */}
+                        <div className="badges-scroll absolute right-2 bottom-1 left-[80px] flex flex-row items-center gap-3 overflow-x-auto overflow-y-hidden">
+                          {/* Top 10% Holders percentage */}
+                          {(() => {
+                            const value =
+                              (token as any).top10_hold_percent ?? 0;
+                            const displayValue =
+                              value > 0 ? value.toFixed(2) : "0";
+                            // Risk thresholds for Top 10 Holders: safe < 40%, risky > 60%
+                            const riskLevel =
+                              value <= 40
+                                ? "safe"
+                                : value >= 60
+                                  ? "risky"
+                                  : "caution";
+                            const riskColors = {
+                              safe: {
+                                bg: "#0f2419",
+                                text: "#31e3ac",
+                                border: "#1a3d2a",
+                              },
+                              caution: {
+                                bg: "#2a2314",
+                                text: "#f59e0b",
+                                border: "#3d351f",
+                              },
+                              risky: {
+                                bg: "#2a1419",
+                                text: "#ef4444",
+                                border: "#3d1f24",
+                              },
+                            };
+                            const colors = riskColors[riskLevel];
+                            return (
+                              <div className="relative flex-shrink-0">
+                                <span
+                                  className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
+                                  style={{
+                                    color: colors.text,
+                                    fontSize: "11px",
+                                    fontWeight: "500",
+                                    borderColor: colors.border,
+                                    backgroundColor: "transparent",
+                                    whiteSpace: "nowrap",
+                                    minWidth: "62px",
+                                    height: "24px",
+                                  }}
+                                  onMouseEnter={() =>
+                                    setShowTop10Tooltip(token.id)
+                                  }
+                                  onMouseLeave={() => setShowTop10Tooltip(null)}
+                                >
+                                  <span className="flex h-[13px] w-[13px] items-center justify-center">
+                                    <BsPersonGear size={13} />
+                                  </span>
+                                  <span className="number-font">
+                                    {displayValue}%
+                                  </span>
+                                </span>
 
-                    {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
-                    {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                                {/* Top 10% Tooltip */}
+                                {showTop10Tooltip === token.id && (
+                                  <div
+                                    className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
+                                    style={{
+                                      backgroundColor: AX.surface,
+                                      color: AX.text,
+                                      border: `1px solid ${AX.border}`,
+                                      minWidth: "240px",
+                                      // Keep above row controls (quick buy at z-10) but below header popout
+                                      zIndex: 15,
+                                    }}
+                                    onMouseEnter={() =>
+                                      setShowTop10Tooltip(token.id)
+                                    }
+                                    onMouseLeave={() =>
+                                      setShowTop10Tooltip(null)
+                                    }
+                                  >
+                                    <div className="mb-2">
+                                      <div
+                                        className="mb-1 text-sm font-semibold"
+                                        style={{ color: AX.aiGreen }}
+                                      >
+                                        Top 10% Holders:{" "}
+                                        {(() => {
+                                          const value =
+                                            (token as any).top10_hold_percent ??
+                                            0;
+                                          return value > 0
+                                            ? `${value.toFixed(2)}%`
+                                            : "0%";
+                                        })()}
+                                      </div>
+                                    </div>
+
+                                    {/* Tooltip arrow */}
+                                    <div
+                                      className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
+                                      style={{ borderBottomColor: AX.surface }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Dev Hold indicator - with risk-based colors */}
+                          {(() => {
+                            const devHoldPercent =
+                              (token as any).dev_hold_percent ??
+                              (token as any).dev_percent ??
+                              0;
+                            const devWallet =
+                              (token as any).dev_wallet ??
+                              (token as any).creator_address;
+                            const hasDevInfo = devHoldPercent > 0 || devWallet;
+                            const isFinalStretch =
+                              title.toLowerCase().includes("final") ||
+                              title.toLowerCase().includes("stretch");
+
+                            // Show for tokens with dev info OR for final stretch tokens
+                            if (!hasDevInfo && !isFinalStretch) return null;
+
+                            // Risk thresholds for Dev Holding: safe < 5%, risky > 10%
+                            const riskLevel =
+                              devHoldPercent <= 5
+                                ? "safe"
+                                : devHoldPercent >= 10
+                                  ? "risky"
+                                  : "caution";
+                            const riskColors = {
+                              safe: {
+                                bg: "#0f2419",
+                                text: "#31e3ac",
+                                border: "#1a3d2a",
+                              },
+                              caution: {
+                                bg: "#2a2314",
+                                text: "#f59e0b",
+                                border: "#3d351f",
+                              },
+                              risky: {
+                                bg: "#2a1419",
+                                text: "#ef4444",
+                                border: "#3d1f24",
+                              },
+                            };
+                            const colors = riskColors[riskLevel];
+                            const displayValue =
+                              devHoldPercent > 0
+                                ? devHoldPercent.toFixed(2)
+                                : "0";
+
+                            return (
+                              <div className="relative flex-shrink-0">
+                                <span
+                                  className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
+                                  style={{
+                                    color: colors.text,
+                                    fontSize: "10px",
+                                    fontWeight: "500",
+                                    borderColor: colors.border,
+                                    backgroundColor: "transparent",
+                                    whiteSpace: "nowrap",
+                                    minWidth: "58px",
+                                    height: "22px",
+                                  }}
+                                  onMouseEnter={() =>
+                                    setShowDevTooltip(token.id)
+                                  }
+                                  onMouseLeave={() => setShowDevTooltip(null)}
+                                >
+                                  <span className="flex h-[13px] w-[13px] items-center justify-center">
+                                    <LuChefHat size={13} />
+                                  </span>
+                                  <span className="number-font">
+                                    {displayValue}%
+                                  </span>
+                                </span>
+
+                                {/* Dev Info Tooltip */}
+                                {showDevTooltip === token.id && (
+                                  <div
+                                    className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
+                                    style={{
+                                      backgroundColor: AX.surface,
+                                      color: AX.text,
+                                      border: `1px solid ${AX.border}`,
+                                      minWidth: "240px",
+                                      zIndex: 4000,
+                                    }}
+                                    onMouseEnter={() =>
+                                      setShowDevTooltip(token.id)
+                                    }
+                                    onMouseLeave={() => setShowDevTooltip(null)}
+                                  >
+                                    {/* DEV Holds X% */}
+                                    <div className="mb-2">
+                                      <div
+                                        className="mb-1 text-sm font-semibold"
+                                        style={{
+                                          color:
+                                            devHoldPercent > 0
+                                              ? AX.aiGreen
+                                              : AX.text,
+                                        }}
+                                      >
+                                        DEV Holds{" "}
+                                        {devHoldPercent > 0
+                                          ? `${devHoldPercent.toFixed(2)}%`
+                                          : "0%"}
+                                      </div>
+                                    </div>
+
+                                    {/* Dev Wallet */}
+                                    {devWallet && (
+                                      <div className="mb-2 flex items-center gap-2">
+                                        <span
+                                          className="text-xs"
+                                          style={{ color: AX.muted }}
+                                        >
+                                          Dev Wallet
+                                        </span>
+                                        <div className="flex items-center gap-1">
+                                          <span
+                                            className="font-mono text-xs"
+                                            style={{ color: AX.text }}
+                                          >
+                                            {devWallet.length > 10
+                                              ? `${devWallet.slice(0, 4)}...${devWallet.slice(-4)}`
+                                              : devWallet}
+                                          </span>
+                                          <FaRegCopy
+                                            size={10}
+                                            className="cursor-pointer hover:opacity-70"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigator.clipboard.writeText(
+                                                devWallet,
+                                              );
+                                            }}
+                                            style={{ color: AX.muted }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Bought */}
+                                    {((token as any).dev_bought_usd !==
+                                      undefined ||
+                                      (token as any).dev_bought_count !==
+                                        undefined) && (
+                                      <div className="mb-2 flex items-center justify-between">
+                                        <span
+                                          className="text-xs"
+                                          style={{ color: AX.muted }}
+                                        >
+                                          Bought
+                                        </span>
+                                        <span
+                                          className="text-xs font-semibold"
+                                          style={{ color: AX.aiGreen }}
+                                        >
+                                          $
+                                          {(
+                                            (token as any).dev_bought_usd ?? 0
+                                          ).toFixed(3)}{" "}
+                                          /{" "}
+                                          {(token as any).dev_bought_count ?? 0}
+                                          TXs
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* Sold */}
+                                    {((token as any).dev_sold_usd !==
+                                      undefined ||
+                                      (token as any).dev_sold_count !==
+                                        undefined) && (
+                                      <div className="mb-2 flex items-center justify-between">
+                                        <span
+                                          className="text-xs"
+                                          style={{ color: AX.muted }}
+                                        >
+                                          Sold
+                                        </span>
+                                        <span
+                                          className="text-xs font-semibold"
+                                          style={{
+                                            color:
+                                              ((token as any).dev_sold_usd ??
+                                                0) > 0
+                                                ? AX.sell
+                                                : AX.text,
+                                          }}
+                                        >
+                                          $
+                                          {(
+                                            (token as any).dev_sold_usd ?? 0
+                                          ).toFixed(3)}{" "}
+                                          / {(token as any).dev_sold_count ?? 0}
+                                          TXs
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* Balance */}
+                                    {(token as any).dev_balance_usd !==
+                                      undefined && (
+                                      <div className="mb-2 flex items-center justify-between">
+                                        <span
+                                          className="text-xs"
+                                          style={{ color: AX.muted }}
+                                        >
+                                          Balance
+                                        </span>
+                                        <span
+                                          className="text-xs font-semibold"
+                                          style={{ color: AX.text }}
+                                        >
+                                          $
+                                          {(
+                                            (token as any).dev_balance_usd ?? 0
+                                          ).toFixed(3)}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* Funding (using dev_wallet as funding address) */}
+                                    {devWallet && (
+                                      <div className="mb-2 flex items-center gap-2">
+                                        <span
+                                          className="text-xs"
+                                          style={{ color: AX.muted }}
+                                        >
+                                          Funding
+                                        </span>
+                                        <div className="flex items-center gap-1">
+                                          <span
+                                            className="font-mono text-xs"
+                                            style={{ color: AX.text }}
+                                          >
+                                            {devWallet.length > 10
+                                              ? `${devWallet.slice(0, 4)}...${devWallet.slice(-4)}`
+                                              : devWallet}
+                                          </span>
+                                          <FaRegCopy
+                                            size={10}
+                                            className="cursor-pointer hover:opacity-70"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigator.clipboard.writeText(
+                                                devWallet,
+                                              );
+                                            }}
+                                            style={{ color: AX.muted }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Time (dev_first_trade_at) */}
+                                    {(token as any).dev_first_trade_at && (
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className="text-xs"
+                                          style={{ color: AX.muted }}
+                                        >
+                                          Time
+                                        </span>
+                                        <span
+                                          className="font-mono text-xs"
+                                          style={{ color: AX.text }}
+                                        >
+                                          {(() => {
+                                            const date = new Date(
+                                              (token as any).dev_first_trade_at,
+                                            );
+                                            const year = date.getFullYear();
+                                            const month = String(
+                                              date.getMonth() + 1,
+                                            ).padStart(2, "0");
+                                            const day = String(
+                                              date.getDate(),
+                                            ).padStart(2, "0");
+                                            const hours = String(
+                                              date.getHours(),
+                                            ).padStart(2, "0");
+                                            const minutes = String(
+                                              date.getMinutes(),
+                                            ).padStart(2, "0");
+                                            const seconds = String(
+                                              date.getSeconds(),
+                                            ).padStart(2, "0");
+                                            return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+                                          })()}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* Tooltip arrow */}
+                                    <div
+                                      className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
+                                      style={{ borderBottomColor: AX.surface }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Sniper Hold percentage - with risk-based colors */}
+                          {(() => {
+                            const sniperValue =
+                              (token as any).sniper_hold_percent ?? 0;
+                            const displayValue =
+                              sniperValue > 0 ? sniperValue.toFixed(2) : "0";
+                            // Risk thresholds for Sniper Holding: safe < 3%, risky > 8%
+                            const riskLevel =
+                              sniperValue <= 3
+                                ? "safe"
+                                : sniperValue >= 8
+                                  ? "risky"
+                                  : "caution";
+                            const riskColors = {
+                              safe: {
+                                bg: "#0f2419",
+                                text: "#31e3ac",
+                                border: "#1a3d2a",
+                              },
+                              caution: {
+                                bg: "#2a2314",
+                                text: "#f59e0b",
+                                border: "#3d351f",
+                              },
+                              risky: {
+                                bg: "#2a1419",
+                                text: "#ef4444",
+                                border: "#3d1f24",
+                              },
+                            };
+                            const colors = riskColors[riskLevel];
+                            return (
+                              <div className="relative flex-shrink-0">
+                                <span
+                                  className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
+                                  style={{
+                                    color: colors.text,
+                                    fontSize: "11px",
+                                    fontWeight: "500",
+                                    borderColor: colors.border,
+                                    backgroundColor: "transparent",
+                                    whiteSpace: "nowrap",
+                                    minWidth: "62px",
+                                    height: "24px",
+                                  }}
+                                  onMouseEnter={() =>
+                                    setShowSniperTooltip(token.id)
+                                  }
+                                  onMouseLeave={() =>
+                                    setShowSniperTooltip(null)
+                                  }
+                                >
+                                  <span className="flex h-[13px] w-[13px] items-center justify-center">
+                                    <svg
+                                      width="13"
+                                      height="13"
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                    >
+                                      <circle
+                                        cx="12"
+                                        cy="12"
+                                        r="8"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                        fill="none"
+                                      />
+                                      <line
+                                        x1="12"
+                                        y1="4"
+                                        x2="12"
+                                        y2="8"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                      />
+                                      <line
+                                        x1="12"
+                                        y1="16"
+                                        x2="12"
+                                        y2="20"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                      />
+                                      <line
+                                        x1="4"
+                                        y1="12"
+                                        x2="8"
+                                        y2="12"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                      />
+                                      <line
+                                        x1="16"
+                                        y1="12"
+                                        x2="20"
+                                        y2="12"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                      />
+                                      <circle
+                                        cx="12"
+                                        cy="12"
+                                        r="2"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                        fill="none"
+                                      />
+                                    </svg>
+                                  </span>
+                                  <span className="number-font">
+                                    {displayValue}%
+                                  </span>
+                                </span>
+
+                                {/* Sniper Hold Tooltip */}
+                                {showSniperTooltip === token.id && (
+                                  <div
+                                    className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
+                                    style={{
+                                      backgroundColor: AX.surface,
+                                      color: AX.text,
+                                      border: `1px solid ${AX.border}`,
+                                      minWidth: "240px",
+                                      zIndex: 4000,
+                                    }}
+                                    onMouseEnter={() =>
+                                      setShowSniperTooltip(token.id)
+                                    }
+                                    onMouseLeave={() =>
+                                      setShowSniperTooltip(null)
+                                    }
+                                  >
+                                    <div className="mb-2">
+                                      <div
+                                        className="mb-1 text-sm font-semibold"
+                                        style={{ color: "#f26681" }}
+                                      >
+                                        Sniper Hold:{" "}
+                                        {(() => {
+                                          const value =
+                                            (token as any)
+                                              .sniper_hold_percent ?? 0;
+                                          return value > 0
+                                            ? `${value.toFixed(2)}%`
+                                            : "0%";
+                                        })()}
+                                      </div>
+                                    </div>
+
+                                    {/* Tooltip arrow */}
+                                    <div
+                                      className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
+                                      style={{ borderBottomColor: AX.surface }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Insider Hold percentage - with risk-based colors */}
+                          {(() => {
+                            const insiderValue =
+                              (token as any).insider_hold_percent ?? 0;
+                            const displayValue =
+                              insiderValue > 0 ? insiderValue.toFixed(2) : "0";
+                            // Risk thresholds for Insider Holding: safe < 10%, risky > 20%
+                            const riskLevel =
+                              insiderValue <= 10
+                                ? "safe"
+                                : insiderValue >= 20
+                                  ? "risky"
+                                  : "caution";
+                            const riskColors = {
+                              safe: {
+                                bg: "#0f2419",
+                                text: "#31e3ac",
+                                border: "#1a3d2a",
+                              },
+                              caution: {
+                                bg: "#2a2314",
+                                text: "#f59e0b",
+                                border: "#3d351f",
+                              },
+                              risky: {
+                                bg: "#2a1419",
+                                text: "#ef4444",
+                                border: "#3d1f24",
+                              },
+                            };
+                            const colors = riskColors[riskLevel];
+                            return (
+                              <div className="relative flex-shrink-0">
+                                <span
+                                  className="number-font flex cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
+                                  style={{
+                                    color: colors.text,
+                                    fontSize: "11px",
+                                    fontWeight: "500",
+                                    borderColor: colors.border,
+                                    backgroundColor: "transparent",
+                                    whiteSpace: "nowrap",
+                                    minWidth: "62px",
+                                    height: "24px",
+                                  }}
+                                  onMouseEnter={() =>
+                                    setShowInsiderTooltip(token.id)
+                                  }
+                                  onMouseLeave={() =>
+                                    setShowInsiderTooltip(null)
+                                  }
+                                >
+                                  <span className="flex h-[13px] w-[13px] items-center justify-center">
+                                    <RiGhostLine size={13} />
+                                  </span>
+                                  <span className="number-font">
+                                    {displayValue}%
+                                  </span>
+                                </span>
+
+                                {/* Insider Hold Tooltip */}
+                                {showInsiderTooltip === token.id && (
+                                  <div
+                                    className="absolute top-full left-1/2 mt-2 -translate-x-1/2 transform rounded-lg px-4 py-3 text-xs font-medium whitespace-nowrap"
+                                    style={{
+                                      backgroundColor: AX.surface,
+                                      color: AX.text,
+                                      border: `1px solid ${AX.border}`,
+                                      minWidth: "240px",
+                                      zIndex: 4000,
+                                    }}
+                                    onMouseEnter={() =>
+                                      setShowInsiderTooltip(token.id)
+                                    }
+                                    onMouseLeave={() =>
+                                      setShowInsiderTooltip(null)
+                                    }
+                                  >
+                                    <div className="mb-2">
+                                      <div
+                                        className="mb-1 text-sm font-semibold"
+                                        style={{ color: AX.aiGreen }}
+                                      >
+                                        Insider Hold:{" "}
+                                        {(() => {
+                                          const value =
+                                            (token as any)
+                                              .insider_hold_percent ?? 0;
+                                          return value > 0
+                                            ? `${value.toFixed(2)}%`
+                                            : "0%";
+                                        })()}
+                                      </div>
+                                    </div>
+
+                                    {/* Tooltip arrow */}
+                                    <div
+                                      className="absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-r-4 border-b-4 border-l-4 border-transparent"
+                                      style={{ borderBottomColor: AX.surface }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
+                          {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -7190,97 +7459,99 @@ function MonadTable({
                     <FaDice size={13} />
                     <span className="text-xs text-gray-500">-</span>
                   </span> */}
-                  </div>
-                  {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
-                  {(() => {
-                    const launchpadProtocol =
-                      (token as any).launchpad_protocol?.toLowerCase() || "";
-                    const isMeteora = launchpadProtocol.includes("meteora");
-                    const bondingPct = (token as any).bonding_pct ?? 0;
-                    const isFinalStretch =
-                      title.toLowerCase().includes("final") ||
-                      title.toLowerCase().includes("stretch");
-                    const isMigratedColumn = title
-                      .toLowerCase()
-                      .includes("migrated");
-                    const isHighBondingMeteora =
-                      isFinalStretch &&
-                      !isMigratedColumn &&
-                      isMeteora &&
-                      bondingPct > 98.6;
-
-                    if (isHighBondingMeteora) {
-                      return (
-                        <div className="absolute right-2 bottom-2 z-0 flex items-center gap-0.5">
-                          {/* Red Meteora Logo (left) */}
-                          <div
-                            className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
-                            style={{
-                              border: "0.5px solid #d11f3a",
-                              backgroundColor: "transparent",
-                            }}
-                          >
-                            <img
-                              src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
-                              alt="Meteora"
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-
-                          {/* 3 Green Chevron Arrows */}
-                          {[0, 1, 2].map((i) => (
-                            <svg
-                              key={i}
-                              width="3"
-                              height="4"
-                              viewBox="0 0 3 4"
-                              fill="none"
-                              className="animate-pulse"
-                              style={{
-                                animationDelay: `${i * 0.2}s`,
-                                animationDuration: "1s",
-                              }}
-                            >
-                              <path
-                                d="M0.5 0.5L2.5 2L0.5 3.5"
-                                stroke="#31e3ac"
-                                strokeWidth="1"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          ))}
-
-                          {/* Yellow Meteora Logo (right) */}
-                          <div
-                            className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
-                            style={{
-                              border: "0.5px solid #fbbf24",
-                              backgroundColor: "transparent",
-                            }}
-                          >
-                            <img
-                              src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
-                              alt="Meteora"
-                              className="h-full w-full object-cover"
-                              style={{
-                                filter:
-                                  "sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)",
-                              }}
-                            />
-                          </div>
                         </div>
-                      );
-                    }
-                    return null;
-                  })()}
+                        {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
+                        {(() => {
+                          const launchpadProtocol =
+                            (token as any).launchpad_protocol?.toLowerCase() ||
+                            "";
+                          const isMeteora =
+                            launchpadProtocol.includes("meteora");
+                          const bondingPct = (token as any).bonding_pct ?? 0;
+                          const isFinalStretch =
+                            title.toLowerCase().includes("final") ||
+                            title.toLowerCase().includes("stretch");
+                          const isMigratedColumn = title
+                            .toLowerCase()
+                            .includes("migrated");
+                          const isHighBondingMeteora =
+                            isFinalStretch &&
+                            !isMigratedColumn &&
+                            isMeteora &&
+                            bondingPct > 98.6;
+
+                          if (isHighBondingMeteora) {
+                            return (
+                              <div className="absolute right-2 bottom-2 z-0 flex items-center gap-0.5">
+                                {/* Red Meteora Logo (left) */}
+                                <div
+                                  className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
+                                  style={{
+                                    border: "0.5px solid #d11f3a",
+                                    backgroundColor: "transparent",
+                                  }}
+                                >
+                                  <img
+                                    src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
+                                    alt="Meteora"
+                                    className="h-full w-full object-cover"
+                                  />
+                                </div>
+
+                                {/* 3 Green Chevron Arrows */}
+                                {[0, 1, 2].map((i) => (
+                                  <svg
+                                    key={i}
+                                    width="3"
+                                    height="4"
+                                    viewBox="0 0 3 4"
+                                    fill="none"
+                                    className="animate-pulse"
+                                    style={{
+                                      animationDelay: `${i * 0.2}s`,
+                                      animationDuration: "1s",
+                                    }}
+                                  >
+                                    <path
+                                      d="M0.5 0.5L2.5 2L0.5 3.5"
+                                      stroke="#31e3ac"
+                                      strokeWidth="1"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                ))}
+
+                                {/* Yellow Meteora Logo (right) */}
+                                <div
+                                  className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
+                                  style={{
+                                    border: "0.5px solid #fbbf24",
+                                    backgroundColor: "transparent",
+                                  }}
+                                >
+                                  <img
+                                    src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
+                                    alt="Meteora"
+                                    className="h-full w-full object-cover"
+                                    style={{
+                                      filter:
+                                        "sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)",
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </div>
-                  </div>
-                </Link>
+                  </Link>
                 </div>
-                </div>
-              );
-            }}
+              </div>
+            );
+          }}
         />
       )}
       {/* Shared singleton tooltips (only 3 divs instead of N*3) */}

@@ -10,19 +10,19 @@ import type { NextApiRequest, NextApiResponse } from "next";
 // install fix.
 
 // FE timeframe → Geckoterminal OHLCV endpoint shape. Density tuned to
-// match Trending's TIMEFRAME_CONFIG (~60-96 candle closes per sparkline)
+// match Trending's TIMEFRAME_CONFIG (~36-60 candle closes per sparkline)
 // so the resulting polyline reads as a real chart, not a smooth curve.
-// Reference: Trending uses 1m×60 (1h), 5m×72 (6h), 30m×48 (24h). We can't
-// match the 1s candles Trending uses for 5m (Geckoterminal min resolution
-// is 1m), so we widen the 5m window to give 60 1-min candles instead of 5.
+// Reference: Trending uses 1m/5m on 1s candles and 30m/1h on 1m candles.
+// Geckoterminal's minimum resolution is 1m, so the short windows are widened
+// to give ~36-60 1-min candles instead of a handful.
 const TIMEFRAME_TO_GT: Record<
   string,
   { period: "minute" | "hour" | "day"; aggregate: number; limit: number }
 > = {
+  "1m": { period: "minute", aggregate: 1, limit: 60 }, // 60 × 1m = 1h context
   "5m": { period: "minute", aggregate: 1, limit: 60 }, // 60 × 1m = 1h context
+  "30m": { period: "minute", aggregate: 5, limit: 36 }, // 36 × 5m = 3h context
   "1h": { period: "minute", aggregate: 1, limit: 60 }, // 60 × 1m = 1h
-  "6h": { period: "minute", aggregate: 5, limit: 72 }, // 72 × 5m = 6h
-  "24h": { period: "minute", aggregate: 15, limit: 96 }, // 96 × 15m = 24h
 };
 
 const GT_BASE = "https://api.geckoterminal.com/api/v2/networks/solana/pools";
@@ -63,7 +63,9 @@ const ipHits = new Map<string, number[]>();
 
 function rateLimited(ip: string): boolean {
   const now = Date.now();
-  const bucket = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  const bucket = (ipHits.get(ip) ?? []).filter(
+    (t) => now - t < RATE_LIMIT_WINDOW_MS,
+  );
   if (bucket.length >= RATE_LIMIT_MAX) {
     ipHits.set(ip, bucket);
     return true;
@@ -152,14 +154,17 @@ export default async function handler(
   // falls back to socket address.
   const xff = req.headers["x-forwarded-for"];
   const xffStr = Array.isArray(xff) ? xff[0] : xff;
-  const ip = (xffStr ?? "").split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip =
+    (xffStr ?? "").split(",")[0]?.trim() ||
+    req.socket.remoteAddress ||
+    "unknown";
   if (rateLimited(ip)) {
     res.setHeader("Retry-After", "60");
     return res.status(429).json({ error: "rate limited" });
   }
 
   const pair = String(req.query.pair_address || "");
-  const timeframe = String(req.query.timeframe || "24h");
+  const timeframe = String(req.query.timeframe || "1h");
 
   // Solana pair addresses are base58, 32-44 chars. Reject anything else
   // before fanning out — keeps the proxy from being a generic SSRF amplifier.
@@ -167,7 +172,7 @@ export default async function handler(
     return res.status(400).json({ error: "invalid pair_address" });
   }
 
-  const tf = TIMEFRAME_TO_GT[timeframe] ?? TIMEFRAME_TO_GT["24h"];
+  const tf = TIMEFRAME_TO_GT[timeframe] ?? TIMEFRAME_TO_GT["1h"];
   const key = `${pair}|${timeframe}`;
 
   // Hit cache if fresh.
