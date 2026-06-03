@@ -13,6 +13,7 @@ import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
 import dynamic from 'next/dynamic';
 import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
+import WalletExportGuard from "../components/WalletExportGuard";
 import { UserLimitProvider, useUserLimit } from "../components/UserLimitContext";
 import UserLimitBlocker from "../components/UserLimitBlocker";
 
@@ -512,7 +513,6 @@ function ReferralTracker() {
 
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
-  const router = useRouter();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -543,7 +543,6 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   };
 
   if (!isMounted) return null;
-
 
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={false} />
@@ -920,7 +919,8 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                         </WatchlistProvider>
                       </SearchProvider>
                     </QuickBuyProvider>
-                    <GlobalLoginModalManager enforceLogin={false} />
+                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                    <WalletExportGuard />
                     <UserLimitBlockerWrapper />
                   </ThemeProvider>
                 </SolPriceProvider>

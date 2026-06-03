@@ -167,13 +167,13 @@ export function ReferralAccessGate({
     ? false
     : env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS !== undefined
       ? env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS
-      : false; // default to false to allow viewing without login
+      : true; // default to true to require access code for new users
 
   // When true, hides the popup UI but still processes referrals silently in the background
   const referralGateHidden =
     env.NEXT_PUBLIC_REFERRAL_GATE_HIDDEN !== undefined
       ? env.NEXT_PUBLIC_REFERRAL_GATE_HIDDEN
-      : true; // default to true to hide the gate
+      : false; // default to false to show the gate
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
     // Start in "checking" state to avoid showing the modal before localStorage is checked.
