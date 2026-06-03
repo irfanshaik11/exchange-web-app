@@ -21,7 +21,7 @@ export default function WalletExportGuard() {
 
   const { sol: needsSol, monad: needsMonad } = needsExportFlags();
 
-  const mustForce = false; // disabled: !!user && (user.hasExportedWallet === false || needsSol || needsMonad);
+  const mustForce = !!user && (user.hasExportedWallet === false || needsSol || needsMonad);
   // Prefer backend wallet list (authoritative) over SDK-derived addresses
   const primaryWallet = walletList?.find((w: any) => w.isPrimary) ?? walletList?.[0];
   const derivedAddress =

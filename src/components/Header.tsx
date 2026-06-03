@@ -96,7 +96,6 @@ import BlockchainSwitcher from "./BlockchainSwitcher";
 import FastImage from "./FastImage";
 import UpdatesModal from "./UpdatesModal";
 import UsernameEditModal from "./UsernameEditModal";
-import ExportWalletModal from "./ExportWalletModal";
 import NotificationDropdown from "./NotificationDropdown";
 import { useReferralStats } from "~/hooks/useArena";
 import type { Timeframe } from "../pages/index";
@@ -180,7 +179,6 @@ const navLinks = [
   { name: "Predictions", href: "/predictions" },
   { name: "Airdrop", href: "/airdrop-genesis" },
   { name: "Portfolio", href: "/portfolio" },
-  // { name: "Learn", href: "/learn" },
   { name: "Agent", href: "/agent" },
   // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
@@ -709,7 +707,6 @@ export default function Header({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
-  const [showExportWalletModal, setShowExportWalletModal] = useState(false);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -3043,43 +3040,6 @@ export default function Header({
                           Edit Username
                         </button>
 
-                        {/* Export Wallet Button */}
-                        <button
-                          onClick={() => {
-                            setProfileMenuOpen(false);
-                            setShowExportWalletModal(true);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
-                          style={{
-                            color: AX.text,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "rgba(24, 196, 140, 0.1)";
-                            e.currentTarget.style.color = AX.mint;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                            e.currentTarget.style.color = AX.text;
-                          }}
-                        >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                            />
-                          </svg>
-                          Export Wallet
-                        </button>
-
                         {/* Logout Button */}
                         <button
                           onClick={() => {
@@ -3864,19 +3824,6 @@ export default function Header({
         onSuccess={() => {
           // User context will be refreshed by the modal
         }}
-      />
-
-      {/* Export Wallet Modal */}
-      <ExportWalletModal
-        isOpen={showExportWalletModal}
-        onClose={() => setShowExportWalletModal(false)}
-        walletId={user?.walletId || walletList?.[0]?.id || undefined}
-        walletAddress={
-          primaryWalletAddresses?.solana ||
-          user?.publicKey ||
-          walletList?.[0]?.solanaAddress ||
-          undefined
-        }
       />
     </>
   );

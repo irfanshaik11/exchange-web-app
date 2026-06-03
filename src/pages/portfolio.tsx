@@ -791,14 +791,13 @@ export default function PortfolioPage() {
       wallets.find((w) => w.isPrimary) ||
       wallets[0];
 
-    // Disabled: export secret phrase modal
-    // if (primary) {
-    //   setExportWalletId(primary.walletId || primary.id);
-    //   setExportWalletAddress(getAddressForChain(primary, "sol"));
-    //   setForceExportChain("sol");
-    //   setShowExportModal(true);
-    //   posthog.capture("wallet_export_initiated", { chain: currentChain });
-    // }
+    if (primary) {
+      setExportWalletId(primary.walletId || primary.id);
+      setExportWalletAddress(getAddressForChain(primary, "sol"));
+      setForceExportChain("sol");
+      setShowExportModal(true);
+      posthog.capture("wallet_export_initiated", { chain: currentChain });
+    }
   }, [currentChain, showExportModal, user?.id, wallets]);
 
   // Save cache to localStorage when it changes (debounced)
@@ -3011,12 +3010,10 @@ export default function PortfolioPage() {
     
     const address = getAddressForChain(wallet, currentChain);
     // Use the Turnkey walletId, not the database id
-    // Disabled: export secret phrase modal
-    // setExportWalletId(wallet.walletId);
-    // setExportWalletAddress(address);
-    // setForceExportChain(null);
-    // setShowExportModal(true);
-    return;
+    setExportWalletId(wallet.walletId);
+    setExportWalletAddress(address);
+    setForceExportChain(null);
+    setShowExportModal(true);
   };
 
   const handleExported = useCallback(() => {
