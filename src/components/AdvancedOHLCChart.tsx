@@ -1601,9 +1601,6 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   const metricsThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const metricsUpdatePendingRef = useRef(false);
   const latestTradeDataRef = useRef<any[]>(tradeData || []);
-  // Sync refs during render (not useEffect) so they're ready before rAF
-  // callbacks fire — critical for sub-frame optimistic marker appearance.
-  latestTradeDataRef.current = tradeData || [];
   const latestCreatorAddressRef = useRef<string | null>(creatorAddress || null);
   const latestUserWalletRef = useRef<string | null>(userWalletAddress || null);
   const latestTokenSymbolRef = useRef<string | null>(tokenSymbol || null);
@@ -1874,7 +1871,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     };
   }, []);
 
-  // latestTradeDataRef is now updated synchronously during render (line ~1605).
+  useEffect(() => {
+    latestTradeDataRef.current = tradeData || [];
+  }, [tradeData]);
 
   useEffect(() => {
     latestCreatorAddressRef.current = creatorAddress || null;
@@ -1969,7 +1968,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             } catch {}
           });
         }
-      }, 100);
+      }, 800);
     }
     return () => { if (refreshMarksTimeoutRef.current) clearTimeout(refreshMarksTimeoutRef.current); };
   }, [tradeData]);
@@ -2031,12 +2030,14 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   // race the chart's widget initialization. Subscribing here too means even
   // if the parent's path silently no-ops (because chartRef wasn't ready), the
   // chart itself triggers a refresh as soon as its widget comes online.
-  // Single rAF defer — latestTradeDataRef is now updated synchronously during
-  // render, so one frame is enough for the React commit to flush.
+  // Two rAFs of defer to ensure the parent's React render has committed and
+  // `latestTradeDataRef` is populated before refreshMarks reads it.
   useEffect(() => {
     return subscribePendingTradeMarkers(() => {
       requestAnimationFrame(() => {
-        scheduleRefreshMarks();
+        requestAnimationFrame(() => {
+          scheduleRefreshMarks();
+        });
       });
     });
   }, [scheduleRefreshMarks]);
