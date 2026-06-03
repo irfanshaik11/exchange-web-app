@@ -1176,18 +1176,9 @@ export default function TradePage() {
           setPositionLinesApi(null);
           return;
         }
-        // Use pre-computed avg prices when available, otherwise derive from totals
-        const avgBuy = data.avgBuyPriceUsd ?? data.avgBuyPriceUSD
-          ?? (data.totalBoughtTokens > 0 && data.totalBoughtUsd > 0
-            ? data.totalBoughtUsd / data.totalBoughtTokens
-            : null);
-        const avgSell = data.avgSellPriceUsd ?? data.avgSellPriceUSD
-          ?? (data.totalSoldTokens > 0 && data.totalSoldUsd > 0
-            ? data.totalSoldUsd / data.totalSoldTokens
-            : null);
         setPositionLinesApi({
-          avgBuyPriceUsd: avgBuy,
-          avgSellPriceUsd: avgSell,
+          avgBuyPriceUsd: data.avgBuyPriceUsd ?? data.avgBuyPriceUSD ?? null,
+          avgSellPriceUsd: data.avgSellPriceUsd ?? data.avgSellPriceUSD ?? null,
         });
       } catch {
         setPositionLinesApi(null);
