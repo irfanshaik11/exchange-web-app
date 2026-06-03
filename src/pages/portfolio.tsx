@@ -3918,6 +3918,20 @@ export default function PortfolioPage() {
                       </svg>
                       Show Hidden
                     </button>
+                    <button
+                      onClick={() => setSortByPnl(!sortByPnl)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer border text-xs ${sortByPnl ? 'border-[#18c48c]/30 text-[#18c48c] bg-[#18c48c]/10' : 'border-white/[0.06] hover:border-white/[0.1] text-[#71717a] hover:text-[#a1a1aa]'}`}
+                    >
+                      <span className="text-xs">↑↓</span>
+                      PnL
+                    </button>
+                    <button
+                      onClick={() => setSortByUSD(!sortByUSD)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 cursor-pointer border border-white/[0.06] hover:border-white/[0.1] text-[#71717a] hover:text-[#a1a1aa] text-xs"
+                    >
+                      <span className="text-xs">↑↓</span>
+                      {sortByUSD ? "USD" : "SOL"}
+                    </button>
                   </div>
                 </div>
 
@@ -3957,8 +3971,6 @@ export default function PortfolioPage() {
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
                         fallbackPositions={fallbackPositions}
-                        sortByPnl={sortByPnl}
-                        onToggleSortByPnl={() => setSortByPnl(!sortByPnl)}
                       />
                     )}
                   </div>
@@ -4015,8 +4027,6 @@ export default function PortfolioPage() {
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
                         fallbackPositions={fallbackPositions}
-                        sortByPnl={sortByPnl}
-                        onToggleSortByPnl={() => setSortByPnl(!sortByPnl)}
                       />
                     )}
                   </div>
