@@ -27,9 +27,9 @@ import { broadcastTradeCompleted, TRADE_COMPLETED_EVENT, type TradeCompletedDeta
 import { formatMonadError } from '~/utils/monadError';
 import { useUser } from '../UserContext';
 import {
-  insertOptimisticMarker,
   confirmOptimisticMarker,
-  verifyTxAndRollbackMarker,
+  insertOptimisticMarker,
+  rollbackOptimisticMarker,
 } from "~/utils/pendingTradeMarkers";
 import { useSolPrice } from '../SolPriceContext';
 import { dispatchBalanceRefresh } from '~/utils/balanceEvents';
@@ -517,6 +517,10 @@ const Positions: React.FC<PositionsProps> = ({
 
       const toastControls = createQuickTradeToast(tokenImage, tokenName, isMonad ? 'monad' : 'solana', position.tokenAddress);
 
+      // Optimistic chart marker — declared outside try so the catch can roll
+      // back. Only set for the Solana branch (Monad isn't covered by this feature).
+      let __sellMarkId = "";
+
       try {
         if (isMonad) {
           const tokenAddress =
@@ -593,6 +597,13 @@ const Positions: React.FC<PositionsProps> = ({
               : 0;
           const primarySolAddr = primaryWalletAddresses.solana || "";
 
+          __sellMarkId = insertOptimisticMarker({
+            mint: position.tokenAddress,
+            walletAddress: primarySolAddr,
+            side: "sell",
+            amountToken: percent,
+          }).id;
+
           const sellResult = await tradeSellPercentage(
             {
               tokenAddress: position.tokenAddress,
@@ -612,19 +623,7 @@ const Positions: React.FC<PositionsProps> = ({
               : undefined,
           );
 
-          // Post-signature chart marker: only insert after we have a real txHash.
-          if (sellResult?.hash) {
-            const { id: __sellMarkId, inserted } = insertOptimisticMarker({
-              mint: position.tokenAddress,
-              walletAddress: primarySolAddr,
-              side: "sell",
-              amountToken: percent,
-            });
-            if (inserted) {
-              confirmOptimisticMarker(__sellMarkId, sellResult.hash);
-              verifyTxAndRollbackMarker(__sellMarkId, sellResult.hash);
-            }
-          }
+          confirmOptimisticMarker(__sellMarkId, sellResult?.hash);
 
           const explorerUrl = sellResult?.hash ? `https://solscan.io/tx/${sellResult.hash}` : undefined;
           toastControls.markSuccess(explorerUrl);
@@ -668,6 +667,7 @@ const Positions: React.FC<PositionsProps> = ({
           // which handles debounced refetch — no need for redundant refreshPositions() here
         }
       } catch (error: any) {
+        rollbackOptimisticMarker(__sellMarkId);
         // Check for POOL_GRADUATED error (bonding curve completed, liquidity migrated)
         const errorCode = error?.code || error?.response?.data?.code;
         const errorMessage = error?.message || error?.error || error?.response?.data?.error;

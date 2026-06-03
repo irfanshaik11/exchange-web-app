@@ -5871,19 +5871,6 @@ Maker: ${walletAddress}`;
             // For optimistic (user) trades, use __optimisticId for a stable
             // mark id that doesn't change when the timestamp updates from
             // click-time → actual execution time after WS merge.
-
-            // Pending visual state: optimistic markers that haven't been
-            // confirmed by the WS feed yet render with muted color, square
-            // shape, and a "?" suffix so the user can tell they're unverified.
-            const isUnverified = trade.__optimistic && !trade.__wsMatched && isUser;
-            let markerShape = "circle";
-            if (isUnverified) {
-              markColor = isBuy ? "darkseagreen" : "rosybrown";
-              label = label + "?";
-              markerShape = "square";
-              markerText = "PENDING CONFIRMATION\n" + markerText;
-            }
-
             const markId = trade.__optimisticId
               ? `user_trade_${trade.__optimisticId}`
               : `${isDev ? "dev" : isUser ? "user" : isMayhem ? "mayhem" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`;
@@ -5897,7 +5884,7 @@ Maker: ${walletAddress}`;
               labelFontColor: "white",
               minSize: 24,
               size: 1,
-              shape: markerShape,
+              shape: "circle",
               // Branded artwork for the in-bar circle: KOLs get their avatar,
               // Mayhem Bot gets the dedicated /mayhem bot.png. TradingView's
               // imageUrl renders inside the colored circle and falls back to

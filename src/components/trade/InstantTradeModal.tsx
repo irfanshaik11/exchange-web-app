@@ -7,9 +7,9 @@ import { FaTimes, FaRunning, FaGasPump, FaEye, FaBan, FaSpinner, FaCheckCircle, 
 import { LuPencil, LuCheck } from 'react-icons/lu';
 import { useUser } from '~/components/UserContext';
 import {
-  insertOptimisticMarker,
   confirmOptimisticMarker,
-  verifyTxAndRollbackMarker,
+  insertOptimisticMarker,
+  rollbackOptimisticMarker,
 } from "~/utils/pendingTradeMarkers";
 import { useQuickBuy } from '~/components/QuickBuyContext';
 import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
@@ -876,6 +876,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
     const cleanupSolanaTradeListener = listenForTradeEvents(token.mint || '', uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
+    let __markId = "";
+
     try {
       // Resolve pool: prefer migrated_pool_address (live AMM after migration);
       // fall back to pair_address (bonding curve) only when not migrated. Re-
@@ -893,6 +895,14 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       }
       const baseMint = token.mint || '';
       const quoteMint = SOL_MINT_ADDRESS;
+
+      __markId = insertOptimisticMarker({
+        mint: baseMint,
+        walletAddress: primaryWalletAddresses?.solana ?? walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+        side: "buy",
+        amountSol: amount,
+        priceUsd: token.usd_price,
+      }).id;
 
       notifyTradePending({ tokenAddress: baseMint, tradeType: 'buy', chain: 'sol' });
       const multiResult = await executeSolanaMultiBuy({
@@ -938,20 +948,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
         )?.result?.txid;
 
-      // Post-signature chart marker: only insert after we have a real txHash.
-      if (firstTxHash) {
-        const { id: __markId, inserted } = insertOptimisticMarker({
-          mint: baseMint,
-          walletAddress: primaryWalletAddresses?.solana ?? walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
-          side: "buy",
-          amountSol: amount,
-          priceUsd: token.usd_price,
-        });
-        if (inserted) {
-          confirmOptimisticMarker(__markId, firstTxHash);
-          verifyTxAndRollbackMarker(__markId, firstTxHash);
-        }
-      }
+      confirmOptimisticMarker(__markId, firstTxHash);
 
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -1000,6 +997,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
       return { success: true };
     } catch (error: any) {
+      rollbackOptimisticMarker(__markId);
       tradeErrored = true;
       cleanupSolanaTradeListener();
       if (timerHandle) {
@@ -1486,8 +1484,18 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         // Listen for trade events (for real-time error detection)
         const cleanupSellTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'solana');
 
+        let __sellMarkId = "";
+
         try {
           const poolType = getPoolTypeFromToken(token);
+
+          __sellMarkId = insertOptimisticMarker({
+            mint: tokenAddress,
+            walletAddress: primaryWalletAddresses?.solana ?? walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
+            side: "sell",
+            amountToken: percentage,
+            priceUsd: (token as any).usd_price,
+          }).id;
 
           // Estimate SOL credit for the optimistic header update.
           const slipFraction = getEffectiveSlippage(sellSettings.maxSlippage, false);
@@ -1543,18 +1551,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           cleanupSellTradeListener();
 
           if (sellResult?.hash) {
-            // Post-signature chart marker: only insert after we have a real txHash.
-            const { id: __sellMarkId, inserted: sellMarkInserted } = insertOptimisticMarker({
-              mint: tokenAddress,
-              walletAddress: primaryWalletAddresses?.solana ?? walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
-              side: "sell",
-              amountToken: percentage,
-              priceUsd: (token as any).usd_price,
-            });
-            if (sellMarkInserted) {
-              confirmOptimisticMarker(__sellMarkId, sellResult.hash);
-              verifyTxAndRollbackMarker(__sellMarkId, sellResult.hash);
-            }
+            confirmOptimisticMarker(__sellMarkId, sellResult.hash);
             // Update Solana logo to clickable Solscan link
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
@@ -1623,12 +1620,14 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             return { success: true, txHash: sellResult.hash };
           } else {
             // No hash returned — treat as failure
+            rollbackOptimisticMarker(__sellMarkId);
             pendingSolanaQuickBuyToastRef.current = null;
             transformToastToError(uniqueToastId, sellResult?.message || 'Sell failed', tokenImage, tokenName);
             setIsLoading(false);
             return { success: false };
           }
         } catch (error: any) {
+          rollbackOptimisticMarker(__sellMarkId);
           tradeErrored = true;
           cleanupSellTradeListener();
 

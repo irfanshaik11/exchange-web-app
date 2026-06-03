@@ -18,7 +18,6 @@ const STORAGE_KEY = "interstate_pending_trade_markers_v1";
 // TTL constants
 const PENDING_HARD_TTL_MS = 5 * 60 * 1000; // 5min — covers tab-killed-mid-flight zombies
 const NO_SIG_CONFIRMED_TTL_MS = 60 * 1000; // 60s — pathological "confirmed but no signature"
-const CONFIRMED_WITH_SIG_TTL_MS = 10 * 60 * 1000; // 10min — safety net for confirmed rows whose verify failed
 
 export interface PendingTradeMarker {
   id: string; // local primary key, e.g. `pend_<uuid>`
@@ -118,16 +117,8 @@ function pruneStale() {
     ) {
       return false;
     }
-    // Safety-net TTL for confirmed-with-signature rows. Normally these are
-    // cleaned up by verifyTxAndRollbackMarker or WS reconciliation, but if
-    // both fail (RPC timeout, WS disconnect) we don't want phantoms forever.
-    if (
-      row.status === "confirmed" &&
-      row.signature &&
-      now - row.createdAt > CONFIRMED_WITH_SIG_TTL_MS
-    ) {
-      return false;
-    }
+    // Confirmed-with-signature rows are kept indefinitely. They're cleaned up
+    // by the reconciliation effect in [id].tsx when the WS echoes the trade.
     return true;
   });
   if (next.length !== cache.length) {
@@ -362,7 +353,7 @@ export function verifyTxAndRollbackMarker(
 
   const connection = new Connection(url, "confirmed");
 
-  // Wait for confirmation then check meta.err, with one retry.
+  // Wait for confirmation then check meta.err
   Promise.resolve()
     .then(async () => {
       // Give the network a moment to finalise the tx
@@ -370,19 +361,10 @@ export function verifyTxAndRollbackMarker(
         // timeout / ws failure — fall through to getTransaction
       });
 
-      let tx = await connection.getTransaction(txHash, {
+      const tx = await connection.getTransaction(txHash, {
         commitment: "confirmed",
         maxSupportedTransactionVersion: 0,
       });
-
-      // Retry once after 5s if tx not yet indexed
-      if (!tx) {
-        await new Promise((r) => setTimeout(r, 5000));
-        tx = await connection.getTransaction(txHash, {
-          commitment: "confirmed",
-          maxSupportedTransactionVersion: 0,
-        });
-      }
 
       if (tx?.meta?.err) {
         console.warn(
@@ -394,10 +376,9 @@ export function verifyTxAndRollbackMarker(
     })
     .catch((err) => {
       console.warn(
-        "[pendingTradeMarkers] verifyTx failed, removing marker",
+        "[pendingTradeMarkers] verifyTx failed, leaving marker for TTL cleanup",
         err,
       );
-      removePendingTrade(markerId);
     });
 }
 
