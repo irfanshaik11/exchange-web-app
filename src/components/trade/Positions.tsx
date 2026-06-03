@@ -1770,7 +1770,7 @@ const Positions: React.FC<PositionsProps> = ({
                         {metadata?.name || shortAddr(displayAddress)}
                       </button>
                       <div className="text-xs text-neutral-400 font-mono truncate" title={displayAddress}>
-                        {metadata?.symbol ? `$${metadata.symbol}` : shortAddr(displayAddress)}
+                        {shortAddr(displayAddress)}
                       </div>
                     </div>
                   </div>
