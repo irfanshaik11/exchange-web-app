@@ -2027,13 +2027,12 @@ export default function Header({
               >
                 {navLinks.map((link) => {
                   const isActive =
-                    !link.external && (
                     router.pathname === link.href ||
                     (link.name === "Trenches" &&
                       router.pathname.startsWith("/trade/")) ||
                     (link.name === "Airdrop" &&
                       (router.pathname === "/airdrop-genesis" ||
-                        router.pathname === "/referrals")));
+                        router.pathname === "/referrals"));
                   const isAgent = link.name === "Agent";
 
                   if (isAgent) {
@@ -2081,8 +2080,7 @@ export default function Header({
                   return (
                     <Link
                       key={link.name}
-                      href={link.external ? link.href : chainAwareHref(link.href)}
-                      {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      href={chainAwareHref(link.href)}
                       className={`relative flex min-h-[44px] flex-shrink-0 items-center px-3 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
@@ -3083,38 +3081,29 @@ export default function Header({
               </div>
             ) : (
               !userLoading && (
-                <div className="ml-0.5 flex flex-shrink-0 items-center gap-2 sm:ml-1 md:ml-1.5 lg:ml-2">
-                  <button
-                    className="flex h-10 min-h-[44px] items-center justify-center rounded-lg border border-[#333] px-4 py-2 text-sm font-medium text-white transition-all duration-200 sm:h-8 sm:min-h-0 sm:py-1.5"
-                    style={{ backgroundColor: "#1a1a1a" }}
-                    onClick={() => {
-                      window.dispatchEvent(new CustomEvent("open-login-modal"));
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#2a2a2a";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "#1a1a1a";
-                    }}
-                  >
-                    Sign Up
-                  </button>
-                  <button
-                    className="flex h-10 min-h-[44px] items-center justify-center rounded-lg border-none px-4 py-2 text-sm font-medium text-black transition-all duration-200 sm:h-8 sm:min-h-0 sm:py-1.5"
-                    style={{ backgroundColor: "#ffffff" }}
-                    onClick={() => {
-                      window.dispatchEvent(new CustomEvent("open-login-modal"));
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#e5e5e5";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "#ffffff";
-                    }}
-                  >
-                    Log In
-                  </button>
-                </div>
+                <button
+                  className="ml-0.5 flex h-10 min-h-[44px] flex-shrink-0 items-center justify-center rounded-md border-none px-3 py-2 text-sm font-medium text-black transition-all duration-300 ease-out sm:ml-1 sm:h-8 sm:min-h-0 sm:py-1.5 md:ml-1.5 md:px-3 lg:ml-2"
+                  style={{
+                    backgroundColor: AX.mint,
+                  }}
+                  onClick={() => {
+                    const event = new CustomEvent("open-login-modal");
+                    window.dispatchEvent(event);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#58B890";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)";
+                    e.currentTarget.style.transform = "scale(1.02)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.mint;
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.transform = "scale(1)";
+                  }}
+                >
+                  Login
+                </button>
               )
             )}
           </div>
@@ -3519,18 +3508,16 @@ export default function Header({
             <nav className="flex flex-1 flex-col overflow-y-auto py-2">
               {navLinks.map((link) => {
                 const isActive =
-                  !link.external && (
                   router.pathname === link.href ||
                   (link.name === "Trenches" &&
                     router.pathname.startsWith("/trade/")) ||
                   (link.name === "Airdrop" &&
                     (router.pathname === "/airdrop-genesis" ||
-                      router.pathname === "/referrals")));
+                      router.pathname === "/referrals"));
                 return (
                   <Link
                     key={link.name}
-                    href={link.external ? link.href : chainAwareHref(link.href)}
-                    {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                    href={chainAwareHref(link.href)}
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex items-center rounded-none px-4 py-3 text-base font-medium transition-colors"
                     style={{

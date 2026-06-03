@@ -825,7 +825,7 @@ export function ReferralAccessGate({
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>
-      {status === "granted" || (!user && !userLoading) ? children : null}
+      {status === "granted" ? children : null}
       {showOverlay && (
         <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl">
           <div className="absolute inset-0 pointer-events-none">

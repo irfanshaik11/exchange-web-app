@@ -2462,8 +2462,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       if (!user?.bearerToken) {
         setSuccessMessage(null);
-        window.dispatchEvent(new CustomEvent("open-login-modal"));
-        showCenteredErrorToast("Please log in to trade.");
+        showCenteredErrorToast("Authentication required to create orders.");
         setPendingTradeOptions(null);
         return;
       }
@@ -4305,11 +4304,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             color: '#030304',
             boxShadow: mode === "buy" ? `0 0 20px ${AX.mintGlow}` : `0 0 20px ${AX.sellGlow}`,
           }}
-          disabled={!user?.bearerToken ? false : (isSniperMode
+          disabled={isSniperMode
             ? !sniperAmount || Number(sniperAmount) <= 0 || sniperSubmitting
             : isDevSellMode
               ? !amount || Number(amount) <= 0 || devSubmitting || !creatorAddress
-              : !amount || (tab === "limit" && !targetMC))}
+              : !amount || (tab === "limit" && !targetMC)}
           onMouseEnter={(e) => {
             e.currentTarget.style.filter = 'brightness(1.1)';
             e.currentTarget.style.transform = 'scale(1.01)';
@@ -4319,10 +4318,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             e.currentTarget.style.transform = 'scale(1)';
           }}
           onClick={() => {
-            if (!user?.bearerToken) {
-              window.dispatchEvent(new CustomEvent("open-login-modal"));
-              return;
-            }
             if (isSniperMode) {
               void handleCreateSniperOrder();
             } else if (isDevSellMode) {
@@ -4332,9 +4327,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             }
           }}
         >
-          {!user?.bearerToken ? (
-            <span className="inline-flex items-center gap-1">Login to Trade</span>
-          ) : isSniperMode ? (
+          {isSniperMode ? (
             sniperSubmitting ? (
               "Arming…"
             ) : (
