@@ -751,11 +751,14 @@ const SearchModalContent = React.memo(function SearchModalContent({
   // Live trending feed for the empty-state fallback (GMGN parity). Reuses the
   // app-wide singleton trending WebSocket — `TrendingBackgroundLoader` already
   // keeps the 1h window connected, so this opens no new socket and renders
-  // instantly from the shared cache. Gated on `open` so the modal drops its
-  // listener while closed.
+  // instantly from the shared cache. Subscribe only while the trending list can
+  // actually be shown (modal open, no active search, no history) so the modal
+  // doesn't re-render on every WS tick while the user is typing/viewing results.
+  // The global map stays warm, so re-enabling reads cached data with no gap.
+  const canShowTrending = open && !hasSearched && recentSearches.length === 0;
   const { tokens: trendingWsTokens } = useTrendingWebSocket({
     timeframe: "1h",
-    enabled: open,
+    enabled: canShowTrending,
   });
   const trendingFallback = useMemo(() => {
     if (!Array.isArray(trendingWsTokens) || trendingWsTokens.length === 0) {
@@ -2400,7 +2403,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           mint: item.mint,
                           launchpad_protocol: item.launchpad_protocol,
                           protocol: item.protocol,
-                        } as any;
+                        };
                         const itemProtocolColor = resolveProtocolColor(
                           trendingMeta,
                           "sol",
@@ -2413,36 +2416,33 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           shouldFillProtocolBadge(trendingMeta);
                         const isMayhem = !!item.is_mayhem_mode;
 
-                        const toToken = (): Token =>
-                          ({
-                            id: 0,
-                            mint: item.mint,
-                            name: item.name || "",
-                            symbol: item.symbol || "",
-                            logo: item.logo || null,
-                            fully_diluted_value: mcRaw,
-                            total_liquidity_usd:
-                              item.total_liquidity_usd ||
-                              item.liquidityUsd ||
-                              0,
-                            total_buy_volume_1h: 0,
-                            total_sell_volume_1h: 0,
-                            created_at:
-                              item.created_at != null
-                                ? String(item.created_at)
-                                : "",
-                            bonding_curve_progress: "0%",
-                            amm: "",
-                            uri:
-                              item.uri ||
-                              item.image_url ||
-                              item.image ||
-                              item.logo ||
-                              "",
-                            pair_address: item.pair_address || item.mint,
-                            launchpad_protocol: item.launchpad_protocol,
-                            is_mayhem_mode: isMayhem,
-                          }) as Token & { launchpad_protocol?: string };
+                        const rowToken = {
+                          id: 0,
+                          mint: item.mint,
+                          name: item.name || "",
+                          symbol: item.symbol || "",
+                          logo: item.logo || null,
+                          fully_diluted_value: mcRaw,
+                          total_liquidity_usd:
+                            item.total_liquidity_usd || item.liquidityUsd || 0,
+                          total_buy_volume_1h: 0,
+                          total_sell_volume_1h: 0,
+                          created_at:
+                            item.created_at != null
+                              ? String(item.created_at)
+                              : "",
+                          bonding_curve_progress: "0%",
+                          amm: "",
+                          uri:
+                            item.uri ||
+                            item.image_url ||
+                            item.image ||
+                            item.logo ||
+                            "",
+                          pair_address: item.pair_address || item.mint,
+                          launchpad_protocol: item.launchpad_protocol,
+                          is_mayhem_mode: isMayhem,
+                        } as Token & { launchpad_protocol?: string };
 
                         return (
                           <li
@@ -2471,7 +2471,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                                 },
                               );
                             }}
-                            onClick={() => handleSelectToken(toToken())}
+                            onClick={() => handleSelectToken(rowToken)}
                             className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#18181A] px-3 py-2.5 transition-all duration-200 hover:z-30 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
                           >
                             {/* Token Logo with Protocol Border */}
@@ -2572,7 +2572,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleSelectToken(toToken());
+                                handleSelectToken(rowToken);
                               }}
                               className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
                             >
