@@ -69,6 +69,7 @@ import {
 import { checkAtaExists } from "~/utils/ataCheck";
 import { getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
+import useTrendingWebSocket from "~/hooks/useTrendingWebSocket";
 import {
   listenForTradeEvents,
   transformToastToError,
@@ -141,6 +142,14 @@ const sortByOptions = [
 const DEFAULT_PROTOCOL_COLOR = "#31e3ac";
 // Use the same pump.fun icon as PulseTable for consistency
 const DEFAULT_PROTOCOL_ICON = "https://pump.fun/pump-logomark.svg";
+
+// ─── Trending empty-state (GMGN parity) ───
+// When the search modal is open with no query AND no recent-search history,
+// surface what's hot instead of a static placeholder (mirrors GMGN's search
+// dropdown). Rows reuse the same look as the Recent Searches list below.
+const TRENDING_EMPTY_STATE_LIMIT = 7;
+// Drop dust/dead pairs so the fallback only ever shows tradeable tokens.
+const TRENDING_EMPTY_STATE_MIN_LIQUIDITY_USD = 500;
 
 const rawProtocolColorMap: Record<string, string> = {
   pump: DEFAULT_PROTOCOL_COLOR,
@@ -738,6 +747,33 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const [lastFetchTime, setLastFetchTime] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
   const [recentSearches, setRecentSearches] = useState<SearchHistoryItem[]>([]);
+
+  // Live trending feed for the empty-state fallback (GMGN parity). Reuses the
+  // app-wide singleton trending WebSocket — `TrendingBackgroundLoader` already
+  // keeps the 1h window connected, so this opens no new socket and renders
+  // instantly from the shared cache. Gated on `open` so the modal drops its
+  // listener while closed.
+  const { tokens: trendingWsTokens } = useTrendingWebSocket({
+    timeframe: "1h",
+    enabled: open,
+  });
+  const trendingFallback = useMemo(() => {
+    if (!Array.isArray(trendingWsTokens) || trendingWsTokens.length === 0) {
+      return [];
+    }
+    // Feed is already rank-sorted, age-capped, and blacklist-filtered upstream.
+    // Here we only drop zero-value / dust pairs and cap the row count.
+    return trendingWsTokens
+      .filter(
+        (t) =>
+          t &&
+          t.mint &&
+          (t.fully_diluted_value || t.marketCapUsd || 0) > 0 &&
+          (t.total_liquidity_usd || t.liquidityUsd || 0) >=
+            TRENDING_EMPTY_STATE_MIN_LIQUIDITY_USD,
+      )
+      .slice(0, TRENDING_EMPTY_STATE_LIMIT);
+  }, [trendingWsTokens]);
   const [selectedIndex, setSelectedIndex] = useState(-1); // Keyboard navigation
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -2331,34 +2367,253 @@ const SearchModalContent = React.memo(function SearchModalContent({
                   </div>
                 </div>
               ) : !recentSearches.length ? (
-                <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
-                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
-                    <FaSearch className="h-6 w-6 text-[#7FFFC9] sm:h-8 sm:w-8" />
-                  </div>
-                  <div className="space-y-2 text-center">
-                    <h3 className="text-base font-semibold text-white sm:text-lg">
-                      Start searching
-                    </h3>
-                    <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
-                      Type at least 2 characters to search for tokens by name,
-                      symbol, or contract address.
-                    </p>
-                    <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-2 text-xs">
-                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                        pepe
-                      </span>
-                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                        sol
-                      </span>
-                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                        pump
-                      </span>
-                      <span className="text-neutral-500">
-                        or contract address
+                trendingFallback.length > 0 ? (
+                  /* 24h-style Trending fallback (GMGN parity) — shown when the
+                     user has no search history. Rows mirror the Recent Searches
+                     list above and select via the same handleSelectToken path. */
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-[#9595B5]">
+                        <FaFire className="h-3.5 w-3.5 text-[#FF8A3D]" />
+                        Trending
                       </span>
                     </div>
+                    <ul className="flex flex-col overflow-y-auto">
+                      {trendingFallback.map((item) => {
+                        const mcRaw =
+                          item.fully_diluted_value || item.marketCapUsd || 0;
+                        const mc = formatMarketCap(mcRaw);
+                        const mcColor = getMarketCapColor(mcRaw);
+                        const liq = formatSmartNumber(
+                          item.total_liquidity_usd || item.liquidityUsd || 0,
+                        );
+                        const normalizedLogo = normalizeAssetUrl(
+                          item.image_url ||
+                            item.image ||
+                            item.logo ||
+                            item.uri ||
+                            null,
+                        );
+                        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.symbol || item.name || "T")}&background=0f1012&color=E6E7EA&size=56`;
+
+                        const trendingMeta = {
+                          mint: item.mint,
+                          launchpad_protocol: item.launchpad_protocol,
+                          protocol: item.protocol,
+                        } as any;
+                        const itemProtocolColor = resolveProtocolColor(
+                          trendingMeta,
+                          "sol",
+                        );
+                        const itemProtocolIcon = resolveProtocolIcon(
+                          trendingMeta,
+                          "sol",
+                        );
+                        const itemFillProtocolBadge =
+                          shouldFillProtocolBadge(trendingMeta);
+                        const isMayhem = !!item.is_mayhem_mode;
+
+                        const toToken = (): Token =>
+                          ({
+                            id: 0,
+                            mint: item.mint,
+                            name: item.name || "",
+                            symbol: item.symbol || "",
+                            logo: item.logo || null,
+                            fully_diluted_value: mcRaw,
+                            total_liquidity_usd:
+                              item.total_liquidity_usd ||
+                              item.liquidityUsd ||
+                              0,
+                            total_buy_volume_1h: 0,
+                            total_sell_volume_1h: 0,
+                            created_at:
+                              item.created_at != null
+                                ? String(item.created_at)
+                                : "",
+                            bonding_curve_progress: "0%",
+                            amm: "",
+                            uri:
+                              item.uri ||
+                              item.image_url ||
+                              item.image ||
+                              item.logo ||
+                              "",
+                            pair_address: item.pair_address || item.mint,
+                            launchpad_protocol: item.launchpad_protocol,
+                            is_mayhem_mode: isMayhem,
+                          }) as Token & { launchpad_protocol?: string };
+
+                        return (
+                          <li
+                            key={item.mint}
+                            onMouseEnter={() => {
+                              if (!item.mint) return;
+                              preloadTradeChart(
+                                {
+                                  mint: item.mint,
+                                  pairAddress: item.pair_address,
+                                  chain: "sol",
+                                  name: item.name || "",
+                                  symbol: item.symbol || "",
+                                  marketCapUsd: mcRaw,
+                                  image:
+                                    item.uri ||
+                                    item.image_url ||
+                                    item.image ||
+                                    item.logo ||
+                                    "",
+                                  launchpadProtocol: item.launchpad_protocol,
+                                },
+                                {
+                                  router,
+                                  tradeUrl: `/trade/${item.mint || item.pair_address}`,
+                                },
+                              );
+                            }}
+                            onClick={() => handleSelectToken(toToken())}
+                            className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#18181A] px-3 py-2.5 transition-all duration-200 hover:z-30 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
+                          >
+                            {/* Token Logo with Protocol Border */}
+                            <div
+                              className="relative flex flex-shrink-0 items-center justify-center"
+                              style={{ overflow: "visible" }}
+                            >
+                              <div
+                                className="relative rounded-lg transition-all duration-200 group-hover:scale-105"
+                                style={{
+                                  border: `2px solid ${isMayhem ? "#c83c51" : itemProtocolColor}`,
+                                  padding: 2,
+                                  backgroundColor: "#06070b",
+                                  boxShadow: `0 0 8px ${isMayhem ? "#c83c5120" : `${itemProtocolColor}20`}`,
+                                }}
+                              >
+                                <div className="relative h-12 w-12 overflow-hidden rounded-md sm:h-14 sm:w-14">
+                                  <FastImage
+                                    src={normalizedLogo ?? undefined}
+                                    fallbackSrc={fallbackAvatar}
+                                    alt={item.name || item.symbol || ""}
+                                    width={56}
+                                    height={56}
+                                    className="h-full w-full object-cover"
+                                    symbol={item.symbol}
+                                    name={item.name}
+                                    showBubble={false}
+                                  />
+                                </div>
+                              </div>
+                              {/* Protocol Pill */}
+                              <div
+                                className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 transform items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110"
+                                style={{
+                                  width: 20,
+                                  height: 20,
+                                  backgroundColor: "#000000",
+                                  border: `1px solid ${isMayhem ? "#c83c51" : itemProtocolColor}`,
+                                  boxShadow: `0 0 4px ${isMayhem ? "#c83c5160" : `${itemProtocolColor}60`}`,
+                                }}
+                              >
+                                {isMayhem ? (
+                                  <img
+                                    src="/Mayhem.webp"
+                                    alt="Mayhem Mode"
+                                    className="h-3/4 w-3/4 rounded-full object-contain"
+                                  />
+                                ) : (
+                                  <img
+                                    src={itemProtocolIcon}
+                                    alt="Protocol logo"
+                                    className={`${itemFillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                                    style={{
+                                      filter:
+                                        itemProtocolColor === "#eab308"
+                                          ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                                          : "none",
+                                    }}
+                                    onError={(e) => {
+                                      (
+                                        e.target as HTMLImageElement
+                                      ).style.display = "none";
+                                    }}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                            {/* Token Info */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
+                                  {item.symbol}
+                                </span>
+                                <span className="min-w-0 truncate text-xs text-neutral-500">
+                                  {item.name}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-[#9595B5]">
+                                <span>
+                                  MC:{" "}
+                                  <span
+                                    className="font-medium"
+                                    style={{ color: mcColor }}
+                                  >
+                                    ${mc}
+                                  </span>
+                                </span>
+                                <span>
+                                  L:{" "}
+                                  <span className="font-medium text-white">
+                                    ${liq}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+                            {/* Quick Action */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectToken(toToken());
+                              }}
+                              className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                            >
+                              <BsLightningChargeFill className="h-3 w-3" />
+                              Trade
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
+                    <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
+                      <FaSearch className="h-6 w-6 text-[#7FFFC9] sm:h-8 sm:w-8" />
+                    </div>
+                    <div className="space-y-2 text-center">
+                      <h3 className="text-base font-semibold text-white sm:text-lg">
+                        Start searching
+                      </h3>
+                      <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                        Type at least 2 characters to search for tokens by name,
+                        symbol, or contract address.
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-2 text-xs">
+                        <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                          pepe
+                        </span>
+                        <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                          sol
+                        </span>
+                        <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                          pump
+                        </span>
+                        <span className="text-neutral-500">
+                          or contract address
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )
               ) : null}
             </div>
           ) : (
