@@ -2901,7 +2901,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               side: "sell",
               amountToken: sellPercentage,
               priceUsd: token.usd_price,
-              timestamp: Date.now() - 1500,
+              timestamp: Date.now() - 500,
               status: "pending",
               createdAt: Date.now(),
             });
@@ -3228,7 +3228,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             side: "buy",
             amountSol: buyAmount,
             priceUsd: token.usd_price,
-            timestamp: Date.now() - 1500,
+            timestamp: Date.now() - 500,
             status: "pending",
             createdAt: Date.now(),
           });

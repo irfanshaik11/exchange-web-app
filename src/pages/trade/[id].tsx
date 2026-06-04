@@ -835,6 +835,12 @@ export default function TradePage() {
     // matching sig dedupes onto this slot via case 2a), or by `__pending_<id>`
     // while still pending.
     for (const p of pendingTrades) {
+      // Only render once the trade actually SUBMITTED (has a signature). This
+      // keeps phantom markers off the chart for pre-send failures — e.g.
+      // "low liquidity" / "insufficient SOL" — that never produced a txHash.
+      // The marker is created on click but stays hidden until the signature is
+      // stamped (confirmOptimisticMarker), i.e. ~when we get the txHash.
+      if (!p.signature) continue;
       const key = p.signature || `__pending_${p.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
