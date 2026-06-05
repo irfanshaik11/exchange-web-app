@@ -1837,6 +1837,27 @@ const SearchModalContent = React.memo(function SearchModalContent({
             <BlockchainSwitcher />
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex h-8 flex-shrink-0 items-center gap-1 rounded-md border border-[#FFFFFF14] bg-[#1B1C21] px-2 transition-colors focus-within:border-[#7FFFC94D]">
+              <BsLightningChargeFill className="h-2.5 w-2.5 flex-shrink-0 text-[#7FFFC9]" />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={quickBuyAmount}
+                onChange={(e) => {
+                  const v = e.target.value
+                    .replace(/[^0-9.]/g, "")
+                    .replace(/(\..*)\./g, "$1");
+                  setQuickBuyAmount(v);
+                  try {
+                    if (v !== "" && parseFloat(v) >= 0)
+                      localStorage.setItem("quickBuyAmount", v);
+                  } catch {}
+                }}
+                aria-label="Quick buy amount in SOL"
+                className="w-8 bg-transparent text-xs font-semibold text-white outline-none"
+              />
+              <span className="text-[10px] font-medium text-[#8A9099]">SOL</span>
+            </div>
             <button
               type="button"
               onClick={openPulseFilters}
@@ -1891,8 +1912,30 @@ const SearchModalContent = React.memo(function SearchModalContent({
           })}
         </div> */}
         <div className="flex flex-col items-start justify-between gap-2 px-3 pt-2 pb-2 sm:items-center sm:gap-3 sm:px-4 sm:pt-4 md:flex-row">
-          <div className="hidden w-full items-center sm:w-auto md:flex">
+          <div className="hidden w-full items-center gap-2.5 sm:w-auto md:flex">
             <BlockchainSwitcher />
+            <div className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg border border-[#FFFFFF14] bg-[#1B1C21] px-2.5 transition-colors focus-within:border-[#7FFFC94D]">
+              <BsLightningChargeFill className="h-3 w-3 flex-shrink-0 text-[#7FFFC9]" />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={quickBuyAmount}
+                onChange={(e) => {
+                  const v = e.target.value
+                    .replace(/[^0-9.]/g, "")
+                    .replace(/(\..*)\./g, "$1");
+                  setQuickBuyAmount(v);
+                  try {
+                    if (v !== "" && parseFloat(v) >= 0)
+                      localStorage.setItem("quickBuyAmount", v);
+                  } catch {}
+                }}
+                aria-label="Quick buy amount in SOL"
+                title="Quick buy amount (SOL)"
+                className="w-9 bg-transparent text-sm font-semibold text-white outline-none"
+              />
+              <span className="text-[11px] font-medium text-[#8A9099]">SOL</span>
+            </div>
           </div>
 
           <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
@@ -2304,7 +2347,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               } as Token & { launchpad_protocol?: string };
                               handleSelectToken(token);
                             }}
-                            className="flex flex-shrink-0 items-center gap-1 rounded-lg whitespace-nowrap border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
+                            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
                           >
                             <BsLightningChargeFill className="h-3 w-3" />
                             Trade
@@ -2574,7 +2617,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                                 e.stopPropagation();
                                 handleSelectToken(rowToken);
                               }}
-                              className="flex flex-shrink-0 items-center gap-1 rounded-lg whitespace-nowrap border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
+                              className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
                             >
                               <BsLightningChargeFill className="h-3 w-3" />
                               Trade
@@ -2618,25 +2661,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
             </div>
           ) : (
             <>
-              {/* Column headers (desktop only — mobile rows render with inline labels) */}
-              <div
-                className="hidden w-full items-center justify-between gap-4 px-3 py-2 text-[11px] font-medium tracking-wide text-[#666666] uppercase sm:flex sm:px-4 md:gap-6 md:px-5"
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-              >
-                <div className="w-full max-w-72 min-w-0 flex-1">Token</div>
-                <div className="flex flex-shrink-0 items-center gap-3 sm:text-[11px] md:gap-5">
-                  <span className="w-20 text-center">MCap</span>
-                  <span className="w-20 text-center">Vol 24hr</span>
-                  <span className="w-20 text-center">Liq</span>
-                </div>
-                <span
-                  className="flex-shrink-0 text-center"
-                  style={{ width: "76px" }}
-                >
-                  Quick Buy
-                </span>
-              </div>
-              <ul className="flex h-full list-none flex-col gap-1 overflow-y-auto pb-2">
+              {/* No column header — metric labels render inline per row (GMGN-style) */}
+              <ul className="flex h-full list-none flex-col gap-1 overflow-y-auto pt-1 pb-2">
                 {displayTokens.map((token, index) => {
                   const mcRaw = token.fully_diluted_value || 0;
                   const mc = formatMarketCap(mcRaw);
@@ -3279,7 +3305,7 @@ const TokenListItem = React.memo(
                   e.stopPropagation();
                   onQuickBuy ? onQuickBuy(token) : onSelect(token);
                 }}
-                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg whitespace-nowrap border border-[#7FFFC94D] bg-[#7FFFC914] px-4 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
+                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-4 py-2 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
                 style={{ transformOrigin: "center", pointerEvents: "auto" }}
                 title={onQuickBuy ? "Quick buy token" : "Select token"}
               >
@@ -3917,20 +3943,37 @@ const TokenListItem = React.memo(
               </div>
             </div>
 
-            {/* MCap / Vol / Liq values - labels live in the column header above */}
-            <div className="flex h-full flex-shrink-0 items-center gap-3 text-xs whitespace-nowrap text-[#9595B5] sm:text-sm md:gap-5">
-              <span
-                className="w-20 text-center font-semibold tabular-nums"
-                style={{ color: mcColor }}
-              >
-                ${mc}
-              </span>
-              <span className="w-20 text-center font-semibold text-white tabular-nums">
-                ${vol}
-              </span>
-              <span className="w-20 text-center font-semibold text-white tabular-nums">
-                ${liq}
-              </span>
+            {/* MCap / Vol / Liq — GMGN-style inline labels + hover tooltips */}
+            <div className="flex h-full flex-shrink-0 items-center gap-4 whitespace-nowrap text-sm md:gap-5">
+              <div className="group/mc relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  MC
+                </span>
+                <span className="font-semibold" style={{ color: mcColor }}>
+                  ${mc}
+                </span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/mc:opacity-100">
+                  Market Cap
+                </span>
+              </div>
+              <div className="group/vol relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  V
+                </span>
+                <span className="font-semibold text-white">${vol}</span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/vol:opacity-100">
+                  {volIs24h ? "24h Volume" : "1h Volume"}
+                </span>
+              </div>
+              <div className="group/liq relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  L
+                </span>
+                <span className="font-semibold text-white">${liq}</span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/liq:opacity-100">
+                  Liquidity
+                </span>
+              </div>
             </div>
 
             <button
@@ -3940,7 +3983,7 @@ const TokenListItem = React.memo(
                 e.stopPropagation();
                 onQuickBuy ? onQuickBuy(token) : onSelect(token);
               }}
-              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg whitespace-nowrap border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3"
+              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-2 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3"
               style={{ transformOrigin: "center", pointerEvents: "auto" }}
               title={onQuickBuy ? "Quick buy token" : "Select token"}
             >
