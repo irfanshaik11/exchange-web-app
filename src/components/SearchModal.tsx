@@ -1828,7 +1828,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         onClose={onClose}
         align="center"
         zIndex={99999}
-        className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-xl border border-white bg-[#18181A] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
+        className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-[14px] border border-[#23252B] bg-[#16171B] tracking-[-0.012em] shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-200 sm:w-[600px] md:w-[800px]"
         disableClickOutside={pulseFilterModalOpen}
       >
         {/* Close Button - Mobile */}
@@ -1900,7 +1900,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
               Sort by:
             </span>
 
-            <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
+            <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#1B1C21] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
               {sortByOptions.map((option) => {
                 const IconComponent = option.icon;
                 const isActive = sortBy === option.key;
@@ -1925,8 +1925,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
                       onClick={() => setSortBy(option.key)}
                       className={`flex w-full cursor-pointer items-center justify-center rounded-md px-2 py-1.5 transition-all duration-200 sm:px-3 sm:py-1.5 ${
                         isActive
-                          ? "bg-[#1a1a1a] text-white shadow-sm"
-                          : "text-[#666666] hover:bg-[#141414] hover:text-[#9595B5]"
+                          ? "bg-[#2A2C33] text-white shadow-sm"
+                          : "text-[#8A9099] hover:bg-[#202228] hover:text-white"
                       }`}
                     >
                       <IconComponent className="size-3.5 sm:size-4" />
@@ -1948,7 +1948,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             <button
               type="button"
               onClick={openPulseFilters}
-              className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
+              className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#1B1C21] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
               aria-label="Filters"
               title="Filters"
             >
@@ -1959,7 +1959,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
         {/* Search Input */}
         <div className="relative px-3 py-2 sm:px-4 sm:py-3">
-          <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#18181A] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#18181A] sm:gap-3 sm:px-4 sm:py-3">
+          <div className="relative flex items-center gap-2.5 rounded-xl border border-[#FFFFFF0F] bg-[#1B1C21] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC94D] sm:gap-3 sm:px-4 sm:py-3.5">
             <FaSearch className="flex-shrink-0 text-base text-[#666666] sm:text-lg" />
             <input
               ref={inputRef}
@@ -1967,8 +1967,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Search tokens..."
-              className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#666666] sm:text-base"
+              placeholder="Search by name, ticker or address"
+              className="flex-1 bg-transparent text-sm font-medium text-white outline-none placeholder:font-normal placeholder:text-[#767C86] sm:text-[17px]"
             />
             {query && (
               <button
@@ -1997,10 +1997,10 @@ const SearchModalContent = React.memo(function SearchModalContent({
               </button>
             )}
             <div className="hidden flex-shrink-0 items-center gap-1.5 sm:flex">
-              <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
+              <span className="rounded-md border border-[#25272E] bg-[#202228] px-1.5 py-1 text-[11px] leading-none font-semibold text-[#8A9099]">
                 /
               </span>
-              <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
+              <span className="rounded-md border border-[#25272E] bg-[#202228] px-1.5 py-1 text-[11px] leading-none font-semibold text-[#8A9099]">
                 TAB
               </span>
             </div>
@@ -2244,7 +2244,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
                                 {item.symbol}
                               </span>
-                              <span className="min-w-0 truncate text-xs text-neutral-500">
+                              <span className="min-w-0 truncate text-[13px] text-neutral-400">
                                 {item.name}
                               </span>
                             </div>
@@ -2304,7 +2304,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               } as Token & { launchpad_protocol?: string };
                               handleSelectToken(token);
                             }}
-                            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                            className="flex flex-shrink-0 items-center gap-1 rounded-lg whitespace-nowrap border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
                           >
                             <BsLightningChargeFill className="h-3 w-3" />
                             Trade
@@ -2545,7 +2545,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                                 <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
                                   {item.symbol}
                                 </span>
-                                <span className="min-w-0 truncate text-xs text-neutral-500">
+                                <span className="min-w-0 truncate text-[13px] text-neutral-400">
                                   {item.name}
                                 </span>
                               </div>
@@ -2574,7 +2574,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                                 e.stopPropagation();
                                 handleSelectToken(rowToken);
                               }}
-                              className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                              className="flex flex-shrink-0 items-center gap-1 rounded-lg whitespace-nowrap border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
                             >
                               <BsLightningChargeFill className="h-3 w-3" />
                               Trade
@@ -2636,7 +2636,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                   Quick Buy
                 </span>
               </div>
-              <ul className="flex h-full list-none flex-col gap-2 overflow-y-auto pb-2">
+              <ul className="flex h-full list-none flex-col gap-1 overflow-y-auto pb-2">
                 {displayTokens.map((token, index) => {
                   const mcRaw = token.fully_diluted_value || 0;
                   const mc = formatMarketCap(mcRaw);
@@ -3128,10 +3128,10 @@ const TokenListItem = React.memo(
     return (
       <>
         <li
-          className={`group relative block rounded-lg border bg-[#18181A] px-3 py-3 text-sm transition-all duration-200 hover:z-30 sm:px-4 sm:py-4 sm:text-base md:px-5 ${
+          className={`group relative block rounded-[10px] border bg-transparent px-2.5 py-2.5 text-sm transition-all duration-150 hover:z-30 sm:px-3 sm:py-2.5 sm:text-base md:px-3.5 ${
             isSelected
-              ? "border-[#7FFFC940] bg-[#7FFFC908]"
-              : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a]"
+              ? "border-[#7FFFC94D] bg-[#7FFFC90D]"
+              : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1B1D22]"
           }`}
           style={{
             animation: `fadeSlideIn 0.3s ease-out ${index * 0.05}s both`,
@@ -3247,10 +3247,10 @@ const TokenListItem = React.memo(
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex items-center gap-1.5">
-                    <span className="flex-shrink-0 text-base font-bold text-white">
+                    <span className="flex-shrink-0 text-[15px] font-semibold text-white">
                       {token.symbol}
                     </span>
-                    <span className="truncate text-xs text-neutral-500">
+                    <span className="truncate text-[13px] text-neutral-400">
                       {token.name}
                     </span>
                     <button
@@ -3279,7 +3279,7 @@ const TokenListItem = React.memo(
                   e.stopPropagation();
                   onQuickBuy ? onQuickBuy(token) : onSelect(token);
                 }}
-                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-4 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f]"
+                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg whitespace-nowrap border border-[#7FFFC94D] bg-[#7FFFC914] px-4 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
                 style={{ transformOrigin: "center", pointerEvents: "auto" }}
                 title={onQuickBuy ? "Quick buy token" : "Select token"}
               >
@@ -3456,7 +3456,7 @@ const TokenListItem = React.memo(
           <div className="hidden w-full min-w-0 items-center justify-between gap-4 sm:flex md:gap-6">
             <div className="flex w-full max-w-72 min-w-0 flex-1 items-center gap-4">
               <div
-                className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center"
+                className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center"
                 style={{
                   overflow: "visible",
                 }}
@@ -3474,13 +3474,13 @@ const TokenListItem = React.memo(
                       boxShadow: `0 0 8px ${(token as any).is_mayhem_mode ? "#c83c5120" : `${protocolColor}20`}`,
                     }}
                   >
-                    <div className="relative h-14 w-14 overflow-hidden rounded-md">
+                    <div className="relative h-10 w-10 overflow-hidden rounded-[7px]">
                       <FastImage
                         src={normalizedLogo ?? undefined}
                         fallbackSrc={fallbackAvatar}
                         alt={token.name || token.symbol || ""}
-                        width={56}
-                        height={56}
+                        width={48}
+                        height={48}
                         className="h-full w-full object-cover"
                         symbol={token.symbol}
                         name={token.name}
@@ -3525,10 +3525,10 @@ const TokenListItem = React.memo(
 
               <div className="max-w-[380px] min-w-0 flex-1">
                 <div className="mb-1.5 flex min-w-0 items-center gap-2">
-                  <span className="flex-shrink-0 text-base font-bold text-white">
+                  <span className="flex-shrink-0 text-[15px] font-semibold text-white">
                     {token.symbol}
                   </span>
-                  <span className="min-w-0 truncate text-xs text-neutral-500">
+                  <span className="min-w-0 truncate text-[13px] text-neutral-400">
                     {token.name}
                   </span>
                   <button
@@ -3920,15 +3920,15 @@ const TokenListItem = React.memo(
             {/* MCap / Vol / Liq values - labels live in the column header above */}
             <div className="flex h-full flex-shrink-0 items-center gap-3 text-xs whitespace-nowrap text-[#9595B5] sm:text-sm md:gap-5">
               <span
-                className="w-20 text-center font-bold"
+                className="w-20 text-center font-semibold tabular-nums"
                 style={{ color: mcColor }}
               >
                 ${mc}
               </span>
-              <span className="w-20 text-center font-bold text-white">
+              <span className="w-20 text-center font-semibold text-white tabular-nums">
                 ${vol}
               </span>
-              <span className="w-20 text-center font-bold text-white">
+              <span className="w-20 text-center font-semibold text-white tabular-nums">
                 ${liq}
               </span>
             </div>
@@ -3940,7 +3940,7 @@ const TokenListItem = React.memo(
                 e.stopPropagation();
                 onQuickBuy ? onQuickBuy(token) : onSelect(token);
               }}
-              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3"
+              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg whitespace-nowrap border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3"
               style={{ transformOrigin: "center", pointerEvents: "auto" }}
               title={onQuickBuy ? "Quick buy token" : "Select token"}
             >
