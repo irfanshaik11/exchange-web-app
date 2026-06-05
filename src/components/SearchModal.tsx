@@ -1828,7 +1828,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         onClose={onClose}
         align="center"
         zIndex={99999}
-        className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-[14px] border border-[#23252B] bg-[#16171B] tracking-[-0.012em] shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-200 sm:w-[600px] md:w-[800px]"
+        className="relative mx-auto flex max-h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-[14px] border border-[#23252B] bg-[#16171B] tracking-[-0.012em] shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-200 sm:w-[600px] md:w-[800px]"
         disableClickOutside={pulseFilterModalOpen}
       >
         {/* Close Button - Mobile */}
@@ -1856,7 +1856,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                 aria-label="Quick buy amount in SOL"
                 className="w-8 bg-transparent text-xs font-semibold text-white outline-none"
               />
-              <span className="text-[10px] font-medium text-[#8A9099]">SOL</span>
+              <span className="text-[10px] font-medium text-[#8A9099]">
+                SOL
+              </span>
             </div>
             <button
               type="button"
@@ -1934,7 +1936,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                 title="Quick buy amount (SOL)"
                 className="w-9 bg-transparent text-sm font-semibold text-white outline-none"
               />
-              <span className="text-[11px] font-medium text-[#8A9099]">SOL</span>
+              <span className="text-[11px] font-medium text-[#8A9099]">
+                SOL
+              </span>
             </div>
           </div>
 
@@ -3944,7 +3948,7 @@ const TokenListItem = React.memo(
             </div>
 
             {/* MCap / Vol / Liq — GMGN-style inline labels + hover tooltips */}
-            <div className="flex h-full flex-shrink-0 items-center gap-4 whitespace-nowrap text-sm md:gap-5">
+            <div className="flex h-full flex-shrink-0 items-center gap-4 text-sm whitespace-nowrap md:gap-5">
               <div className="group/mc relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
                 <span className="cursor-default text-xs font-medium text-[#8A9099]">
                   MC
