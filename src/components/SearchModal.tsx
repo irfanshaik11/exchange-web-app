@@ -140,11 +140,14 @@ const sortByOptions = [
 
 // GMGN-style launchpad filter chips. `match` receives the normalized
 // launchpad_protocol / amm key (lowercased, separators stripped).
+// `match(protocol, mint)` mirrors shouldFillProtocolBadge so a token that
+// renders a launchpad badge also passes its chip (incl. the mint-encoded
+// fallbacks). Both args arrive lowercased.
 const SEARCH_FILTER_CHIPS: {
   key: string;
   label: string;
   color: string;
-  match: (p: string) => boolean;
+  match: (p: string, mint: string) => boolean;
 }[] = [
   {
     key: "pump",
@@ -156,13 +159,14 @@ const SEARCH_FILTER_CHIPS: {
     key: "bonk",
     label: "Bonk",
     color: "#e78c19",
-    match: (p) => p.includes("bonk") || p.includes("launchlab"),
+    match: (p, m) =>
+      p.includes("bonk") || p.includes("launchlab") || m.endsWith("bonk"),
   },
   {
     key: "bags",
     label: "Bags",
     color: "#00d62b",
-    match: (p) => p.includes("bags"),
+    match: (p, m) => p.includes("bags") || m.includes("bags"),
   },
 ];
 
@@ -1767,13 +1771,20 @@ const SearchModalContent = React.memo(function SearchModalContent({
     if (!hasSearched) return [];
     const sorted = sortTokens(searchResults, sortBy, query);
     if (activeFilterChips.length === 0) return sorted;
+    const active = SEARCH_FILTER_CHIPS.filter((c) =>
+      activeFilterChips.includes(c.key),
+    );
     return sorted.filter((t) => {
-      const p = normalizeKey(
-        String((t as any).launchpad_protocol || (t as any).amm || ""),
-      );
-      return SEARCH_FILTER_CHIPS.some(
-        (c) => activeFilterChips.includes(c.key) && c.match(p),
-      );
+      const tk = t as any;
+      const p = String(
+        tk.launchpad_protocol ||
+          tk.launchpad_name ||
+          tk.protocol ||
+          tk.amm ||
+          "",
+      ).toLowerCase();
+      const m = String(tk.mint || "").toLowerCase();
+      return active.some((c) => c.match(p, m));
     });
   }, [hasSearched, searchResults, sortBy, query, activeFilterChips]);
 
@@ -1887,8 +1898,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     .replace(/(\..*)\./g, "$1");
                   setQuickBuyAmount(v);
                   try {
-                    if (v !== "" && parseFloat(v) >= 0)
-                      localStorage.setItem("quickBuyAmount", v);
+                    const n = parseFloat(v);
+                    if (!isNaN(n) && n > 0)
+                      localStorage.setItem("quickBuyAmount", String(n));
                   } catch {}
                 }}
                 aria-label="Quick buy amount in SOL"
@@ -1901,7 +1913,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             <button
               type="button"
               onClick={openPulseFilters}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#1B1C21] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
               aria-label="Filters"
               title="Filters"
             >
@@ -1954,7 +1966,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         <div className="flex flex-col items-start justify-between gap-2 px-3 pt-2 pb-2 sm:items-center sm:gap-3 sm:px-4 sm:pt-4 md:flex-row">
           <div className="hidden w-full items-center gap-2.5 sm:w-auto md:flex">
             <BlockchainSwitcher />
-            <div className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg border border-[#FFFFFF14] bg-[#1B1C21] px-2.5 transition-colors focus-within:border-[#7FFFC94D]">
+            <div className="flex h-8 flex-shrink-0 cursor-text items-center gap-1.5 rounded-lg border border-[#FFFFFF14] bg-[#1B1C21] px-2.5 transition-colors hover:border-[#FFFFFF2E] focus-within:border-[#7FFFC94D]">
               <BsLightningChargeFill className="h-3 w-3 flex-shrink-0 text-[#7FFFC9]" />
               <input
                 type="text"
@@ -1966,8 +1978,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     .replace(/(\..*)\./g, "$1");
                   setQuickBuyAmount(v);
                   try {
-                    if (v !== "" && parseFloat(v) >= 0)
-                      localStorage.setItem("quickBuyAmount", v);
+                    const n = parseFloat(v);
+                    if (!isNaN(n) && n > 0)
+                      localStorage.setItem("quickBuyAmount", String(n));
                   } catch {}
                 }}
                 aria-label="Quick buy amount in SOL"
@@ -1993,11 +2006,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           : [...prev, chip.key],
                       )
                     }
-                    className="h-7 flex-shrink-0 rounded-full border px-2.5 text-xs font-medium transition-colors"
+                    className="h-7 flex-shrink-0 rounded-full border px-2.5 text-xs transition-colors"
                     style={{
                       borderColor: on ? chip.color : `${chip.color}59`,
-                      color: on ? chip.color : `${chip.color}b3`,
-                      backgroundColor: on ? `${chip.color}1f` : "transparent",
+                      color: on ? chip.color : `${chip.color}d9`,
+                      backgroundColor: on ? `${chip.color}26` : "transparent",
+                      fontWeight: on ? 600 : 500,
                     }}
                     aria-pressed={on}
                   >
@@ -2463,23 +2477,49 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     </svg>
                   </div>
                   <div className="space-y-2 text-center">
-                    <h3 className="text-base font-semibold text-white sm:text-lg">
-                      No tokens found
-                    </h3>
-                    <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
-                      We couldn't find any tokens matching "
-                      <span className="font-medium text-[#7FFFC9]">
-                        {query}
-                      </span>
-                      ". Try searching with a different name, symbol, or check
-                      the spelling.
-                    </p>
-                    <div className="px-2 pt-2 text-xs text-neutral-500">
-                      <p>
-                        💡 Tip: Search by token name, ticker symbol, or contract
-                        address
-                      </p>
-                    </div>
+                    {activeFilterChips.length > 0 &&
+                    searchResults.length > 0 ? (
+                      <>
+                        <h3 className="text-base font-semibold text-white sm:text-lg">
+                          No matches for the active filter
+                        </h3>
+                        <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                          {searchResults.length} result
+                          {searchResults.length === 1 ? "" : "s"} for "
+                          <span className="font-medium text-[#7FFFC9]">
+                            {query}
+                          </span>
+                          ", but none match the selected launchpad.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveFilterChips([])}
+                          className="mt-1 rounded-full border border-[#7FFFC94D] bg-[#7FFFC914] px-3 py-1 text-xs font-semibold text-[#7FFFC9] transition-colors hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
+                        >
+                          Clear filters
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="text-base font-semibold text-white sm:text-lg">
+                          No tokens found
+                        </h3>
+                        <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                          We couldn't find any tokens matching "
+                          <span className="font-medium text-[#7FFFC9]">
+                            {query}
+                          </span>
+                          ". Try searching with a different name, symbol, or
+                          check the spelling.
+                        </p>
+                        <div className="px-2 pt-2 text-xs text-neutral-500">
+                          <p>
+                            💡 Tip: Search by token name, ticker symbol, or
+                            contract address
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : !recentSearches.length ? (
