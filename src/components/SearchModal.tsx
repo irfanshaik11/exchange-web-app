@@ -138,6 +138,38 @@ const sortByOptions = [
   { key: "liquidity" as const, icon: FiDroplet },
 ];
 
+// GMGN-style launchpad filter chips. `match` receives the normalized
+// launchpad_protocol / amm key (lowercased, separators stripped).
+// `match(protocol, mint)` mirrors shouldFillProtocolBadge so a token that
+// renders a launchpad badge also passes its chip (incl. the mint-encoded
+// fallbacks). Both args arrive lowercased.
+const SEARCH_FILTER_CHIPS: {
+  key: string;
+  label: string;
+  color: string;
+  match: (p: string, mint: string) => boolean;
+}[] = [
+  {
+    key: "pump",
+    label: "Pumpfun",
+    color: "#88d693",
+    match: (p) => p.includes("pump"),
+  },
+  {
+    key: "bonk",
+    label: "Bonk",
+    color: "#e78c19",
+    match: (p, m) =>
+      p.includes("bonk") || p.includes("launchlab") || m.endsWith("bonk"),
+  },
+  {
+    key: "bags",
+    label: "Bags",
+    color: "#00d62b",
+    match: (p, m) => p.includes("bags") || m.includes("bags"),
+  },
+];
+
 // Use the same green as PulseTable for consistency
 const DEFAULT_PROTOCOL_COLOR = "#31e3ac";
 // Use the same pump.fun icon as PulseTable for consistency
@@ -701,6 +733,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
     return "0.05";
   });
   const [selectedPill, setSelectedPill] = useState("P1");
+  const [activeFilterChips, setActiveFilterChips] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("smart");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -1734,8 +1767,24 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const isSearching = useMemo(() => query.trim().length > 0, [query]);
   const displayTokens = useMemo(() => {
     if (!hasSearched) return [];
-    return sortTokens(searchResults, sortBy, query);
-  }, [hasSearched, searchResults, sortBy, query]);
+    const sorted = sortTokens(searchResults, sortBy, query);
+    if (activeFilterChips.length === 0) return sorted;
+    const active = SEARCH_FILTER_CHIPS.filter((c) =>
+      activeFilterChips.includes(c.key),
+    );
+    return sorted.filter((t) => {
+      const tk = t as any;
+      const p = String(
+        tk.launchpad_protocol ||
+          tk.launchpad_name ||
+          tk.protocol ||
+          tk.amm ||
+          "",
+      ).toLowerCase();
+      const m = String(tk.mint || "").toLowerCase();
+      return active.some((c) => c.match(p, m));
+    });
+  }, [hasSearched, searchResults, sortBy, query, activeFilterChips]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -1826,7 +1875,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         onClose={onClose}
         align="center"
         zIndex={99999}
-        className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-xl border border-white bg-[#18181A] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
+        className="relative mx-auto flex max-h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-[14px] border border-[#23252B] bg-[#16171B] tracking-[-0.012em] shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-200 sm:w-[600px] md:w-[800px]"
         disableClickOutside={pulseFilterModalOpen}
       >
         {/* Close Button - Mobile */}
@@ -1835,10 +1884,34 @@ const SearchModalContent = React.memo(function SearchModalContent({
             <BlockchainSwitcher />
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex h-8 flex-shrink-0 items-center gap-1 rounded-md border border-[#FFFFFF14] bg-[#1B1C21] px-2 transition-colors focus-within:border-[#7FFFC94D]">
+              <BsLightningChargeFill className="h-2.5 w-2.5 flex-shrink-0 text-[#7FFFC9]" />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={quickBuyAmount}
+                onChange={(e) => {
+                  const v = e.target.value
+                    .replace(/[^0-9.]/g, "")
+                    .replace(/(\..*)\./g, "$1");
+                  setQuickBuyAmount(v);
+                  try {
+                    const n = parseFloat(v);
+                    if (!isNaN(n) && n > 0)
+                      localStorage.setItem("quickBuyAmount", String(n));
+                  } catch {}
+                }}
+                aria-label="Quick buy amount in SOL"
+                className="w-8 bg-transparent text-xs font-semibold text-white outline-none"
+              />
+              <span className="text-[10px] font-medium text-[#8A9099]">
+                SOL
+              </span>
+            </div>
             <button
               type="button"
               onClick={openPulseFilters}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#1B1C21] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
               aria-label="Filters"
               title="Filters"
             >
@@ -1889,8 +1962,62 @@ const SearchModalContent = React.memo(function SearchModalContent({
           })}
         </div> */}
         <div className="flex flex-col items-start justify-between gap-2 px-3 pt-2 pb-2 sm:items-center sm:gap-3 sm:px-4 sm:pt-4 md:flex-row">
-          <div className="hidden w-full items-center sm:w-auto md:flex">
+          <div className="hidden w-full items-center gap-2.5 sm:w-auto md:flex">
             <BlockchainSwitcher />
+            <div className="flex h-8 flex-shrink-0 cursor-text items-center gap-1.5 rounded-lg border border-[#FFFFFF14] bg-[#1B1C21] px-2.5 transition-colors hover:border-[#FFFFFF2E] focus-within:border-[#7FFFC94D]">
+              <BsLightningChargeFill className="h-3 w-3 flex-shrink-0 text-[#7FFFC9]" />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={quickBuyAmount}
+                onChange={(e) => {
+                  const v = e.target.value
+                    .replace(/[^0-9.]/g, "")
+                    .replace(/(\..*)\./g, "$1");
+                  setQuickBuyAmount(v);
+                  try {
+                    const n = parseFloat(v);
+                    if (!isNaN(n) && n > 0)
+                      localStorage.setItem("quickBuyAmount", String(n));
+                  } catch {}
+                }}
+                aria-label="Quick buy amount in SOL"
+                title="Quick buy amount (SOL)"
+                className="w-9 bg-transparent text-sm font-semibold text-white outline-none"
+              />
+              <span className="text-[11px] font-medium text-[#8A9099]">
+                SOL
+              </span>
+            </div>
+            {/* GMGN-style launchpad filter chips */}
+            <div className="flex flex-shrink-0 items-center gap-1.5">
+              {SEARCH_FILTER_CHIPS.map((chip) => {
+                const on = activeFilterChips.includes(chip.key);
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() =>
+                      setActiveFilterChips((prev) =>
+                        prev.includes(chip.key)
+                          ? prev.filter((k) => k !== chip.key)
+                          : [...prev, chip.key],
+                      )
+                    }
+                    className="h-7 flex-shrink-0 rounded-full border px-2.5 text-xs transition-colors"
+                    style={{
+                      borderColor: on ? chip.color : `${chip.color}59`,
+                      color: on ? chip.color : `${chip.color}d9`,
+                      backgroundColor: on ? `${chip.color}26` : "transparent",
+                      fontWeight: on ? 600 : 500,
+                    }}
+                    aria-pressed={on}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
@@ -1898,7 +2025,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
               Sort by:
             </span>
 
-            <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
+            <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#1B1C21] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
               {sortByOptions.map((option) => {
                 const IconComponent = option.icon;
                 const isActive = sortBy === option.key;
@@ -1923,8 +2050,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
                       onClick={() => setSortBy(option.key)}
                       className={`flex w-full cursor-pointer items-center justify-center rounded-md px-2 py-1.5 transition-all duration-200 sm:px-3 sm:py-1.5 ${
                         isActive
-                          ? "bg-[#1a1a1a] text-white shadow-sm"
-                          : "text-[#666666] hover:bg-[#141414] hover:text-[#9595B5]"
+                          ? "bg-[#2A2C33] text-white shadow-sm"
+                          : "text-[#8A9099] hover:bg-[#202228] hover:text-white"
                       }`}
                     >
                       <IconComponent className="size-3.5 sm:size-4" />
@@ -1946,7 +2073,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             <button
               type="button"
               onClick={openPulseFilters}
-              className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
+              className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#1B1C21] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
               aria-label="Filters"
               title="Filters"
             >
@@ -1957,7 +2084,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
         {/* Search Input */}
         <div className="relative px-3 py-2 sm:px-4 sm:py-3">
-          <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#18181A] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#18181A] sm:gap-3 sm:px-4 sm:py-3">
+          <div className="relative flex items-center gap-2.5 rounded-xl border border-[#FFFFFF0F] bg-[#1B1C21] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC94D] sm:gap-3 sm:px-4 sm:py-3.5">
             <FaSearch className="flex-shrink-0 text-base text-[#666666] sm:text-lg" />
             <input
               ref={inputRef}
@@ -1965,8 +2092,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Search tokens..."
-              className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#666666] sm:text-base"
+              placeholder="Search by name, ticker or address"
+              className="flex-1 bg-transparent text-sm font-medium text-white outline-none placeholder:font-normal placeholder:text-[#767C86] sm:text-[17px]"
             />
             {query && (
               <button
@@ -1995,10 +2122,10 @@ const SearchModalContent = React.memo(function SearchModalContent({
               </button>
             )}
             <div className="hidden flex-shrink-0 items-center gap-1.5 sm:flex">
-              <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
+              <span className="rounded-md border border-[#25272E] bg-[#202228] px-1.5 py-1 text-[11px] leading-none font-semibold text-[#8A9099]">
                 /
               </span>
-              <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
+              <span className="rounded-md border border-[#25272E] bg-[#202228] px-1.5 py-1 text-[11px] leading-none font-semibold text-[#8A9099]">
                 TAB
               </span>
             </div>
@@ -2242,7 +2369,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
                                 {item.symbol}
                               </span>
-                              <span className="min-w-0 truncate text-xs text-neutral-500">
+                              <span className="min-w-0 truncate text-[13px] text-neutral-400">
                                 {item.name}
                               </span>
                             </div>
@@ -2302,7 +2429,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               } as Token & { launchpad_protocol?: string };
                               handleSelectToken(token);
                             }}
-                            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
                           >
                             <BsLightningChargeFill className="h-3 w-3" />
                             Trade
@@ -2348,23 +2475,49 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     </svg>
                   </div>
                   <div className="space-y-2 text-center">
-                    <h3 className="text-base font-semibold text-white sm:text-lg">
-                      No tokens found
-                    </h3>
-                    <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
-                      We couldn't find any tokens matching "
-                      <span className="font-medium text-[#7FFFC9]">
-                        {query}
-                      </span>
-                      ". Try searching with a different name, symbol, or check
-                      the spelling.
-                    </p>
-                    <div className="px-2 pt-2 text-xs text-neutral-500">
-                      <p>
-                        💡 Tip: Search by token name, ticker symbol, or contract
-                        address
-                      </p>
-                    </div>
+                    {activeFilterChips.length > 0 &&
+                    searchResults.length > 0 ? (
+                      <>
+                        <h3 className="text-base font-semibold text-white sm:text-lg">
+                          No matches for the active filter
+                        </h3>
+                        <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                          {searchResults.length} result
+                          {searchResults.length === 1 ? "" : "s"} for "
+                          <span className="font-medium text-[#7FFFC9]">
+                            {query}
+                          </span>
+                          ", but none match the selected launchpad.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveFilterChips([])}
+                          className="mt-1 rounded-full border border-[#7FFFC94D] bg-[#7FFFC914] px-3 py-1 text-xs font-semibold text-[#7FFFC9] transition-colors hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
+                        >
+                          Clear filters
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="text-base font-semibold text-white sm:text-lg">
+                          No tokens found
+                        </h3>
+                        <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                          We couldn't find any tokens matching "
+                          <span className="font-medium text-[#7FFFC9]">
+                            {query}
+                          </span>
+                          ". Try searching with a different name, symbol, or
+                          check the spelling.
+                        </p>
+                        <div className="px-2 pt-2 text-xs text-neutral-500">
+                          <p>
+                            💡 Tip: Search by token name, ticker symbol, or
+                            contract address
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : !recentSearches.length ? (
@@ -2543,7 +2696,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                                 <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
                                   {item.symbol}
                                 </span>
-                                <span className="min-w-0 truncate text-xs text-neutral-500">
+                                <span className="min-w-0 truncate text-[13px] text-neutral-400">
                                   {item.name}
                                 </span>
                               </div>
@@ -2572,7 +2725,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                                 e.stopPropagation();
                                 handleSelectToken(rowToken);
                               }}
-                              className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                              className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
                             >
                               <BsLightningChargeFill className="h-3 w-3" />
                               Trade
@@ -2616,25 +2769,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
             </div>
           ) : (
             <>
-              {/* Column headers (desktop only — mobile rows render with inline labels) */}
-              <div
-                className="hidden w-full items-center justify-between gap-4 px-3 py-2 text-[11px] font-medium tracking-wide text-[#666666] uppercase sm:flex sm:px-4 md:gap-6 md:px-5"
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-              >
-                <div className="w-full max-w-72 min-w-0 flex-1">Token</div>
-                <div className="flex flex-shrink-0 items-center gap-3 sm:text-[11px] md:gap-5">
-                  <span className="w-20 text-center">MCap</span>
-                  <span className="w-20 text-center">Vol 24hr</span>
-                  <span className="w-20 text-center">Liq</span>
-                </div>
-                <span
-                  className="flex-shrink-0 text-center"
-                  style={{ width: "76px" }}
-                >
-                  Quick Buy
-                </span>
-              </div>
-              <ul className="flex h-full list-none flex-col gap-2 overflow-y-auto pb-2">
+              {/* No column header — metric labels render inline per row (GMGN-style) */}
+              <ul className="flex h-full list-none flex-col gap-1 overflow-y-auto pt-1 pb-2">
                 {displayTokens.map((token, index) => {
                   const mcRaw = token.fully_diluted_value || 0;
                   const mc = formatMarketCap(mcRaw);
@@ -3126,10 +3262,10 @@ const TokenListItem = React.memo(
     return (
       <>
         <li
-          className={`group relative block rounded-lg border bg-[#18181A] px-3 py-3 text-sm transition-all duration-200 hover:z-30 sm:px-4 sm:py-4 sm:text-base md:px-5 ${
+          className={`group relative block rounded-[10px] border bg-transparent px-2.5 py-2.5 text-sm transition-all duration-150 hover:z-30 sm:px-3 sm:py-2.5 sm:text-base md:px-3.5 ${
             isSelected
-              ? "border-[#7FFFC940] bg-[#7FFFC908]"
-              : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a]"
+              ? "border-[#7FFFC94D] bg-[#7FFFC90D]"
+              : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1B1D22]"
           }`}
           style={{
             animation: `fadeSlideIn 0.3s ease-out ${index * 0.05}s both`,
@@ -3245,10 +3381,10 @@ const TokenListItem = React.memo(
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex items-center gap-1.5">
-                    <span className="flex-shrink-0 text-base font-bold text-white">
+                    <span className="flex-shrink-0 text-[15px] font-semibold text-white">
                       {token.symbol}
                     </span>
-                    <span className="truncate text-xs text-neutral-500">
+                    <span className="truncate text-[13px] text-neutral-400">
                       {token.name}
                     </span>
                     <button
@@ -3277,7 +3413,7 @@ const TokenListItem = React.memo(
                   e.stopPropagation();
                   onQuickBuy ? onQuickBuy(token) : onSelect(token);
                 }}
-                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-4 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f]"
+                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-4 py-2 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
                 style={{ transformOrigin: "center", pointerEvents: "auto" }}
                 title={onQuickBuy ? "Quick buy token" : "Select token"}
               >
@@ -3454,7 +3590,7 @@ const TokenListItem = React.memo(
           <div className="hidden w-full min-w-0 items-center justify-between gap-4 sm:flex md:gap-6">
             <div className="flex w-full max-w-72 min-w-0 flex-1 items-center gap-4">
               <div
-                className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center"
+                className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center"
                 style={{
                   overflow: "visible",
                 }}
@@ -3472,13 +3608,13 @@ const TokenListItem = React.memo(
                       boxShadow: `0 0 8px ${(token as any).is_mayhem_mode ? "#c83c5120" : `${protocolColor}20`}`,
                     }}
                   >
-                    <div className="relative h-14 w-14 overflow-hidden rounded-md">
+                    <div className="relative h-11 w-11 overflow-hidden rounded-md">
                       <FastImage
                         src={normalizedLogo ?? undefined}
                         fallbackSrc={fallbackAvatar}
                         alt={token.name || token.symbol || ""}
-                        width={56}
-                        height={56}
+                        width={44}
+                        height={44}
                         className="h-full w-full object-cover"
                         symbol={token.symbol}
                         name={token.name}
@@ -3522,17 +3658,14 @@ const TokenListItem = React.memo(
               </div>
 
               <div className="max-w-[380px] min-w-0 flex-1">
-                <div className="mb-1.5 flex min-w-0 items-center gap-2">
-                  <span className="flex-shrink-0 text-base font-bold text-white">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex-shrink-0 text-[15px] font-semibold text-white">
                     {token.symbol}
-                  </span>
-                  <span className="min-w-0 truncate text-xs text-neutral-500">
-                    {token.name}
                   </span>
                   <button
                     type="button"
                     onClick={handleCopyAddress}
-                    className="relative z-20 ml-1 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
+                    className="relative z-20 ml-0.5 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
                     style={{ pointerEvents: "auto" }}
                   >
                     <LuCopy size={13} />
@@ -3547,6 +3680,11 @@ const TokenListItem = React.memo(
                     <IoShareSocialOutline size={15} />
                   </button>
                 </div>
+                {token.name && (
+                  <div className="mt-0.5 mb-1 min-w-0 truncate text-[13px] text-neutral-400">
+                    {token.name}
+                  </div>
+                )}
                 <div className="flex items-center gap-3 text-sm">
                   <span className="rounded-md bg-[#1a1a1a] px-2 py-0.5 text-xs font-semibold text-neutral-300">
                     {ageLabel}
@@ -3915,20 +4053,37 @@ const TokenListItem = React.memo(
               </div>
             </div>
 
-            {/* MCap / Vol / Liq values - labels live in the column header above */}
-            <div className="flex h-full flex-shrink-0 items-center gap-3 text-xs whitespace-nowrap text-[#9595B5] sm:text-sm md:gap-5">
-              <span
-                className="w-20 text-center font-bold"
-                style={{ color: mcColor }}
-              >
-                ${mc}
-              </span>
-              <span className="w-20 text-center font-bold text-white">
-                ${vol}
-              </span>
-              <span className="w-20 text-center font-bold text-white">
-                ${liq}
-              </span>
+            {/* MCap / Vol / Liq — GMGN-style inline labels + hover tooltips */}
+            <div className="flex h-full flex-shrink-0 items-center gap-4 text-sm whitespace-nowrap md:gap-5">
+              <div className="group/mc relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  MC
+                </span>
+                <span className="font-semibold" style={{ color: mcColor }}>
+                  ${mc}
+                </span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/mc:opacity-100">
+                  Market Cap
+                </span>
+              </div>
+              <div className="group/vol relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  V
+                </span>
+                <span className="font-semibold text-white">${vol}</span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/vol:opacity-100">
+                  {volIs24h ? "24h Volume" : "1h Volume"}
+                </span>
+              </div>
+              <div className="group/liq relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  L
+                </span>
+                <span className="font-semibold text-white">${liq}</span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/liq:opacity-100">
+                  Liquidity
+                </span>
+              </div>
             </div>
 
             <button
@@ -3938,7 +4093,7 @@ const TokenListItem = React.memo(
                 e.stopPropagation();
                 onQuickBuy ? onQuickBuy(token) : onSelect(token);
               }}
-              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3"
+              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-2 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3"
               style={{ transformOrigin: "center", pointerEvents: "auto" }}
               title={onQuickBuy ? "Quick buy token" : "Select token"}
             >
