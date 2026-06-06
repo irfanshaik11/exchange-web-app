@@ -138,6 +138,34 @@ const sortByOptions = [
   { key: "liquidity" as const, icon: FiDroplet },
 ];
 
+// GMGN-style launchpad filter chips. `match` receives the normalized
+// launchpad_protocol / amm key (lowercased, separators stripped).
+const SEARCH_FILTER_CHIPS: {
+  key: string;
+  label: string;
+  color: string;
+  match: (p: string) => boolean;
+}[] = [
+  {
+    key: "pump",
+    label: "Pumpfun",
+    color: "#88d693",
+    match: (p) => p.includes("pump"),
+  },
+  {
+    key: "bonk",
+    label: "Bonk",
+    color: "#e78c19",
+    match: (p) => p.includes("bonk") || p.includes("launchlab"),
+  },
+  {
+    key: "bags",
+    label: "Bags",
+    color: "#00d62b",
+    match: (p) => p.includes("bags"),
+  },
+];
+
 // Use the same green as PulseTable for consistency
 const DEFAULT_PROTOCOL_COLOR = "#31e3ac";
 // Use the same pump.fun icon as PulseTable for consistency
@@ -701,6 +729,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
     return "0.05";
   });
   const [selectedPill, setSelectedPill] = useState("P1");
+  const [activeFilterChips, setActiveFilterChips] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("smart");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -1736,8 +1765,17 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const isSearching = useMemo(() => query.trim().length > 0, [query]);
   const displayTokens = useMemo(() => {
     if (!hasSearched) return [];
-    return sortTokens(searchResults, sortBy, query);
-  }, [hasSearched, searchResults, sortBy, query]);
+    const sorted = sortTokens(searchResults, sortBy, query);
+    if (activeFilterChips.length === 0) return sorted;
+    return sorted.filter((t) => {
+      const p = normalizeKey(
+        String((t as any).launchpad_protocol || (t as any).amm || ""),
+      );
+      return SEARCH_FILTER_CHIPS.some(
+        (c) => activeFilterChips.includes(c.key) && c.match(p),
+      );
+    });
+  }, [hasSearched, searchResults, sortBy, query, activeFilterChips]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -1939,6 +1977,34 @@ const SearchModalContent = React.memo(function SearchModalContent({
               <span className="text-[11px] font-medium text-[#8A9099]">
                 SOL
               </span>
+            </div>
+            {/* GMGN-style launchpad filter chips */}
+            <div className="flex flex-shrink-0 items-center gap-1.5">
+              {SEARCH_FILTER_CHIPS.map((chip) => {
+                const on = activeFilterChips.includes(chip.key);
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() =>
+                      setActiveFilterChips((prev) =>
+                        prev.includes(chip.key)
+                          ? prev.filter((k) => k !== chip.key)
+                          : [...prev, chip.key],
+                      )
+                    }
+                    className="h-7 flex-shrink-0 rounded-full border px-2.5 text-xs font-medium transition-colors"
+                    style={{
+                      borderColor: on ? chip.color : `${chip.color}59`,
+                      color: on ? chip.color : `${chip.color}b3`,
+                      backgroundColor: on ? `${chip.color}1f` : "transparent",
+                    }}
+                    aria-pressed={on}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -3504,13 +3570,13 @@ const TokenListItem = React.memo(
                       boxShadow: `0 0 8px ${(token as any).is_mayhem_mode ? "#c83c5120" : `${protocolColor}20`}`,
                     }}
                   >
-                    <div className="relative h-10 w-10 overflow-hidden rounded-[7px]">
+                    <div className="relative h-11 w-11 overflow-hidden rounded-md">
                       <FastImage
                         src={normalizedLogo ?? undefined}
                         fallbackSrc={fallbackAvatar}
                         alt={token.name || token.symbol || ""}
-                        width={48}
-                        height={48}
+                        width={44}
+                        height={44}
                         className="h-full w-full object-cover"
                         symbol={token.symbol}
                         name={token.name}
@@ -3554,17 +3620,14 @@ const TokenListItem = React.memo(
               </div>
 
               <div className="max-w-[380px] min-w-0 flex-1">
-                <div className="mb-1.5 flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span className="flex-shrink-0 text-[15px] font-semibold text-white">
                     {token.symbol}
-                  </span>
-                  <span className="min-w-0 truncate text-[13px] text-neutral-400">
-                    {token.name}
                   </span>
                   <button
                     type="button"
                     onClick={handleCopyAddress}
-                    className="relative z-20 ml-1 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
+                    className="relative z-20 ml-0.5 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
                     style={{ pointerEvents: "auto" }}
                   >
                     <LuCopy size={13} />
@@ -3579,6 +3642,11 @@ const TokenListItem = React.memo(
                     <IoShareSocialOutline size={15} />
                   </button>
                 </div>
+                {token.name && (
+                  <div className="mt-0.5 mb-1 min-w-0 truncate text-[13px] text-neutral-400">
+                    {token.name}
+                  </div>
+                )}
                 <div className="flex items-center gap-3 text-sm">
                   <span className="rounded-md bg-[#1a1a1a] px-2 py-0.5 text-xs font-semibold text-neutral-300">
                     {ageLabel}
