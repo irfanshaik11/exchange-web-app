@@ -708,7 +708,7 @@ const Activity: React.FC<ActivityProps> = ({
                           {truncateName(metadata?.name || trade.tokenName || shortAddr(trade.tokenAddress))}
                         </div>
                         <div className="text-xs text-neutral-400 font-mono truncate" title={trade.tokenAddress}>
-                          {metadata?.symbol ? `$${metadata.symbol}` : shortAddr(trade.tokenAddress)}
+                          {shortAddr(trade.tokenAddress)}
                         </div>
                       </div>
                     </div>

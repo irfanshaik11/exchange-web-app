@@ -18,7 +18,6 @@ const STORAGE_KEY = "interstate_pending_trade_markers_v1";
 // TTL constants
 const PENDING_HARD_TTL_MS = 5 * 60 * 1000; // 5min — covers tab-killed-mid-flight zombies
 const NO_SIG_CONFIRMED_TTL_MS = 60 * 1000; // 60s — pathological "confirmed but no signature"
-const CONFIRMED_WITH_SIG_TTL_MS = 10 * 60 * 1000; // 10min — safety net for confirmed rows whose verify failed
 
 export interface PendingTradeMarker {
   id: string; // local primary key, e.g. `pend_<uuid>`
@@ -118,16 +117,8 @@ function pruneStale() {
     ) {
       return false;
     }
-    // Safety-net TTL for confirmed-with-signature rows. Normally these are
-    // cleaned up by verifyTxAndRollbackMarker or WS reconciliation, but if
-    // both fail (RPC timeout, WS disconnect) we don't want phantoms forever.
-    if (
-      row.status === "confirmed" &&
-      row.signature &&
-      now - row.createdAt > CONFIRMED_WITH_SIG_TTL_MS
-    ) {
-      return false;
-    }
+    // Confirmed-with-signature rows are kept indefinitely. They're cleaned up
+    // by the reconciliation effect in [id].tsx when the WS echoes the trade.
     return true;
   });
   if (next.length !== cache.length) {
@@ -299,7 +290,7 @@ export function insertOptimisticMarker(
     amountSol: args.amountSol,
     amountToken: args.amountToken,
     priceUsd: args.priceUsd,
-    timestamp: Date.now() - 1500,
+    timestamp: Date.now() - 500,
     status: "pending",
     createdAt: Date.now(),
   });
@@ -328,6 +319,12 @@ export function confirmOptimisticMarker(
     return;
   }
   updatePendingTrade(id, { signature, status: "confirmed" });
+  // Auto-verify on-chain: a confirmed marker whose tx FAILED on-chain (e.g.
+  // ComputationalBudgetExceeded, slippage) must be removed, not left as a
+  // phantom. Doing it here means EVERY path that confirms a marker
+  // (Positions / SellPopup / InstantTradeModal / etc.) gets the failure
+  // cleanup automatically — no per-call-site wiring needed.
+  verifyTxAndRollbackMarker(id, signature);
 }
 
 /**
@@ -362,43 +359,41 @@ export function verifyTxAndRollbackMarker(
 
   const connection = new Connection(url, "confirmed");
 
-  // Wait for confirmation then check meta.err, with one retry.
-  Promise.resolve()
-    .then(async () => {
-      // Give the network a moment to finalise the tx
-      await connection.confirmTransaction(txHash, "confirmed").catch(() => {
-        // timeout / ws failure — fall through to getTransaction
-      });
-
-      let tx = await connection.getTransaction(txHash, {
-        commitment: "confirmed",
-        maxSupportedTransactionVersion: 0,
-      });
-
-      // Retry once after 5s if tx not yet indexed
-      if (!tx) {
-        await new Promise((r) => setTimeout(r, 5000));
-        tx = await connection.getTransaction(txHash, {
-          commitment: "confirmed",
-          maxSupportedTransactionVersion: 0,
-        });
+  // Poll getSignatureStatuses until the tx lands (success OR failure), up to ~30s.
+  // Do NOT use connection.confirmTransaction(): its WebSocket signature
+  // subscription can hang indefinitely (no timeout), so the await never returns,
+  // getTransaction never runs, and a FAILED trade's marker is never removed —
+  // leaving a phantom buy/sell marker on the chart for a trade that never landed.
+  // Polling is hang-proof and catches the err the moment the tx is confirmed-failed.
+  (async () => {
+    for (let i = 0; i < 20; i++) {
+      try {
+        const st = (await connection.getSignatureStatuses([txHash])).value[0];
+        if (st?.err) {
+          console.warn(
+            "[pendingTradeMarkers] tx failed on-chain, removing marker",
+            { markerId, txHash, err: st.err },
+          );
+          removePendingTrade(markerId);
+          return;
+        }
+        if (
+          st?.confirmationStatus === "confirmed" ||
+          st?.confirmationStatus === "finalized"
+        ) {
+          // Landed successfully — keep the marker; WS reconciliation handles it.
+          return;
+        }
+      } catch {
+        // transient RPC error — retry on next tick
       }
-
-      if (tx?.meta?.err) {
-        console.warn(
-          "[pendingTradeMarkers] tx failed on-chain, removing marker",
-          { markerId, txHash, err: tx.meta.err },
-        );
-        removePendingTrade(markerId);
-      }
-    })
-    .catch((err) => {
-      console.warn(
-        "[pendingTradeMarkers] verifyTx failed, removing marker",
-        err,
-      );
-      removePendingTrade(markerId);
-    });
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    console.warn(
+      "[pendingTradeMarkers] verifyTx timed out; leaving marker for WS/TTL cleanup",
+      { markerId, txHash },
+    );
+  })();
 }
 
 // Cross-tab sync: when another tab writes to our key, re-read and notify.

@@ -66,8 +66,6 @@ const AX = {
   blue: "#3b82f6",
 };
 
-const LOW_LIQUIDITY_MIGRATED_THRESHOLD = 3_000; // USD
-
 /* ===================================================================== */
 
 type SimilarTokenLite = {
@@ -146,7 +144,6 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
-  const [lowLiquidityBannerDismissed, setLowLiquidityBannerDismissed] = useState(false);
   
   // Load instant trade open state from localStorage
   const getInitialInstantTradeState = (): boolean => {
@@ -734,30 +731,6 @@ export default function TradePage() {
     };
   }, [displayToken, holderSummary, wsTopTraders, restHoldersData.top10HeldPercentage]);
 
-  // Reset low-liquidity banner dismiss when navigating to a different token
-  useEffect(() => {
-    setLowLiquidityBannerDismissed(false);
-  }, [idString]);
-
-  // Show low-liquidity warning banner for migrated tokens with liquidity < 3K
-  const showLowLiquidityBanner = useMemo(() => {
-    if (lowLiquidityBannerDismissed) return false;
-    const t = enhancedDisplayToken;
-    if (!t) return false;
-    const isMigrated =
-      (t as any)?.is_migrated ||
-      (t as any)?.migrated ||
-      (t as any)?.graduated ||
-      (t as any)?.is_graduated ||
-      ((t?.status || '').toLowerCase().includes('migrated')) ||
-      !!(t as any)?.migrated_time ||
-      !!(wsTokenInfo as any)?.is_migrated ||
-      (wsTokenInfo?.graduation_percent != null && wsTokenInfo.graduation_percent >= 100);
-    if (!isMigrated) return false;
-    const liq = wsTokenInfo?.liquidity_usd ?? (t as any)?.liquidity_usd ?? (t as any)?.total_liquidity_usd;
-    return typeof liq === 'number' && liq < LOW_LIQUIDITY_MIGRATED_THRESHOLD;
-  }, [enhancedDisplayToken, wsTokenInfo, lowLiquidityBannerDismissed]);
-
   // Also use dev_wallet from WebSocket holderSummary for chart dev markers
   useEffect(() => {
     if (holderSummary?.dev_wallet && !creatorAddress) {
@@ -862,6 +835,12 @@ export default function TradePage() {
     // matching sig dedupes onto this slot via case 2a), or by `__pending_<id>`
     // while still pending.
     for (const p of pendingTrades) {
+      // Only render once the trade actually SUBMITTED (has a signature). This
+      // keeps phantom markers off the chart for pre-send failures — e.g.
+      // "low liquidity" / "insufficient SOL" — that never produced a txHash.
+      // The marker is created on click but stays hidden until the signature is
+      // stamped (confirmOptimisticMarker), i.e. ~when we get the txHash.
+      if (!p.signature) continue;
       const key = p.signature || `__pending_${p.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -894,7 +873,6 @@ export default function TradePage() {
               : undefined,
         __optimistic: true,
         __optimisticId: p.id,
-        __optimisticStatus: p.status,
         // createdAt — used by fuzzy-match guard to reject WS trades older
         // than the click (those can't be the echo of a click that just
         // happened, so they shouldn't dedupe against this optimistic row).
@@ -956,7 +934,6 @@ export default function TradePage() {
             __optimistic: true,
             __optimisticId: combined[idx].__optimisticId,
             __optimisticCreatedAt: combined[idx].__optimisticCreatedAt,
-            __wsMatched: true,
           };
         }
         continue;
@@ -1005,7 +982,6 @@ export default function TradePage() {
           __optimistic: true,
           __optimisticId: combined[fuzzyIdx].__optimisticId,
           __optimisticCreatedAt: combined[fuzzyIdx].__optimisticCreatedAt,
-          __wsMatched: true,
         };
         seen.add(sigKey);
         continue;
@@ -1176,18 +1152,9 @@ export default function TradePage() {
           setPositionLinesApi(null);
           return;
         }
-        // Use pre-computed avg prices when available, otherwise derive from totals
-        const avgBuy = data.avgBuyPriceUsd ?? data.avgBuyPriceUSD
-          ?? (data.totalBoughtTokens > 0 && data.totalBoughtUsd > 0
-            ? data.totalBoughtUsd / data.totalBoughtTokens
-            : null);
-        const avgSell = data.avgSellPriceUsd ?? data.avgSellPriceUSD
-          ?? (data.totalSoldTokens > 0 && data.totalSoldUsd > 0
-            ? data.totalSoldUsd / data.totalSoldTokens
-            : null);
         setPositionLinesApi({
-          avgBuyPriceUsd: avgBuy,
-          avgSellPriceUsd: avgSell,
+          avgBuyPriceUsd: data.avgBuyPriceUsd ?? data.avgBuyPriceUSD ?? null,
+          avgSellPriceUsd: data.avgSellPriceUsd ?? data.avgSellPriceUSD ?? null,
         });
       } catch {
         setPositionLinesApi(null);
@@ -1446,26 +1413,6 @@ export default function TradePage() {
                   onRefreshSupply={refetchSupply}
                 />
               </div>
-
-              {/* Low liquidity warning for migrated tokens */}
-              {showLowLiquidityBanner && (
-                <div
-                  className="flex items-center justify-between px-3 py-1.5 text-xs font-medium"
-                  style={{ backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#eab308' }}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span>⚠</span>
-                    <span>This token has low liquidity. Trade carefully!</span>
-                  </div>
-                  <button
-                    onClick={() => setLowLiquidityBannerDismissed(true)}
-                    className="ml-2 hover:opacity-70 transition-opacity"
-                    style={{ color: '#eab308', lineHeight: 1 }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
 
               {/* Separator line after TradeHeader */}
               <div className="px-3" style={{ borderBottom: `1px solid ${AX.border}` }} />

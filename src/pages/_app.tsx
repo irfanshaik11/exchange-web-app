@@ -13,6 +13,7 @@ import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
 import dynamic from 'next/dynamic';
 import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
+import WalletExportGuard from "../components/WalletExportGuard";
 import { UserLimitProvider, useUserLimit } from "../components/UserLimitContext";
 import UserLimitBlocker from "../components/UserLimitBlocker";
 
@@ -512,41 +513,33 @@ function ReferralTracker() {
 
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
-  const router = useRouter();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-
+  
   // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
-  // Listen for "open-login-modal" custom events (from Header login button, trade panels, etc.)
+  
   useEffect(() => {
     if (!isMounted) return;
-    const handler = () => {
-      if (!user) setLoginOpen(true);
-    };
-    window.addEventListener("open-login-modal", handler);
-    return () => window.removeEventListener("open-login-modal", handler);
-  }, [isMounted, user]);
-
-  useEffect(() => {
-    if (!isMounted) return;
+    if (enforceLogin && !userLoading && !user) {
+      setLoginOpen(true);
+    }
     if (user && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, loginOpen, isMounted]);
-
+  }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
+  
+  // Prevent closing if not logged in
   const handleLoginClose = () => {
-    setLoginOpen(false);
+    if (user) setLoginOpen(false);
   };
-
-  if (!isMounted) return null;
-
-
+  
+  if (!enforceLogin || !isMounted) return null;
+  
   return (
-    <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={false} />
+    <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
   );
 }
 
@@ -920,7 +913,8 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                         </WatchlistProvider>
                       </SearchProvider>
                     </QuickBuyProvider>
-                    <GlobalLoginModalManager enforceLogin={false} />
+                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                    <WalletExportGuard />
                     <UserLimitBlockerWrapper />
                   </ThemeProvider>
                 </SolPriceProvider>
