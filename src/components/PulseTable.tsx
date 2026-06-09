@@ -153,7 +153,8 @@ import { checkAtaExists } from "~/utils/ataCheck";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import toast from "react-hot-toast";
-import { FiGlobe } from "react-icons/fi";
+import { FiGlobe, FiUpload, FiDownload } from "react-icons/fi";
+import { copyToClipboard } from "~/utils/clipboard";
 import BottomCardInfoHolder from "./BottomCardInfoHolder";
 import InterstateTooltip from "./InterstateTooltip";
 import { useBlacklist } from "~/hooks/useBlacklist";
@@ -3355,6 +3356,104 @@ function PulseTable({
   const prevHasSpecificProtocolsRef = useRef(false);
   const isInitialMountRef = useRef(true);
 
+  // ── Filter import/export popups ──────────────────────────────────
+  // Axiom-style flow: Import opens a paste-JSON modal and Export opens a
+  // copy-JSON modal. Each modal also offers a file channel ("Import as file"
+  // / "Export as file") so users can move filter sets via clipboard OR disk.
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [importText, setImportText] = useState("");
+
+  // Parse a JSON string into filters, merge over this column's defaults, and
+  // apply immediately (matches the previous file-import behaviour). Returns
+  // false on malformed input so callers can surface an error toast.
+  const applyImportedFilters = useCallback(
+    (raw: string): boolean => {
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return false;
+        }
+        const merged = {
+          ...getDefaultFilters(),
+          ...(parsed as Partial<PulseFilters>),
+        } as PulseFilters;
+        setFilters(merged);
+        setPendingFilters(merged);
+        setHasPendingChanges(false);
+        return true;
+      } catch (error) {
+        console.error("Error importing filters:", error);
+        return false;
+      }
+    },
+    [getDefaultFilters],
+  );
+
+  const handleImportFromText = useCallback(() => {
+    if (!importText.trim()) {
+      showCenteredErrorToast("Paste filter JSON first");
+      return;
+    }
+    if (applyImportedFilters(importText)) {
+      showCenteredSuccessToast("Filters imported");
+      setImportText("");
+      setShowImportModal(false);
+    } else {
+      showCenteredErrorToast("Invalid filter JSON");
+    }
+  }, [importText, applyImportedFilters]);
+
+  const handleImportFromFile = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = String(event.target?.result ?? "");
+        if (applyImportedFilters(content)) {
+          showCenteredSuccessToast("Filters imported from file");
+          setImportText("");
+          setShowImportModal(false);
+        } else {
+          showCenteredErrorToast("Invalid filter file");
+        }
+      };
+      reader.onerror = () => showCenteredErrorToast("Failed to read file");
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [applyImportedFilters]);
+
+  const handleCopyExportJson = useCallback(() => {
+    void copyToClipboard(
+      JSON.stringify(filters, null, 2),
+      "Filters copied as JSON",
+      "Failed to copy filters",
+    );
+  }, [filters]);
+
+  const handleExportToFile = useCallback(() => {
+    try {
+      const dataStr = JSON.stringify(filters, null, 2);
+      const dataBlob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "pulse-filters.json";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showCenteredSuccessToast("Filters exported to file");
+    } catch {
+      showCenteredErrorToast("Failed to export filters");
+    }
+  }, [filters]);
+
   // Determine channel from title (moved up for use in localStorage caching)
   const channel = useMemo(() => {
     const lowerTitle = title.toLowerCase();
@@ -6181,6 +6280,220 @@ function PulseTable({
             </button>
 
             {/* Comprehensive Filter Modal - portaled to body to escape stacking contexts */}
+            {/* Import filters popup (paste JSON or import from a file) */}
+            {showImportModal &&
+              typeof document !== "undefined" &&
+              createPortal(
+                <>
+                  <div
+                    className="fixed inset-0"
+                    style={{
+                      backgroundColor: "rgba(0, 0, 0, 0.5)",
+                      zIndex: 10000010,
+                    }}
+                    onClick={() => setShowImportModal(false)}
+                  />
+                  <div
+                    className="fixed top-1/2 left-1/2 w-[95vw] max-w-[560px] -translate-x-1/2 -translate-y-1/2 transform rounded-xl border"
+                    style={{
+                      backgroundColor: AX.surface,
+                      borderColor: AX.border,
+                      boxShadow: "0 24px 64px rgba(0, 0, 0, 0.6)",
+                      zIndex: 10000011,
+                    }}
+                  >
+                    {/* Header */}
+                    <div
+                      className="flex items-center justify-between border-b p-4"
+                      style={{ borderColor: AX.border }}
+                    >
+                      <h3
+                        className="text-lg"
+                        style={{
+                          color: AX.text,
+                          fontWeight: "300",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        Import {title} Filters
+                      </h3>
+                      <button
+                        onClick={() => setShowImportModal(false)}
+                        className="cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
+                      >
+                        <FaTimes size={16} style={{ color: AX.muted }} />
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-4">
+                      <textarea
+                        value={importText}
+                        onChange={(e) => setImportText(e.target.value)}
+                        placeholder={`Paste your ${title.toLowerCase()} filters JSON content here...`}
+                        spellCheck={false}
+                        className="h-52 w-full resize-none rounded-lg border p-3 text-sm outline-none"
+                        style={{
+                          backgroundColor: AX.bgDeep,
+                          borderColor: AX.border,
+                          color: AX.text,
+                          fontFamily:
+                            "ui-monospace, SFMono-Regular, Menlo, monospace",
+                        }}
+                      />
+                    </div>
+
+                    {/* Footer */}
+                    <div
+                      className="flex items-center gap-2 border-t p-4"
+                      style={{ borderColor: AX.border }}
+                    >
+                      <button
+                        onClick={handleImportFromFile}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
+                        style={{
+                          backgroundColor: AX.surface2,
+                          color: AX.textSecondary,
+                          border: `1px solid ${AX.border}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = AX.borderHover;
+                          e.currentTarget.style.color = AX.text;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = AX.border;
+                          e.currentTarget.style.color = AX.textSecondary;
+                        }}
+                      >
+                        <FiUpload className="h-4 w-4" />
+                        Import as file
+                      </button>
+                      <button
+                        onClick={handleImportFromText}
+                        className="flex-1 cursor-pointer rounded-lg px-4 py-2.5 text-sm font-semibold transition-all"
+                        style={{ backgroundColor: AX.aiBlue, color: "#000000" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = AX.aiBlueHover;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = AX.aiBlue;
+                        }}
+                      >
+                        Import
+                      </button>
+                    </div>
+                  </div>
+                </>,
+                document.body,
+              )}
+
+            {/* Export filters popup (copy JSON or export to a file) */}
+            {showExportModal &&
+              typeof document !== "undefined" &&
+              createPortal(
+                <>
+                  <div
+                    className="fixed inset-0"
+                    style={{
+                      backgroundColor: "rgba(0, 0, 0, 0.5)",
+                      zIndex: 10000010,
+                    }}
+                    onClick={() => setShowExportModal(false)}
+                  />
+                  <div
+                    className="fixed top-1/2 left-1/2 w-[95vw] max-w-[560px] -translate-x-1/2 -translate-y-1/2 transform rounded-xl border"
+                    style={{
+                      backgroundColor: AX.surface,
+                      borderColor: AX.border,
+                      boxShadow: "0 24px 64px rgba(0, 0, 0, 0.6)",
+                      zIndex: 10000011,
+                    }}
+                  >
+                    {/* Header */}
+                    <div
+                      className="flex items-center justify-between border-b p-4"
+                      style={{ borderColor: AX.border }}
+                    >
+                      <h3
+                        className="text-lg"
+                        style={{
+                          color: AX.text,
+                          fontWeight: "300",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        Export {title} Filters
+                      </h3>
+                      <button
+                        onClick={() => setShowExportModal(false)}
+                        className="cursor-pointer rounded p-1 transition-colors hover:bg-gray-700"
+                      >
+                        <FaTimes size={16} style={{ color: AX.muted }} />
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-4">
+                      <textarea
+                        value={JSON.stringify(filters, null, 2)}
+                        readOnly
+                        spellCheck={false}
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="h-52 w-full resize-none rounded-lg border p-3 text-sm outline-none"
+                        style={{
+                          backgroundColor: AX.bgDeep,
+                          borderColor: AX.border,
+                          color: AX.textSecondary,
+                          fontFamily:
+                            "ui-monospace, SFMono-Regular, Menlo, monospace",
+                        }}
+                      />
+                    </div>
+
+                    {/* Footer */}
+                    <div
+                      className="flex items-center gap-2 border-t p-4"
+                      style={{ borderColor: AX.border }}
+                    >
+                      <button
+                        onClick={handleExportToFile}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
+                        style={{
+                          backgroundColor: AX.surface2,
+                          color: AX.textSecondary,
+                          border: `1px solid ${AX.border}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = AX.borderHover;
+                          e.currentTarget.style.color = AX.text;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = AX.border;
+                          e.currentTarget.style.color = AX.textSecondary;
+                        }}
+                      >
+                        <FiDownload className="h-4 w-4" />
+                        Export as file
+                      </button>
+                      <button
+                        onClick={handleCopyExportJson}
+                        className="flex-1 cursor-pointer rounded-lg px-4 py-2.5 text-sm font-semibold transition-all"
+                        style={{ backgroundColor: AX.aiBlue, color: "#000000" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = AX.aiBlueHover;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = AX.aiBlue;
+                        }}
+                      >
+                        Copy JSON
+                      </button>
+                    </div>
+                  </div>
+                </>,
+                document.body,
+              )}
+
             {showFilters &&
               typeof document !== "undefined" &&
               createPortal(
@@ -6196,7 +6509,7 @@ function PulseTable({
                   />
                   {/* Modal */}
                   <div
-                    className="filter-modal fixed top-1/2 left-1/2 max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-y-auto rounded-lg border shadow-xl"
+                    className="filter-modal fixed top-1/2 left-1/2 flex max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform flex-col overflow-hidden rounded-lg border shadow-xl"
                     style={{
                       backgroundColor: AX.surface,
                       borderColor: AX.border,
@@ -6206,7 +6519,7 @@ function PulseTable({
                   >
                     {/* Header */}
                     <div
-                      className="flex items-center justify-between border-b p-4"
+                      className="flex flex-shrink-0 items-center justify-between border-b p-4"
                       style={{ borderColor: AX.border }}
                     >
                       <h3
@@ -6247,7 +6560,7 @@ function PulseTable({
                 ))}
                 </div> */}
                     <div
-                      className="flex items-center justify-end border-b p-1"
+                      className="flex flex-shrink-0 items-center justify-end border-b p-1"
                       style={{ borderColor: AX.border }}
                     >
                       <button
@@ -6267,8 +6580,12 @@ function PulseTable({
                         />
                       </button>
                     </div>
+                    {/* Single scroll region: flex-1 + min-h-0 lets the body
+                        absorb the leftover height and scroll on its own, so the
+                        modal stays within max-h-[90vh] with the footer pinned
+                        (no double scrollbar, footer always visible). */}
                     <div
-                      className="max-h-[500px] overflow-y-auto p-4"
+                      className="min-h-0 flex-1 overflow-y-auto p-4"
                       style={{ backgroundColor: AX.surface }}
                     >
                       {/* Protocols */}
@@ -8336,7 +8653,7 @@ function PulseTable({
                     </div>
                     {/* Footer */}
                     <div
-                      className="flex items-center justify-between border-t p-4"
+                      className="flex flex-shrink-0 items-center justify-between border-t p-4"
                       style={{ borderColor: AX.border }}
                     >
                       <div className="flex gap-2">
@@ -8344,39 +8661,9 @@ function PulseTable({
                           className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition-colors"
                           style={{ backgroundColor: AX.border, color: AX.text }}
                           onClick={() => {
-                            // Import functionality
-                            const input = document.createElement("input");
-                            input.type = "file";
-                            input.accept = ".json";
-                            input.onchange = (e) => {
-                              const file = (e.target as HTMLInputElement)
-                                .files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                  try {
-                                    const importedFilters = JSON.parse(
-                                      event.target?.result as string,
-                                    ) as PulseFilters;
-                                    // Merge with defaults to ensure all fields exist
-                                    const mergedFilters = {
-                                      ...getDefaultFilters(),
-                                      ...importedFilters,
-                                    };
-                                    setFilters(mergedFilters);
-                                    setPendingFilters(mergedFilters);
-                                    setHasPendingChanges(false);
-                                  } catch (error) {
-                                    console.error(
-                                      "Error importing filters:",
-                                      error,
-                                    );
-                                  }
-                                };
-                                reader.readAsText(file);
-                              }
-                            };
-                            input.click();
+                            setImportText("");
+                            setShowImportModal(true);
+                            setShowFilters(false);
                           }}
                         >
                           Import
@@ -8385,19 +8672,8 @@ function PulseTable({
                           className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition-colors"
                           style={{ backgroundColor: AX.border, color: AX.text }}
                           onClick={() => {
-                            // Export functionality
-                            const dataStr = JSON.stringify(filters, null, 2);
-                            const dataBlob = new Blob([dataStr], {
-                              type: "application/json",
-                            });
-                            const url = URL.createObjectURL(dataBlob);
-                            const link = document.createElement("a");
-                            link.href = url;
-                            link.download = "pulse-filters.json";
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                            URL.revokeObjectURL(url);
+                            setShowExportModal(true);
+                            setShowFilters(false);
                           }}
                         >
                           Export
