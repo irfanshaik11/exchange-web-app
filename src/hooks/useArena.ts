@@ -764,7 +764,7 @@ export function useVerifySocialQuest() {
 
   return useMutation({
     // Accepts a bare questId (existing social quests) OR { questId, code }
-    // for code_entry quests (e.g. DAILY_CODE_ENTRY).
+    // for code_entry quests (e.g. badge quests like BADGE_COLLAB_1).
     mutationFn: (input: string | { questId: string; code?: string }) => {
       const { questId, code } =
         typeof input === "string" ? { questId: input, code: undefined } : input;

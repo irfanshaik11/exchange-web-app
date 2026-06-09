@@ -687,7 +687,7 @@ export async function verifySocialQuest(
   return fetchWithAuth('/api/arena/social/verify', bearerToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    // `code` is only sent for code_entry quests (e.g. DAILY_CODE_ENTRY).
+    // `code` is only sent for code_entry quests (e.g. badge quests like BADGE_COLLAB_1).
     body: JSON.stringify(code ? { questId, code } : { questId }),
   });
 }
