@@ -89,6 +89,7 @@ import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 import LiveTradesPanel from "../components/LiveTradesPanel";
 import MonitorPanel from "../components/MonitorPanel";
+import KolScanTrackerContent from "../components/KolScanTrackerContent";
 import kolWalletTrackerData from "../data/kol-wallet-tracker.json";
 import { useSolPrice } from "../components/SolPriceContext";
 import {
@@ -351,9 +352,9 @@ export default function TrackersPage() {
   const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "social">(
     "wallets",
   );
-  const [socialPanelTab, setSocialPanelTab] = useState<"twitter" | "telegram">(
-    "twitter",
-  );
+  const [socialPanelTab, setSocialPanelTab] = useState<
+    "twitter" | "telegram" | "kolscan"
+  >("twitter");
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<
     Record<string, WalletEvent[]>
@@ -2860,8 +2861,22 @@ export default function TrackersPage() {
                             >
                               Telegram Tracker
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => setSocialPanelTab("kolscan")}
+                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                                socialPanelTab === "kolscan"
+                                  ? "text-[#f4f4f5]"
+                                  : "text-[#52525b] hover:text-[#a1a1aa]"
+                              }`}
+                            >
+                              KOLScan
+                            </button>
                           </div>
                         </div>
+                        {socialPanelTab === "kolscan" && (
+                          <KolScanTrackerContent />
+                        )}
                         {socialPanelTab === "telegram" && (
                           <>
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pt-2.5 pb-2.5 sm:gap-3 sm:pt-3 sm:pb-3">

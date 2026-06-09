@@ -954,6 +954,49 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 		}
 	};
 
+	// Copy-address menu: opens on hover, while a direct click on the copy icon just
+	// copies the pair address (see the LuCopy button below). Controlled so hover and
+	// click-to-copy can coexist without the click toggling the menu.
+	const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+	const copyMenuCloseTimerRef = useRef<number | null>(null);
+	const lastCopyPointerWasTouchRef = useRef(false);
+	const openCopyMenu = () => {
+		if (typeof window !== "undefined" && copyMenuCloseTimerRef.current != null) {
+			window.clearTimeout(copyMenuCloseTimerRef.current);
+			copyMenuCloseTimerRef.current = null;
+		}
+		setCopyMenuOpen(true);
+	};
+	const scheduleCloseCopyMenu = () => {
+		if (typeof window === "undefined") return;
+		if (copyMenuCloseTimerRef.current != null) {
+			window.clearTimeout(copyMenuCloseTimerRef.current);
+		}
+		// Small delay so the cursor can travel from the icon to the menu without it closing.
+		copyMenuCloseTimerRef.current = window.setTimeout(() => {
+			setCopyMenuOpen(false);
+			copyMenuCloseTimerRef.current = null;
+		}, 140);
+	};
+	const copyPairAddress = async () => {
+		const addr = token?.pair_address;
+		if (!addr) return;
+		try {
+			await navigator.clipboard.writeText(addr);
+		} catch {
+			const ta = document.createElement("textarea");
+			ta.value = addr;
+			ta.style.position = "fixed";
+			ta.style.opacity = "0";
+			document.body.appendChild(ta);
+			ta.focus();
+			ta.select();
+			try { document.execCommand("copy"); } catch { }
+			document.body.removeChild(ta);
+		}
+		showToast("Pair Address copied");
+	};
+
 	const handleImageHover = (e: React.MouseEvent<HTMLDivElement>) => {
 		const rect = e.currentTarget.getBoundingClientRect();
 		const popupWidth = 150;
@@ -1234,14 +1277,37 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 							</span>
 
 							{!!token?.mint && (
-								<DropdownMenu>
+								<DropdownMenu open={copyMenuOpen} onOpenChange={setCopyMenuOpen} modal={false}>
 									<DropdownMenuTrigger asChild>
-										<button className="ml-0.5 sm:ml-1 p-0.5 sm:p-1 flex-shrink-0" style={{ color: AX.muted }}>
+										<button
+											className="ml-0.5 sm:ml-1 p-0.5 sm:p-1 flex-shrink-0"
+											style={{ color: AX.muted }}
+											title="Copy pair address"
+											onMouseEnter={openCopyMenu}
+											onMouseLeave={scheduleCloseCopyMenu}
+											onPointerDown={(e) => {
+												// Mouse: hover already opens the menu, so a click should copy —
+												// block Radix's open-toggle. Touch has no hover, so let a tap open it.
+												lastCopyPointerWasTouchRef.current = e.pointerType === "touch";
+												if (e.pointerType !== "touch") e.preventDefault();
+											}}
+											onClick={async (e) => {
+												if (lastCopyPointerWasTouchRef.current) return; // touch tap opens the menu instead
+												e.preventDefault();
+												e.stopPropagation();
+												await copyPairAddress();
+											}}
+										>
 											<LuCopy size={12} className="sm:w-3.5 sm:h-3.5" />
 										</button>
 									</DropdownMenuTrigger>
 
-									<DropdownMenuContent className="dark bg-popover border-border">
+									<DropdownMenuContent
+											className="dark bg-popover border-border"
+											onMouseEnter={openCopyMenu}
+											onMouseLeave={scheduleCloseCopyMenu}
+											onCloseAutoFocus={(e) => e.preventDefault()}
+										>
 										<DropdownMenuItem
 											className="dark:focus:bg-accent focus:bg-accent dark:text-popover-foreground"
 											onClick={async () => {

@@ -179,6 +179,7 @@ const navLinks = [
   { name: "Predictions", href: "/predictions" },
   { name: "Airdrop", href: "/airdrop-genesis" },
   { name: "Portfolio", href: "/portfolio" },
+  { name: "Agent", href: "/agent" },
   // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
 ];
@@ -1908,6 +1909,19 @@ export default function Header({
     };
   }, [mobileMenuOpen]);
 
+  // Auto-close the drawer once the viewport reaches lg, where the full nav is shown
+  // and the hamburger disappears — otherwise the body scroll-lock could stay stuck.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const handle = () => {
+      if (mql.matches) setMobileMenuOpen(false);
+    };
+    handle();
+    mql.addEventListener("change", handle);
+    return () => mql.removeEventListener("change", handle);
+  }, []);
+
   // Show Feature Updates modal only on first login
   // COMMENTED OUT: Disabled popout that shows "Enhanced Real-Time Data" on login
   // useEffect(() => {
@@ -1944,12 +1958,12 @@ export default function Header({
           className="flex max-w-full flex-nowrap items-center justify-between gap-1 px-2 py-2 md:px-4"
           style={{ backgroundColor: "transparent" }}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2 md:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2 md:gap-2 lg:gap-3">
             {/* Hamburger button */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg border transition-all duration-200 md:hidden"
+              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg border transition-all duration-200 lg:hidden"
               style={{
                 borderColor: AX.border,
                 color: AX.textSecondary,
@@ -1992,8 +2006,8 @@ export default function Header({
               </h3>
             </Link>
 
-            {/* Navigation container with arrows - hidden on small, visible from md (50% web app width) */}
-            <div className="relative hidden min-w-0 flex-1 items-center gap-0 overflow-hidden sm:gap-1 md:flex">
+            {/* Navigation container with arrows - hidden below lg; collapses into the hamburger drawer on smaller screens */}
+            <div className="relative hidden min-w-0 flex-1 items-center gap-0 overflow-hidden sm:gap-1 lg:flex">
               {/* Left arrow - hidden on very small screens to save space (user can swipe nav) */}
               {showLeftArrow && (
                 <button
@@ -2017,7 +2031,7 @@ export default function Header({
               {/* Navigation tabs - always visible with horizontal scroll */}
               <nav
                 ref={navScrollRef}
-                className="scrollbar-hide flex flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch] sm:gap-2 xl:gap-3"
+                className="scrollbar-hide flex flex-1 items-center gap-0.5 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch] lg:gap-1.5 xl:gap-3"
                 style={{
                   position: "relative",
                   zIndex: 1000,
@@ -2032,11 +2046,55 @@ export default function Header({
                     (link.name === "Airdrop" &&
                       (router.pathname === "/airdrop-genesis" ||
                         router.pathname === "/referrals"));
+                  const isAgent = link.name === "Agent";
+
+                  if (isAgent) {
+                    return (
+                      <Link
+                        key={link.name}
+                        href={chainAwareHref(link.href)}
+                        className={`relative flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-semibold whitespace-nowrap xl:px-3.5 xl:text-sm`}
+                        style={{
+                          color: isActive ? "#0A0A0A" : AX.mint,
+                          background: isActive
+                            ? `linear-gradient(135deg, ${AX.mint}, #58B890)`
+                            : "transparent",
+                          border: `1px solid ${AX.mint}`,
+                          borderRadius: "9999px",
+                          position: "relative",
+                          zIndex: 1001,
+                          pointerEvents: "auto",
+                          cursor: "pointer",
+                          transition: "all 150ms cubic-bezier(0.16, 1, 0.3, 1)",
+                          boxShadow: isActive
+                            ? `0 0 16px ${AX.mintGlow}`
+                            : `0 0 8px ${AX.mintGlow}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.color = "#0A0A0A";
+                            e.currentTarget.style.background = `linear-gradient(135deg, ${AX.mint}, #58B890)`;
+                            e.currentTarget.style.boxShadow = `0 0 16px ${AX.mintGlow}`;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.color = AX.mint;
+                            e.currentTarget.style.background = "transparent";
+                            e.currentTarget.style.boxShadow = `0 0 8px ${AX.mintGlow}`;
+                          }
+                        }}
+                      >
+                        {link.name}
+                      </Link>
+                    );
+                  }
+
                   return (
                     <Link
                       key={link.name}
                       href={chainAwareHref(link.href)}
-                      className={`relative flex min-h-[44px] flex-shrink-0 items-center px-3 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
+                      className={`relative flex flex-shrink-0 items-center px-2 py-1.5 text-[13px] font-medium whitespace-nowrap xl:px-3 xl:text-sm`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
                         backgroundColor: isActive ? AX.mintGlow : "transparent",
@@ -2088,7 +2146,7 @@ export default function Header({
               )}
             </div>
           </div>
-          <div className="flex min-w-0 flex-shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-4">
+          <div className="flex min-w-0 flex-shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-3">
             {/* Morphing Arena Navigation - commented out, Arena now in main nav
             <MorphingArenaNav />
             */}
@@ -2335,10 +2393,10 @@ export default function Header({
                   </div>
                 )}
 
-                {/* Search button (desktop) - squarish pill; collapses to icon-only below lg */}
+                {/* Search button (desktop) - squarish pill; icon-only below xl, full label + "/" hint at xl+ */}
                 <button
                   onClick={() => openSearch()}
-                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-lg border px-2.5 transition-all duration-200 ease-out md:flex lg:px-3"
+                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-lg border px-2.5 transition-all duration-200 ease-out md:flex xl:px-3"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -2356,11 +2414,11 @@ export default function Header({
                   }}
                 >
                   <FaSearch size={12} />
-                  <span className="hidden text-xs whitespace-nowrap lg:inline" style={{ color: AX.textMuted }}>
+                  <span className="hidden text-xs whitespace-nowrap xl:inline" style={{ color: AX.textMuted }}>
                     Search
                   </span>
-                  <span 
-                    className="ml-1.5 hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none lg:inline-block"
+                  <span
+                    className="ml-1.5 hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none xl:inline-block"
                     style={{
                       backgroundColor: AX.surface2,
                       color: AX.textMuted,
@@ -3415,12 +3473,12 @@ export default function Header({
       {mobileMenuOpen && (
         <>
           <div
-            className="fixed inset-0 z-[10003] bg-black/60 transition-opacity duration-200 md:hidden"
+            className="fixed inset-0 z-[10003] bg-black/60 transition-opacity duration-200 lg:hidden"
             aria-hidden
             onClick={() => setMobileMenuOpen(false)}
           />
           <div
-            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#050608] shadow-2xl md:hidden"
+            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#050608] shadow-2xl lg:hidden"
             style={{ borderColor: AX.border }}
             role="dialog"
             aria-modal="true"

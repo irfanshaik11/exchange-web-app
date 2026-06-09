@@ -289,6 +289,7 @@ export default function UnifiedPortfolio({
 }: UnifiedPortfolioProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [sortByPnl, setSortByPnl] = useState(false);
 
   // Select theme based on variant, with glass-style overrides for uniform look
   const baseTheme = variant === 'portfolio' ? PortfolioTheme : PredictionTheme;
@@ -1050,6 +1051,22 @@ export default function UnifiedPortfolio({
               <EmptyState message="No open positions" icon={HiOutlineCollection} theme={C} />
             ) : (
               <>
+                {/* Sort controls */}
+                <div className="flex justify-end mb-1">
+                  <button
+                    onClick={() => setSortByPnl(!sortByPnl)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${sortByPnl ? '' : ''}`}
+                    style={{
+                      backgroundColor: sortByPnl ? 'rgba(24,196,140,0.1)' : C.surface,
+                      color: sortByPnl ? '#18c48c' : C.muted,
+                      border: `1px solid ${sortByPnl ? 'rgba(24,196,140,0.3)' : C.border}`,
+                    }}
+                  >
+                    <span className="text-xs">↑↓</span>
+                    Sort by PnL
+                  </button>
+                </div>
+
                 {/* Polymarket Positions */}
                 {positions.length > 0 && talarionPositions.length > 0 && (
                   <div className="flex items-center gap-2 pb-1">
@@ -1057,7 +1074,10 @@ export default function UnifiedPortfolio({
                     <div className="flex-1 h-px" style={{ backgroundColor: C.border }} />
                   </div>
                 )}
-                {positions.map((position, index) => (
+                {(sortByPnl
+                  ? [...positions].sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
+                  : positions
+                ).map((position, index) => (
                   <PositionRow
                     key={position.id}
                     position={position}
@@ -1074,7 +1094,10 @@ export default function UnifiedPortfolio({
                       <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: C.purple }}>Predictions</span>
                       <div className="flex-1 h-px" style={{ backgroundColor: C.border }} />
                     </div>
-                    {talarionPositions.map((position, index) => (
+                    {(sortByPnl
+                      ? [...talarionPositions].sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
+                      : talarionPositions
+                    ).map((position, index) => (
                       <TalarionPositionRow
                         key={position.id}
                         position={position}

@@ -1,9 +1,18 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { FaTimes } from "react-icons/fa";
 import { BiRefresh } from "react-icons/bi";
-import type { PulseFilters } from "~/contexts/PulseFiltersContext";
+import { FiDownload, FiUpload } from "react-icons/fi";
+import {
+  type PulseFilters,
+  defaultPulseFilters,
+} from "~/contexts/PulseFiltersContext";
+import { copyToClipboard } from "~/utils/clipboard";
+import {
+  showCenteredErrorToast,
+  showCenteredSuccessToast,
+} from "~/utils/toast";
 
 // ── Color constants (Axiom-style dark theme) ──
 const AX = {
@@ -288,6 +297,42 @@ function MinMaxRow({
   );
 }
 
+// File name used when exporting filters to disk.
+const FILTER_EXPORT_FILENAME = "pulse-filters.json";
+
+/**
+ * Coerce an untrusted, parsed JSON value into a valid {@link PulseFilters}.
+ *
+ * Only keys present in {@link defaultPulseFilters} are copied over, and only
+ * when the incoming value's type matches the default's (string arrays must be
+ * arrays of strings). Anything missing, extra, or mistyped falls back to the
+ * default — so a hand-edited, partial, or stale filter file can never corrupt
+ * the live filter state. Throws if the input isn't an object at all.
+ */
+export function sanitizeImportedFilters(raw: unknown): PulseFilters {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("Filter data must be a JSON object");
+  }
+  const obj = raw as Record<string, unknown>;
+  const result: PulseFilters = { ...defaultPulseFilters };
+
+  (Object.keys(defaultPulseFilters) as (keyof PulseFilters)[]).forEach((key) => {
+    const incoming = obj[key as string];
+    if (incoming === undefined || incoming === null) return;
+    const fallback = defaultPulseFilters[key];
+
+    if (Array.isArray(fallback)) {
+      if (Array.isArray(incoming) && incoming.every((v) => typeof v === "string")) {
+        (result as unknown as Record<string, unknown>)[key as string] = incoming;
+      }
+    } else if (typeof incoming === typeof fallback) {
+      (result as unknown as Record<string, unknown>)[key as string] = incoming;
+    }
+  });
+
+  return result;
+}
+
 export default function DiscoverFilterModal({
   isOpen,
   onClose,
@@ -303,21 +348,164 @@ export default function DiscoverFilterModal({
   // Mayhem mode. Lets us restore their selection when they toggle Mayhem
   // back off, rather than silently clobbering it to ['All'].
   const preMayhemProtocolsRef = useRef<string[] | null>(null);
+  // Dialog container — used to move focus into the modal on open so keyboard
+  // users land inside it, matching expected dialog behaviour.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
-  if (!isOpen || typeof document === "undefined") return null;
+  // ── Import / Export ──────────────────────────────────────────────
+  // Filters serialize to plain JSON. Import opens a paste-JSON popup and
+  // Export opens a copy-JSON popup; each popup also offers a file channel
+  // ("Import as file" / "Export as file") so a filter set can move via the
+  // clipboard OR disk.
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [importText, setImportText] = useState("");
+  // Opening a popup closes the filter modal, which removes the "Apply All"
+  // button — so an import must commit itself. This flag tells the effect below
+  // to call onApply() once the imported values have flushed into pendingFilters.
+  const applyAfterImportRef = useRef(false);
+
+  const serializeFilters = () => JSON.stringify(pendingFilters, null, 2);
+
+  const handleCopyJson = () => {
+    void copyToClipboard(
+      serializeFilters(),
+      "Filters copied as JSON",
+      "Failed to copy filters",
+    );
+  };
+
+  const handleDownloadFile = () => {
+    try {
+      const blob = new Blob([serializeFilters()], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = FILTER_EXPORT_FILENAME;
+      a.click();
+      URL.revokeObjectURL(url);
+      showCenteredSuccessToast("Filters exported to file");
+    } catch {
+      showCenteredErrorToast("Failed to export filters");
+    }
+  };
+
+  // Parse + validate raw JSON text, then stage it as pending changes (the user
+  // still has to hit Apply All — import never silently mutates the live feed).
+  // Returns true on success so callers can close the popup.
+  const applyImportedJson = (text: string): boolean => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      showCenteredErrorToast("Invalid JSON — could not import filters");
+      return false;
+    }
+    try {
+      const next = sanitizeImportedFilters(parsed);
+      onPendingFilterChange(() => next);
+      showCenteredSuccessToast("Filters imported — review, then Apply All");
+      return true;
+    } catch {
+      showCenteredErrorToast("Unrecognized filter format");
+      return false;
+    }
+  };
+
+  const handleImportFromText = () => {
+    if (!importText.trim()) {
+      showCenteredErrorToast("Paste filter JSON first");
+      return;
+    }
+    if (applyImportedJson(importText)) {
+      applyAfterImportRef.current = true;
+      setImportText("");
+      setShowImportModal(false);
+    }
+  };
+
+  const handleUploadFile = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Clear the value so picking the same file again still fires onChange.
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (applyImportedJson(String(ev.target?.result ?? ""))) {
+        applyAfterImportRef.current = true;
+        setImportText("");
+        setShowImportModal(false);
+      }
+    };
+    reader.onerror = () => showCenteredErrorToast("Failed to read file");
+    reader.readAsText(file);
+  };
+
+  // Escape-to-close. Bound only while open so we don't leak listeners.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
+
+  // Move focus into the dialog when it opens so Tab/Escape work immediately
+  // and screen readers announce the dialog context. Reset the import/export
+  // popups on (re)open so a stale one never lingers — note we deliberately do
+  // NOT close them when isOpen goes false, since clicking Import/Export closes
+  // the filter modal *in order to* reveal the popup on its own.
+  useEffect(() => {
+    if (isOpen) {
+      setShowImportModal(false);
+      setShowExportModal(false);
+      dialogRef.current?.focus();
+    }
+  }, [isOpen]);
+
+  // Commit an imported filter set once it has flushed into pendingFilters.
+  // Import closes the filter modal (no Apply All to press), so we apply for
+  // the user — mirroring how the Pulse table applies imports immediately.
+  useEffect(() => {
+    if (applyAfterImportRef.current) {
+      applyAfterImportRef.current = false;
+      onApply();
+    }
+  }, [pendingFilters, onApply]);
+
+  // Render nothing only when the filter modal is closed AND no popup is open —
+  // the popups must survive the filter modal closing.
+  if (typeof document === "undefined") return null;
+  if (!isOpen && !showImportModal && !showExportModal) return null;
 
   return createPortal(
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 backdrop-blur-sm"
-        style={{ backgroundColor: "rgba(0, 0, 0, 0.6)", zIndex: 10000000 }}
-        onClick={onClose}
-      />
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 backdrop-blur-sm"
+            style={{ backgroundColor: "rgba(0, 0, 0, 0.6)", zIndex: 10000000 }}
+            onClick={onClose}
+          />
 
       {/* Modal - Axiom style */}
       <div
-        className="filter-modal fixed top-1/2 left-1/2 flex max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform flex-col overflow-hidden rounded-xl border shadow-2xl"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Trending filters"
+        tabIndex={-1}
+        className="filter-modal fixed top-1/2 left-1/2 flex max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform flex-col overflow-hidden rounded-xl border shadow-2xl outline-none"
         style={{
           backgroundColor: AX.surface,
           borderColor: AX.border,
@@ -327,7 +515,7 @@ export default function DiscoverFilterModal({
       >
         {/* Header - Axiom style */}
         <div
-          className="flex items-center justify-between border-b px-5 py-4"
+          className="flex flex-shrink-0 items-center justify-between border-b px-5 py-4"
           style={{ borderColor: AX.border, backgroundColor: AX.surfaceAlt }}
         >
           <h3
@@ -353,9 +541,11 @@ export default function DiscoverFilterModal({
           </div>
         </div>
 
-        {/* Scrollable body */}
+        {/* Scrollable body — flex-1 + min-h-0 makes this the single scroll
+            region, so header/footer stay pinned and the modal never exceeds
+            max-h-[90vh] (no double scrollbar, footer always visible). */}
         <div
-          className="max-h-[500px] overflow-y-auto p-5"
+          className="min-h-0 flex-1 overflow-y-auto p-5"
           style={{ backgroundColor: AX.surface }}
         >
           {/* ── Protocols - Axiom style ── */}
@@ -708,6 +898,43 @@ export default function DiscoverFilterModal({
                 pendingFilters={pendingFilters}
                 onChange={onPendingFilterChange}
               />
+              {/* ── Audit % gates ──
+                  Distribution-health filters keyed off fields the trending WS
+                  feed reliably carries (sniper_percent / insider_percent /
+                  top10_holders_percent / bundle_percent on
+                  NormalizedTrendingToken). These are typically used as a Max
+                  cap (e.g. "Top-10 < 50%") to screen out concentrated /
+                  manipulated supply, but Min is offered too for symmetry.
+                  Dev % is intentionally absent — it is NOT on the trending
+                  token shape, so a Dev % filter would silently match nothing. */}
+              <MinMaxRow
+                label="Top 10 Holders %"
+                minKey="top10HoldersPercentMin"
+                maxKey="top10HoldersPercentMax"
+                pendingFilters={pendingFilters}
+                onChange={onPendingFilterChange}
+              />
+              <MinMaxRow
+                label="Snipers %"
+                minKey="snipersPercentMin"
+                maxKey="snipersPercentMax"
+                pendingFilters={pendingFilters}
+                onChange={onPendingFilterChange}
+              />
+              <MinMaxRow
+                label="Insiders %"
+                minKey="insidersPercentMin"
+                maxKey="insidersPercentMax"
+                pendingFilters={pendingFilters}
+                onChange={onPendingFilterChange}
+              />
+              <MinMaxRow
+                label="Bundlers %"
+                minKey="bundlePercentMin"
+                maxKey="bundlePercentMax"
+                pendingFilters={pendingFilters}
+                onChange={onPendingFilterChange}
+              />
               <MinMaxRow
                 label="Dev Migrations"
                 minKey="devMigrationsMin"
@@ -853,11 +1080,26 @@ export default function DiscoverFilterModal({
 
         {/* ── Footer - Axiom style ── */}
         <div
-          className="flex items-center justify-between border-t px-5 py-4"
+          className="flex flex-shrink-0 items-center justify-between border-t px-5 py-4"
           style={{ borderColor: AX.border, backgroundColor: AX.surfaceAlt }}
         >
           <div className="flex gap-2">
+            {/* Hidden input backing the "Upload .json file" import option. */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={handleFileSelected}
+            />
+
             <button
+              type="button"
+              onClick={() => {
+                setImportText("");
+                setShowImportModal(true);
+                onClose();
+              }}
               className="cursor-pointer rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-200"
               style={{
                 backgroundColor: AX.surfaceAlt,
@@ -876,6 +1118,11 @@ export default function DiscoverFilterModal({
               Import
             </button>
             <button
+              type="button"
+              onClick={() => {
+                setShowExportModal(true);
+                onClose();
+              }}
               className="cursor-pointer rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-200"
               style={{
                 backgroundColor: AX.surfaceAlt,
@@ -945,6 +1192,201 @@ export default function DiscoverFilterModal({
           </div>
         </div>
       </div>
+        </>
+      )}
+
+      {/* Import popup — paste JSON, or import from a file */}
+      {showImportModal && (
+        <>
+          <div
+            className="fixed inset-0"
+            style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 10000010 }}
+            onClick={() => setShowImportModal(false)}
+          />
+          <div
+            className="fixed top-1/2 left-1/2 w-[95vw] max-w-[560px] -translate-x-1/2 -translate-y-1/2 transform rounded-xl border"
+            style={{
+              backgroundColor: AX.surface,
+              borderColor: AX.border,
+              boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+              zIndex: 10000011,
+            }}
+          >
+            <div
+              className="flex items-center justify-between border-b px-5 py-4"
+              style={{ borderColor: AX.border, backgroundColor: AX.surfaceAlt }}
+            >
+              <h3
+                className="text-base font-semibold"
+                style={{ color: AX.text, letterSpacing: "0.02em" }}
+              >
+                Import Filters
+              </h3>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="cursor-pointer rounded-lg p-2 transition-all duration-200 hover:bg-white/[0.05]"
+                aria-label="Close"
+              >
+                <FaTimes size={14} style={{ color: AX.textMuted }} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              <textarea
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                placeholder="Paste your filters JSON content here..."
+                spellCheck={false}
+                autoFocus
+                className="h-52 w-full resize-none rounded-lg border p-3 text-sm outline-none"
+                style={{
+                  backgroundColor: AX.surfaceAlt,
+                  borderColor: AX.border,
+                  color: AX.text,
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                }}
+              />
+            </div>
+
+            <div
+              className="flex items-center gap-2 border-t px-5 py-4"
+              style={{ borderColor: AX.border, backgroundColor: AX.surfaceAlt }}
+            >
+              <button
+                type="button"
+                onClick={handleUploadFile}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200"
+                style={{
+                  backgroundColor: AX.surface,
+                  color: AX.textMuted,
+                  border: `1px solid ${AX.border}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = AX.borderHover;
+                  e.currentTarget.style.color = AX.text;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = AX.border;
+                  e.currentTarget.style.color = AX.textMuted;
+                }}
+              >
+                <FiUpload className="h-4 w-4" />
+                Import as file
+              </button>
+              <button
+                type="button"
+                onClick={handleImportFromText}
+                className="flex-1 cursor-pointer rounded-lg px-4 py-2.5 text-sm font-semibold transition-all duration-200"
+                style={{ backgroundColor: AX.accent, color: "#030304" }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.filter = "brightness(1.1)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.filter = "brightness(1)";
+                }}
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Export popup — copy JSON, or export to a file */}
+      {showExportModal && (
+        <>
+          <div
+            className="fixed inset-0"
+            style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 10000010 }}
+            onClick={() => setShowExportModal(false)}
+          />
+          <div
+            className="fixed top-1/2 left-1/2 w-[95vw] max-w-[560px] -translate-x-1/2 -translate-y-1/2 transform rounded-xl border"
+            style={{
+              backgroundColor: AX.surface,
+              borderColor: AX.border,
+              boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+              zIndex: 10000011,
+            }}
+          >
+            <div
+              className="flex items-center justify-between border-b px-5 py-4"
+              style={{ borderColor: AX.border, backgroundColor: AX.surfaceAlt }}
+            >
+              <h3
+                className="text-base font-semibold"
+                style={{ color: AX.text, letterSpacing: "0.02em" }}
+              >
+                Export Filters
+              </h3>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="cursor-pointer rounded-lg p-2 transition-all duration-200 hover:bg-white/[0.05]"
+                aria-label="Close"
+              >
+                <FaTimes size={14} style={{ color: AX.textMuted }} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              <textarea
+                value={serializeFilters()}
+                readOnly
+                spellCheck={false}
+                onFocus={(e) => e.currentTarget.select()}
+                className="h-52 w-full resize-none rounded-lg border p-3 text-sm outline-none"
+                style={{
+                  backgroundColor: AX.surfaceAlt,
+                  borderColor: AX.border,
+                  color: AX.textMuted,
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                }}
+              />
+            </div>
+
+            <div
+              className="flex items-center gap-2 border-t px-5 py-4"
+              style={{ borderColor: AX.border, backgroundColor: AX.surfaceAlt }}
+            >
+              <button
+                type="button"
+                onClick={handleDownloadFile}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200"
+                style={{
+                  backgroundColor: AX.surface,
+                  color: AX.textMuted,
+                  border: `1px solid ${AX.border}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = AX.borderHover;
+                  e.currentTarget.style.color = AX.text;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = AX.border;
+                  e.currentTarget.style.color = AX.textMuted;
+                }}
+              >
+                <FiDownload className="h-4 w-4" />
+                Export as file
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyJson}
+                className="flex-1 cursor-pointer rounded-lg px-4 py-2.5 text-sm font-semibold transition-all duration-200"
+                style={{ backgroundColor: AX.accent, color: "#030304" }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.filter = "brightness(1.1)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.filter = "brightness(1)";
+                }}
+              >
+                Copy JSON
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>,
     document.body,
   );

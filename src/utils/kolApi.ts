@@ -2,14 +2,13 @@
  * KOL Leaderboard API Utilities
  *
  * The wallet-tracker backend owns the canonical, DB-backed implementation
- * (`/api/kol-leaderboard` served from `KolLeaderboardRow` and refreshed by
- * the kolscan-poller worker every 30 min). The Next.js app also ships a
- * self-contained fallback at the same path that proxies kolscan with an
- * in-memory cache — used until the backend is deployed.
+ * (`GET /api/kol-leaderboard` served from `KolLeaderboardRow` and refreshed
+ * by the kolscan-poller worker every 30 min). We always call it directly via
+ * `NEXT_PUBLIC_WALLET_TRACKER_URL`.
  *
- * To target the backend, set `NEXT_PUBLIC_KOL_LEADERBOARD_USE_BACKEND=true`
- * and ensure `NEXT_PUBLIC_BACKEND_URL` is pointed at the wallet-tracker
- * backend. Default is same-origin (frontend fallback).
+ * If that env var is unset we fall back to same-origin, which hits the Next.js
+ * app's self-contained route at the same path — handy for local dev without a
+ * running tracker backend.
  */
 
 import { env } from "../env";
@@ -56,37 +55,38 @@ export interface KolLeaderboardResult {
 // HELPERS
 // ============================================================
 
-function useBackend(): boolean {
-  // Opt-in flag — keep default same-origin until the backend deploys, then
-  // flip via env without touching code.
-  return (
-    process.env.NEXT_PUBLIC_KOL_LEADERBOARD_USE_BACKEND === "true" ||
-    process.env.NEXT_PUBLIC_KOL_LEADERBOARD_USE_BACKEND === "1"
-  );
-}
-
 function stripTrailingSlash(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
 function getBaseUrl(): string {
-  if (useBackend()) {
-    const envUrl = env.NEXT_PUBLIC_BACKEND_URL || "";
-    if (typeof window === "undefined") return stripTrailingSlash(envUrl);
-    try {
-      const url = new URL(envUrl || window.location.origin);
-      if (window.location.protocol === "https:" && url.protocol === "http:") {
-        url.protocol = "https:";
-      }
-      return stripTrailingSlash(url.toString());
-    } catch {
-      return stripTrailingSlash(window.location.origin);
-    }
+  // The wallet-tracker backend owns the canonical /api/kol-leaderboard.
+  // NEXT_PUBLIC_* vars are inlined at build time; read process.env on the
+  // server and the validated `env` object in the browser.
+  const envUrl =
+    typeof window === "undefined"
+      ? process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || ""
+      : env.NEXT_PUBLIC_WALLET_TRACKER_URL || "";
+
+  // No tracker URL configured → same-origin, so local dev against the
+  // Next.js fallback route still works.
+  if (!envUrl) {
+    if (typeof window === "undefined") return "";
+    return stripTrailingSlash(window.location.origin);
   }
 
-  // Default: same-origin → hits the Next.js route at /api/kol-leaderboard.
-  if (typeof window === "undefined") return "";
-  return stripTrailingSlash(window.location.origin);
+  if (typeof window === "undefined") return stripTrailingSlash(envUrl);
+
+  try {
+    const url = new URL(envUrl);
+    // Avoid mixed-content: upgrade http→https when the page is on https.
+    if (window.location.protocol === "https:" && url.protocol === "http:") {
+      url.protocol = "https:";
+    }
+    return stripTrailingSlash(url.toString());
+  } catch {
+    return stripTrailingSlash(window.location.origin);
+  }
 }
 
 // ============================================================

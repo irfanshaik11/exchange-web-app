@@ -12,25 +12,29 @@
  *    so pages skip their loading state on mount.
  */
 
-import { useEffect } from 'react';
-import useTrendingWebSocket from '~/hooks/useTrendingWebSocket';
-import useDexScreenerTrending from '~/hooks/useDexScreenerTrending';
-import usePumpPortalWebSocket from '~/hooks/usePumpPortalWebSocket';
+import { useEffect } from "react";
+import useTrendingWebSocket from "~/hooks/useTrendingWebSocket";
+import useDexScreenerTrending from "~/hooks/useDexScreenerTrending";
+import usePumpPortalWebSocket from "~/hooks/usePumpPortalWebSocket";
 import {
   useQueryNewPairs,
   useQueryFinalStretch,
   useQueryMigrated,
   useQueryLaunchpadData,
-} from '~/hooks/useQueryTokens';
-import { useUser } from '~/components/UserContext';
-import { getTradeActivityByUser } from '~/utils/functions';
-import { prefetchXStocks, prefetchNewPairs, prefetchPumpLive } from '~/utils/discoverPrefetch';
+} from "~/hooks/useQueryTokens";
+import { useUser } from "~/components/UserContext";
+import { getTradeActivityByUser } from "~/utils/functions";
+import {
+  prefetchXStocks,
+  prefetchNewPairs,
+  prefetchPumpLive,
+} from "~/utils/discoverPrefetch";
 
 // ─── Trending / Discover tabs ─────────────────────────────────────────────────
 
 function TrendingWsPreloader() {
-  // One WS for all timeframes (5m/1h/6h are delivered in a single snapshot).
-  useTrendingWebSocket({ timeframe: '1h', enabled: true });
+  // One WS for all timeframes (1m/5m/30m/1h are delivered in a single snapshot).
+  useTrendingWebSocket({ timeframe: "1h", enabled: true });
   // REST pre-fetch (instant from Redis) + live delta WS.
   useDexScreenerTrending(true);
   // PumpPortal WS — tokens accumulate while the user is on other tabs.
@@ -64,8 +68,8 @@ function PortfolioPreloader() {
 
     // Prefetch for both chains so switching chains is instant too.
     const chains: Array<{ chain: string; blockchain: string }> = [
-      { chain: 'sol', blockchain: 'solana' },
-      { chain: 'monad', blockchain: 'monad' },
+      { chain: "sol", blockchain: "solana" },
+      { chain: "monad", blockchain: "monad" },
     ];
 
     for (const { chain, blockchain } of chains) {
@@ -86,7 +90,10 @@ function PortfolioPreloader() {
         .then((data) => {
           if (!Array.isArray(data) || data.length === 0) return;
           try {
-            localStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }));
+            localStorage.setItem(
+              cacheKey,
+              JSON.stringify({ data, timestamp: Date.now() }),
+            );
           } catch {}
         })
         .catch(() => {});
@@ -104,8 +111,8 @@ function DiscoverRestPreloader() {
     // localStorage / sessionStorage keys that discover.tsx reads on mount,
     // so the page skips its loading state entirely.
     prefetchXStocks();
-    prefetchNewPairs('sol');
-    prefetchNewPairs('monad');
+    prefetchNewPairs("sol");
+    prefetchNewPairs("monad");
     prefetchPumpLive();
   }, []);
 

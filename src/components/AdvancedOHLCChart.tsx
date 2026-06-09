@@ -1365,8 +1365,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       gapShiftsRef.current = [];
       totalShiftRef.current = 0;
 
-      // Clear price line state for new token
+      // Clear price line and user trade shape state for new token
       priceLineShapesRef.current = {};
+      userTradeShapesRef.current = {};
       if (previewLineShapeIdRef.current) {
         try {
           const w = widgetRef.current;
@@ -1613,6 +1614,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   const totalShiftRef = useRef<number>(0);
   const hasRealPriceDataRef = useRef<boolean>(false); // Track if we've received real price data
   const priceLineShapesRef = useRef<Record<string, any>>({});
+  const userTradeShapesRef = useRef<Record<string, string>>({});
   const previewLineShapeIdRef = useRef<string | null>(null);
   const previewCreationSeqRef = useRef(0);
   const lastMetricsRef = useRef<{
@@ -1970,6 +1972,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     }
     return () => { if (refreshMarksTimeoutRef.current) clearTimeout(refreshMarksTimeoutRef.current); };
   }, [tradeData]);
+
+  // User trade markers now use the same getMarks circle style as dev markers
+  // (with "B"/"S" labels) — no separate balloon shapes needed.
 
   // Single cancellable retry chain shared by both refresh paths (the chart's
   // direct store subscription below, and the imperative `refreshMarksNow` API
@@ -5863,8 +5868,14 @@ Maker: ${walletAddress}`;
             }
 
             // getMarks only supports named colors (NOT hex)
+            // For optimistic (user) trades, use __optimisticId for a stable
+            // mark id that doesn't change when the timestamp updates from
+            // click-time → actual execution time after WS merge.
+            const markId = trade.__optimisticId
+              ? `user_trade_${trade.__optimisticId}`
+              : `${isDev ? "dev" : isUser ? "user" : isMayhem ? "mayhem" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`;
             const markData: any = {
-              id: `${isDev ? "dev" : isUser ? "user" : isMayhem ? "mayhem" : "kol"}_trade_${timeSeconds}_${trade.transactionHash || trade.tx_hash || trade.id || trade.maker || ''}`,
+              id: markId,
               time: realToAdjusted(timeSeconds * 1000, gapShiftsRef.current) / 1000,
               color: markColor,
               label: label,
@@ -6474,6 +6485,7 @@ Maker: ${walletAddress}`;
         widgetTokenRef.current = initialTokenId;
         // Clear any stale shape refs from previous widget instance
         priceLineShapesRef.current = {};
+        userTradeShapesRef.current = {};
         previewLineShapeIdRef.current = null;
         previewCreationSeqRef.current++;
         lastPriceLinesRef.current = {};
@@ -6700,6 +6712,7 @@ Maker: ${walletAddress}`;
                     activeChart.removeAllShapes();
                   }
                   priceLineShapesRef.current = {};
+                  userTradeShapesRef.current = {};
                   previewLineShapeIdRef.current = null;
                   previewCreationSeqRef.current++;
                   lastPriceLinesRef.current = {};
@@ -6827,6 +6840,7 @@ Maker: ${walletAddress}`;
         widgetTokenRef.current = null;
       }
       priceLineShapesRef.current = {};
+      userTradeShapesRef.current = {};
       previewLineShapeIdRef.current = null;
       previewCreationSeqRef.current++;
       lastPriceLinesRef.current = {};

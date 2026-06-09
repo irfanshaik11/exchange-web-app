@@ -48,13 +48,13 @@ export function formatMarketCap(value: number | null | undefined): string {
   const absValue = Math.abs(value);
 
   if (absValue >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(2)}B`;
+    return `$${(value / 1_000_000_000).toFixed(1)}B`;
   }
   if (absValue >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`;
+    return `$${(value / 1_000_000).toFixed(1)}M`;
   }
   if (absValue >= 1_000) {
-    return `$${(value / 1_000).toFixed(2)}K`;
+    return `$${(value / 1_000).toFixed(1)}K`;
   }
-  return `$${value.toFixed(2)}`;
+  return `$${value.toFixed(1)}`;
 }

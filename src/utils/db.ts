@@ -46,38 +46,38 @@ export type Token = {
   description: string;
   is_verified_contract: boolean;
   possible_spam: boolean;
+  total_buy_volume_1m: number;
   total_buy_volume_5m: number;
+  total_buy_volume_30m: number;
   total_buy_volume_1h: number;
-  total_buy_volume_6h: number;
-  total_buy_volume_24h: number;
+  total_sell_volume_1m: number;
   total_sell_volume_5m: number;
+  total_sell_volume_30m: number;
   total_sell_volume_1h: number;
-  total_sell_volume_6h: number;
-  total_sell_volume_24h: number;
+  total_buyers_1m: number;
   total_buyers_5m: number;
+  total_buyers_30m: number;
   total_buyers_1h: number;
-  total_buyers_6h: number;
-  total_buyers_24h: number;
+  total_sellers_1m: number;
   total_sellers_5m: number;
+  total_sellers_30m: number;
   total_sellers_1h: number;
-  total_sellers_6h: number;
-  total_sellers_24h: number;
+  total_buys_1m: number;
   total_buys_5m: number;
+  total_buys_30m: number;
   total_buys_1h: number;
-  total_buys_6h: number;
-  total_buys_24h: number;
+  total_sells_1m: number;
   total_sells_5m: number;
+  total_sells_30m: number;
   total_sells_1h: number;
-  total_sells_6h: number;
-  total_sells_24h: number;
+  unique_wallets_1m: number;
   unique_wallets_5m: number;
+  unique_wallets_30m: number;
   unique_wallets_1h: number;
-  unique_wallets_6h: number;
-  unique_wallets_24h: number;
+  price_percent_change_1m: number;
   price_percent_change_5m: number;
+  price_percent_change_30m: number;
   price_percent_change_1h: number;
-  price_percent_change_6h: number;
-  price_percent_change_24h: number;
   sol_price: number;
   usd_price: number;
   market_cap_usd: number;
@@ -125,7 +125,9 @@ export type Token = {
  *   0.123456   => "0.123"
  *   0.5        => "0.5"
  */
-export function formatSmallPrice(val: string | number | null | undefined): string {
+export function formatSmallPrice(
+  val: string | number | null | undefined,
+): string {
   if (val === null || val === undefined) return "-";
 
   const num = typeof val === "string" ? parseFloat(val) : val;
@@ -141,19 +143,21 @@ export function formatSmallPrice(val: string | number | null | undefined): strin
   // If number is >= 0.01, use regular formatting
   // For very small numbers (< 0.01), use subscript notation
   if (abs >= 0.01) {
-    return (isNegative ? '-' : '') + abs.toFixed(abs >= 1 ? 2 : 4);
+    return (isNegative ? "-" : "") + abs.toFixed(abs >= 1 ? 2 : 4);
   }
 
   // For very small numbers, convert to string to count leading zeros
   const str = abs.toString();
-  
+
   // For scientific notation like "3.526868e-4", convert to decimal
   let decimalStr: string;
-  if (str.includes('e')) {
-    const [base, exponent] = str.split('e');
+  if (str.includes("e")) {
+    const [base, exponent] = str.split("e");
     const exp = parseInt(exponent);
-    decimalStr = (parseFloat(base) * Math.pow(10, exp)).toFixed(Math.abs(exp) + 10);
-  } else if (str.includes('.')) {
+    decimalStr = (parseFloat(base) * Math.pow(10, exp)).toFixed(
+      Math.abs(exp) + 10,
+    );
+  } else if (str.includes(".")) {
     decimalStr = str;
   } else {
     decimalStr = abs.toFixed(20);
@@ -161,10 +165,10 @@ export function formatSmallPrice(val: string | number | null | undefined): strin
 
   // Count leading zeros after decimal point
   const match = decimalStr.match(/\.(0*)([1-9].*)/);
-  
+
   if (!match) {
     // No leading zeros, just format normally
-    return (isNegative ? '-' : '') + abs.toFixed(4);
+    return (isNegative ? "-" : "") + abs.toFixed(4);
   }
 
   const [, leadingZeros, significantDigits] = match;
@@ -172,13 +176,15 @@ export function formatSmallPrice(val: string | number | null | undefined): strin
 
   // Format significant digits (take first 2 digits)
   const formattedDigits = significantDigits.slice(0, 2);
-  
-  // Convert zero count to subscript
-  const subscript = zeroCount.toString().split('').map(d => 
-    String.fromCharCode(0x2080 + parseInt(d))
-  ).join('');
 
-  return (isNegative ? '-' : '') + `0.0${subscript}${formattedDigits}`;
+  // Convert zero count to subscript
+  const subscript = zeroCount
+    .toString()
+    .split("")
+    .map((d) => String.fromCharCode(0x2080 + parseInt(d)))
+    .join("");
+
+  return (isNegative ? "-" : "") + `0.0${subscript}${formattedDigits}`;
 }
 
 /**
@@ -190,7 +196,9 @@ export function formatSmallPrice(val: string | number | null | undefined): strin
  *   0.00000012 => "0.00000012"
  *   "abc"      => "-"
  */
-export function formatSmartNumber(val: string | number | null | undefined): string {
+export function formatSmartNumber(
+  val: string | number | null | undefined,
+): string {
   if (val === null || val === undefined) return "-";
 
   const num = typeof val === "string" ? parseFloat(val) : val;
@@ -204,35 +212,52 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
   // Handle very small values (< $0.01) with subscript notation: 0.0₅123
   if (abs > 0 && abs < 0.01) {
     const str = abs.toFixed(20);
-    const decIdx = str.indexOf('.');
+    const decIdx = str.indexOf(".");
     if (decIdx !== -1) {
       let zeroCount = 0;
-      let sigDigits = '';
+      let sigDigits = "";
       for (let i = decIdx + 1; i < str.length; i++) {
-        if (str[i] === '0') {
+        if (str[i] === "0") {
           zeroCount++;
         } else {
-          sigDigits = str.substring(i, Math.min(i + 4, str.length)).replace(/0+$/, '');
+          sigDigits = str
+            .substring(i, Math.min(i + 4, str.length))
+            .replace(/0+$/, "");
           break;
         }
       }
       if (zeroCount >= 2 && sigDigits) {
-        const subMap: Record<string, string> = { '0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉' };
-        const sub = zeroCount.toString().split('').map(c => subMap[c] || c).join('');
-        return `${num < 0 ? '-' : ''}0.0${sub}${sigDigits}`;
+        const subMap: Record<string, string> = {
+          "0": "₀",
+          "1": "₁",
+          "2": "₂",
+          "3": "₃",
+          "4": "₄",
+          "5": "₅",
+          "6": "₆",
+          "7": "₇",
+          "8": "₈",
+          "9": "₉",
+        };
+        const sub = zeroCount
+          .toString()
+          .split("")
+          .map((c) => subMap[c] || c)
+          .join("");
+        return `${num < 0 ? "-" : ""}0.0${sub}${sigDigits}`;
       }
     }
-    return num.toFixed(3);
+    return num.toFixed(1);
   }
 
-  // Handle small values (< $1) with 3 decimal places
+  // Handle small values (< $1) with 1 decimal place
   if (abs < 1) {
-    return num.toFixed(3);
+    return num.toFixed(1);
   }
 
-  // Handle values < $1000 with 3 decimal places
+  // Handle values < $1000 with 1 decimal place
   if (abs < 1000) {
-    return num.toFixed(3);
+    return num.toFixed(1);
   }
 
   const abbreviations = [
@@ -244,15 +269,15 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
 
   for (const { value, suffix } of abbreviations) {
     if (abs >= value) {
-      const formatted = (num / value).toFixed(3);
-      return formatted.endsWith(".000")
+      const formatted = (num / value).toFixed(1);
+      return formatted.endsWith(".0")
         ? `${parseInt(formatted)}${suffix}`
         : `${formatted}${suffix}`;
     }
   }
 
   // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
-  return num.toFixed(3);
+  return num.toFixed(1);
 }
 
 /**
@@ -263,7 +288,9 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
  *   346141     => "346.14K"
  *   1438000    => "1.44M"
  */
-export function formatMarketCap(val: string | number | null | undefined): string {
+export function formatMarketCap(
+  val: string | number | null | undefined,
+): string {
   if (val === null || val === undefined) return "-";
 
   const num = typeof val === "string" ? parseFloat(val) : val;
@@ -274,19 +301,19 @@ export function formatMarketCap(val: string | number | null | undefined): string
 
   const abs = Math.abs(num);
 
-  // Handle very small values (< $0.01) with 2 decimal places
+  // Handle very small values (< $0.01) with 1 decimal place
   if (abs > 0 && abs < 0.01) {
-    return num.toFixed(2);
+    return num.toFixed(1);
   }
 
-  // Handle small values (< $1) with 2 decimal places
+  // Handle small values (< $1) with 1 decimal place
   if (abs < 1) {
-    return num.toFixed(2);
+    return num.toFixed(1);
   }
 
-  // Handle values < $1000 with 2 decimal places
+  // Handle values < $1000 with 1 decimal place
   if (abs < 1000) {
-    return num.toFixed(2);
+    return num.toFixed(1);
   }
 
   const abbreviations = [
@@ -298,15 +325,15 @@ export function formatMarketCap(val: string | number | null | undefined): string
 
   for (const { value, suffix } of abbreviations) {
     if (abs >= value) {
-      const formatted = (num / value).toFixed(2);
-      return formatted.endsWith(".00")
+      const formatted = (num / value).toFixed(1);
+      return formatted.endsWith(".0")
         ? `${parseInt(formatted)}${suffix}`
         : `${formatted}${suffix}`;
     }
   }
 
   // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
-  return num.toFixed(2);
+  return num.toFixed(1);
 }
 
 /**
@@ -318,7 +345,9 @@ export function formatMarketCap(val: string | number | null | undefined): string
  *   500000000   => "0.5 SOL"
  *   50000000000 => "50 SOL"
  */
-export function formatLamportsToSol(lamports: number | null | undefined): string {
+export function formatLamportsToSol(
+  lamports: number | null | undefined,
+): string {
   if (lamports === null || lamports === undefined || lamports === 0) return "-";
 
   const sol = lamports / 1_000_000_000;
@@ -349,7 +378,7 @@ export function formatLamportsToSol(lamports: number | null | undefined): string
  */
 export function normalizeTimestampMs(
   value: any,
-  options?: { rejectUnreasonable?: boolean }
+  options?: { rejectUnreasonable?: boolean },
 ): number | null {
   const { rejectUnreasonable = true } = options || {};
 
@@ -361,7 +390,8 @@ export function normalizeTimestampMs(
   if (typeof v === "object" && v !== null) {
     if ("Time" in v && typeof v.Time === "string") v = v.Time;
     else if ("time" in v && typeof v.time === "string") v = v.time;
-    else if ("seconds" in v && typeof v.seconds === "number") v = v.seconds * 1000;
+    else if ("seconds" in v && typeof v.seconds === "number")
+      v = v.seconds * 1000;
     else if ("millis" in v && typeof v.millis === "number") v = v.millis;
     else if (v instanceof Date) v = v.getTime();
     else return null;
@@ -401,14 +431,14 @@ export function normalizeTimestampMs(
     if (ts < now - fiveYearsMs) {
       console.warn(
         "[normalizeTimestampMs] Rejecting unreasonable timestamp (>5 years old):",
-        { value, parsedTs: ts, parsedDate: new Date(ts).toISOString() }
+        { value, parsedTs: ts, parsedDate: new Date(ts).toISOString() },
       );
       return null;
     }
     if (ts > now + oneDayMs) {
       console.warn(
         "[normalizeTimestampMs] Rejecting unreasonable timestamp (>1 day in future):",
-        { value, parsedTs: ts, parsedDate: new Date(ts).toISOString() }
+        { value, parsedTs: ts, parsedDate: new Date(ts).toISOString() },
       );
       return null;
     }
@@ -428,6 +458,3 @@ export function normalizeTimestampToISO(value: any): string | null {
   if (ts === null) return null;
   return new Date(ts).toISOString();
 }
-
-
-

@@ -1,70 +1,106 @@
 // src/components/DiscoverPopoutContent.tsx
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/router';
-import InterstateTable from './InterstateTable';
-import type { Token } from '~/utils/db';
-import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
-import { usePumpPortalWebSocket } from '../hooks/usePumpPortalWebSocket';
-import useTrendingWebSocket, { type TrendingTimeframe } from '../hooks/useTrendingWebSocket';
-import { useDexScreenerTrending } from '../hooks/useDexScreenerTrending';
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
+import { useRouter } from "next/router";
+import InterstateTable from "./InterstateTable";
+import type { Token } from "~/utils/db";
+import usePaginatedTokensWithFallback from "../hooks/usePaginatedTokensWithFallback";
+import { usePumpPortalWebSocket } from "../hooks/usePumpPortalWebSocket";
+import useTrendingWebSocket, {
+  type TrendingTimeframe,
+} from "../hooks/useTrendingWebSocket";
+import { useDexScreenerTrending } from "../hooks/useDexScreenerTrending";
 import { useQuickBuy } from "~/components/QuickBuyContext";
-import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
-import { useFilter } from '../components/FilterContext';
-import FilterPopout from '../components/FilterPopout';
+import QuickBuySettingsModal from "../components/QuickBuySettingsModal";
+import { useFilter } from "../components/FilterContext";
+import FilterPopout from "../components/FilterPopout";
 import { SOL_MINT_ADDRESS } from "~/utils/api";
-import { executeMonadMultiBuy, formatMonadTxSummary } from "~/utils/monadWalletAllocation";
+import {
+  executeMonadMultiBuy,
+  formatMonadTxSummary,
+} from "~/utils/monadWalletAllocation";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
-import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
-import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons/fa";
+import PumpLive, {
+  type PumpItem,
+  demoLeft as demoLeftPump,
+  demoRight as demoRightPump,
+} from "../components/PumpLive";
+import {
+  FaRunning,
+  FaGasPump,
+  FaCoins,
+  FaBan,
+  FaCheckCircle,
+} from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 
 import toast from "react-hot-toast";
 import { extractTokenImage, getResolvedTokenImage } from "~/utils/images";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
-import { broadcastTradeCompleted, notifyTradePending } from "~/utils/tradeEvents";
+import {
+  broadcastTradeCompleted,
+  notifyTradePending,
+} from "~/utils/tradeEvents";
 import { formatMonadError } from "~/utils/monadError";
-import { validateMonadBuy, showTradeValidationError } from "~/utils/preTradeValidation";
-import { listenForTradeEvents, transformToastToError } from "~/utils/createSolanaToastHandler";
+import {
+  validateMonadBuy,
+  showTradeValidationError,
+} from "~/utils/preTradeValidation";
+import {
+  listenForTradeEvents,
+  transformToastToError,
+} from "~/utils/createSolanaToastHandler";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
-export type Timeframe = "5m" | "1h" | "6h" | "24h";
+export type Timeframe = "1m" | "5m" | "30m" | "1h";
 
 // Extend Token with optional flags
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export default function DiscoverPopoutContent() {
   const router = useRouter();
-  
+
   // CRITICAL: Initialize chain from router query immediately to avoid race conditions
   // Default to solana chain for popout
   const manualChainSwitchRef = useRef(false);
   const [currentChain, setCurrentChain] = useState<string>(() => {
     // Initialize from router query if available, otherwise default to 'sol'
-    if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'sol';
+    if (typeof window !== "undefined" && router.isReady) {
+      return (router.query.chain as string) || "sol";
     }
     // Also check URL params directly for immediate access
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'sol';
+      return urlParams.get("chain") || "sol";
     }
-    return 'sol';
+    return "sol";
   });
-  
+
   // Sync chain state with router query (only if not manually switched)
   useEffect(() => {
     if (!router.isReady || manualChainSwitchRef.current) {
       manualChainSwitchRef.current = false;
       return;
     }
-    const chainFromQuery = (router.query.chain as string) || 'sol';
+    const chainFromQuery = (router.query.chain as string) || "sol";
     if (chainFromQuery !== currentChain) {
-      isDev && console.log('[DiscoverPopout] Chain changed from router:', currentChain, '->', chainFromQuery);
+      isDev &&
+        console.log(
+          "[DiscoverPopout] Chain changed from router:",
+          currentChain,
+          "->",
+          chainFromQuery,
+        );
       setCurrentChain(chainFromQuery);
     }
   }, [router.query.chain, router.isReady]);
@@ -75,29 +111,52 @@ export default function DiscoverPopoutContent() {
       manualChainSwitchRef.current = false;
       return;
     }
-    const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'sol';
+    const urlParams = new URLSearchParams(router.asPath.split("?")[1] || "");
+    const chainFromUrl = urlParams.get("chain") || "sol";
     if (chainFromUrl !== currentChain) {
-      isDev && console.log('[DiscoverPopout] Chain changed from URL:', currentChain, '->', chainFromUrl);
+      isDev &&
+        console.log(
+          "[DiscoverPopout] Chain changed from URL:",
+          currentChain,
+          "->",
+          chainFromUrl,
+        );
       setCurrentChain(chainFromUrl);
     }
   }, [router.asPath, router.isReady]);
-  
+
   // For Monad, only allow 'trending' and 'newPairs' tabs
   // Initialize activeTab from localStorage to persist across navigation
   // Also respect chain restrictions during initialization
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>(() => {
-    if (typeof window !== 'undefined') {
+  const [activeTab, setActiveTab] = useState<
+    "trending" | "newPairs" | "xStocks" | "surge" | "dex" | "live"
+  >(() => {
+    if (typeof window !== "undefined") {
       try {
-        const saved = localStorage.getItem('discover_active_tab');
-        if (saved && ['trending', 'newPairs', 'xStocks', 'surge', 'dex', 'live'].includes(saved)) {
-          const savedTab = saved as 'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live';
+        const saved = localStorage.getItem("discover_active_tab");
+        if (
+          saved &&
+          ["trending", "newPairs", "xStocks", "surge", "dex", "live"].includes(
+            saved,
+          )
+        ) {
+          const savedTab = saved as
+            | "trending"
+            | "newPairs"
+            | "xStocks"
+            | "surge"
+            | "dex"
+            | "live";
           // Check if we're on monad chain - if so, only allow trending or newPairs
           // Check URL params directly for immediate access (same pattern as currentChain)
           const urlParams = new URLSearchParams(window.location.search);
-          const initialChain = urlParams.get('chain') || 'sol';
-          if (initialChain === 'monad' && savedTab !== 'trending' && savedTab !== 'newPairs') {
-            return 'trending';
+          const initialChain = urlParams.get("chain") || "sol";
+          if (
+            initialChain === "monad" &&
+            savedTab !== "trending" &&
+            savedTab !== "newPairs"
+          ) {
+            return "trending";
           }
           return savedTab;
         }
@@ -105,24 +164,28 @@ export default function DiscoverPopoutContent() {
         // Ignore localStorage errors
       }
     }
-    return 'trending';
+    return "trending";
   });
-  
+
   // Save activeTab to localStorage whenever it changes
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
-        localStorage.setItem('discover_active_tab', activeTab);
+        localStorage.setItem("discover_active_tab", activeTab);
       } catch {
         // Ignore localStorage errors
       }
     }
   }, [activeTab]);
-  
+
   // When chain changes to monad, switch to trending if current tab is not allowed
   useEffect(() => {
-    if (currentChain === 'monad' && activeTab !== 'trending' && activeTab !== 'newPairs') {
-      setActiveTab('trending');
+    if (
+      currentChain === "monad" &&
+      activeTab !== "trending" &&
+      activeTab !== "newPairs"
+    ) {
+      setActiveTab("trending");
     }
   }, [currentChain, activeTab]);
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
@@ -130,11 +193,8 @@ export default function DiscoverPopoutContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter } = useFilter();
-  
-  const normalizedSearch = useMemo(
-    () => search.trim().toLowerCase(),
-    [search]
-  );
+
+  const normalizedSearch = useMemo(() => search.trim().toLowerCase(), [search]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -147,12 +207,19 @@ export default function DiscoverPopoutContent() {
   }, [router.isReady, router.query.search]);
 
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const { user, solBalance, refreshBalance, walletList, walletBalances, selectedWalletIds } = useUser();
+  const {
+    user,
+    solBalance,
+    refreshBalance,
+    walletList,
+    walletBalances,
+    selectedWalletIds,
+  } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('quickBuyAmount');
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("quickBuyAmount");
       if (saved) {
         const parsed = parseFloat(saved);
         if (!isNaN(parsed) && parsed >= 0) {
@@ -163,27 +230,49 @@ export default function DiscoverPopoutContent() {
     return 0.05;
   };
 
-  const [quickBuyAmount, setQuickBuyAmount] = useState(getInitialQuickBuyAmount().toString());
-  const [selectedPill, setSelectedPill] = useState('P1'); // Local preset selection for discover page
+  const [quickBuyAmount, setQuickBuyAmount] = useState(
+    getInitialQuickBuyAmount().toString(),
+  );
+  const [selectedPill, setSelectedPill] = useState("P1"); // Local preset selection for discover page
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
-  
+
   // Ref for pending quick buy toast (for WebSocket updates)
-  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; tokenAddress: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
-  
+  const pendingQuickBuyToastRef = useRef<{
+    id: string;
+    tokenImage: string | null;
+    tokenName: string;
+    fakeTime: string;
+    tokenAddress: string;
+    startTime: number;
+    timerInterval?: NodeJS.Timeout;
+  } | null>(null);
+
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
-  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value">("volume");
+  const [sortKey, setSortKey] = useState<
+    | "market_cap_total"
+    | "liquidity"
+    | "volume"
+    | "txns"
+    | "name"
+    | "total_liquidity_usd"
+    | "fully_diluted_value"
+  >("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   // Store new pairs data per chain to preserve data when switching chains
-  const [newPairsRawByChain, setNewPairsRawByChain] = useState<Record<string, TokenWithDexPaid[]>>(() => {
+  const [newPairsRawByChain, setNewPairsRawByChain] = useState<
+    Record<string, TokenWithDexPaid[]>
+  >(() => {
     // Initialize with cached data for all chains if available
     const data: Record<string, TokenWithDexPaid[]> = {};
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
         // Load cached data for both chains
-        ['sol', 'monad'].forEach((chain) => {
-          const cached = localStorage.getItem(`discover_new_pairs_cache_${chain}`);
+        ["sol", "monad"].forEach((chain) => {
+          const cached = localStorage.getItem(
+            `discover_new_pairs_cache_${chain}`,
+          );
           if (cached) {
             const parsed = JSON.parse(cached);
             const age = Date.now() - parsed.timestamp;
@@ -198,32 +287,35 @@ export default function DiscoverPopoutContent() {
     }
     return data;
   });
-  
+
   // Get current chain's data
   const newPairsRaw = newPairsRawByChain[currentChain] || [];
-  
+
   // Ref to track current state for use in callbacks/intervals
   const newPairsRawByChainRef = useRef(newPairsRawByChain);
   useEffect(() => {
     newPairsRawByChainRef.current = newPairsRawByChain;
   }, [newPairsRawByChain]);
-  
+
   // Helper to update data for a specific chain
-  const setNewPairsRawForChain = useCallback((chain: string, data: TokenWithDexPaid[]) => {
-    setNewPairsRawByChain((prev) => ({
-      ...prev,
-      [chain]: data,
-    }));
-  }, []);
+  const setNewPairsRawForChain = useCallback(
+    (chain: string, data: TokenWithDexPaid[]) => {
+      setNewPairsRawByChain((prev) => ({
+        ...prev,
+        [chain]: data,
+      }));
+    },
+    [],
+  );
   const [newPairsLoading, setNewPairsLoading] = useState(false);
   const [newPairsError, setNewPairsError] = useState<string | null>(null);
 
   // xStocks state
   const [xStocksRaw, setXStocksRaw] = useState<TokenWithDexPaid[]>(() => {
     // Initialize with cached data if available (no loading state)
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
-        const cached = localStorage.getItem('discover_xstocks_cache');
+        const cached = localStorage.getItem("discover_xstocks_cache");
         if (cached) {
           const parsed = JSON.parse(cached);
           const age = Date.now() - parsed.timestamp;
@@ -241,7 +333,9 @@ export default function DiscoverPopoutContent() {
   const [xStocksError, setXStocksError] = useState<string | null>(null);
 
   // 🔒 Image cache: tokenId -> { cover?: string; avatar?: string }
-  const imageCacheRef = useRef<Map<string, { cover?: string; avatar?: string }>>(new Map());
+  const imageCacheRef = useRef<
+    Map<string, { cover?: string; avatar?: string }>
+  >(new Map());
   // Track one-time preloads to avoid refetch spam
   const preloadedRef = useRef<Set<string>>(new Set());
 
@@ -250,41 +344,44 @@ export default function DiscoverPopoutContent() {
   // Helper to check if a token is wrapped SOL - AGGRESSIVE FILTERING
   const isWrappedSol = useCallback((token: any): boolean => {
     if (!token || !token.mint) return false;
-    
+
     // Check exact mint match (most reliable)
     if (token.mint === WRAPPED_SOL_MINT) return true;
-    
+
     // Check symbol and name with comprehensive variations
-    const symbol = (token.symbol || '').toLowerCase().trim();
-    const name = (token.name || '').toLowerCase().trim();
-    
+    const symbol = (token.symbol || "").toLowerCase().trim();
+    const name = (token.name || "").toLowerCase().trim();
+
     // Comprehensive wrapped SOL variations to catch all instances
     const wrappedSolVariations = [
-      'wrapped sol',
-      'wsol',
-      'wrapped solana',
-      'wsolana',
-      'wrapped-sol',
-      'wrapped-solana',
-      'solwrapped',
-      'solw',
-      'w.sol',
-      'w sol',
-      'sol wrapped',
-      'sol wrapped solana',
-      'wrappedsol',
-      'wrappedsolana'
+      "wrapped sol",
+      "wsol",
+      "wrapped solana",
+      "wsolana",
+      "wrapped-sol",
+      "wrapped-solana",
+      "solwrapped",
+      "solw",
+      "w.sol",
+      "w sol",
+      "sol wrapped",
+      "sol wrapped solana",
+      "wrappedsol",
+      "wrappedsolana",
     ];
-    
+
     // Check if symbol or name contains any variation
-    const isWrappedSolSymbol = wrappedSolVariations.some(variant => 
-      symbol === variant || symbol.includes(variant) ||
-      name === variant || name.includes(variant)
+    const isWrappedSolSymbol = wrappedSolVariations.some(
+      (variant) =>
+        symbol === variant ||
+        symbol.includes(variant) ||
+        name === variant ||
+        name.includes(variant),
     );
-    
+
     // Also check if mint starts with So111... (wrapped SOL mint pattern)
-    const isWrappedSolMint = token.mint.startsWith('So111');
-    
+    const isWrappedSolMint = token.mint.startsWith("So111");
+
     return isWrappedSolSymbol || isWrappedSolMint;
   }, []);
 
@@ -298,7 +395,7 @@ export default function DiscoverPopoutContent() {
       token.totalLiquidityUsd ??
       null;
 
-    if (rawValue === undefined || rawValue === null || rawValue === '') {
+    if (rawValue === undefined || rawValue === null || rawValue === "") {
       return false;
     }
 
@@ -328,25 +425,25 @@ export default function DiscoverPopoutContent() {
       token?.ts ??
       null;
 
-    if (v && typeof v === 'object') {
-      if ('Time' in v && typeof (v as any).Time === 'string') {
+    if (v && typeof v === "object") {
+      if ("Time" in v && typeof (v as any).Time === "string") {
         v = (v as any).Time;
-      } else if ('time' in v && typeof (v as any).time === 'string') {
+      } else if ("time" in v && typeof (v as any).time === "string") {
         v = (v as any).time;
-      } else if ('seconds' in v && typeof (v as any).seconds === 'number') {
+      } else if ("seconds" in v && typeof (v as any).seconds === "number") {
         const sec = Number((v as any).seconds);
         return sec > 1e12 ? sec : sec > 1e9 ? sec * 1000 : 0;
-      } else if ('millis' in v && typeof (v as any).millis === 'number') {
+      } else if ("millis" in v && typeof (v as any).millis === "number") {
         const ms = Number((v as any).millis);
         return ms > 0 ? ms : 0;
       }
     }
 
     if (!v) return 0;
-    if (typeof v === 'number') {
+    if (typeof v === "number") {
       return v > 1e12 ? v : v > 1e9 ? v * 1000 : 0;
     }
-    if (typeof v === 'string') {
+    if (typeof v === "string") {
       const n = Number(v);
       if (!Number.isNaN(n) && n > 0) {
         return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
@@ -383,10 +480,20 @@ export default function DiscoverPopoutContent() {
       imageCacheRef.current.set(id, { cover, avatar });
 
       // Optional one-time preload to encourage browser caching
-      const preloadKey = `${id}:${cover ?? ''}|${avatar ?? ''}`;
+      const preloadKey = `${id}:${cover ?? ""}|${avatar ?? ""}`;
       if (!preloadedRef.current.has(preloadKey)) {
-        if (cover) { const i = new Image(); i.decoding = 'async'; i.loading = 'eager'; i.src = cover; }
-        if (avatar) { const i2 = new Image(); i2.decoding = 'async'; i2.loading = 'eager'; i2.src = avatar; }
+        if (cover) {
+          const i = new Image();
+          i.decoding = "async";
+          i.loading = "eager";
+          i.src = cover;
+        }
+        if (avatar) {
+          const i2 = new Image();
+          i2.decoding = "async";
+          i2.loading = "eager";
+          i2.src = avatar;
+        }
         preloadedRef.current.add(preloadKey);
       }
     }
@@ -397,10 +504,13 @@ export default function DiscoverPopoutContent() {
   // Hydrate cache from sessionStorage (optional persistence)
   useEffect(() => {
     try {
-      if (typeof window !== 'undefined') {
-        const raw = sessionStorage.getItem('tokenImageCache');
+      if (typeof window !== "undefined") {
+        const raw = sessionStorage.getItem("tokenImageCache");
         if (raw) {
-          const obj = JSON.parse(raw) as Record<string, { cover?: string; avatar?: string }>;
+          const obj = JSON.parse(raw) as Record<
+            string,
+            { cover?: string; avatar?: string }
+          >;
           imageCacheRef.current = new Map(Object.entries(obj));
         }
       }
@@ -412,10 +522,12 @@ export default function DiscoverPopoutContent() {
   // Persist cache to sessionStorage periodically (after displayed changes is fine)
   useEffect(() => {
     try {
-      if (typeof window !== 'undefined') {
+      if (typeof window !== "undefined") {
         const obj: Record<string, { cover?: string; avatar?: string }> = {};
-        imageCacheRef.current.forEach((v, k) => { obj[k] = v; });
-        sessionStorage.setItem('tokenImageCache', JSON.stringify(obj));
+        imageCacheRef.current.forEach((v, k) => {
+          obj[k] = v;
+        });
+        sessionStorage.setItem("tokenImageCache", JSON.stringify(obj));
       }
     } catch {
       // ignore
@@ -424,7 +536,12 @@ export default function DiscoverPopoutContent() {
 
   // CRITICAL: Clear ALL data when chain changes to prevent stale data from showing
   useEffect(() => {
-    isDev && console.log('[Discover] Chain changed to:', currentChain, '- Clearing all data');
+    isDev &&
+      console.log(
+        "[Discover] Chain changed to:",
+        currentChain,
+        "- Clearing all data",
+      );
     // Clear token map
     tokenMapRef.current.clear();
     // Clear filtered and displayed tokens
@@ -432,7 +549,7 @@ export default function DiscoverPopoutContent() {
     setDisplayed([]);
     // Force a small delay to ensure state is cleared before hook re-runs
   }, [currentChain]);
-  
+
   // Use same data source strategy as main Discover page:
   // - Solana trending tab: WebSocket (real-time)
   // - Everything else (including Monad): paginated HTTP fallback
@@ -444,14 +561,15 @@ export default function DiscoverPopoutContent() {
     isReconnecting: fallbackReconnecting,
     usingFallback,
   } = usePaginatedTokensWithFallback({
-    filter: 'trending',
+    filter: "trending",
     timeframe: selectedTimeframe,
     chain: currentChain,
     // Only enable fallback fetch when on Monad or when not on Solana trending tab
-    limit: (currentChain === 'monad' || activeTab !== 'trending') ? 500 : 0,
+    limit: currentChain === "monad" || activeTab !== "trending" ? 500 : 0,
   });
 
-  const trendingWsTimeframe = (selectedTimeframe === '24h' ? '6h' : selectedTimeframe) as TrendingTimeframe;
+  // Every Timeframe value is now a valid TrendingTimeframe, so pass it straight through.
+  const trendingWsTimeframe = selectedTimeframe as TrendingTimeframe;
   const {
     tokens: wsTokens,
     loading: wsLoading,
@@ -461,7 +579,7 @@ export default function DiscoverPopoutContent() {
     lastUpdate: wsLastUpdate,
   } = useTrendingWebSocket({
     timeframe: trendingWsTimeframe,
-    enabled: currentChain === 'sol' && activeTab === 'trending',
+    enabled: currentChain === "sol" && activeTab === "trending",
   });
 
   // DexScreener trending (kept in sync with main Discover, even though this popout
@@ -474,34 +592,51 @@ export default function DiscoverPopoutContent() {
   } = useDexScreenerTrending(false);
 
   const allTokens = useMemo(() => {
-    if (currentChain === 'sol' && activeTab === 'trending') {
+    if (currentChain === "sol" && activeTab === "trending") {
       return wsTokens as unknown as TokenWithDexPaid[];
     }
     return fallbackTokens;
   }, [currentChain, activeTab, wsTokens, fallbackTokens]);
 
   const tokensLoading =
-    currentChain === 'sol' && activeTab === 'trending' ? wsLoading : fallbackLoading;
+    currentChain === "sol" && activeTab === "trending"
+      ? wsLoading
+      : fallbackLoading;
   const isConnected =
-    currentChain === 'sol' && activeTab === 'trending' ? wsConnected : fallbackConnected;
+    currentChain === "sol" && activeTab === "trending"
+      ? wsConnected
+      : fallbackConnected;
   const tokenError =
-    currentChain === 'sol' && activeTab === 'trending' ? wsError : fallbackError;
+    currentChain === "sol" && activeTab === "trending"
+      ? wsError
+      : fallbackError;
   const isReconnecting =
-    currentChain === 'sol' && activeTab === 'trending' ? wsReconnecting : fallbackReconnecting;
+    currentChain === "sol" && activeTab === "trending"
+      ? wsReconnecting
+      : fallbackReconnecting;
 
   // Log when hook data changes to track chain switching
   useEffect(() => {
-    isDev && console.log('[DiscoverPopout] Hook data updated:', {
-      chain: currentChain,
-      activeTab,
-      tokenCount: allTokens?.length || 0,
-      loading: tokensLoading,
-      usingWebSocket: currentChain === 'sol' && activeTab === 'trending',
-      wsConnected,
-      wsLastUpdate,
-      usingFallback,
-    });
-  }, [allTokens, tokensLoading, currentChain, activeTab, wsConnected, wsLastUpdate, usingFallback]);
+    isDev &&
+      console.log("[DiscoverPopout] Hook data updated:", {
+        chain: currentChain,
+        activeTab,
+        tokenCount: allTokens?.length || 0,
+        loading: tokensLoading,
+        usingWebSocket: currentChain === "sol" && activeTab === "trending",
+        wsConnected,
+        wsLastUpdate,
+        usingFallback,
+      });
+  }, [
+    allTokens,
+    tokensLoading,
+    currentChain,
+    activeTab,
+    wsConnected,
+    wsLastUpdate,
+    usingFallback,
+  ]);
 
   // PumpPortal WebSocket for live pump section
   const {
@@ -509,7 +644,7 @@ export default function DiscoverPopoutContent() {
     connected: pumpPortalConnected,
     error: pumpPortalError,
   } = usePumpPortalWebSocket({
-    enabled: activeTab === 'live', // Only connect when on live tab
+    enabled: activeTab === "live", // Only connect when on live tab
   });
 
   // When chain changes, load cached data for that chain if available
@@ -518,7 +653,9 @@ export default function DiscoverPopoutContent() {
   useEffect(() => {
     if (prevChainRef.current !== currentChain) {
       // Chain changed - check if we have cached data for this chain
-      const cached = localStorage.getItem(`discover_new_pairs_cache_${currentChain}`);
+      const cached = localStorage.getItem(
+        `discover_new_pairs_cache_${currentChain}`,
+      );
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -526,10 +663,16 @@ export default function DiscoverPopoutContent() {
           if (age < 60 * 1000 && parsed.data && parsed.data.length > 0) {
             // Load cached data for this chain
             setNewPairsRawForChain(currentChain, parsed.data);
-            isDev && console.log(`[Discover] Loaded cached data for chain ${currentChain}: ${parsed.data.length} tokens`);
+            isDev &&
+              console.log(
+                `[Discover] Loaded cached data for chain ${currentChain}: ${parsed.data.length} tokens`,
+              );
           }
         } catch (err) {
-          console.warn(`[Discover] Failed to load cache for chain ${currentChain}:`, err);
+          console.warn(
+            `[Discover] Failed to load cache for chain ${currentChain}:`,
+            err,
+          );
         }
       }
       // Reset loading/error state for chain switch
@@ -561,7 +704,10 @@ export default function DiscoverPopoutContent() {
           const age = Date.now() - parsed.timestamp;
           // If we have data in state and cache is still valid, skip fetching
           if (age < STALE_THRESHOLD && parsed.data && parsed.data.length > 0) {
-            isDev && console.log('[Discover] Already have cached data in state, skipping re-fetch');
+            isDev &&
+              console.log(
+                "[Discover] Already have cached data in state, skipping re-fetch",
+              );
             // Just set up the refresh interval for stale cache updates
             intervalId = setInterval(() => {
               if (cancelled) return;
@@ -573,19 +719,21 @@ export default function DiscoverPopoutContent() {
                 if (age > CACHE_TTL) {
                   // Trigger a silent background refresh
                   // Use appropriate endpoint based on chain
-                  const chainToUse = currentChain || (router.query.chain as string) || 'sol';
-                  const apiUrl = chainToUse === 'monad'
-                    ? `/api/token-service/pulse-new-monad?limit=200`
-                    : `/api/token-service/pulse-new?limit=200`;
+                  const chainToUse =
+                    currentChain || (router.query.chain as string) || "sol";
+                  const apiUrl =
+                    chainToUse === "monad"
+                      ? `/api/token-service/pulse-new-monad?limit=200`
+                      : `/api/token-service/pulse-new?limit=200`;
                   fetch(apiUrl, {
-                    headers: { 
-                      'Cache-Control': 'no-cache', 
-                      Pragma: 'no-cache',
-                      'Accept': 'application/json'
+                    headers: {
+                      "Cache-Control": "no-cache",
+                      Pragma: "no-cache",
+                      Accept: "application/json",
                     },
                   })
-                    .then(res => res.ok ? res.json() : null)
-                    .then(data => {
+                    .then((res) => (res.ok ? res.json() : null))
+                    .then((data) => {
                       if (!cancelled && data) {
                         // Handle multiple formats:
                         // 1. Direct array
@@ -597,24 +745,35 @@ export default function DiscoverPopoutContent() {
                         } else if (data?.data) {
                           if (Array.isArray(data.data)) {
                             tokensArray = data.data;
-                          } else if (data.data?.tokens && Array.isArray(data.data.tokens)) {
+                          } else if (
+                            data.data?.tokens &&
+                            Array.isArray(data.data.tokens)
+                          ) {
                             tokensArray = data.data.tokens;
                           }
                         }
                         if (tokensArray.length > 0) {
                           // Process and save to cache (simplified - just update cache)
-                          localStorage.setItem(CACHE_KEY, JSON.stringify({
-                            data: tokensArray,
-                            timestamp: Date.now(),
-                          }));
+                          localStorage.setItem(
+                            CACHE_KEY,
+                            JSON.stringify({
+                              data: tokensArray,
+                              timestamp: Date.now(),
+                            }),
+                          );
                         }
                       }
                     })
-                    .catch(err => console.error('[Discover] Background refresh failed:', err));
+                    .catch((err) =>
+                      console.error(
+                        "[Discover] Background refresh failed:",
+                        err,
+                      ),
+                    );
                 }
               }
             }, 60_000);
-            
+
             return () => {
               cancelled = true;
               if (intervalId) {
@@ -631,21 +790,24 @@ export default function DiscoverPopoutContent() {
     // Load from cache on mount
     const loadFromCache = (): TokenWithDexPaid[] | null => {
       try {
-        if (typeof window === 'undefined') return null;
+        if (typeof window === "undefined") return null;
         const cached = localStorage.getItem(CACHE_KEY);
         if (cached) {
           const parsed = JSON.parse(cached);
           const age = Date.now() - parsed.timestamp;
           if (parsed.data && parsed.data.length > 0) {
             const isStale = age > STALE_THRESHOLD;
-            isDev && console.log(`[Discover] Loaded ${parsed.data.length} new pairs from cache (age: ${Math.round(age / 1000)}s${isStale ? ', stale' : ''})`);
+            isDev &&
+              console.log(
+                `[Discover] Loaded ${parsed.data.length} new pairs from cache (age: ${Math.round(age / 1000)}s${isStale ? ", stale" : ""})`,
+              );
             return parsed.data;
           }
           // Cache exists but empty data - drop it
           localStorage.removeItem(CACHE_KEY);
         }
       } catch (err) {
-        console.warn('[Discover] Failed to load cache:', err);
+        console.warn("[Discover] Failed to load cache:", err);
         localStorage.removeItem(CACHE_KEY);
       }
       return null;
@@ -654,14 +816,17 @@ export default function DiscoverPopoutContent() {
     // Save to cache
     const saveToCache = (data: TokenWithDexPaid[]) => {
       try {
-        if (typeof window === 'undefined') return;
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          data,
-          timestamp: Date.now(),
-        }));
+        if (typeof window === "undefined") return;
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({
+            data,
+            timestamp: Date.now(),
+          }),
+        );
         isDev && console.log(`[Discover] Cached ${data.length} new pairs`);
       } catch (err) {
-        console.warn('[Discover] Failed to save cache:', err);
+        console.warn("[Discover] Failed to save cache:", err);
       }
     };
 
@@ -669,7 +834,7 @@ export default function DiscoverPopoutContent() {
       if (cancelled) {
         return;
       }
-      
+
       // Ref is updated via useEffect above, no need to update here
 
       // Try to load from cache first
@@ -680,7 +845,7 @@ export default function DiscoverPopoutContent() {
           setNewPairsRawForChain(currentChain, cached);
           setNewPairsError(null);
           setNewPairsLoading(false);
-          
+
           // Check if cache is stale and refresh in background
           try {
             const cachedData = localStorage.getItem(CACHE_KEY);
@@ -689,9 +854,12 @@ export default function DiscoverPopoutContent() {
               const age = Date.now() - parsed.timestamp;
               if (age > CACHE_TTL) {
                 // Cache is stale, refresh in background (silently)
-                isDev && console.log('[Discover] Cache is stale, refreshing in background');
-                fetchNewPairs(false, false).catch(err => {
-                  console.error('[Discover] Background refresh failed:', err);
+                isDev &&
+                  console.log(
+                    "[Discover] Cache is stale, refreshing in background",
+                  );
+                fetchNewPairs(false, false).catch((err) => {
+                  console.error("[Discover] Background refresh failed:", err);
                 });
               }
             }
@@ -711,22 +879,23 @@ export default function DiscoverPopoutContent() {
         // For Monad chain, use the Next.js API route (which proxies to Monad service server-side, avoiding CORS)
         // For Solana, use the regular pulse-new endpoint
         // Check both currentChain state and router query to ensure we have the right chain
-        const chainToUse = currentChain || (router.query.chain as string) || 'sol';
+        const chainToUse =
+          currentChain || (router.query.chain as string) || "sol";
         let apiUrl: string;
-        
-        if (chainToUse === 'monad') {
+
+        if (chainToUse === "monad") {
           // Use Next.js API route which proxies to Monad service server-side (avoids CORS)
           apiUrl = `/api/token-service/pulse-new-monad?limit=200&fresh=1`;
         } else {
           // Use Next.js API route for Solana (which proxies to exchange-token-service)
           apiUrl = `/api/token-service/pulse-new?limit=200&fresh=1`;
         }
-        
+
         const response = await fetch(apiUrl, {
           headers: {
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-            'Accept': 'application/json',
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+            Accept: "application/json",
           },
         });
 
@@ -735,16 +904,21 @@ export default function DiscoverPopoutContent() {
           console.error(`[Discover] API error for ${currentChain} new pairs:`, {
             status: response.status,
             statusText: response.statusText,
-            error: errorText
+            error: errorText,
           });
-          throw new Error(`Request failed with status ${response.status}: ${errorText.substring(0, 100)}`);
+          throw new Error(
+            `Request failed with status ${response.status}: ${errorText.substring(0, 100)}`,
+          );
         }
 
         const payload = await response.json();
-        
+
         // Check if response is an error object
         if (payload?.error) {
-          console.error(`[Discover] API returned error object for ${currentChain} new pairs:`, payload.error);
+          console.error(
+            `[Discover] API returned error object for ${currentChain} new pairs:`,
+            payload.error,
+          );
           throw new Error(payload.error);
         }
         if (cancelled) {
@@ -763,24 +937,34 @@ export default function DiscoverPopoutContent() {
           if (Array.isArray(payload.data)) {
             // Monad format: {status, count, data: [...]}
             tokensArray = payload.data;
-          } else if (payload.data?.tokens && Array.isArray(payload.data.tokens)) {
+          } else if (
+            payload.data?.tokens &&
+            Array.isArray(payload.data.tokens)
+          ) {
             // Birdeye format: {data: {tokens: [...]}}
             tokensArray = payload.data.tokens;
           }
         }
-        
+
         // Log response for debugging
         if (!tokensArray || tokensArray.length === 0) {
-          console.warn('[Discover] No tokens found in response:', {
+          console.warn("[Discover] No tokens found in response:", {
             chain: currentChain,
-            payloadType: Array.isArray(payload) ? 'array' : typeof payload,
-            payloadKeys: Array.isArray(payload) ? 'N/A' : Object.keys(payload || {}),
+            payloadType: Array.isArray(payload) ? "array" : typeof payload,
+            payloadKeys: Array.isArray(payload)
+              ? "N/A"
+              : Object.keys(payload || {}),
             hasData: !!(payload as any)?.data,
-            dataType: Array.isArray((payload as any)?.data) ? 'array' : typeof (payload as any)?.data,
-            dataKeys: (payload as any)?.data && !Array.isArray((payload as any)?.data) ? Object.keys((payload as any).data || {}) : 'N/A'
+            dataType: Array.isArray((payload as any)?.data)
+              ? "array"
+              : typeof (payload as any)?.data,
+            dataKeys:
+              (payload as any)?.data && !Array.isArray((payload as any)?.data)
+                ? Object.keys((payload as any).data || {})
+                : "N/A",
           });
         }
-        
+
         if (!tokensArray || tokensArray.length === 0) {
           // Don't clear existing data if refresh returns empty - preserve what we have
           setNewPairsError(null);
@@ -801,10 +985,10 @@ export default function DiscoverPopoutContent() {
         if (tokensArray.length > 0) {
           const normalizePulseToken = (token: any): TokenWithDexPaid => {
             const toNumber = (value: any): number => {
-              if (typeof value === 'number') {
+              if (typeof value === "number") {
                 return Number.isFinite(value) ? value : 0;
               }
-              if (typeof value === 'string') {
+              if (typeof value === "string") {
                 const cleaned = value.trim();
                 if (!cleaned) return 0;
                 const parsed = Number(cleaned);
@@ -813,12 +997,15 @@ export default function DiscoverPopoutContent() {
               return 0;
             };
 
-            const sumVolumes = (buy: any, sell: any): number => toNumber(buy) + toNumber(sell);
+            const sumVolumes = (buy: any, sell: any): number =>
+              toNumber(buy) + toNumber(sell);
 
             // Helper to get first non-empty string from multiple candidates
-            const getFirstString = (...candidates: any[]): string | undefined => {
+            const getFirstString = (
+              ...candidates: any[]
+            ): string | undefined => {
               for (const candidate of candidates) {
-                if (typeof candidate === 'string' && candidate.trim() !== '') {
+                if (typeof candidate === "string" && candidate.trim() !== "") {
                   return candidate.trim();
                 }
               }
@@ -831,17 +1018,17 @@ export default function DiscoverPopoutContent() {
 
             // Handle both standard format and Birdeye format
             const marketCap = toNumber(
-              token.market_cap_usd ?? 
-              token.marketCapUsd ?? 
-              token.marketcap ?? // Birdeye format
-              token.fully_diluted_value ??
-              token.fdv // Birdeye format
+              token.market_cap_usd ??
+                token.marketCapUsd ??
+                token.marketcap ?? // Birdeye format
+                token.fully_diluted_value ??
+                token.fdv, // Birdeye format
             );
             const liquidity = toNumber(
-              token.liquidity_usd ?? 
-              token.total_liquidity_usd ?? 
-              token.total_liquidityUsd ??
-              token.liquidity // Birdeye format
+              token.liquidity_usd ??
+                token.total_liquidity_usd ??
+                token.total_liquidityUsd ??
+                token.liquidity, // Birdeye format
             );
 
             normalized.market_cap_usd = marketCap;
@@ -853,41 +1040,94 @@ export default function DiscoverPopoutContent() {
             // Volume fields - prefer buy/sell volume sum if available, otherwise use provided value
             // This ensures we get accurate volume even if the direct volume field is 0 or missing
             // For Monad tokens, check volume_*_usd fields first, then fallback to volume_* fields
-            const vol24h = token.volume_24h_usd ?? token.volume_24h ?? token.volume24h ?? token.volume24hUSD; // Monad uses volume_24h_usd, Birdeye format
-            const sum24h = sumVolumes(token.total_buy_volume_24h, token.total_sell_volume_24h);
-            normalized.volume_24h = sum24h > 0 ? sum24h : (vol24h !== undefined && vol24h !== null ? toNumber(vol24h) : 0);
-            
-            const vol6h = token.volume_6h_usd ?? token.volume_6h ?? token.volume6h;
-            const sum6h = sumVolumes(token.total_buy_volume_6h, token.total_sell_volume_6h);
-            normalized.volume_6h = sum6h > 0 ? sum6h : (vol6h !== undefined && vol6h !== null ? toNumber(vol6h) : 0);
-            
-            const vol1h = token.volume_1h_usd ?? token.volume_1h ?? token.volume1h;
-            const sum1h = sumVolumes(token.total_buy_volume_1h, token.total_sell_volume_1h);
-            normalized.volume_1h = sum1h > 0 ? sum1h : (vol1h !== undefined && vol1h !== null ? toNumber(vol1h) : 0);
-            
-            const vol5m = token.volume_5m_usd ?? token.volume_5m ?? token.volume5m;
-            const sum5m = sumVolumes(token.total_buy_volume_5m, token.total_sell_volume_5m);
-            normalized.volume_5m = sum5m > 0 ? sum5m : (vol5m !== undefined && vol5m !== null ? toNumber(vol5m) : 0);
+            const vol24h =
+              token.volume_24h_usd ??
+              token.volume_24h ??
+              token.volume24h ??
+              token.volume24hUSD; // Monad uses volume_24h_usd, Birdeye format
+            const sum24h = sumVolumes(
+              token.total_buy_volume_24h,
+              token.total_sell_volume_24h,
+            );
+            // Map upstream long windows onto the surviving Axiom-style slots:
+            // 24h → 1m and 6h → 30m (nearest available bucket).
+            normalized.volume_1m =
+              sum24h > 0
+                ? sum24h
+                : vol24h !== undefined && vol24h !== null
+                  ? toNumber(vol24h)
+                  : 0;
+            normalized.volume_24h = normalized.volume_1m;
+
+            const vol6h =
+              token.volume_6h_usd ?? token.volume_6h ?? token.volume6h;
+            const sum6h = sumVolumes(
+              token.total_buy_volume_6h,
+              token.total_sell_volume_6h,
+            );
+            normalized.volume_30m =
+              sum6h > 0
+                ? sum6h
+                : vol6h !== undefined && vol6h !== null
+                  ? toNumber(vol6h)
+                  : 0;
+            normalized.volume_6h = normalized.volume_30m;
+
+            const vol1h =
+              token.volume_1h_usd ?? token.volume_1h ?? token.volume1h;
+            const sum1h = sumVolumes(
+              token.total_buy_volume_1h,
+              token.total_sell_volume_1h,
+            );
+            normalized.volume_1h =
+              sum1h > 0
+                ? sum1h
+                : vol1h !== undefined && vol1h !== null
+                  ? toNumber(vol1h)
+                  : 0;
+
+            const vol5m =
+              token.volume_5m_usd ?? token.volume_5m ?? token.volume5m;
+            const sum5m = sumVolumes(
+              token.total_buy_volume_5m,
+              token.total_sell_volume_5m,
+            );
+            normalized.volume_5m =
+              sum5m > 0
+                ? sum5m
+                : vol5m !== undefined && vol5m !== null
+                  ? toNumber(vol5m)
+                  : 0;
 
             const normalizePercent = (value: any) => {
               const num = toNumber(value);
               return Number.isFinite(num) ? num : 0;
             };
 
-            normalized.price_percent_change_24h = normalizePercent(
-              token.price_percent_change_24h ?? 
-              token.price_change_24h ?? 
-              token.priceChange24h ??
-              token.price24hChangePercent // Birdeye format
+            normalized.price_percent_change_1m = normalizePercent(
+              token.price_percent_change_24h ??
+                token.price_change_24h ??
+                token.priceChange24h ??
+                token.price24hChangePercent, // Birdeye format
             );
-            normalized.price_percent_change_6h = normalizePercent(
-              token.price_percent_change_6h ?? token.price_change_6h ?? token.priceChange6h
+            normalized.price_percent_change_24h =
+              normalized.price_percent_change_1m;
+            normalized.price_percent_change_30m = normalizePercent(
+              token.price_percent_change_6h ??
+                token.price_change_6h ??
+                token.priceChange6h,
             );
+            normalized.price_percent_change_6h =
+              normalized.price_percent_change_30m;
             normalized.price_percent_change_1h = normalizePercent(
-              token.price_percent_change_1h ?? token.price_change_1h ?? token.priceChange1h
+              token.price_percent_change_1h ??
+                token.price_change_1h ??
+                token.priceChange1h,
             );
             normalized.price_percent_change_5m = normalizePercent(
-              token.price_percent_change_5m ?? token.price_change_5m ?? token.priceChange5m
+              token.price_percent_change_5m ??
+                token.price_change_5m ??
+                token.priceChange5m,
             );
 
             if (!normalized.created_at && token.launch_time) {
@@ -953,7 +1193,9 @@ export default function DiscoverPopoutContent() {
               token.pool_address,
               token.amm_id,
               token.ammId,
-              typeof token.pool === 'string' && token.pool.length >= 32 ? token.pool : undefined,
+              typeof token.pool === "string" && token.pool.length >= 32
+                ? token.pool
+                : undefined,
             );
 
             // Set migrated_pool_address if found
@@ -963,14 +1205,18 @@ export default function DiscoverPopoutContent() {
 
             // Set pair_address - prioritize original, then migrated, then fallback
             // This is critical for trading - enhancedTradeHandler needs either pair_address or migrated_pool_address
-            const effectivePairAddress = originalPairAddress || migratedPoolAddress || fallbackPoolAddress;
-            
+            const effectivePairAddress =
+              originalPairAddress || migratedPoolAddress || fallbackPoolAddress;
+
             // Special handling for pump.fun tokens only:
             // Pump.fun can use mint as pool address - backend will resolve it to bonding curve
             // Meteora tokens require the actual DBC pool address, not the mint
-            const protocol = normalized.launchpad_protocol?.toLowerCase() || '';
-            const isPumpFun = protocol.includes('pump.fun') || protocol.includes('pumpfun') || protocol === 'pump';
-            
+            const protocol = normalized.launchpad_protocol?.toLowerCase() || "";
+            const isPumpFun =
+              protocol.includes("pump.fun") ||
+              protocol.includes("pumpfun") ||
+              protocol === "pump";
+
             if (effectivePairAddress && effectivePairAddress !== token.mint) {
               // Valid pool address that's different from mint
               normalized.pair_address = effectivePairAddress;
@@ -981,12 +1227,16 @@ export default function DiscoverPopoutContent() {
             } else if (effectivePairAddress === token.mint && !isPumpFun) {
               // If pair_address equals mint for non-pump.fun tokens (like Meteora), it's invalid
               // Meteora requires the actual DBC pool address, not the mint
-              console.warn(`[Discover] Token ${token.symbol || token.mint} has pair_address equal to mint (invalid for ${protocol || 'this protocol'}), not setting pair_address`);
+              console.warn(
+                `[Discover] Token ${token.symbol || token.mint} has pair_address equal to mint (invalid for ${protocol || "this protocol"}), not setting pair_address`,
+              );
               // Don't set pair_address - this will trigger the proper error in enhancedTradeHandler
             } else if (!effectivePairAddress && !isPumpFun) {
               // No valid pool address found for non-pump.fun tokens
               // Meteora and other protocols need the actual pool address from the API
-              console.warn(`[Discover] Token ${token.symbol || token.mint} (${protocol || 'unknown protocol'}) has no valid pool address - trading will be blocked`);
+              console.warn(
+                `[Discover] Token ${token.symbol || token.mint} (${protocol || "unknown protocol"}) has no valid pool address - trading will be blocked`,
+              );
             }
 
             return normalized as TokenWithDexPaid;
@@ -997,23 +1247,32 @@ export default function DiscoverPopoutContent() {
           // This matches pulse.tsx transformation logic
           const transformedTokens = tokensArray.map((token: any) => {
             // Handle Monad tokens (have 'address' field) - always map address to mint
-            if (currentChain === 'monad') {
+            if (currentChain === "monad") {
               // Ensure mint is set from address if not already present
               const mint = token.mint || token.address;
               if (!mint) {
                 return token; // Skip if no mint or address
               }
-              
+
               return {
                 ...token,
                 mint: mint, // Always set mint from address for Monad tokens
                 // Map Monad image fields
-                image: token.image_url || token.image || token.logo || token.logoURI || token.uri,
-                logo: token.image_url || token.logo || token.logoURI || token.image,
+                image:
+                  token.image_url ||
+                  token.image ||
+                  token.logo ||
+                  token.logoURI ||
+                  token.uri,
+                logo:
+                  token.image_url || token.logo || token.logoURI || token.image,
                 uri: token.image_url || token.uri,
                 imageUrl: token.image_url || token.imageUrl || token.logoURI,
                 // Map Monad volume fields (Monad uses volume_24h_usd, volume_1h_usd, etc.)
+                // Axiom-style windows: 24h → 1m, 6h → 30m (nearest available bucket).
+                volume_1m: token.volume_24h_usd || token.volume_24h || 0,
                 volume_24h: token.volume_24h_usd || token.volume_24h || 0,
+                volume_30m: token.volume_6h_usd || token.volume_6h || 0,
                 volume_6h: token.volume_6h_usd || token.volume_6h || 0,
                 volume_1h: token.volume_1h_usd || token.volume_1h || 0,
                 volume_5m: token.volume_5m_usd || token.volume_5m || 0,
@@ -1028,9 +1287,13 @@ export default function DiscoverPopoutContent() {
                 unique_traders: token.unique_traders || 0,
                 total_buys: token.total_buys || 0,
                 total_sells: token.total_sells || 0,
-                // Map total counts to 24h fields (InterstateTable looks for total_buys_24h, total_sells_24h)
+                // Map total counts to timeframe fields (InterstateTable looks for total_buys_<tf>)
+                total_buys_1m: token.total_buys || 0, // Use total as fallback
+                total_sells_1m: token.total_sells || 0,
                 total_buys_24h: token.total_buys || 0,
                 total_sells_24h: token.total_sells || 0,
+                total_buys_30m: token.total_buys || 0, // Use total as fallback
+                total_sells_30m: token.total_sells || 0,
                 total_buys_6h: token.total_buys || 0, // Use total as fallback
                 total_sells_6h: token.total_sells || 0,
                 total_buys_1h: token.total_buys || 0, // Use total as fallback
@@ -1044,9 +1307,9 @@ export default function DiscoverPopoutContent() {
                 launchpad_protocol: token.launchpad_protocol || token.protocol,
               };
             }
-            
+
             // If this is a Birdeye token (has 'address' field), transform it
-            if (token.address && !token.mint && currentChain !== 'monad') {
+            if (token.address && !token.mint && currentChain !== "monad") {
               return {
                 ...token,
                 mint: token.address, // Map address to mint
@@ -1058,9 +1321,14 @@ export default function DiscoverPopoutContent() {
                 market_cap_usd: token.marketcap,
                 fully_diluted_value: token.fdv,
                 total_liquidity_usd: token.liquidity,
+                // Birdeye only exposes 24h; map onto the surviving 1m slot too.
+                volume_1m: token.volume24hUSD,
                 volume_24h: token.volume24hUSD,
+                price_percent_change_1m: token.price24hChangePercent,
                 price_percent_change_24h: token.price24hChangePercent,
                 // Birdeye doesn't provide transaction data, so set defaults
+                total_buys_1m: 0,
+                total_sells_1m: 0,
                 total_buys_24h: 0,
                 total_sells_24h: 0,
                 total_buy_volume_24h: 0,
@@ -1078,19 +1346,20 @@ export default function DiscoverPopoutContent() {
             if (isWrappedSol(token)) {
               return false;
             }
-            
+
             // Filter out zero liquidity tokens (same as pulse.tsx)
             if (isZeroLiquidityToken(token)) {
               return false;
             }
-            
+
             // For Monad, tokens use 'address' which we map to 'mint', but check both as fallback
             // For Solana, ensure we have a mint
-            const tokenId = token.mint || (currentChain === 'monad' ? token.address : null);
+            const tokenId =
+              token.mint || (currentChain === "monad" ? token.address : null);
             if (!token || !tokenId) {
               return false;
             }
-            
+
             return true;
           }) as TokenWithDexPaid[];
 
@@ -1098,7 +1367,9 @@ export default function DiscoverPopoutContent() {
           const seenKeys = new Set<string>();
 
           for (const token of filtered) {
-            const key = (token?.pair_address || token?.mint) as string | undefined;
+            const key = (token?.pair_address || token?.mint) as
+              | string
+              | undefined;
             if (!key || seenKeys.has(key)) {
               continue;
             }
@@ -1111,13 +1382,19 @@ export default function DiscoverPopoutContent() {
             // Update data silently (no loading animation) for current chain
             setNewPairsRawForChain(currentChain, deduped);
             setNewPairsError(null);
-            
+
             // Save to cache
             saveToCache(deduped);
-            isDev && console.log(`[Discover] Updated new pairs: ${deduped.length} tokens for ${currentChain}`);
+            isDev &&
+              console.log(
+                `[Discover] Updated new pairs: ${deduped.length} tokens for ${currentChain}`,
+              );
           } else {
             // If transformation resulted in empty array, preserve existing data for current chain
-            isDev && console.log('[Discover] Transformation resulted in empty array, preserving existing data');
+            isDev &&
+              console.log(
+                "[Discover] Transformation resulted in empty array, preserving existing data",
+              );
             setNewPairsRawByChain((prev) => {
               const currentData = prev[currentChain] || [];
               if (currentData.length === 0) {
@@ -1131,8 +1408,9 @@ export default function DiscoverPopoutContent() {
         if (cancelled) {
           return;
         }
-        const message = err instanceof Error ? err.message : 'Failed to fetch new pairs';
-        console.error('[Discover] Failed to fetch new pairs:', err);
+        const message =
+          err instanceof Error ? err.message : "Failed to fetch new pairs";
+        console.error("[Discover] Failed to fetch new pairs:", err);
 
         let handled = false;
 
@@ -1140,7 +1418,8 @@ export default function DiscoverPopoutContent() {
         if (useCache) {
           const cached = loadFromCache();
           if (cached && cached.length > 0) {
-            isDev && console.log('[Discover] Using cached data after fetch failure');
+            isDev &&
+              console.log("[Discover] Using cached data after fetch failure");
             setNewPairsRawForChain(currentChain, cached);
             setNewPairsError(null);
             handled = true;
@@ -1153,7 +1432,9 @@ export default function DiscoverPopoutContent() {
           setNewPairsRawByChain((prev) => {
             const currentData = prev[currentChain] || [];
             if (currentData.length > 0) {
-              console.warn('[Discover] Fetch failed but existing data is available. Keeping previous list.');
+              console.warn(
+                "[Discover] Fetch failed but existing data is available. Keeping previous list.",
+              );
               setNewPairsError(null);
               return prev; // Preserve existing data
             } else {
@@ -1172,25 +1453,26 @@ export default function DiscoverPopoutContent() {
 
     // Check if we already have data from initial state (cached) for current chain
     // Use ref to get current value
-    const hasInitialData = (newPairsRawByChainRef.current[currentChain] || []).length > 0;
-    
+    const hasInitialData =
+      (newPairsRawByChainRef.current[currentChain] || []).length > 0;
+
     if (hasInitialData) {
       // We have cached data from initial state, don't show loading, just refresh in background silently
       // Ensure loading is false since we have cached data
       setNewPairsLoading(false);
-      fetchNewPairs(false, false).catch(err => {
-        console.error('[Discover] Background fetch failed:', err);
+      fetchNewPairs(false, false).catch((err) => {
+        console.error("[Discover] Background fetch failed:", err);
       });
     } else {
       // No cache, fetch with loading state only on first load
       fetchNewPairs(true, true);
     }
-    
+
     // Refresh every 60 seconds (silently, no loading state)
     // Use functional setState to preserve existing data if refresh fails or returns empty
     intervalId = setInterval(() => {
-      fetchNewPairs(true, false).catch(err => {
-        console.error('[Discover] Background refresh failed:', err);
+      fetchNewPairs(true, false).catch((err) => {
+        console.error("[Discover] Background refresh failed:", err);
         // Don't clear data on error - preserve what we have
       });
     }, 60_000);
@@ -1208,26 +1490,29 @@ export default function DiscoverPopoutContent() {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    const CACHE_KEY = 'discover_xstocks_cache';
+    const CACHE_KEY = "discover_xstocks_cache";
     const CACHE_TTL = 30 * 1000; // 30 seconds
     const STALE_THRESHOLD = 60 * 1000; // 60 seconds
 
     const loadFromCache = (): TokenWithDexPaid[] | null => {
       try {
-        if (typeof window === 'undefined') return null;
+        if (typeof window === "undefined") return null;
         const cached = localStorage.getItem(CACHE_KEY);
         if (cached) {
           const parsed = JSON.parse(cached);
           const age = Date.now() - parsed.timestamp;
           if (age < STALE_THRESHOLD) {
-            isDev && console.log(`[Discover] Loaded ${parsed.data.length} xStocks from cache (age: ${Math.round(age / 1000)}s)`);
+            isDev &&
+              console.log(
+                `[Discover] Loaded ${parsed.data.length} xStocks from cache (age: ${Math.round(age / 1000)}s)`,
+              );
             return parsed.data;
           } else {
             localStorage.removeItem(CACHE_KEY);
           }
         }
       } catch (err) {
-        console.warn('[Discover] Failed to load xStocks cache:', err);
+        console.warn("[Discover] Failed to load xStocks cache:", err);
         localStorage.removeItem(CACHE_KEY);
       }
       return null;
@@ -1235,24 +1520,27 @@ export default function DiscoverPopoutContent() {
 
     const saveToCache = (data: TokenWithDexPaid[]) => {
       try {
-        if (typeof window === 'undefined') return;
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          data,
-          timestamp: Date.now(),
-        }));
+        if (typeof window === "undefined") return;
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({
+            data,
+            timestamp: Date.now(),
+          }),
+        );
         isDev && console.log(`[Discover] Cached ${data.length} xStocks`);
       } catch (err) {
-        console.warn('[Discover] Failed to save xStocks cache:', err);
+        console.warn("[Discover] Failed to save xStocks cache:", err);
       }
     };
 
     const toNumber = (value: any): number => {
-      if (typeof value === 'number') {
+      if (typeof value === "number") {
         return Number.isFinite(value) ? value : 0;
       }
-      if (typeof value === 'string') {
+      if (typeof value === "string") {
         const cleaned = value.trim();
-        if (!cleaned || cleaned === '0' || cleaned === 'null') return 0;
+        if (!cleaned || cleaned === "0" || cleaned === "null") return 0;
         const parsed = Number(cleaned);
         return Number.isFinite(parsed) ? parsed : 0;
       }
@@ -1265,99 +1553,116 @@ export default function DiscoverPopoutContent() {
 
       // Get image from token.info or token directly
       const getImage = () => {
-        return token.info?.imageThumbUrl || token.info?.imageSmallUrl || token.info?.imageLargeUrl ||
-               token.imageThumbUrl || token.imageSmallUrl || token.imageLargeUrl ||
-               undefined;
+        return (
+          token.info?.imageThumbUrl ||
+          token.info?.imageSmallUrl ||
+          token.info?.imageLargeUrl ||
+          token.imageThumbUrl ||
+          token.imageSmallUrl ||
+          token.imageLargeUrl ||
+          undefined
+        );
       };
 
-      const marketCap = toNumber(result.marketCap || '0');
-      const liquidity = toNumber(result.liquidity || '0');
-      
+      const marketCap = toNumber(result.marketCap || "0");
+      const liquidity = toNumber(result.liquidity || "0");
+
       // Volume fields - convert strings to numbers
-      const volume24h = toNumber(result.volume24 || '0');
-      const volume12h = toNumber(result.volume12 || '0');
-      const volume4h = toNumber(result.volume4 || '0');
-      const volume1h = toNumber(result.volume1 || '0');
-      const volume5m = toNumber(result.volume5m || '0');
-      
+      const volume24h = toNumber(result.volume24 || "0");
+      const volume12h = toNumber(result.volume12 || "0");
+      const volume4h = toNumber(result.volume4 || "0");
+      const volume1h = toNumber(result.volume1 || "0");
+      const volume5m = toNumber(result.volume5m || "0");
+
       // Price change fields - convert strings to numbers
-      const change24h = toNumber(result.change24 || '0');
-      const change12h = toNumber(result.change12 || '0');
-      const change4h = toNumber(result.change4 || '0');
-      const change1h = toNumber(result.change1 || '0');
-      const change5m = toNumber(result.change5m || '0');
+      const change24h = toNumber(result.change24 || "0");
+      const change12h = toNumber(result.change12 || "0");
+      const change4h = toNumber(result.change4 || "0");
+      const change1h = toNumber(result.change1 || "0");
+      const change5m = toNumber(result.change5m || "0");
 
       const normalized: Record<string, any> = {
-        mint: token.address || '',
-        name: token.name || '',
-        symbol: token.symbol || '',
+        mint: token.address || "",
+        name: token.name || "",
+        symbol: token.symbol || "",
         decimals: token.decimals || 9,
         networkId: token.networkId || 1399811149,
-        
+
         // Market data
         market_cap_usd: marketCap,
         fully_diluted_value: marketCap,
         liquidity_usd: liquidity,
         total_liquidity_usd: liquidity,
-        price_usd: toNumber(result.priceUSD || '0'),
-        
-        // Volumes
+        price_usd: toNumber(result.priceUSD || "0"),
+
+        // Volumes — Axiom-style windows mapped from nearest Codex buckets:
+        // 24h → 1m, 4h/12h → 30m. Legacy keys kept for any other consumers.
+        volume_1m: volume24h,
         volume_24h: volume24h,
         volume_12h: volume12h,
-        volume_6h: volume4h > 0 ? volume4h : (volume12h / 2), // Use volume4 if available, otherwise estimate from volume12
+        volume_30m: volume4h > 0 ? volume4h : volume12h / 2,
+        volume_6h: volume4h > 0 ? volume4h : volume12h / 2, // Use volume4 if available, otherwise estimate from volume12
         volume_4h: volume4h,
         volume_1h: volume1h,
         volume_5m: volume5m,
-        
+
         // Price changes
+        price_percent_change_1m: change24h * 100,
         price_percent_change_24h: change24h * 100, // Convert to percentage
         price_percent_change_12h: change12h * 100,
+        price_percent_change_30m: change4h * 100,
         price_percent_change_6h: change4h * 100, // Use change4 for 6h
         price_percent_change_4h: change4h * 100,
         price_percent_change_1h: change1h * 100,
         price_percent_change_5m: change5m * 100,
-        
+
         // Pair address
-        pair_address: pair.address || token.address || '',
+        pair_address: pair.address || token.address || "",
         created_at: result.createdAt || pair.createdAt || Date.now(),
-        
+
         // Protocol - xStocks use Raydium Launchpad
-        protocol: 'Raydium Launchpad',
-        launchpad_protocol: 'Raydium Launchpad',
-        
+        protocol: "Raydium Launchpad",
+        launchpad_protocol: "Raydium Launchpad",
+
         // Image
         uri: getImage(),
         logo: getImage(),
         image: getImage(),
         imageUrl: getImage(),
-        
+
         // Additional fields from xStocks response
         holders: result.holders || 0,
-        
+
         // Transaction counts - map Codex fields to frontend expected format
         // Codex provides: buyCount1, buyCount4, buyCount12, buyCount24, buyCount5m
         // Frontend expects: total_buys_1h, total_buys_6h, total_buys_12h, total_buys_24h, total_buys_5m
-        total_buys_1h: toNumber(result.buyCount1 || '0'),
-        total_buys_6h: toNumber(result.buyCount4 || '0'), // Using 4h as approximation for 6h
-        total_buys_12h: toNumber(result.buyCount12 || '0'),
-        total_buys_24h: toNumber(result.buyCount24 || '0'),
-        total_buys_5m: toNumber(result.buyCount5m || '0'),
-        
+        total_buys_1m: toNumber(result.buyCount24 || "0"), // 24h → 1m slot
+        total_buys_1h: toNumber(result.buyCount1 || "0"),
+        total_buys_30m: toNumber(result.buyCount4 || "0"), // Using 4h as approximation for 30m
+        total_buys_6h: toNumber(result.buyCount4 || "0"), // Using 4h as approximation for 6h
+        total_buys_12h: toNumber(result.buyCount12 || "0"),
+        total_buys_24h: toNumber(result.buyCount24 || "0"),
+        total_buys_5m: toNumber(result.buyCount5m || "0"),
+
         // Same for sells
-        total_sells_1h: toNumber(result.sellCount1 || '0'),
-        total_sells_6h: toNumber(result.sellCount4 || '0'), // Using 4h as approximation for 6h
-        total_sells_12h: toNumber(result.sellCount12 || '0'),
-        total_sells_24h: toNumber(result.sellCount24 || '0'),
-        total_sells_5m: toNumber(result.sellCount5m || '0'),
-        
+        total_sells_1m: toNumber(result.sellCount24 || "0"), // 24h → 1m slot
+        total_sells_1h: toNumber(result.sellCount1 || "0"),
+        total_sells_30m: toNumber(result.sellCount4 || "0"), // Using 4h as approximation for 30m
+        total_sells_6h: toNumber(result.sellCount4 || "0"), // Using 4h as approximation for 6h
+        total_sells_12h: toNumber(result.sellCount12 || "0"),
+        total_sells_24h: toNumber(result.sellCount24 || "0"),
+        total_sells_5m: toNumber(result.sellCount5m || "0"),
+
         // Total transaction counts for fallback (txnCount = buyCount + sellCount)
         // These are useful when buyCount/sellCount are 0 but txnCount has data
-        txnCount1h: toNumber(result.txnCount1 || '0'),
-        txnCount6h: toNumber(result.txnCount4 || '0'), // Using 4h as approximation for 6h
-        txnCount12h: toNumber(result.txnCount12 || '0'),
-        txnCount24h: toNumber(result.txnCount24 || '0'),
-        txnCount5m: toNumber(result.txnCount5m || '0'),
-        
+        txnCount1m: toNumber(result.txnCount24 || "0"),
+        txnCount1h: toNumber(result.txnCount1 || "0"),
+        txnCount30m: toNumber(result.txnCount4 || "0"), // Using 4h as approximation for 30m
+        txnCount6h: toNumber(result.txnCount4 || "0"), // Using 4h as approximation for 6h
+        txnCount12h: toNumber(result.txnCount12 || "0"),
+        txnCount24h: toNumber(result.txnCount24 || "0"),
+        txnCount5m: toNumber(result.txnCount5m || "0"),
+
         // Keep original fields for reference and fallback
         buyCount24: result.buyCount24 || 0,
         sellCount24: result.sellCount24 || 0,
@@ -1376,7 +1681,7 @@ export default function DiscoverPopoutContent() {
           setXStocksRaw(cached);
           setXStocksError(null);
           setXStocksLoading(false);
-          
+
           // Refresh in background if stale
           try {
             const cachedData = localStorage.getItem(CACHE_KEY);
@@ -1384,8 +1689,11 @@ export default function DiscoverPopoutContent() {
               const parsed = JSON.parse(cachedData);
               const age = Date.now() - parsed.timestamp;
               if (age > CACHE_TTL) {
-                fetchXStocks(false, false).catch(err => {
-                  console.error('[Discover] xStocks background refresh failed:', err);
+                fetchXStocks(false, false).catch((err) => {
+                  console.error(
+                    "[Discover] xStocks background refresh failed:",
+                    err,
+                  );
                 });
               }
             }
@@ -1403,8 +1711,8 @@ export default function DiscoverPopoutContent() {
       try {
         const response = await fetch(`/api/token-service/xstocks?limit=50`, {
           headers: {
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
           },
         });
 
@@ -1434,12 +1742,13 @@ export default function DiscoverPopoutContent() {
           } catch {
             // If we can't read the body, use default message
           }
-          
+
           // For 500 errors, provide a more user-friendly message
           if (response.status === 500) {
-            errorMessage = 'Service temporarily unavailable. Please try again later.';
+            errorMessage =
+              "Service temporarily unavailable. Please try again later.";
           }
-          
+
           throw new Error(errorMessage);
         }
 
@@ -1447,20 +1756,26 @@ export default function DiscoverPopoutContent() {
         if (cancelled) return;
 
         // Process filterTokens response from Codex
-        if (payload?.data?.filterTokens?.results || payload?.filterTokens?.results) {
+        if (
+          payload?.data?.filterTokens?.results ||
+          payload?.filterTokens?.results
+        ) {
           // Handle both nested (payload.data.filterTokens) and direct (payload.filterTokens) formats
-          const results = payload?.data?.filterTokens?.results || payload.filterTokens.results || [];
-          
+          const results =
+            payload?.data?.filterTokens?.results ||
+            payload.filterTokens.results ||
+            [];
+
           const normalized = results
             .filter((result: any) => {
               const token = result.token;
               if (!token || !token.address) return false;
               if (isWrappedSol({ mint: token.address })) return false;
-              
+
               // Filter out zero liquidity
-              const liq = toNumber(result.liquidity || '0');
+              const liq = toNumber(result.liquidity || "0");
               if (liq <= 0) return false;
-              
+
               return true;
             })
             .map(normalizeXStocksToken);
@@ -1483,22 +1798,22 @@ export default function DiscoverPopoutContent() {
         }
       } catch (err) {
         if (cancelled) return;
-        
+
         // Extract error message
-        let message = 'Failed to fetch xStocks';
+        let message = "Failed to fetch xStocks";
         if (err instanceof Error) {
           message = err.message;
-        } else if (typeof err === 'string') {
+        } else if (typeof err === "string") {
           message = err;
         }
-        
+
         // Log error with full details for debugging
-        console.error('[Discover] Failed to fetch xStocks:', {
+        console.error("[Discover] Failed to fetch xStocks:", {
           error: err,
           message,
           useCache,
         });
-        
+
         // Try to use cached data if available
         if (useCache) {
           const cached = loadFromCache();
@@ -1509,7 +1824,7 @@ export default function DiscoverPopoutContent() {
             return;
           }
         }
-        
+
         // Only set error if we don't have cached data to fall back to
         setXStocksError(message);
       } finally {
@@ -1522,16 +1837,16 @@ export default function DiscoverPopoutContent() {
     };
 
     const hasInitialData = xStocksRaw.length > 0;
-    
+
     if (hasInitialData) {
       setXStocksLoading(false);
-      fetchXStocks(false, false).catch(err => {
-        console.error('[Discover] xStocks background fetch failed:', err);
+      fetchXStocks(false, false).catch((err) => {
+        console.error("[Discover] xStocks background fetch failed:", err);
       });
     } else {
       fetchXStocks(true, true);
     }
-    
+
     intervalId = setInterval(() => fetchXStocks(true, false), 60_000);
 
     return () => {
@@ -1548,62 +1863,69 @@ export default function DiscoverPopoutContent() {
   // }, [selectedTimeframe]);
 
   // Helper to determine Monad launchpad (same logic as MonadTable)
-  const getMonadLaunchpad = useCallback((token: Token): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
-    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || "";
-    
-    // Also check token.protocol for "flap"
-    if ((token as any)?.protocol?.toLowerCase()?.includes("flap")) {
-      return "flapsh-simple";
-    }
+  const getMonadLaunchpad = useCallback(
+    (token: Token): "nadfun" | "flapsh-simple" | "flapsh-devs" => {
+      const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || "";
 
-    if (protocol.includes("nad.fun") || protocol.includes("nadfun")) {
-      return "nadfun";
-    } else if (protocol.includes("flap.sh") || protocol.includes("flapsh")) {
-      // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
-      if (protocol.includes("dev")) {
-        return "flapsh-devs";
+      // Also check token.protocol for "flap"
+      if ((token as any)?.protocol?.toLowerCase()?.includes("flap")) {
+        return "flapsh-simple";
       }
-      return "flapsh-simple";
-    }
 
-    // Default to nadfun if unknown
-    return "nadfun";
-  }, []);
+      if (protocol.includes("nad.fun") || protocol.includes("nadfun")) {
+        return "nadfun";
+      } else if (protocol.includes("flap.sh") || protocol.includes("flapsh")) {
+        // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
+        if (protocol.includes("dev")) {
+          return "flapsh-devs";
+        }
+        return "flapsh-simple";
+      }
+
+      // Default to nadfun if unknown
+      return "nadfun";
+    },
+    [],
+  );
 
   // QUICK BUY handler – using MonadTable logic for Monad, enhanced trade flow for Solana
   const handleQuickBuy = async (token: Token) => {
     if (!user?.bearerToken || !user?.id) {
-      showEnhancedToast('warning', 'Please connect your wallet to trade', {
-        title: 'Authentication Required',
+      showEnhancedToast("warning", "Please connect your wallet to trade", {
+        title: "Authentication Required",
       });
       return;
     }
 
     const buyAmount = parseFloat(quickBuyAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
-      const currency = currentChain === 'monad' ? 'MON' : 'SOL';
-      showEnhancedToast('warning', `Please enter a valid ${currency} amount (minimum 0.001 ${currency})`, {
-        title: 'Invalid Amount',
-      });
+      const currency = currentChain === "monad" ? "MON" : "SOL";
+      showEnhancedToast(
+        "warning",
+        `Please enter a valid ${currency} amount (minimum 0.001 ${currency})`,
+        {
+          title: "Invalid Amount",
+        },
+      );
       return;
     }
 
     // Get preset based on selected pill (local state)
-    const presetIndex = parseInt(selectedPill.replace('P', '')) - 1;
+    const presetIndex = parseInt(selectedPill.replace("P", "")) - 1;
     const preset = presets[presetIndex];
     if (!preset) {
-      showEnhancedToast('error', 'Quick buy preset not configured', {
-        title: 'Configuration Error',
-        suggestions: ['Update your presets in settings'],
+      showEnhancedToast("error", "Quick buy preset not configured", {
+        title: "Configuration Error",
+        suggestions: ["Update your presets in settings"],
       });
       return;
     }
 
     // For Monad chain, use MonadTable quick buy logic
-    if (currentChain === 'monad') {
+    if (currentChain === "monad") {
       if (!token.mint) {
-        showEnhancedToast('error', 'Invalid token information', {
-          title: 'Token Error',
+        showEnhancedToast("error", "Invalid token information", {
+          title: "Token Error",
         });
         return;
       }
@@ -1615,47 +1937,96 @@ export default function DiscoverPopoutContent() {
       // Get slippage from preset or use default (15%)
       const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
       // Get gas price from preset (optional, undefined if not set)
-      const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
+      const gasPrice =
+        settings?.gasPrice !== undefined && settings.gasPrice > 0
+          ? settings.gasPrice
+          : undefined;
 
       // Pre-validate before showing toast (handles multi-wallet)
-      const monadValidation = validateMonadBuy(buyAmount, walletBalances, walletList, selectedWalletIds?.monad || [], gasPrice);
+      const monadValidation = validateMonadBuy(
+        buyAmount,
+        walletBalances,
+        walletList,
+        selectedWalletIds?.monad || [],
+        gasPrice,
+      );
       if (!monadValidation.valid) {
-        showTradeValidationError(monadValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
+        showTradeValidationError(
+          monadValidation.error,
+          getResolvedTokenImage(token as any),
+          token.symbol || token.name || "Token",
+        );
         return;
       }
 
       // Get token image and name - use resolved version to get cached metadata images
       const tokenImage = token ? getResolvedTokenImage(token as any) : null;
-      const tokenName = token?.name || token?.symbol || '';
-      
+      const tokenName = token?.name || token?.symbol || "";
+
       // Generate unique toast ID and fake fast time (0.40-0.60s)
       const uniqueToastId = `monad-quickbuy-${Date.now()}`;
       const startTime = Date.now();
-      
+
       // Random cap time between 0.40 and 0.60 seconds
-      const timerCap = 0.30 + Math.random() * 0.20;
+      const timerCap = 0.3 + Math.random() * 0.2;
       let timerFinished = false;
       let tradeErrored = false;
       let firstSuccessShown = false;
-      
+
       // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
       toast.custom(
         (t) => (
-          <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
-            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: timerFinished && !tradeErrored ? 'block' : 'none' }} />
+          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-4 py-3 text-white">
+            <FaCheckCircle
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0"
+              size={16}
+              style={{
+                color: "#31e3ac",
+                display: timerFinished && !tradeErrored ? "block" : "none",
+              }}
+            />
             {tokenImage && (
-              <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <img
+                src={tokenImage}
+                alt={tokenName}
+                className="h-5 w-5 flex-shrink-0 rounded-full object-cover"
+                style={{ border: "1px solid rgba(255, 255, 255, 0.1)" }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
             )}
-            <span id={`message-${uniqueToastId}`} className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
-            <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
-            <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
-              <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+            <span
+              id={`message-${uniqueToastId}`}
+              className="text-sm font-semibold"
+              style={{ color: "#31e3ac" }}
+            >
+              Trade placed!
+            </span>
+            <span
+              id={`timer-${uniqueToastId}`}
+              className="ml-1 text-xs text-[#9CA3AF]"
+            >
+              (0.00s)
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="ml-1 inline-flex items-center"
+              style={{ display: "none" }}
+            >
+              <img
+                src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg"
+                alt="Monad"
+                className="h-4 w-4 rounded-full"
+                style={{ cursor: "default" }}
+              />
             </span>
           </div>
         ),
-        { id: uniqueToastId, duration: Infinity }
+        { id: uniqueToastId, duration: Infinity },
       );
-      
+
       // Start timer animation - update every 50ms, show checkmark when cap is reached
       const timerInterval = setInterval(() => {
         const elapsed = (Date.now() - startTime) / 1000;
@@ -1664,29 +2035,44 @@ export default function DiscoverPopoutContent() {
         if (timerEl) {
           timerEl.textContent = `(${displayTime}s)`;
         }
-        
+
         // When timer reaches cap, show checkmark and Monad logo
         if (!timerFinished && elapsed >= timerCap) {
           timerFinished = true;
           if (!tradeErrored) {
             const checkEl = document.getElementById(`check-${uniqueToastId}`);
             if (checkEl) {
-              checkEl.style.display = 'block';
+              checkEl.style.display = "block";
             }
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
-              linkEl.style.display = 'inline-flex';
+              linkEl.style.display = "inline-flex";
             }
           }
         }
       }, 50);
-      const cleanupTradeListener = listenForTradeEvents(tokenAddress, uniqueToastId, (v) => { tradeErrored = v; }, 'monad');
+      const cleanupTradeListener = listenForTradeEvents(
+        tokenAddress,
+        uniqueToastId,
+        (v) => {
+          tradeErrored = v;
+        },
+        "monad",
+      );
 
       // Store pending toast info for WebSocket instant update (including timer)
-      pendingQuickBuyToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), tokenAddress, startTime, timerInterval };
+      pendingQuickBuyToastRef.current = {
+        id: uniqueToastId,
+        tokenImage,
+        tokenName,
+        fakeTime: timerCap.toFixed(2),
+        tokenAddress,
+        startTime,
+        timerInterval,
+      };
 
       try {
-        notifyTradePending({ tokenAddress, tradeType: 'buy', chain: 'monad' });
+        notifyTradePending({ tokenAddress, tradeType: "buy", chain: "monad" });
         const { results, totalConsidered } = await executeMonadMultiBuy({
           tokenAddress,
           amountMON: buyAmount,
@@ -1700,30 +2086,37 @@ export default function DiscoverPopoutContent() {
           onWalletSuccess: (ctx) => {
             if (firstSuccessShown) return;
             const txHash = (ctx.result as any)?.txHash;
-            const summary = formatMonadTxSummary(txHash ? [txHash] : [], ctx.totalConsidered);
-            const messageEl = document.getElementById(`message-${uniqueToastId}`);
+            const summary = formatMonadTxSummary(
+              txHash ? [txHash] : [],
+              ctx.totalConsidered,
+            );
+            const messageEl = document.getElementById(
+              `message-${uniqueToastId}`,
+            );
             if (messageEl) {
               messageEl.textContent = summary.message;
             }
             const checkEl = document.getElementById(`check-${uniqueToastId}`);
             if (checkEl) {
-              checkEl.style.display = 'block';
+              checkEl.style.display = "block";
             }
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
               if (summary.hasMultiple || !txHash) {
-                linkEl.style.display = 'none';
+                linkEl.style.display = "none";
               } else {
                 const explorerUrl = `https://monadvision.com/tx/${txHash}`;
                 linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-                linkEl.style.display = 'inline-flex';
+                linkEl.style.display = "inline-flex";
               }
             }
             firstSuccessShown = true;
           },
         });
 
-        const txHashes = results.map((r) => (r.result as any)?.txHash).filter(Boolean);
+        const txHashes = results
+          .map((r) => (r.result as any)?.txHash)
+          .filter(Boolean);
         const summary = formatMonadTxSummary(txHashes, totalConsidered);
 
         if (txHashes.length > 0) {
@@ -1736,11 +2129,11 @@ export default function DiscoverPopoutContent() {
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
             if (linkEl) {
               if (summary.hasMultiple) {
-                linkEl.style.display = 'none';
+                linkEl.style.display = "none";
               } else if (txHashes[0]) {
                 const explorerUrl = `https://monadvision.com/tx/${txHashes[0]}`;
                 linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-                linkEl.style.display = 'inline-flex';
+                linkEl.style.display = "inline-flex";
               }
             }
             setTimeout(() => {
@@ -1748,14 +2141,24 @@ export default function DiscoverPopoutContent() {
             }, 10000);
             pendingQuickBuyToastRef.current = null;
           }
-          isDev && console.log('Monad Quick Buy successful:', txHashes);
-          broadcastMonadQuickTrade(tokenAddress, 'buy');
-          broadcastTradeCompleted({ tokenAddress, tradeType: 'buy', chain: 'monad', tokenName: token?.name, tokenSymbol: token?.symbol, imageUrl: tokenImage || undefined, solAmountSpent: buyAmount });
+          isDev && console.log("Monad Quick Buy successful:", txHashes);
+          broadcastMonadQuickTrade(tokenAddress, "buy");
+          broadcastTradeCompleted({
+            tokenAddress,
+            tradeType: "buy",
+            chain: "monad",
+            tokenName: token?.name,
+            tokenSymbol: token?.symbol,
+            imageUrl: tokenImage || undefined,
+            solAmountSpent: buyAmount,
+          });
           // Refresh header balance after successful buy
           setTimeout(() => {
-            refreshBalance({ chain: "monad", force: true }).catch((err: any) => {
-              console.warn('Failed to refresh balance:', err);
-            });
+            refreshBalance({ chain: "monad", force: true }).catch(
+              (err: any) => {
+                console.warn("Failed to refresh balance:", err);
+              },
+            );
           }, 1000);
           toast.success(summary.message, { duration: 4000 });
           return { success: true, txHash: txHashes[0] };
@@ -1764,7 +2167,7 @@ export default function DiscoverPopoutContent() {
           cleanupTradeListener();
           clearInterval(timerInterval);
           pendingQuickBuyToastRef.current = null;
-          const errorMsg = 'Trade failed';
+          const errorMsg = "Trade failed";
           transformToastToError(uniqueToastId, errorMsg, tokenImage, tokenName);
           return { success: false, error: errorMsg };
         }
@@ -1775,7 +2178,12 @@ export default function DiscoverPopoutContent() {
         clearInterval(timerInterval);
         pendingQuickBuyToastRef.current = null;
         const errorMessage = formatMonadError(error?.message || error?.error);
-        transformToastToError(uniqueToastId, errorMessage, tokenImage, tokenName);
+        transformToastToError(
+          uniqueToastId,
+          errorMessage,
+          tokenImage,
+          tokenName,
+        );
         return { success: false, error: errorMessage };
       }
     }
@@ -1787,26 +2195,30 @@ export default function DiscoverPopoutContent() {
     const result = await executeEnhancedTrade({
       token,
       amount: buyAmount,
-      side: 'buy',
+      side: "buy",
       settings,
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150, // TODO: Get real SOL price
       walletContext: {
-        selectedWalletIds: currentChain === 'monad' ? selectedWalletIds?.monad || [] : selectedWalletIds?.sol || [],
+        selectedWalletIds:
+          currentChain === "monad"
+            ? selectedWalletIds?.monad || []
+            : selectedWalletIds?.sol || [],
         walletList: walletList || [],
         walletBalances: walletBalances || {},
-        chain: currentChain === 'monad' ? 'monad' : 'sol',
+        chain: currentChain === "monad" ? "monad" : "sol",
       },
       refreshBalance,
       onSuccess: (txHash, stats) => {
-        isDev && console.log('Enhanced Quick Buy successful:', { txHash, stats });
+        isDev &&
+          console.log("Enhanced Quick Buy successful:", { txHash, stats });
       },
       onError: (error) => {
-        console.error('❌ Enhanced Quick Buy failed:', error);
+        console.error("❌ Enhanced Quick Buy failed:", error);
       },
       onWarning: (warnings) => {
-        console.warn('⚠️ Pre-transaction warnings:', warnings);
+        console.warn("⚠️ Pre-transaction warnings:", warnings);
       },
     });
 
@@ -1825,127 +2237,169 @@ export default function DiscoverPopoutContent() {
   const getVolumeForTimeframe = useCallback((t: any, tf: Timeframe) => {
     // Try direct volume field first
     let vol = t?.[`volume_${tf}`];
-    if (typeof vol === 'number' && vol > 0) return vol;
-    if (typeof vol === 'string' && vol.trim() !== '') {
+    if (typeof vol === "number" && vol > 0) return vol;
+    if (typeof vol === "string" && vol.trim() !== "") {
       const n = parseFloat(vol);
       if (!isNaN(n) && n > 0) return n;
     }
-    
+
     // If volume is 0 or missing, try calculating from buy/sell volumes
     const buyVol = t?.[`total_buy_volume_${tf}`];
     const sellVol = t?.[`total_sell_volume_${tf}`];
-    const buyNum = typeof buyVol === 'number' ? buyVol : (typeof buyVol === 'string' ? parseFloat(buyVol) || 0 : 0);
-    const sellNum = typeof sellVol === 'number' ? sellVol : (typeof sellVol === 'string' ? parseFloat(sellVol) || 0 : 0);
+    const buyNum =
+      typeof buyVol === "number"
+        ? buyVol
+        : typeof buyVol === "string"
+          ? parseFloat(buyVol) || 0
+          : 0;
+    const sellNum =
+      typeof sellVol === "number"
+        ? sellVol
+        : typeof sellVol === "string"
+          ? parseFloat(sellVol) || 0
+          : 0;
     const sum = buyNum + sellNum;
-    
+
     return sum > 0 ? sum : 0;
   }, []);
 
   // Map AMM IDs to protocol patterns (same logic as PulseTable)
   const mapAmmToProtocolPatterns = useCallback((ammId: string): string[] => {
     switch (ammId) {
-      case 'pump':
-      case 'pump_amm':
-        return ['pump.fun', 'pump'];
-      case 'raydium_amm':
-      case 'amm_v3':
-        return ['raydium', 'raydiumlaunchpad'];
-      case 'cp_amm':
-      case 'lb_clmm':
-        return ['meteora', 'meteora_v2'];
-      case 'token_launchpad':
-        return ['moonit', 'moonshot', 'moonshoot'];
-      case 'raydium_launchpad':
-        return ['bonk'];
+      case "pump":
+      case "pump_amm":
+        return ["pump.fun", "pump"];
+      case "raydium_amm":
+      case "amm_v3":
+        return ["raydium", "raydiumlaunchpad"];
+      case "cp_amm":
+      case "lb_clmm":
+        return ["meteora", "meteora_v2"];
+      case "token_launchpad":
+        return ["moonit", "moonshot", "moonshoot"];
+      case "raydium_launchpad":
+        return ["bonk"];
       default:
         return [ammId.toLowerCase()];
     }
   }, []);
 
   // Apply filters to tokens
-  const applyFilters = useCallback((tokens: TokenWithDexPaid[]) => {
-    let filtered = [...tokens];
+  const applyFilters = useCallback(
+    (tokens: TokenWithDexPaid[]) => {
+      let filtered = [...tokens];
 
-    if (normalizedSearch) {
-      filtered = filtered.filter((token) => {
-        const tokenText = `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
-        return tokenText.includes(normalizedSearch);
-      });
-    }
-
-    // Protocol/AMM filter - filter by launchpad_protocol (same as PulseTable)
-    if (filter.amms && filter.amms.length > 0) {
-      const protocolPatterns = filter.amms.flatMap(ammId => mapAmmToProtocolPatterns(ammId));
-      filtered = filtered.filter(token => {
-        const launchpadProtocol = ((token as any).launchpad_protocol || '').toLowerCase();
-        if (!launchpadProtocol) return false;
-        
-        // Check if token's protocol matches any selected AMM's protocol patterns
-        return protocolPatterns.some(pattern => {
-          const patternLower = pattern.toLowerCase();
-          // Direct match
-          if (launchpadProtocol === patternLower) return true;
-          // Substring match (e.g., "raydiumlaunchpad" contains "raydium")
-          if (launchpadProtocol.includes(patternLower) || patternLower.includes(launchpadProtocol)) return true;
-          return false;
-        });
-      });
-    }
-
-    // Search keywords
-    if (filter.searchKeywords.trim()) {
-      const searchTerms = filter.searchKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
-      if (searchTerms.length > 0) {
-        filtered = filtered.filter(token => {
-          const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
-          return searchTerms.some(term => tokenText.includes(term));
+      if (normalizedSearch) {
+        filtered = filtered.filter((token) => {
+          const tokenText =
+            `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
+          return tokenText.includes(normalizedSearch);
         });
       }
-    }
 
-    // Exclude keywords
-    if (filter.excludeKeywords.trim()) {
-      const excludeTerms = filter.excludeKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
-      if (excludeTerms.length > 0) {
-        filtered = filtered.filter(token => {
-          const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
-          return !excludeTerms.some(term => tokenText.includes(term));
+      // Protocol/AMM filter - filter by launchpad_protocol (same as PulseTable)
+      if (filter.amms && filter.amms.length > 0) {
+        const protocolPatterns = filter.amms.flatMap((ammId) =>
+          mapAmmToProtocolPatterns(ammId),
+        );
+        filtered = filtered.filter((token) => {
+          const launchpadProtocol = (
+            (token as any).launchpad_protocol || ""
+          ).toLowerCase();
+          if (!launchpadProtocol) return false;
+
+          // Check if token's protocol matches any selected AMM's protocol patterns
+          return protocolPatterns.some((pattern) => {
+            const patternLower = pattern.toLowerCase();
+            // Direct match
+            if (launchpadProtocol === patternLower) return true;
+            // Substring match (e.g., "raydiumlaunchpad" contains "raydium")
+            if (
+              launchpadProtocol.includes(patternLower) ||
+              patternLower.includes(launchpadProtocol)
+            )
+              return true;
+            return false;
+          });
         });
       }
-    }
 
-    // Market cap filter
-    if (filter.marketCapMin || filter.marketCapMax) {
-      filtered = filtered.filter(token => {
-        const marketCap = Number(token.fully_diluted_value) || 0;
-        const min = filter.marketCapMin ? Number(filter.marketCapMin) : 0;
-        const max = filter.marketCapMax ? Number(filter.marketCapMax) : Infinity;
-        return marketCap >= min && marketCap <= max;
-      });
-    }
+      // Search keywords
+      if (filter.searchKeywords.trim()) {
+        const searchTerms = filter.searchKeywords
+          .toLowerCase()
+          .split(",")
+          .map((term) => term.trim())
+          .filter((term) => term);
+        if (searchTerms.length > 0) {
+          filtered = filtered.filter((token) => {
+            const tokenText =
+              `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
+            return searchTerms.some((term) => tokenText.includes(term));
+          });
+        }
+      }
 
-    // Volume filter
-    if (filter.volumeMin || filter.volumeMax) {
-      filtered = filtered.filter(token => {
-        const volume = getVolumeForTimeframe(token, selectedTimeframe);
-        const min = filter.volumeMin ? Number(filter.volumeMin) : 0;
-        const max = filter.volumeMax ? Number(filter.volumeMax) : Infinity;
-        return volume >= min && volume <= max;
-      });
-    }
+      // Exclude keywords
+      if (filter.excludeKeywords.trim()) {
+        const excludeTerms = filter.excludeKeywords
+          .toLowerCase()
+          .split(",")
+          .map((term) => term.trim())
+          .filter((term) => term);
+        if (excludeTerms.length > 0) {
+          filtered = filtered.filter((token) => {
+            const tokenText =
+              `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
+            return !excludeTerms.some((term) => tokenText.includes(term));
+          });
+        }
+      }
 
-    // Liquidity filter
-    if (filter.liquidityMin || filter.liquidityMax) {
-      filtered = filtered.filter(token => {
-        const liquidity = Number(token.total_liquidity_usd) || 0;
-        const min = filter.liquidityMin ? Number(filter.liquidityMin) : 0;
-        const max = filter.liquidityMax ? Number(filter.liquidityMax) : Infinity;
-        return liquidity >= min && liquidity <= max;
-      });
-    }
+      // Market cap filter
+      if (filter.marketCapMin || filter.marketCapMax) {
+        filtered = filtered.filter((token) => {
+          const marketCap = Number(token.fully_diluted_value) || 0;
+          const min = filter.marketCapMin ? Number(filter.marketCapMin) : 0;
+          const max = filter.marketCapMax
+            ? Number(filter.marketCapMax)
+            : Infinity;
+          return marketCap >= min && marketCap <= max;
+        });
+      }
 
-    return filtered;
-  }, [filter, selectedTimeframe, getVolumeForTimeframe, mapAmmToProtocolPatterns, normalizedSearch]);
+      // Volume filter
+      if (filter.volumeMin || filter.volumeMax) {
+        filtered = filtered.filter((token) => {
+          const volume = getVolumeForTimeframe(token, selectedTimeframe);
+          const min = filter.volumeMin ? Number(filter.volumeMin) : 0;
+          const max = filter.volumeMax ? Number(filter.volumeMax) : Infinity;
+          return volume >= min && volume <= max;
+        });
+      }
+
+      // Liquidity filter
+      if (filter.liquidityMin || filter.liquidityMax) {
+        filtered = filtered.filter((token) => {
+          const liquidity = Number(token.total_liquidity_usd) || 0;
+          const min = filter.liquidityMin ? Number(filter.liquidityMin) : 0;
+          const max = filter.liquidityMax
+            ? Number(filter.liquidityMax)
+            : Infinity;
+          return liquidity >= min && liquidity <= max;
+        });
+      }
+
+      return filtered;
+    },
+    [
+      filter,
+      selectedTimeframe,
+      getVolumeForTimeframe,
+      mapAmmToProtocolPatterns,
+      normalizedSearch,
+    ],
+  );
 
   // Count active filters for badge
   const activeFilterCount = useMemo(() => {
@@ -1974,28 +2428,36 @@ export default function DiscoverPopoutContent() {
   useEffect(() => {
     if (allTokens && Array.isArray(allTokens)) {
       const newMap = new Map<string, TokenWithDexPaid>();
-      
+
       allTokens.forEach((token: any) => {
         // CRITICAL: Filter out wrapped SOL tokens explicitly
         if (!token || !token.mint || isWrappedSol(token)) {
           return;
         }
-        
+
         // Ensure we have valid token data (not quote tokens)
-        if (token.quoteMint === WRAPPED_SOL_MINT && !token.pair_address && !token.mint) {
+        if (
+          token.quoteMint === WRAPPED_SOL_MINT &&
+          !token.pair_address &&
+          !token.mint
+        ) {
           return; // Skip if this looks like quote token data
         }
-        
+
         // Create a deep copy to avoid mutation issues
         const tokenCopy = JSON.parse(JSON.stringify(token)) as TokenWithDexPaid;
-        
+
         // CRITICAL: Use mint as primary key to prevent wrapped SOL duplicates
         // Wrapped SOL can have different pair_addresses but same mint
         const baseKey = tokenCopy.mint || tokenCopy.pair_address;
-        if (!baseKey || baseKey === WRAPPED_SOL_MINT || isWrappedSol(tokenCopy)) {
+        if (
+          !baseKey ||
+          baseKey === WRAPPED_SOL_MINT ||
+          isWrappedSol(tokenCopy)
+        ) {
           return; // Skip invalid keys or wrapped SOL
         }
-        
+
         // If key already exists, keep the one with more complete data
         const existing = newMap.get(baseKey);
         if (existing) {
@@ -2008,12 +2470,12 @@ export default function DiscoverPopoutContent() {
           newMap.set(baseKey, tokenCopy);
         }
       });
-      
+
       tokenMapRef.current = newMap;
 
       const arr = Array.from(tokenMapRef.current.values());
       // Final safety check: filter out any wrapped SOL that might have slipped through
-      const filtered = arr.filter(t => !isWrappedSol(t));
+      const filtered = arr.filter((t) => !isWrappedSol(t));
       setFilteredTokens(filtered);
     }
   }, [allTokens, isWrappedSol]);
@@ -2025,88 +2487,109 @@ export default function DiscoverPopoutContent() {
   useEffect(() => {
     if (activeTab === "trending") {
       let arr: TokenWithDexPaid[];
-      if (currentChain === 'sol') {
+      if (currentChain === "sol") {
         // Always use WebSocket data for Solana trending (even when empty) so count matches Discover
-        arr = Array.isArray(wsTokens) ? (wsTokens as unknown as TokenWithDexPaid[]) : [];
+        arr = Array.isArray(wsTokens)
+          ? (wsTokens as unknown as TokenWithDexPaid[])
+          : [];
       } else {
         // Monad: use tokenMapRef (populated from fallback HTTP)
         arr = Array.from(tokenMapRef.current.values());
       }
-      
+
       // Safety check: filter out wrapped SOL before processing
-      let safeArr = arr.filter(t => t && t.mint && !isWrappedSol(t));
-      
+      let safeArr = arr.filter((t) => t && t.mint && !isWrappedSol(t));
+
       // Filter out specific blacklisted tokens for Monad trending section
-      if (currentChain === 'monad') {
+      if (currentChain === "monad") {
         const blacklistedAddresses = [
-          '0x6a7E3F839382FBb6A6131D4Aae864AAEb362292d',
-          '0x01bFF41798a0BcF287b996046Ca68b395DbC1071',
-          '0x0a332311633C0625f63CFc51EE33fC49826E0a3C',
-          '0x22Cd99EC337a2811F594340a4A6E41e4A3022b07',
-          '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3'
-        ].map(addr => addr.toLowerCase());
-        
-        safeArr = safeArr.filter(t => {
-          const tokenAddress = (t.mint || (t as any).address || '').toLowerCase();
+          "0x6a7E3F839382FBb6A6131D4Aae864AAEb362292d",
+          "0x01bFF41798a0BcF287b996046Ca68b395DbC1071",
+          "0x0a332311633C0625f63CFc51EE33fC49826E0a3C",
+          "0x22Cd99EC337a2811F594340a4A6E41e4A3022b07",
+          "0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3",
+        ].map((addr) => addr.toLowerCase());
+
+        safeArr = safeArr.filter((t) => {
+          const tokenAddress = (
+            t.mint ||
+            (t as any).address ||
+            ""
+          ).toLowerCase();
           return !blacklistedAddresses.includes(tokenAddress);
         });
       }
-      
+
       // Apply filters - this will re-run when filter context changes
       // CRITICAL: applyFilters uses filter context, so when filters change, this will re-run
       const filtered = applyFilters(safeArr);
-      
+
       // When no filters are active, prevent timeframe switches from collapsing the list.
       // If the filtered list is unexpectedly tiny (e.g., Birdeye only returns 24h data),
       // fall back to the baseline safe array so every timeframe shows a full slate.
       const baselineThreshold = Math.max(
         10,
-        Math.floor(Math.min(safeArr.length, 80) * 0.25)
+        Math.floor(Math.min(safeArr.length, 80) * 0.25),
       );
       const shouldUseBaseline =
         activeFilterCount === 0 &&
         safeArr.length > 0 &&
         filtered.length < Math.min(baselineThreshold, safeArr.length);
       const workingTokens = shouldUseBaseline ? safeArr : filtered;
-      
-      
+
       // Create deep copies to avoid mutation during sort
-      const sortedTokens = workingTokens.map(t => JSON.parse(JSON.stringify(t)));
-      
+      const sortedTokens = workingTokens.map((t) =>
+        JSON.parse(JSON.stringify(t)),
+      );
+
       sortedTokens.sort((a, b) => {
         // Final safety check in sort
         if (!a || !b || isWrappedSol(a) || isWrappedSol(b)) {
           return 0;
         }
-        
-        let aVal = 0, bVal = 0;
-        if (sortKey === 'volume') {
+
+        let aVal = 0,
+          bVal = 0;
+        if (sortKey === "volume") {
           aVal = getVolumeForTimeframe(a, selectedTimeframe);
           bVal = getVolumeForTimeframe(b, selectedTimeframe);
-        } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
+        } else if (
+          sortKey === "liquidity" ||
+          sortKey === "total_liquidity_usd"
+        ) {
           aVal = Number((a as any).total_liquidity_usd) || 0;
           bVal = Number((b as any).total_liquidity_usd) || 0;
-        } else if (sortKey === 'market_cap_total' || sortKey === 'fully_diluted_value') {
+        } else if (
+          sortKey === "market_cap_total" ||
+          sortKey === "fully_diluted_value"
+        ) {
           aVal = Number((a as any).fully_diluted_value) || 0;
           bVal = Number((b as any).fully_diluted_value) || 0;
         } else {
           aVal = Number((a as any)[sortKey]) || 0;
           bVal = Number((b as any)[sortKey]) || 0;
         }
-        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
       });
-      
+
       // Final filter before setting displayed - also deduplicate by mint/address
-      const finalSafe = sortedTokens.filter(t => t && t.mint && !isWrappedSol(t));
-      
+      const finalSafe = sortedTokens.filter(
+        (t) => t && t.mint && !isWrappedSol(t),
+      );
+
       // Ensure every token has some kind of image to display (fallback to initials if missing)
       const normalizedTokens = finalSafe.map((t: any) => {
         const hasImage = t?.uri || t?.logo || t?.image || t?.imageUrl;
-        if (hasImage && hasImage !== '' && hasImage !== 'null' && hasImage !== null) {
+        if (
+          hasImage &&
+          hasImage !== "" &&
+          hasImage !== "null" &&
+          hasImage !== null
+        ) {
           return t;
         }
 
-        const initials = t?.symbol || t?.name || 'T';
+        const initials = t?.symbol || t?.name || "T";
         const fallbackImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=0f1012&color=E6E7EA&size=64`;
         return {
           ...t,
@@ -2115,60 +2598,59 @@ export default function DiscoverPopoutContent() {
           uri: fallbackImage,
         };
       });
-      
+
       // CRITICAL: Deduplicate using Set to track seen mints AND addresses
       // This prevents duplicate wrapped SOL with different pair_addresses
       const seenAddresses = new Set<string>();
       const seenMints = new Set<string>();
       const uniqueSafe: TokenWithDexPaid[] = [];
-      
+
       for (const token of normalizedTokens) {
         const mint = token.mint;
         const address = token.pair_address;
-        
+
         // Skip if we've already seen this mint (prevents wrapped SOL duplicates)
         if (mint && seenMints.has(mint)) {
           continue;
         }
-        
+
         // Also check address to be safe
         if (address && seenAddresses.has(address)) {
           continue;
         }
-        
+
         // Mark as seen and add to results
         if (mint) seenMints.add(mint);
         if (address) seenAddresses.add(address);
         uniqueSafe.push(token);
       }
-      
+
       // If we have fewer than 10 trending tokens, supplement with top tokens from new pairs (match Discover page: up to 50)
       if (uniqueSafe.length < 10 && newPairsRaw && newPairsRaw.length > 0) {
-        
         // Get top tokens from new pairs, sorted by volume (for selected timeframe)
         const topNewPairs = newPairsRaw
           .filter((token: any) => {
             // Skip if already in trending list
-            const tokenMint = (token.mint || token.address || '').toLowerCase();
+            const tokenMint = (token.mint || token.address || "").toLowerCase();
             if (tokenMint && seenMints.has(tokenMint)) return false;
-            
+
             // Skip wrapped SOL and blacklisted tokens
             if (isWrappedSol(token)) return false;
-            if (currentChain === 'monad') {
+            if (currentChain === "monad") {
               const blacklistedAddresses = [
-                '0x6a7E3F839382FBb6A6131D4Aae864AAEb362292d',
-                '0x01bFF41798a0BcF287b996046Ca68b395DbC1071',
-                '0x0a332311633C0625f63CFc51EE33fC49826E0a3C',
-                '0x22Cd99EC337a2811F594340a4A6E41e4A3022b07',
-                '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3'
-              ].map(addr => addr.toLowerCase());
+                "0x6a7E3F839382FBb6A6131D4Aae864AAEb362292d",
+                "0x01bFF41798a0BcF287b996046Ca68b395DbC1071",
+                "0x0a332311633C0625f63CFc51EE33fC49826E0a3C",
+                "0x22Cd99EC337a2811F594340a4A6E41e4A3022b07",
+                "0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3",
+              ].map((addr) => addr.toLowerCase());
               const tokenAddress = tokenMint;
               if (blacklistedAddresses.includes(tokenAddress)) return false;
             }
-            
+
             // Skip zero liquidity tokens
             if (isZeroLiquidityToken(token)) return false;
-            
+
             return true;
           })
           .map((token: any) => ({
@@ -2180,8 +2662,12 @@ export default function DiscoverPopoutContent() {
             // Sort by volume descending, then by market cap
             const volumeDiff = b.sortVolume - a.sortVolume;
             if (Math.abs(volumeDiff) > 0.01) return volumeDiff;
-            const aMc = Number((a as any).fully_diluted_value || (a as any).market_cap_usd || 0);
-            const bMc = Number((b as any).fully_diluted_value || (b as any).market_cap_usd || 0);
+            const aMc = Number(
+              (a as any).fully_diluted_value || (a as any).market_cap_usd || 0,
+            );
+            const bMc = Number(
+              (b as any).fully_diluted_value || (b as any).market_cap_usd || 0,
+            );
             return bMc - aMc;
           })
           .slice(0, 50) // Take top 50 from new pairs (same as Discover page)
@@ -2190,34 +2676,49 @@ export default function DiscoverPopoutContent() {
             const { sortVolume, ...rest } = token;
             return rest;
           });
-        
+
         // Add to uniqueSafe, tracking their mints to avoid duplicates (no cap - show same as Discover)
         for (const token of topNewPairs) {
-          const mint = (token.mint || token.address || '').toLowerCase();
+          const mint = (token.mint || token.address || "").toLowerCase();
           if (mint && !seenMints.has(mint)) {
             seenMints.add(mint);
             uniqueSafe.push(token);
           }
         }
-        
       }
-      
+
       setDisplayed(uniqueSafe);
     } else if (activeTab === "dex") {
       // dex tab → show all filtered tokens (match Discover page behavior)
-      const safe = filteredTokens.filter(t => t && t.mint && !isWrappedSol(t));
+      const safe = filteredTokens.filter(
+        (t) => t && t.mint && !isWrappedSol(t),
+      );
       setDisplayed(safe);
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken, wsTokens]); // wsTokens required so displayed updates when WebSocket delivers full list
+  }, [
+    activeTab,
+    filteredTokens,
+    sortKey,
+    sortDirection,
+    selectedTimeframe,
+    applyFilters,
+    getVolumeForTimeframe,
+    isWrappedSol,
+    filter,
+    activeFilterCount,
+    newPairsRaw,
+    currentChain,
+    isZeroLiquidityToken,
+    wsTokens,
+  ]); // wsTokens required so displayed updates when WebSocket delivers full list
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) {
       return [] as TokenWithDexPaid[];
     }
 
-    
     // Match pulse.tsx filtering logic - only filter by zero liquidity and wrapped SOL
     // This ensures we show the same tokens as pulse table
     const base = newPairsRaw.filter((token) => {
@@ -2225,37 +2726,44 @@ export default function DiscoverPopoutContent() {
       if (isWrappedSol(token)) {
         return false;
       }
-      
+
       // Filter out zero liquidity tokens (same as pulse.tsx)
       if (isZeroLiquidityToken(token)) {
         return false;
       }
-      
+
       // For Monad, ensure we have a mint (from address transformation)
       // For Solana, ensure we have a mint
-      const tokenId = token.mint || (currentChain === 'monad' ? (token as any).address : null);
+      const tokenId =
+        token.mint ||
+        (currentChain === "monad" ? (token as any).address : null);
       if (!token || !tokenId) {
         return false;
       }
-      
+
       return true;
     });
-    
+
     const filtered = applyFilters(base);
-    const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
+    const sortedTokens = filtered.map(
+      (token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid,
+    );
 
     sortedTokens.sort((a, b) => {
       if (!a || !b) return 0;
       let aVal = 0;
       let bVal = 0;
 
-      if (sortKey === 'volume') {
+      if (sortKey === "volume") {
         aVal = getVolumeForTimeframe(a, selectedTimeframe);
         bVal = getVolumeForTimeframe(b, selectedTimeframe);
-      } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
+      } else if (sortKey === "liquidity" || sortKey === "total_liquidity_usd") {
         aVal = Number((a as any).total_liquidity_usd) || 0;
         bVal = Number((b as any).total_liquidity_usd) || 0;
-      } else if (sortKey === 'market_cap_total' || sortKey === 'fully_diluted_value') {
+      } else if (
+        sortKey === "market_cap_total" ||
+        sortKey === "fully_diluted_value"
+      ) {
         aVal = Number((a as any).fully_diluted_value) || 0;
         bVal = Number((b as any).fully_diluted_value) || 0;
       } else {
@@ -2263,7 +2771,7 @@ export default function DiscoverPopoutContent() {
         bVal = Number((b as any)[sortKey]) || 0;
       }
 
-      const diff = sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      const diff = sortDirection === "asc" ? aVal - bVal : bVal - aVal;
       if (diff !== 0) {
         return diff;
       }
@@ -2290,7 +2798,18 @@ export default function DiscoverPopoutContent() {
     }
 
     return unique;
-  }, [newPairsRaw, applyFilters, getVolumeForTimeframe, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
+  }, [
+    newPairsRaw,
+    applyFilters,
+    getVolumeForTimeframe,
+    getNewPairTimestamp,
+    isWrappedSol,
+    isZeroLiquidityToken,
+    currentChain,
+    sortDirection,
+    sortKey,
+    selectedTimeframe,
+  ]);
 
   const newPairsRows = useMemo(
     () =>
@@ -2298,7 +2817,7 @@ export default function DiscoverPopoutContent() {
         token,
         i: index,
       })),
-    [processedNewPairs]
+    [processedNewPairs],
   );
 
   // Process xStocks data similar to newPairs
@@ -2312,7 +2831,9 @@ export default function DiscoverPopoutContent() {
         return false;
       }
       // Filter out tokens with 0 liquidity
-      const liquidity = Number((token as any).total_liquidity_usd || (token as any).liquidity_usd || 0);
+      const liquidity = Number(
+        (token as any).total_liquidity_usd || (token as any).liquidity_usd || 0,
+      );
       if (liquidity <= 0) {
         return false;
       }
@@ -2324,21 +2845,25 @@ export default function DiscoverPopoutContent() {
 
     // Sort tokens
     const sortedTokens = [...filtered].sort((a, b) => {
-      let aVal = 0, bVal = 0;
-      if (sortKey === 'volume') {
+      let aVal = 0,
+        bVal = 0;
+      if (sortKey === "volume") {
         aVal = getVolumeForTimeframe(a, selectedTimeframe);
         bVal = getVolumeForTimeframe(b, selectedTimeframe);
-      } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
+      } else if (sortKey === "liquidity" || sortKey === "total_liquidity_usd") {
         aVal = Number((a as any).total_liquidity_usd) || 0;
         bVal = Number((b as any).total_liquidity_usd) || 0;
-      } else if (sortKey === 'market_cap_total' || sortKey === 'fully_diluted_value') {
+      } else if (
+        sortKey === "market_cap_total" ||
+        sortKey === "fully_diluted_value"
+      ) {
         aVal = Number((a as any).fully_diluted_value) || 0;
         bVal = Number((b as any).fully_diluted_value) || 0;
       } else {
         aVal = Number((a as any)[sortKey]) || 0;
         bVal = Number((b as any)[sortKey]) || 0;
       }
-      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
     });
 
     // Deduplicate
@@ -2359,7 +2884,15 @@ export default function DiscoverPopoutContent() {
     }
 
     return unique;
-  }, [xStocksRaw, applyFilters, getVolumeForTimeframe, isWrappedSol, sortDirection, sortKey, selectedTimeframe]);
+  }, [
+    xStocksRaw,
+    applyFilters,
+    getVolumeForTimeframe,
+    isWrappedSol,
+    sortDirection,
+    sortKey,
+    selectedTimeframe,
+  ]);
 
   const xStocksRows = useMemo(
     () =>
@@ -2367,7 +2900,7 @@ export default function DiscoverPopoutContent() {
         token,
         i: index,
       })),
-    [processedXStocks]
+    [processedXStocks],
   );
 
   const renderPrimaryTable = () => {
@@ -2390,7 +2923,12 @@ export default function DiscoverPopoutContent() {
     }
 
     // Only fall back to unfiltered allTokens when no filters are active
-    if (activeFilterCount === 0 && allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+    if (
+      activeFilterCount === 0 &&
+      allTokens &&
+      Array.isArray(allTokens) &&
+      allTokens.length > 0
+    ) {
       return (
         <InterstateTable
           rows={allTokens.map((token, i) => ({
@@ -2412,7 +2950,10 @@ export default function DiscoverPopoutContent() {
       return (
         <div className="space-y-4">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
+            <div
+              key={i}
+              className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
+            />
           ))}
         </div>
       );
@@ -2424,24 +2965,25 @@ export default function DiscoverPopoutContent() {
       );
     }
 
-    return <div className="py-10 text-center text-[#9CA3AF]">No tokens found.</div>;
+    return (
+      <div className="py-10 text-center text-[#9CA3AF]">No tokens found.</div>
+    );
   };
-
 
   /* ------- map tokens -> PumpItem for Live Pump (uses cached images) ------- */
   const toPumpItem = (t: any): PumpItem => {
-    const name = t?.name || t?.symbol || '—';
+    const name = t?.name || t?.symbol || "—";
     const sym = t?.symbol ? String(t.symbol).slice(0, 12) : undefined;
-    const desc = t?.description || t?.bio || '';
-    const age = t?.age_label || '22m'; // fallback display label
+    const desc = t?.description || t?.bio || "";
+    const age = t?.age_label || "22m"; // fallback display label
     const mcNum = Number(t?.fully_diluted_value || 0);
     const mc =
       mcNum > 0
-        ? (mcNum >= 1_000_000
-            ? `$${(mcNum / 1_000_000).toFixed(2)}M`
-            : mcNum >= 1_000
+        ? mcNum >= 1_000_000
+          ? `$${(mcNum / 1_000_000).toFixed(2)}M`
+          : mcNum >= 1_000
             ? `$${(mcNum / 1_000).toFixed(2)}K`
-            : `$${mcNum.toFixed(0)}`)
+            : `$${mcNum.toFixed(0)}`
         : undefined;
 
     const { cover, avatar } = getCachedImagesForToken(t);
@@ -2462,12 +3004,12 @@ export default function DiscoverPopoutContent() {
 
   // Create a helper to map PumpPortal tokens to PumpItem format
   const toPumpPortalItem = (t: any): PumpItem => {
-    const name = t?.name || t?.symbol || '—';
+    const name = t?.name || t?.symbol || "—";
     const sym = t?.symbol ? String(t.symbol).slice(0, 12) : undefined;
-    const desc = t?.description || t?.bio || '';
-    
+    const desc = t?.description || t?.bio || "";
+
     // Calculate age from timestamp
-    const age = t?.timestamp 
+    const age = t?.timestamp
       ? (() => {
           const seconds = Math.floor((Date.now() - t.timestamp) / 1000);
           if (seconds < 60) return `${seconds}s`;
@@ -2475,26 +3017,28 @@ export default function DiscoverPopoutContent() {
           if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
           return `${Math.floor(seconds / 86400)}d`;
         })()
-      : '1m';
-    
-    const mcNum = Number(t?.market_cap_usd || (t?.marketCapSol ? (t.marketCapSol * 170) : 0));
+      : "1m";
+
+    const mcNum = Number(
+      t?.market_cap_usd || (t?.marketCapSol ? t.marketCapSol * 170 : 0),
+    );
     const mc =
       mcNum > 0
-        ? (mcNum >= 1_000_000
-            ? `$${(mcNum / 1_000_000).toFixed(2)}M`
-            : mcNum >= 1_000
+        ? mcNum >= 1_000_000
+          ? `$${(mcNum / 1_000_000).toFixed(2)}M`
+          : mcNum >= 1_000
             ? `$${(mcNum / 1_000).toFixed(2)}K`
-            : `$${mcNum.toFixed(0)}`)
+            : `$${mcNum.toFixed(0)}`
         : undefined;
 
     // Use cached images to ensure they persist across re-renders
     const { cover, avatar } = getCachedImagesForToken(t);
-    
+
     // For PumpPortal tokens, use the same image for both cover and avatar
     // The large box (cover) shows the full image, the small box (avatar) shows the token image
     const imageUrl = cover || t?.image || undefined;
     const avatarImageUrl = avatar || imageUrl || undefined;
-    
+
     return {
       id: t?.mint || t?.pair_address || Math.random().toString(36).slice(2),
       name,
@@ -2510,8 +3054,12 @@ export default function DiscoverPopoutContent() {
     };
   };
 
-  const liveLeftItems: PumpItem[] = pumpPortalTokens.slice(0, 30).map(toPumpPortalItem);
-  const liveRightItems: PumpItem[] = pumpPortalTokens.slice(30, 60).map(toPumpPortalItem);
+  const liveLeftItems: PumpItem[] = pumpPortalTokens
+    .slice(0, 30)
+    .map(toPumpPortalItem);
+  const liveRightItems: PumpItem[] = pumpPortalTokens
+    .slice(30, 60)
+    .map(toPumpPortalItem);
 
   // Simple LRU-ish trim when the cache gets large (optional)
   useEffect(() => {
@@ -2529,14 +3077,16 @@ export default function DiscoverPopoutContent() {
   }, [displayed]);
 
   return (
-    <div className="flex h-full flex-col text-[#E6E7EA]" style={{ backgroundColor: '#111214' }}>
-
-        {/* Tab Navigation + Controls: tabs on first line, Filter/amount/P1-P3 on second line */}
-        <div className="flex flex-col gap-3 px-4 pt-4 sm:px-6 lg:px-8">
-          {/* Tabs Section - first row */}
-          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-0 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0">
-            {/* Chain Switcher - Commented out */}
-            {/* <div className="flex items-center gap-2 mr-2">
+    <div
+      className="flex h-full flex-col text-[#E6E7EA]"
+      style={{ backgroundColor: "#111214" }}
+    >
+      {/* Tab Navigation + Controls: tabs on first line, Filter/amount/P1-P3 on second line */}
+      <div className="flex flex-col gap-3 px-4 pt-4 sm:px-6 lg:px-8">
+        {/* Tabs Section - first row */}
+        <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-0 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0">
+          {/* Chain Switcher - Commented out */}
+          {/* <div className="flex items-center gap-2 mr-2">
               <button
                 onClick={() => {
                   manualChainSwitchRef.current = true;
@@ -2602,28 +3152,28 @@ export default function DiscoverPopoutContent() {
                 />
               </button>
             </div> */}
-            <button
-              className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-              onClick={() => setActiveTab("trending")}
-            >
-              Trending
-            </button>
-            <button
-              className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-              onClick={() => setActiveTab("newPairs")}
-            >
-              New Pairs
-            </button>
-            {/* Hide xStocks, surge, and live tabs when Monad is selected */}
-            {currentChain !== "monad" && (
-              <>
-                <button
-                  className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-                  onClick={() => setActiveTab("xStocks")}
-                >
-                  xStocks
-                </button>
-                {/* <button
+          <button
+            className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+            onClick={() => setActiveTab("trending")}
+          >
+            Trending
+          </button>
+          <button
+            className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+            onClick={() => setActiveTab("newPairs")}
+          >
+            New Pairs
+          </button>
+          {/* Hide xStocks, surge, and live tabs when Monad is selected */}
+          {currentChain !== "monad" && (
+            <>
+              <button
+                className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+                onClick={() => setActiveTab("xStocks")}
+              >
+                xStocks
+              </button>
+              {/* <button
                   className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
                   onClick={() => setActiveTab("surge")}
                 >
@@ -2635,255 +3185,252 @@ export default function DiscoverPopoutContent() {
                 >
                   Pump Live
                 </button> */}
-              </>
-            )}
-            {/* <button
+            </>
+          )}
+          {/* <button
               className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("dex")}
             >
               DEX Screener
             </button> */}
-          </div>
+        </div>
 
-          {/* Second row: Filter, amount input, P1 P2 P3 */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3 sm:gap-3 sm:pt-3 lg:gap-4 mb-4">
-            {/* Connection status - commented out per user request */}
-            {/* <div className="flex items-center gap-2">
+        {/* Second row: Filter, amount input, P1 P2 P3 */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3 sm:gap-3 sm:pt-3 lg:gap-4">
+          {/* Connection status - commented out per user request */}
+          {/* <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
               <span className="text-xs text-neutral-400">
                 {isConnected ? 'Live' : 'Disconnected'}
               </span>
             </div> */}
 
-            {/* Timeframes - hide when on live tab, new pairs, xStocks, surge, or trending (for both Solana and Monad) */}
-            {/* COMMENTED OUT: Timeframe selector hidden for trending section */}
-            {activeTab !== "live" &&
-              activeTab !== "newPairs" &&
-              activeTab !== "xStocks" &&
-              activeTab !== "surge" &&
-              activeTab !== "trending" && (
-                <div className="relative hidden h-7 w-[130px] min-w-[130px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
-                  {(["5m", "1h", "6h", "24h"] as Timeframe[]).map(
-                    (tf: Timeframe) => (
-                      <div
-                        key={tf}
-                        className="relative flex items-center justify-center"
+          {/* Timeframes - hide when on live tab, new pairs, xStocks, surge, or trending (for both Solana and Monad) */}
+          {/* COMMENTED OUT: Timeframe selector hidden for trending section */}
+          {activeTab !== "live" &&
+            activeTab !== "newPairs" &&
+            activeTab !== "xStocks" &&
+            activeTab !== "surge" &&
+            activeTab !== "trending" && (
+              <div className="relative hidden h-7 w-[130px] min-w-[130px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+                {(["1m", "5m", "30m", "1h"] as Timeframe[]).map(
+                  (tf: Timeframe) => (
+                    <div
+                      key={tf}
+                      className="relative flex items-center justify-center"
+                    >
+                      <button
+                        className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-[rgba(22,23,28,0.6)]"}`}
+                        onClick={() => handleTimeframeClick(tf)}
+                        onMouseEnter={(e) => {
+                          if (selectedTimeframe !== tf) {
+                            e.currentTarget.style.color = "#f0f5f5";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (selectedTimeframe !== tf) {
+                            e.currentTarget.style.color = "";
+                          }
+                        }}
                       >
-                        <button
-                          className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-[rgba(22,23,28,0.6)]"}`}
-                          onClick={() => handleTimeframeClick(tf)}
-                          onMouseEnter={(e) => {
-                            if (selectedTimeframe !== tf) {
-                              e.currentTarget.style.color = "#f0f5f5";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (selectedTimeframe !== tf) {
-                              e.currentTarget.style.color = "";
-                            }
-                          }}
-                        >
-                          {tf}
-                        </button>
-                      </div>
-                    ),
-                  )}
-                </div>
-              )}
-
-            {/* Filter button - hidden when in Live Pump tab */}
-            {activeTab !== "live" && (
-              <div className="relative hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
-                <button
-                  className="relative flex h-full w-full cursor-pointer items-center justify-between transition-all duration-200"
-                  onClick={() => setIsFilterPopoutOpen(true)}
-                  onMouseEnter={(e) => {
-                    const text = e.currentTarget.querySelector("span");
-                    const icon = e.currentTarget.querySelector("svg");
-                    if (text) text.style.color = "#f0f5f5";
-                    if (icon) icon.style.color = "#f0f5f5";
-                  }}
-                  onMouseLeave={(e) => {
-                    const text = e.currentTarget.querySelector("span");
-                    const icon = e.currentTarget.querySelector("svg");
-                    const activeColor = isFilterPopoutOpen
-                      ? "#526fff"
-                      : "#9CA3AF";
-                    if (text) text.style.color = activeColor;
-                    if (icon) icon.style.color = activeColor;
-                  }}
-                >
-                  <span
-                    className={`text-sm font-medium ${isFilterPopoutOpen ? "text-[#526fff]" : "text-[#9CA3AF]"}`}
-                  >
-                    Filter
-                  </span>
-                  <BsSliders2
-                    size={14}
-                    className={`${isFilterPopoutOpen ? "text-[#526fff]" : "text-[#9CA3AF]"}`}
-                  />
-
-                  {/* Active Filter Count Badge */}
-                  {activeFilterCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#85d99f] text-xs text-[10px] font-bold text-[#f0f5f5]">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
+                        {tf}
+                      </button>
+                    </div>
+                  ),
+                )}
               </div>
             )}
 
-            {/* Thunder Icon and Amount Entry - Separate Thin Box */}
-            <div className="hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
-              <HiLightningBolt size={14} className="text-[#31e3ac]" />
-              <input
-                type="text"
-                value={quickBuyAmount}
-                inputMode="decimal"
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Allow only digits and at most one decimal point
-                  if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                    setQuickBuyAmount(value);
-                    const numValue = Number(value) || 0;
-                    if (typeof window !== "undefined") {
-                      localStorage.setItem(
-                        "quickBuyAmount",
-                        numValue.toString(),
-                      );
-                    }
-                  }
+          {/* Filter button - hidden when in Live Pump tab */}
+          {activeTab !== "live" && (
+            <div className="relative hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+              <button
+                className="relative flex h-full w-full cursor-pointer items-center justify-between transition-all duration-200"
+                onClick={() => setIsFilterPopoutOpen(true)}
+                onMouseEnter={(e) => {
+                  const text = e.currentTarget.querySelector("span");
+                  const icon = e.currentTarget.querySelector("svg");
+                  if (text) text.style.color = "#f0f5f5";
+                  if (icon) icon.style.color = "#f0f5f5";
                 }}
-                onKeyDown={(e) => {
-                  // Block non-numeric keys except control/navigation keys and '.'
-                  const allowedKeys = [
-                    "Backspace",
-                    "Delete",
-                    "ArrowLeft",
-                    "ArrowRight",
-                    "Tab",
-                    "Home",
-                    "End",
-                  ];
-                  if (allowedKeys.includes(e.key)) return;
-                  if (e.key === ".") return;
-                  if (!/^[0-9]$/.test(e.key)) {
-                    e.preventDefault();
-                  }
+                onMouseLeave={(e) => {
+                  const text = e.currentTarget.querySelector("span");
+                  const icon = e.currentTarget.querySelector("svg");
+                  const activeColor = isFilterPopoutOpen
+                    ? "#526fff"
+                    : "#9CA3AF";
+                  if (text) text.style.color = activeColor;
+                  if (icon) icon.style.color = activeColor;
                 }}
-                className="w-12 border-none bg-transparent text-center text-sm font-medium text-[#f0f5f5] outline-none"
-              />
+              >
+                <span
+                  className={`text-sm font-medium ${isFilterPopoutOpen ? "text-[#526fff]" : "text-[#9CA3AF]"}`}
+                >
+                  Filter
+                </span>
+                <BsSliders2
+                  size={14}
+                  className={`${isFilterPopoutOpen ? "text-[#526fff]" : "text-[#9CA3AF]"}`}
+                />
+
+                {/* Active Filter Count Badge */}
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#85d99f] text-xs text-[10px] font-bold text-[#f0f5f5]">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
             </div>
+          )}
 
-            {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
-            <div className="relative hidden h-7 w-[100px] min-w-[100px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
-              {["P1", "P2", "P3"].map((pill) => {
-                const presetIndex = parseInt(pill.replace("P", "")) - 1;
-                const preset = presets[presetIndex];
-                const settings = preset?.quickBuySettings;
+          {/* Thunder Icon and Amount Entry - Separate Thin Box */}
+          <div className="hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+            <HiLightningBolt size={14} className="text-[#31e3ac]" />
+            <input
+              type="text"
+              value={quickBuyAmount}
+              inputMode="decimal"
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow only digits and at most one decimal point
+                if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                  setQuickBuyAmount(value);
+                  const numValue = Number(value) || 0;
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("quickBuyAmount", numValue.toString());
+                  }
+                }
+              }}
+              onKeyDown={(e) => {
+                // Block non-numeric keys except control/navigation keys and '.'
+                const allowedKeys = [
+                  "Backspace",
+                  "Delete",
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "Tab",
+                  "Home",
+                  "End",
+                ];
+                if (allowedKeys.includes(e.key)) return;
+                if (e.key === ".") return;
+                if (!/^[0-9]$/.test(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              className="w-12 border-none bg-transparent text-center text-sm font-medium text-[#f0f5f5] outline-none"
+            />
+          </div>
 
-                return (
-                  <div
-                    key={pill}
-                    className="relative flex items-center justify-center"
+          {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
+          <div className="relative hidden h-7 w-[100px] min-w-[100px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+            {["P1", "P2", "P3"].map((pill) => {
+              const presetIndex = parseInt(pill.replace("P", "")) - 1;
+              const preset = presets[presetIndex];
+              const settings = preset?.quickBuySettings;
+
+              return (
+                <div
+                  key={pill}
+                  className="relative flex items-center justify-center"
+                >
+                  <button
+                    className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-[rgba(22,23,28,0.6)]"}`}
+                    onClick={() => {
+                      setSelectedPill(pill);
+                      setActivePreset(presetIndex); // Also update global preset for consistency
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedPill !== pill) {
+                        e.currentTarget.style.color = "#f0f5f5";
+                      }
+                      setShowPillTooltip(pill);
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedPill !== pill) {
+                        e.currentTarget.style.color = "";
+                      }
+                      setShowPillTooltip(null);
+                    }}
                   >
-                    <button
-                      className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-[rgba(22,23,28,0.6)]"}`}
-                      onClick={() => {
-                        setSelectedPill(pill);
-                        setActivePreset(presetIndex); // Also update global preset for consistency
-                      }}
-                      onMouseEnter={(e) => {
-                        if (selectedPill !== pill) {
-                          e.currentTarget.style.color = "#f0f5f5";
-                        }
-                        setShowPillTooltip(pill);
-                      }}
-                      onMouseLeave={(e) => {
-                        if (selectedPill !== pill) {
-                          e.currentTarget.style.color = "";
-                        }
-                        setShowPillTooltip(null);
-                      }}
-                    >
-                      {pill}
-                    </button>
+                    {pill}
+                  </button>
 
-                    {/* Tooltip for each pill */}
-                    {showPillTooltip === pill && settings && (
-                      <div className="bg-[rgba(15,16,18,0.95)] absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border border-[#24252C] shadow-xl">
-                        <div className="space-y-1.5 p-2">
-                          {/* Slippage - Running person icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaRunning
-                              size={10}
-                              className="stroke-2 opacity-80"
-                            />
-                            <span className="text-xs font-light text-gray-300">
-                              {(settings.maxSlippage * 100).toFixed(0)}%
-                            </span>
-                          </div>
+                  {/* Tooltip for each pill */}
+                  {showPillTooltip === pill && settings && (
+                    <div className="absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border border-[#24252C] bg-[rgba(15,16,18,0.95)] shadow-xl">
+                      <div className="space-y-1.5 p-2">
+                        {/* Slippage - Running person icon */}
+                        <div className="flex items-center gap-1.5">
+                          <FaRunning
+                            size={10}
+                            className="stroke-2 opacity-80"
+                          />
+                          <span className="text-xs font-light text-gray-300">
+                            {(settings.maxSlippage * 100).toFixed(0)}%
+                          </span>
+                        </div>
 
-                          {/* Priority Fee - Gas pump icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
-                            <FaGasPump
-                              size={10}
-                              className="stroke-2 text-[#FCD34D] opacity-90"
-                            />
-                            <span className="text-xs font-light text-yellow-400">
-                              {settings.priority}
-                            </span>
-                            <span className="text-xs font-light text-[#d11f3a]">
-                              ⚠
-                            </span>
-                          </div>
+                        {/* Priority Fee - Gas pump icon with yellow styling */}
+                        <div className="flex items-center gap-1.5">
+                          <FaGasPump
+                            size={10}
+                            className="stroke-2 text-[#FCD34D] opacity-90"
+                          />
+                          <span className="text-xs font-light text-yellow-400">
+                            {settings.priority}
+                          </span>
+                          <span className="text-xs font-light text-[#d11f3a]">
+                            ⚠
+                          </span>
+                        </div>
 
-                          {/* Bribe - Coins icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
-                            <FaCoins
-                              size={10}
-                              className="stroke-2 text-[#FCD34D] opacity-90"
-                            />
-                            <span className="text-xs font-light text-yellow-400">
-                              {settings.bribe}
-                            </span>
-                            <span className="text-xs font-light text-[#d11f3a]">
-                              ⚠
-                            </span>
-                          </div>
+                        {/* Bribe - Coins icon with yellow styling */}
+                        <div className="flex items-center gap-1.5">
+                          <FaCoins
+                            size={10}
+                            className="stroke-2 text-[#FCD34D] opacity-90"
+                          />
+                          <span className="text-xs font-light text-yellow-400">
+                            {settings.bribe}
+                          </span>
+                          <span className="text-xs font-light text-[#d11f3a]">
+                            ⚠
+                          </span>
+                        </div>
 
-                          {/* MEV Protection - Ban icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaBan size={10} className="stroke-2 opacity-90" />
-                            <span className="text-xs font-light text-gray-300">
-                              {settings.mevMode === "off"
-                                ? "Off"
-                                : settings.mevMode === "reduced"
-                                  ? "Reduced"
-                                  : "Secure"}
-                            </span>
-                          </div>
+                        {/* MEV Protection - Ban icon */}
+                        <div className="flex items-center gap-1.5">
+                          <FaBan size={10} className="stroke-2 opacity-90" />
+                          <span className="text-xs font-light text-gray-300">
+                            {settings.mevMode === "off"
+                              ? "Off"
+                              : settings.mevMode === "reduced"
+                                ? "Reduced"
+                                : "Secure"}
+                          </span>
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
+      </div>
 
-        {/* Filter Popout */}
-        {isFilterPopoutOpen && (
-          <FilterPopout
-            open={isFilterPopoutOpen}
-            onClose={() => setIsFilterPopoutOpen(false)}
-          />
-        )}
+      {/* Filter Popout */}
+      {isFilterPopoutOpen && (
+        <FilterPopout
+          open={isFilterPopoutOpen}
+          onClose={() => setIsFilterPopoutOpen(false)}
+        />
+      )}
 
-        {/* Main Content */}
-        <main className="w-full">
-          {/* {activeTab === 'live' ? (
+      {/* Main Content */}
+      <main className="w-full">
+        {/* {activeTab === 'live' ? (
             pumpPortalTokens.length > 0 ? (
               <PumpLive
                 leftItems={liveLeftItems}
@@ -2939,9 +3486,9 @@ export default function DiscoverPopoutContent() {
               </div>
             )
           ) : */}{" "}
-          {activeTab === "newPairs" ? (
-            <section aria-label="New Pairs">
-              {/* <div className="mb-4 flex items-center justify-between">
+        {activeTab === "newPairs" ? (
+          <section aria-label="New Pairs">
+            {/* <div className="mb-4 flex items-center justify-between">
                 {newPairsLoading && (
                   <span className="text-xs font-medium text-[#9CA3AF]">
                     Updating…
@@ -2949,73 +3496,73 @@ export default function DiscoverPopoutContent() {
                 )}
               </div> */}
 
-              {newPairsLoading &&
-              processedNewPairs.length === 0 &&
-              newPairsRaw.length === 0 ? (
-                <div className="space-y-4">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
-                    />
-                  ))}
-                </div>
-              ) : newPairsError ? (
-                <div className="py-10 text-center text-[#f26681]">
-                  {newPairsError}
-                </div>
-              ) : processedNewPairs.length > 0 ? (
-                <InterstateTable
-                  rows={newPairsRows}
-                  onQuickBuy={handleQuickBuy}
-                  sortKey={sortKey}
-                  sortDirection={sortDirection}
-                  setSort={handleSort}
-                  selectedTimeframe={selectedTimeframe}
-                  quickBuyAmount={Number(quickBuyAmount) || 0}
-                  chain={currentChain}
-                />
-              ) : (
-                <div className="py-10 text-center text-[#9CA3AF]">
-                  No new pairs available right now. Check back shortly.
-                </div>
-              )}
-            </section>
-          ) : activeTab === "xStocks" ? (
-            <section aria-label="xStocks" className="pb-8">
-              {xStocksLoading &&
-              processedXStocks.length === 0 &&
-              xStocksRaw.length === 0 ? (
-                <div className="space-y-4">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
-                    />
-                  ))}
-                </div>
-              ) : xStocksError && processedXStocks.length === 0 ? (
-                <div className="py-10 text-center text-[#f26681]">
-                  Error loading xStocks: {xStocksError}
-                </div>
-              ) : processedXStocks.length > 0 ? (
-                <InterstateTable
-                  rows={xStocksRows}
-                  onQuickBuy={handleQuickBuy}
-                  sortKey={sortKey}
-                  sortDirection={sortDirection}
-                  setSort={handleSort}
-                  selectedTimeframe={selectedTimeframe}
-                  quickBuyAmount={Number(quickBuyAmount) || 0}
-                />
-              ) : (
-                <div className="py-10 text-center text-[#9CA3AF]">
-                  No xStocks available right now. Check back shortly.
-                </div>
-              )}
-            </section>
-          ) : (
-            /* activeTab === 'surge' ? (
+            {newPairsLoading &&
+            processedNewPairs.length === 0 &&
+            newPairsRaw.length === 0 ? (
+              <div className="space-y-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
+                  />
+                ))}
+              </div>
+            ) : newPairsError ? (
+              <div className="py-10 text-center text-[#f26681]">
+                {newPairsError}
+              </div>
+            ) : processedNewPairs.length > 0 ? (
+              <InterstateTable
+                rows={newPairsRows}
+                onQuickBuy={handleQuickBuy}
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                setSort={handleSort}
+                selectedTimeframe={selectedTimeframe}
+                quickBuyAmount={Number(quickBuyAmount) || 0}
+                chain={currentChain}
+              />
+            ) : (
+              <div className="py-10 text-center text-[#9CA3AF]">
+                No new pairs available right now. Check back shortly.
+              </div>
+            )}
+          </section>
+        ) : activeTab === "xStocks" ? (
+          <section aria-label="xStocks" className="pb-8">
+            {xStocksLoading &&
+            processedXStocks.length === 0 &&
+            xStocksRaw.length === 0 ? (
+              <div className="space-y-4">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
+                  />
+                ))}
+              </div>
+            ) : xStocksError && processedXStocks.length === 0 ? (
+              <div className="py-10 text-center text-[#f26681]">
+                Error loading xStocks: {xStocksError}
+              </div>
+            ) : processedXStocks.length > 0 ? (
+              <InterstateTable
+                rows={xStocksRows}
+                onQuickBuy={handleQuickBuy}
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                setSort={handleSort}
+                selectedTimeframe={selectedTimeframe}
+                quickBuyAmount={Number(quickBuyAmount) || 0}
+              />
+            ) : (
+              <div className="py-10 text-center text-[#9CA3AF]">
+                No xStocks available right now. Check back shortly.
+              </div>
+            )}
+          </section>
+        ) : (
+          /* activeTab === 'surge' ? (
             <section aria-label="Surge">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-[#f0f5f5]">Surge</h2>
@@ -3038,13 +3585,13 @@ export default function DiscoverPopoutContent() {
               />
             </section>
           ) : */ renderPrimaryTable()
-          )}
-        </main>
+        )}
+      </main>
 
-        <QuickBuySettingsModal
-          open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-        />
+      <QuickBuySettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   );
 }

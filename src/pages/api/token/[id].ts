@@ -1,21 +1,26 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
-import { env } from '../../../env';
-import type { Token } from '~/utils/db';
+import type { NextApiRequest, NextApiResponse } from "next";
+import { Pool } from "pg";
+import { env } from "../../../env";
+import type { Token } from "~/utils/db";
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@postgres:5432/tokenservice',
+  connectionString:
+    process.env.DATABASE_URL ||
+    "postgresql://postgres:password@postgres:5432/tokenservice",
 });
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse,
+) {
   const { id } = req.query;
-  if (!id || typeof id !== 'string') {
-    return res.status(400).json({ error: 'Missing or invalid token address' });
+  if (!id || typeof id !== "string") {
+    return res.status(400).json({ error: "Missing or invalid token address" });
   }
   try {
     const { rows } = await pool.query(
       `SELECT * FROM bonding_tokens WHERE mint = $1 LIMIT 1`,
-      [id]
+      [id],
     );
 
     if (rows.length === 0) {
@@ -38,38 +43,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       description: row.description,
       is_verified_contract: row.is_verified_contract,
       possible_spam: row.possible_spam,
+      // The token-service DB still exposes 6h/24h columns; slot them into the
+      // surviving Axiom-style fields (6h → 30m, 24h → 1m) for the renamed Token type.
+      total_buy_volume_1m: row.total_buy_volume_24h,
       total_buy_volume_5m: row.total_buy_volume_5m,
+      total_buy_volume_30m: row.total_buy_volume_6h,
       total_buy_volume_1h: row.total_buy_volume_1h,
-      total_buy_volume_6h: row.total_buy_volume_6h,
-      total_buy_volume_24h: row.total_buy_volume_24h,
+      total_sell_volume_1m: row.total_sell_volume_24h,
       total_sell_volume_5m: row.total_sell_volume_5m,
+      total_sell_volume_30m: row.total_sell_volume_6h,
       total_sell_volume_1h: row.total_sell_volume_1h,
-      total_sell_volume_6h: row.total_sell_volume_6h,
-      total_sell_volume_24h: row.total_sell_volume_24h,
+      total_buyers_1m: row.total_buyers_24h,
       total_buyers_5m: row.total_buyers_5m,
+      total_buyers_30m: row.total_buyers_6h,
       total_buyers_1h: row.total_buyers_1h,
-      total_buyers_6h: row.total_buyers_6h,
-      total_buyers_24h: row.total_buyers_24h,
+      total_sellers_1m: row.total_sellers_24h,
       total_sellers_5m: row.total_sellers_5m,
+      total_sellers_30m: row.total_sellers_6h,
       total_sellers_1h: row.total_sellers_1h,
-      total_sellers_6h: row.total_sellers_6h,
-      total_sellers_24h: row.total_sellers_24h,
+      total_buys_1m: row.total_buys_24h,
       total_buys_5m: row.total_buys_5m,
+      total_buys_30m: row.total_buys_6h,
       total_buys_1h: row.total_buys_1h,
-      total_buys_6h: row.total_buys_6h,
-      total_buys_24h: row.total_buys_24h,
+      total_sells_1m: row.total_sells_24h,
       total_sells_5m: row.total_sells_5m,
+      total_sells_30m: row.total_sells_6h,
       total_sells_1h: row.total_sells_1h,
-      total_sells_6h: row.total_sells_6h,
-      total_sells_24h: row.total_sells_24h,
+      unique_wallets_1m: row.unique_wallets_24h,
       unique_wallets_5m: row.unique_wallets_5m,
+      unique_wallets_30m: row.unique_wallets_6h,
       unique_wallets_1h: row.unique_wallets_1h,
-      unique_wallets_6h: row.unique_wallets_6h,
-      unique_wallets_24h: row.unique_wallets_24h,
+      price_percent_change_1m: row.price_percent_change_24h,
       price_percent_change_5m: row.price_percent_change_5m,
+      price_percent_change_30m: row.price_percent_change_6h,
       price_percent_change_1h: row.price_percent_change_1h,
-      price_percent_change_6h: row.price_percent_change_6h,
-      price_percent_change_24h: row.price_percent_change_24h,
       usd_price: row.usd_price,
       sol_price: row.sol_price,
       market_cap_usd: row.market_cap_usd || 0,
@@ -88,6 +95,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({ result });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to fetch token' });
+    res.status(500).json({ error: "Failed to fetch token" });
   }
-} 
+}

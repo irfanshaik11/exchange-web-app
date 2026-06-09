@@ -287,7 +287,7 @@ export async function executeEnhancedTrade(
       // Subtract 1.5s from the timestamp so the marker reliably falls inside
       // the chart's cached visible-range `to` value. Real WS trades arrive
       // with indexer timestamps slightly in the past for the same reason.
-      const markerTs = Date.now() - 1500;
+      const markerTs = Date.now() - 500;
       addPendingTrade({
         id: pendingMarkerId,
         mint: token.mint,

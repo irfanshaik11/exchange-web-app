@@ -1102,7 +1102,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Internal state with fallback to external props
   const [mode, setMode] = useState<"buy" | "sell">(externalTradeParams?.mode || "buy");
   const [tab, setTab] = useState<"market" | "limit" | "adv">(externalTradeParams?.tab || "market");
-  const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange as TimeRange || "5m");
+  const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange as TimeRange || "24h");
   const [amount, setAmount] = useState(externalTradeParams?.amount || "");
   const [targetMC, setTargetMC] = useState(externalTradeParams?.targetMC || "");
   const [sliderPct, setSliderPct] = useState<number | string>(externalTradeParams?.sliderPct || 0);
@@ -2901,7 +2901,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               side: "sell",
               amountToken: sellPercentage,
               priceUsd: token.usd_price,
-              timestamp: Date.now() - 1500,
+              timestamp: Date.now() - 500,
               status: "pending",
               createdAt: Date.now(),
             });
@@ -3228,7 +3228,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             side: "buy",
             amountSol: buyAmount,
             priceUsd: token.usd_price,
-            timestamp: Date.now() - 1500,
+            timestamp: Date.now() - 500,
             status: "pending",
             createdAt: Date.now(),
           });

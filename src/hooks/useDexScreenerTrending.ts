@@ -119,18 +119,21 @@ function normalizeDexScreenerToken(raw: any): NormalizedTrendingToken {
     // fallback for mints Interstate's indexer hasn't seen yet.
     // `??` (not `||`) so a real `0` from BE is preserved as `0` rather than
     // re-coerced through the fallback.
+    // Axiom-style windows: DexScreener still exposes H6/H24, so slot its
+    // `volume_6h` into the 30m field and `volume_24h` into the 1m field
+    // (nearest surviving bucket after dropping the long windows).
     volume_1h: raw.volume_1h ?? 0,
     volume_5m: raw.volume_5m ?? 0,
-    volume_6h: raw.volume_6h ?? 0,
-    volume_24h: raw.volume_24h ?? 0,
+    volume_30m: raw.volume_6h ?? 0,
+    volume_1m: raw.volume_24h ?? 0,
     // Interstate-indexed SOL volume (BE enrichment populates these only when
     // the mint exists in Interstate's vol:{mint}:{minute} Redis buckets — same
     // source the Trade page reads from). When > 0, InterstateTable prefers
     // these so the DEX Screener tab vol matches the Trade page for that mint.
     volume_sol_5m: raw.volume_sol_5m ?? undefined,
     volume_sol_1h: raw.volume_sol_1h ?? undefined,
-    volume_sol_6h: raw.volume_sol_6h ?? undefined,
-    volume_sol_24h: raw.volume_sol_24h ?? undefined,
+    volume_sol_30m: raw.volume_sol_6h ?? undefined,
+    volume_sol_1m: raw.volume_sol_24h ?? undefined,
     holder_count: 0,
     rank: raw.rank || 0,
     status: "ACTIVE",
@@ -148,10 +151,10 @@ function normalizeDexScreenerToken(raw: any): NormalizedTrendingToken {
     total_sells_5m: raw.total_sells_5m || 0,
     total_buys_1h: raw.total_buys_1h || 0,
     total_sells_1h: raw.total_sells_1h || 0,
-    total_buys_6h: raw.total_buys_6h || 0,
-    total_sells_6h: raw.total_sells_6h || 0,
-    total_buys_24h: raw.total_buys_24h || 0,
-    total_sells_24h: raw.total_sells_24h || 0,
+    total_buys_30m: raw.total_buys_6h || 0,
+    total_sells_30m: raw.total_sells_6h || 0,
+    total_buys_1m: raw.total_buys_24h || 0,
+    total_sells_1m: raw.total_sells_24h || 0,
     // Per-TF price-change percentages. DexScreener payload uses `price_change_<tf>`;
     // the InterstateTable sparkline + percent-change cells read the legacy
     // `price_percent_change_<tf>` keys, so map both. Without this, the sparkline
@@ -161,9 +164,9 @@ function normalizeDexScreenerToken(raw: any): NormalizedTrendingToken {
       raw.price_change_5m ?? raw.price_percent_change_5m ?? 0,
     price_percent_change_1h:
       raw.price_change_1h ?? raw.price_percent_change_1h ?? 0,
-    price_percent_change_6h:
+    price_percent_change_30m:
       raw.price_change_6h ?? raw.price_percent_change_6h ?? 0,
-    price_percent_change_24h:
+    price_percent_change_1m:
       raw.price_change_24h ?? raw.price_percent_change_24h ?? 0,
     launchpad_protocol: protocol,
     protocol: protocol,
@@ -477,14 +480,14 @@ function connectDexScreenerWS() {
                   typeof update.volume_1h === "number" && update.volume_1h > 0
                     ? update.volume_1h
                     : existing.volume_1h,
-                volume_6h:
+                volume_30m:
                   typeof update.volume_6h === "number" && update.volume_6h > 0
                     ? update.volume_6h
-                    : existing.volume_6h,
-                volume_24h:
+                    : existing.volume_30m,
+                volume_1m:
                   typeof update.volume_24h === "number" && update.volume_24h > 0
                     ? update.volume_24h
-                    : existing.volume_24h,
+                    : existing.volume_1m,
                 // SOL fields come from Interstate's `vol:{mint}:{minute}`
                 // Redis buckets — same source as the Trade page. Unlike the
                 // DexScreener USD legacy fields above (which need the `> 0`
@@ -497,8 +500,8 @@ function connectDexScreenerWS() {
                 // preserves the snapshot value via the `??` fallback.
                 volume_sol_5m: update.volume_sol_5m ?? existing.volume_sol_5m,
                 volume_sol_1h: update.volume_sol_1h ?? existing.volume_sol_1h,
-                volume_sol_6h: update.volume_sol_6h ?? existing.volume_sol_6h,
-                volume_sol_24h: update.volume_sol_24h ?? existing.volume_sol_24h,
+                volume_sol_30m: update.volume_sol_6h ?? existing.volume_sol_30m,
+                volume_sol_1m: update.volume_sol_24h ?? existing.volume_sol_1m,
                 rank: update.rank ?? existing.rank,
                 total_buys_5m: update.total_buys_5m ?? existing.total_buys_5m,
                 total_sells_5m:
@@ -506,13 +509,12 @@ function connectDexScreenerWS() {
                 total_buys_1h: update.total_buys_1h ?? existing.total_buys_1h,
                 total_sells_1h:
                   update.total_sells_1h ?? existing.total_sells_1h,
-                total_buys_6h: update.total_buys_6h ?? existing.total_buys_6h,
-                total_sells_6h:
-                  update.total_sells_6h ?? existing.total_sells_6h,
-                total_buys_24h:
-                  update.total_buys_24h ?? existing.total_buys_24h,
-                total_sells_24h:
-                  update.total_sells_24h ?? existing.total_sells_24h,
+                total_buys_30m: update.total_buys_6h ?? existing.total_buys_30m,
+                total_sells_30m:
+                  update.total_sells_6h ?? existing.total_sells_30m,
+                total_buys_1m: update.total_buys_24h ?? existing.total_buys_1m,
+                total_sells_1m:
+                  update.total_sells_24h ?? existing.total_sells_1m,
               };
               globalTokenMap.set(mint, merged);
               replaceBucketUpdate(mint, merged);
