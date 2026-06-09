@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { formatSmartNumber, formatMarketCap, formatSmallPrice } from '~/utils/db';
 import type { TradeRow } from '~/utils/functions';
@@ -8,6 +8,7 @@ import { FaExternalLinkAlt } from 'react-icons/fa';
 import Image from 'next/image';
 import { useSolPrice } from '~/components/SolPriceContext';
 import { fetchChainTokenMetadata, fetchPumpfunImage, isPumpfunToken, toNumber, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
+import { resolveTokenImageByMint } from '~/utils/images';
 import { getProtocolBranding } from '~/utils/protocolBranding';
 import { preloadTradeChart } from '~/utils/preloadTradeChart';
 
@@ -130,6 +131,10 @@ const Activity: React.FC<ActivityProps> = ({
       : name;
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [pumpfunImages, setPumpfunImages] = useState<Record<string, string>>({});
+  // Images resolved via the token-service search endpoint (reliable mint→image
+  // source). searchAttemptedRef prevents re-querying misses on every render.
+  const [searchImages, setSearchImages] = useState<Record<string, string>>({});
+  const searchAttemptedRef = useRef<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [monPriceUsd, setMonPriceUsd] = useState(0);
   const router = useRouter();
@@ -326,6 +331,53 @@ const Activity: React.FC<ActivityProps> = ({
 
     if (Object.keys(tokenMetadata).length > 0 || trades.length > 0) {
       fetchMissingPumpfunImages();
+    }
+  }, [trades, tokenMetadata, pumpfunImages]);
+
+  // Resolve images via the token-service search endpoint for any token still
+  // missing one. This is the reliable image source: wallet positions/trades and
+  // /v1/token/{mint} carry no image, but /v1/search does (the path the token page
+  // uses). Covers non-pump.fun tokens the Pump.fun fallback above can't.
+  useEffect(() => {
+    const resolveMissingImages = async () => {
+      const tokensNeedingImages = trades
+        .map((t) => t.tokenAddress)
+        .filter((addr, i, arr) => arr.indexOf(addr) === i) // unique
+        .filter((addr) => {
+          if (!addr || searchAttemptedRef.current.has(addr)) return false;
+          // /v1/search is the Solana token service — skip EVM/Monad (0x) mints.
+          if (addr.toLowerCase().startsWith('0x')) return false;
+          const metadata = tokenMetadata[addr];
+          const trade = trades.find((t) => t.tokenAddress === addr);
+          const hasImage = metadata?.imageUrl || trade?.imageUrl || pumpfunImages[addr];
+          return !hasImage;
+        });
+
+      if (tokensNeedingImages.length === 0) return;
+      // Mark attempted up front so a failed lookup isn't retried every render.
+      tokensNeedingImages.forEach((addr) => searchAttemptedRef.current.add(addr));
+
+      const results = await Promise.allSettled(
+        tokensNeedingImages.map(async (tokenAddress) => {
+          const imageUrl = await resolveTokenImageByMint(tokenAddress);
+          return { tokenAddress, imageUrl };
+        })
+      );
+
+      const newImages: Record<string, string> = {};
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.imageUrl) {
+          newImages[result.value.tokenAddress] = result.value.imageUrl;
+        }
+      }
+
+      if (Object.keys(newImages).length > 0) {
+        setSearchImages((prev) => ({ ...prev, ...newImages }));
+      }
+    };
+
+    if (trades.length > 0) {
+      resolveMissingImages();
     }
   }, [trades, tokenMetadata, pumpfunImages]);
 
@@ -671,7 +723,7 @@ const Activity: React.FC<ActivityProps> = ({
                           >
                             <div className="relative rounded-lg overflow-hidden w-10 h-10">
                               <FastImage
-                                src={metadata?.imageUrl || trade.imageUrl || pumpfunImages[trade.tokenAddress] || ''}
+                                src={metadata?.imageUrl || trade.imageUrl || pumpfunImages[trade.tokenAddress] || searchImages[trade.tokenAddress] || ''}
                                 alt={metadata?.name || metadata?.symbol || "Token"}
                                 symbol={metadata?.symbol}
                                 name={metadata?.name}

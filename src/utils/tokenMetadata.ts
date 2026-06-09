@@ -345,41 +345,44 @@ async function fetchSolanaMetadata(
 ): Promise<UnifiedTokenMetadata | null> {
   let lastError: unknown = null;
 
-  // Primary: /v1/token/{mint} via proxy — works with just the mint address
+  // Resolve via the token-service SEARCH endpoint (by mint), called DIRECTLY client-side.
+  // Why not /v1/token via the /api/token-service proxy:
+  //   1. The proxy reads NEXT_PUBLIC_GO_SERVICE_URL server-side at runtime, which the
+  //      deployed pod doesn't set (it's only baked into the client bundle at build) — so
+  //      the proxy 500s and name + image come back empty.
+  //   2. /v1/token returns image_url = https://cdn.interstate.so/{mint}.webp, which 403s
+  //      for many tokens; /v1/search returns the working original (IPFS) image instead.
+  // The URL is inlined client-side, where this runs; fall back to the proxy for SSR.
   try {
-    const response = await fetch(
-      `${DEFAULT_TOKEN_BY_MINT_ENDPOINT}/${encodeURIComponent(address)}`,
-      { signal: options.signal },
-    );
+    const goBase = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(/\/$/, "");
+    const searchUrl = goBase
+      ? `${goBase}/v1/search?phrase=${encodeURIComponent(address)}&limit=1`
+      : `/api/token-service/search?phrase=${encodeURIComponent(address)}&limit=1`;
+    const response = await fetch(searchUrl, { signal: options.signal });
 
     if (response.ok) {
       const data = await response.json();
-      const token = data?.token || data?.data || data;
-      const market = data?.marketData || {};
+      const results = data?.tokens || data?.results || data?.filterTokens?.results || [];
+      const token = results[0]?.token || results[0] || null;
 
       if (token && typeof token === "object" && Object.keys(token).length > 0) {
         return {
-          address: token.mint_address || token.address || address,
+          address: token.mint || token.mint_address || token.address || address,
           name: token.name || undefined,
           symbol: token.symbol || undefined,
           protocol: token.launchpad_protocol || token.protocol || undefined,
           launchpad: token.launchpad_protocol || token.protocol || undefined,
-          imageUrl: token.image_url || token.image || token.logo || token.uri || undefined,
-          createdAt: token.created_timestamp || token.created_at,
-          priceUsd: toOptionalNumber(market.price_usd ?? token.usd_price ?? token.price_usd),
-          marketCapUsd: toOptionalNumber(market.market_cap_usd ?? token.market_cap_usd ?? token.market_cap),
-          // Preserve the literal `migrated_pool_address` field. Do NOT fall back
-          // to `pair_address` here — those are semantically distinct: migrated
-          // is the live AMM after bonding-curve migration, pair_address is the
-          // bonding curve. Conflating them tricks downstream consumers into
-          // thinking a non-migrated token is migrated and routes trades to the
-          // wrong pool. Trade-execution paths derive the effective pool via
-          // `migrated_pool_address || pair_address` themselves.
+          // Prefer image_url/logo (the original IPFS image). `image` is the CDN-cached
+          // copy (cdn.interstate.so) which currently 403s — keep it last.
+          imageUrl: token.image_url || token.logo || token.uri || token.image || undefined,
+          createdAt: token.created_at || token.created_timestamp,
+          priceUsd: toOptionalNumber(token.usd_price ?? token.price_usd),
+          marketCapUsd: toOptionalNumber(token.market_cap_usd ?? token.market_cap),
           migrated_pool_address: token.migrated_pool_address || undefined,
         };
       }
     } else {
-      lastError = new Error(`Token-by-mint service responded with ${response.status}`);
+      lastError = new Error(`Token search service responded with ${response.status}`);
     }
   } catch (error) {
     lastError = error;

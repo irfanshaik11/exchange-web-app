@@ -18,7 +18,7 @@ import { IoIosCloseCircleOutline } from "react-icons/io";
 import { getProtocolBranding } from "~/utils/protocolBranding";
 import Image from "next/image";
 import { useImagePreloader } from "~/hooks/useImagePreloader";
-import { extractTokenImage } from "~/utils/images";
+import { extractTokenImage, resolveTokenImageByMint } from "~/utils/images";
 import {
   useWalletScan,
   toAggregatedPosition,
@@ -443,6 +443,31 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       };
     }
     return map;
+  }, [goPositions]);
+
+  // Positions/trades carry no usable image (image_url is empty or the 403 CDN URL),
+  // so resolve each mint's image via the token-service search endpoint (working IPFS
+  // image). Powers the History / Active Positions / Top 100 token avatars.
+  const [resolvedImages, setResolvedImages] = useState<Record<string, string>>({});
+  const resolvedImgAttemptedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const mints = Array.from(
+      new Set(goPositions.map((p) => p.token_mint).filter(Boolean)),
+    ).filter(
+      (m) => !resolvedImgAttemptedRef.current.has(m) && !m.toLowerCase().startsWith("0x"),
+    );
+    if (mints.length === 0) return;
+    mints.forEach((m) => resolvedImgAttemptedRef.current.add(m));
+    (async () => {
+      const results = await Promise.allSettled(
+        mints.map(async (m) => ({ mint: m, img: await resolveTokenImageByMint(m) })),
+      );
+      const next: Record<string, string> = {};
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value.img) next[r.value.mint] = r.value.img;
+      }
+      if (Object.keys(next).length > 0) setResolvedImages((prev) => ({ ...prev, ...next }));
+    })();
   }, [goPositions]);
 
   // Activity data: convert Go service trades to TradeRow format for Activity component
@@ -1013,7 +1038,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                         >
                                           <div className="relative h-10 w-10 overflow-hidden rounded-lg">
                                             <FastImage
-                                              src={order.imageUrl || ""}
+                                              src={resolvedImages[order.mint] || order.imageUrl || ""}
                                               alt={
                                                 displayName ||
                                                 displaySymbol ||
@@ -1189,7 +1214,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               <div className="flex items-center gap-2">
                                 <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
                                   <FastImage
-                                    src={imageUrl}
+                                    src={resolvedImages[position.mint] || imageUrl}
                                     alt={
                                       displayName || displaySymbol || "Token"
                                     }
@@ -1357,7 +1382,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               <div className="flex items-center gap-2">
                                 <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
                                   <FastImage
-                                    src={imageUrl}
+                                    src={resolvedImages[position.mint] || imageUrl}
                                     alt={
                                       displayName || displaySymbol || "Token"
                                     }

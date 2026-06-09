@@ -478,21 +478,20 @@ export function WalletTrackerProvider({
 
           // Fetch token by mint address
           try {
+            // Use /v1/search, NOT /v1/token: /v1/token returns image_url =
+            // cdn.interstate.so/{mint}.webp which 403s; search returns the working
+            // (IPFS) image plus name/symbol/market cap.
             const searchResponse = await fetch(
-              `${goServiceUrl}/v1/token/${normalizedEvent.mint}`,
+              `${goServiceUrl}/v1/search?phrase=${encodeURIComponent(normalizedEvent.mint)}&limit=1`,
               {
                 signal: AbortSignal.timeout(3000),
               },
             );
             if (searchResponse.ok) {
               const responseData = await searchResponse.json();
-              tokenData = responseData?.token || null;
-              // Merge marketData fields onto tokenData (market_cap lives in marketData)
-              if (tokenData && responseData?.marketData) {
-                tokenData.market_cap_usd =
-                  responseData.marketData.market_cap_usd ||
-                  tokenData.market_cap_usd;
-              }
+              const results =
+                responseData?.tokens || responseData?.results || responseData?.filterTokens?.results || [];
+              tokenData = results[0]?.token || results[0] || null;
             }
           } catch (searchError) {
             // Silent fail
