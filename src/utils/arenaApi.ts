@@ -681,12 +681,14 @@ export async function connectSocial(
 
 export async function verifySocialQuest(
   bearerToken: string,
-  questId: string
+  questId: string,
+  code?: string
 ): Promise<{ verified: boolean; quest?: Quest; message?: string }> {
   return fetchWithAuth('/api/arena/social/verify', bearerToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ questId }),
+    // `code` is only sent for code_entry quests (e.g. badge quests like BADGE_COLLAB_1).
+    body: JSON.stringify(code ? { questId, code } : { questId }),
   });
 }
 

@@ -18,6 +18,8 @@ import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
 import { useUser } from '~/components/UserContext';
 import { useArenaStats, useQuests, useCashbackSummary, useClaimCashback, useClaimAllQuests } from '~/hooks/useArena';
 import SocialQuestsSection from '~/components/arena/quests/SocialQuestsSection';
+import SnagDailyQuests, { SNAG_DAILY_QUEST_IDS } from '~/components/arena/quests/SnagDailyQuests';
+import BadgeQuests, { BADGE_QUEST_IDS } from '~/components/arena/quests/BadgeQuests';
 import KeyTweetsSection from '~/components/arena/quests/KeyTweetsSection';
 import SeasonRoadmap from '~/components/arena/season/SeasonRoadmap';
 import SeasonCountdownBanner from '~/components/arena/season/SeasonCountdownBanner';
@@ -685,9 +687,19 @@ export default function ArenaPage() {
   };
 
   // Use real API data only — no mocks so empty state messages show when quests haven't been earned yet
-  const dailyQuests = (questsData as any)?.grouped?.daily || [];
+  const allDailyQuests = (questsData as any)?.grouped?.daily || [];
+  // Snag-verified daily quests (post / code) render via SnagDailyQuests with their
+  // own verify/redeem UI; the rest are trade-driven and render via the plain QuestItem.
+  const snagDailyQuestIdSet = new Set<string>(SNAG_DAILY_QUEST_IDS as readonly string[]);
+  const dailyQuests = allDailyQuests.filter((q: any) => !snagDailyQuestIdSet.has(q.questId));
+  // "Post about Interstate" renders under the Social Quests cluster (it's an X
+  // action and needs Connect X).
+  const postDailyQuests = allDailyQuests.filter((q: any) => q.questId === 'DAILY_POST_X');
   const seasonalQuests = (questsData as any)?.grouped?.seasonal || [];
   const socialQuests = (questsData as any)?.grouped?.special || [];
+  // Collaboration badges live in grouped.special (one-time SPECIAL quests).
+  const badgeQuestIdSet = new Set<string>(BADGE_QUEST_IDS as readonly string[]);
+  const badgeQuests = (socialQuests as any[]).filter((q: any) => badgeQuestIdSet.has(q.questId));
 
   // Calculate pending gold from completed but unclaimed quests
   const allQuests = (questsData as any)?.quests || [];
@@ -1020,6 +1032,21 @@ export default function ArenaPage() {
                       quests={socialQuests}
                       goldMultiplier={displayMultiplier}
                     />
+                  )}
+
+                  {/* "Post about Interstate" — daily Snag quest shown with social quests.
+                      -mt-4 absorbs SocialQuestsSection's trailing mb-6 (margins collapse:
+                      24px - 16px = 8px) so this row sits flush with the social list rhythm. */}
+                  {!questsLoading && !questsError && postDailyQuests.length > 0 && (
+                    <SnagDailyQuests
+                      quests={postDailyQuests}
+                      className={`mb-6 ${socialQuests.length > 0 ? '-mt-4' : ''}`}
+                    />
+                  )}
+
+                  {/* Collaboration badges — enter a single-use code to claim a badge */}
+                  {!questsLoading && !questsError && badgeQuests.length > 0 && (
+                    <BadgeQuests quests={badgeQuests} />
                   )}
 
                   {/* v2.0: Admin-curated Key Tweets (repeatable credits) —
