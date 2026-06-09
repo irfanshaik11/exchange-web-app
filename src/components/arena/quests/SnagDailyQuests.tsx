@@ -45,16 +45,33 @@ const XLogo = () => (
 
 interface SnagDailyQuestsProps {
   quests: Quest[];
+  /**
+   * Whether the separate "Connect X Account" (SOCIAL_CONNECT_X) quest is already
+   * completed. If it is, the user's X account is linked, so the post quest skips
+   * the "Connect X" step and goes straight to Post → Verify — otherwise it can get
+   * stuck on "Connect X" when Snag's `twitterUser` metadata lags behind the linked
+   * account (the two are independent sources of truth).
+   */
+  connectXCompleted?: boolean;
   className?: string;
 }
 
-export default function SnagDailyQuests({ quests, className = '' }: SnagDailyQuestsProps) {
+export default function SnagDailyQuests({ quests, connectXCompleted = false, className = '' }: SnagDailyQuestsProps) {
   const connectSocial = useConnectSocial();
   const verifySocialQuest = useVerifySocialQuest();
   const claimQuest = useClaimQuest();
   const { data: socialStatus } = useSocialStatus();
 
-  const twitterConnected = !!socialStatus?.connections?.twitter;
+  // Local fallback for when the backend reports the X account is already linked
+  // (connect returns no oauthUrl) but Snag's `twitterUser` metadata is still stale —
+  // lets the quest advance to Post instead of dead-ending on "Connect X".
+  const [locallyConnected, setLocallyConnected] = useState(false);
+
+  // Treat the X account as connected if Snag reports a linked handle OR the
+  // "Connect X Account" quest is done — completing that quest requires a verified
+  // X link, so it's the authoritative signal even when Snag metadata is stale.
+  const twitterConnected =
+    !!socialStatus?.connections?.twitter || connectXCompleted || locallyConnected;
 
   const [postActionTaken, setPostActionTaken] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -65,6 +82,9 @@ export default function SnagDailyQuests({ quests, className = '' }: SnagDailyQue
     const result = await connectSocial.mutateAsync('twitter');
     if (result.oauthUrl) {
       window.location.href = result.oauthUrl; // returns with ?social_connected=twitter
+    } else if (result.connected) {
+      // Already linked — advance to the Post step rather than no-op on "Connect X".
+      setLocallyConnected(true);
     }
   }, [connectSocial]);
 
