@@ -763,8 +763,13 @@ export function useVerifySocialQuest() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (questId: string) =>
-      verifySocialQuest(user!.bearerToken, questId),
+    // Accepts a bare questId (existing social quests) OR { questId, code }
+    // for code_entry quests (e.g. DAILY_CODE_ENTRY).
+    mutationFn: (input: string | { questId: string; code?: string }) => {
+      const { questId, code } =
+        typeof input === "string" ? { questId: input, code: undefined } : input;
+      return verifySocialQuest(user!.bearerToken, questId, code);
+    },
     onSuccess: (data) => {
       if (data.verified) {
         queryClient.invalidateQueries({ queryKey: ["arena", "quests"] });

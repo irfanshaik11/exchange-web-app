@@ -18,6 +18,7 @@ import { DockedPanelMarginWrapper } from '~/contexts/DockedPanelContext';
 import { useUser } from '~/components/UserContext';
 import { useArenaStats, useQuests, useCashbackSummary, useClaimCashback, useClaimAllQuests } from '~/hooks/useArena';
 import SocialQuestsSection from '~/components/arena/quests/SocialQuestsSection';
+import SnagDailyQuests, { SNAG_DAILY_QUEST_IDS } from '~/components/arena/quests/SnagDailyQuests';
 import KeyTweetsSection from '~/components/arena/quests/KeyTweetsSection';
 import SeasonRoadmap from '~/components/arena/season/SeasonRoadmap';
 import SeasonCountdownBanner from '~/components/arena/season/SeasonCountdownBanner';
@@ -685,7 +686,15 @@ export default function ArenaPage() {
   };
 
   // Use real API data only — no mocks so empty state messages show when quests haven't been earned yet
-  const dailyQuests = (questsData as any)?.grouped?.daily || [];
+  const allDailyQuests = (questsData as any)?.grouped?.daily || [];
+  // Snag-verified daily quests (post / code) render via SnagDailyQuests with their
+  // own verify/redeem UI; the rest are trade-driven and render via the plain QuestItem.
+  const snagDailyQuestIdSet = new Set<string>(SNAG_DAILY_QUEST_IDS as readonly string[]);
+  const dailyQuests = allDailyQuests.filter((q: any) => !snagDailyQuestIdSet.has(q.questId));
+  // "Post about Interstate" renders under the Social Quests cluster (it's an X
+  // action and needs Connect X); the code quest stays in the Daily Quests list.
+  const postDailyQuests = allDailyQuests.filter((q: any) => q.questId === 'DAILY_POST_X');
+  const codeDailyQuests = allDailyQuests.filter((q: any) => q.questId === 'DAILY_CODE_ENTRY');
   const seasonalQuests = (questsData as any)?.grouped?.seasonal || [];
   const socialQuests = (questsData as any)?.grouped?.special || [];
 
@@ -1022,6 +1031,16 @@ export default function ArenaPage() {
                     />
                   )}
 
+                  {/* "Post about Interstate" — daily Snag quest shown with social quests.
+                      -mt-4 absorbs SocialQuestsSection's trailing mb-6 (margins collapse:
+                      24px - 16px = 8px) so this row sits flush with the social list rhythm. */}
+                  {!questsLoading && !questsError && postDailyQuests.length > 0 && (
+                    <SnagDailyQuests
+                      quests={postDailyQuests}
+                      className={`mb-6 ${socialQuests.length > 0 ? '-mt-4' : ''}`}
+                    />
+                  )}
+
                   {/* v2.0: Admin-curated Key Tweets (repeatable credits) —
                       HIDDEN until Snag-backed verification is wired.
                       Decision: only social tasks should be Snag-maintained;
@@ -1044,6 +1063,10 @@ export default function ArenaPage() {
                       <CountdownDisplay hours={countdown.hours} minutes={countdown.minutes} seconds={countdown.seconds} />
                     </div>
                     <div className="space-y-2">
+                      {/* Snag-verified daily code quest ("Enter Today's Code") */}
+                      {!questsLoading && !questsError && codeDailyQuests.length > 0 && (
+                        <SnagDailyQuests quests={codeDailyQuests} />
+                      )}
                       {questsError ? (
                         <div className="text-center py-6 text-red-400 text-sm">
                           <p>Failed to load quests.</p>
@@ -1057,12 +1080,12 @@ export default function ArenaPage() {
                         dailyQuests.map((quest: any, idx: number) => (
                           <QuestItem key={quest.id} quest={quest} index={idx} />
                         ))
-                      ) : (
+                      ) : codeDailyQuests.length === 0 ? (
                         <div className="text-center py-6 text-neutral-500 text-sm">
                           <p>No daily quests available yet.</p>
                           <p className="text-xs mt-1">Start trading to unlock quests!</p>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
 
