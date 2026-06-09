@@ -21,7 +21,7 @@ import { hasActiveFilters as checkPulseActiveFilters } from "~/utils/discoverFil
 import { LuChartNoAxesColumn, LuCopy } from "react-icons/lu";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { fetchBatchSupplies, recomputeMarketCap } from "~/lib/tokenSupply";
-import { extractMetaImage } from "~/utils/images";
+import { extractMetaImage, isMetadataUrl } from "~/utils/images";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import FastImage from "./FastImage";
 import { TokenCountdown24h } from "./TokenCountdown24h";
@@ -1041,7 +1041,14 @@ const SearchModalContent = React.memo(function SearchModalContent({
             mint: tokenAddress,
             name: token.name || "",
             symbol: token.symbol || "",
-            logo: token.uri || token.logo || token.image || token.image_url,
+            // Prefer the backend CDN image (cdn.interstate.so/{mint}.webp — the
+            // same URL the token page renders), then the raw upstream image, then
+            // the metadata `uri` last (a JSON URL, never a renderable image).
+            logo:
+              token.image || token.image_url || token.logo || token.uri,
+            // Raw upstream image, carried separately so the row can fall back to
+            // it if the CDN image 404s (e.g. a brand-new token not yet warmed).
+            image_url: token.image_url || token.logo || undefined,
             fully_diluted_value:
               token.market_cap_usd ||
               token.marketCapUSD ||
@@ -1084,6 +1091,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             is_mayhem_mode?: boolean;
             launch_time?: string;
             usd_price?: number;
+            image_url?: string;
           };
         });
 
@@ -2893,9 +2901,28 @@ const TokenListItem = React.memo(
       });
     }
     const tokenIsTrending = isTrendingToken(token);
+    // logoUrl holds ONLY the async metadata-resolved fallback image. The primary
+    // image is the direct CDN URL below; this is used only if that fails to load.
+    // Seed from the per-mint cache so a revisited token paints instantly.
     const [logoUrl, setLogoUrl] = useState<string | null>(
-      // Prioritize uri (metadata JSON with image) over logo (often empty)
-      token.uri || token.logo || null,
+      () => resolvedImageByMint.get(token.mint) ?? null,
+    );
+    // Direct CDN image: token.logo now carries cdn.interstate.so/{mint}.webp from
+    // the backend `image` field (see the search-result mapping) — the same URL the
+    // token page renders. Mirror PulseTable: prefer this direct image and only
+    // fall back to the metadata-resolved image if it fails, so no token regresses.
+    const directImage =
+      token.logo && !isMetadataUrl(token.logo) ? token.logo : null;
+    // Raw upstream image fallback (carried by the search-result mapping). Used
+    // only if the CDN image fails AND no metadata image resolves, so a token
+    // with a working raw image never drops to a letter placeholder.
+    const rawImageUrl = (token as { image_url?: string }).image_url ?? null;
+    const rawImageFallback =
+      rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null;
+    const [directImageFailed, setDirectImageFailed] = useState(false);
+    const handleDirectImageFailed = useCallback(
+      () => setDirectImageFailed(true),
+      [],
     );
     const [showXPreview, setShowXPreview] = useState(false);
     const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
@@ -2939,18 +2966,23 @@ const TokenListItem = React.memo(
     // Don't reset if we already have a resolved image for this mint
     useEffect(() => {
       if (resolvedForMintRef.current !== token.mint) {
-        // New token - reset and start fresh
-        // Prioritize uri (metadata JSON with image) over logo (often empty)
-        const initialUrl = token.uri || token.logo || null;
-        setLogoUrl(initialUrl);
+        // New token - reset the metadata fallback (seed from cache when known)
+        // and clear the direct-image failure flag.
+        setLogoUrl(resolvedImageByMint.get(token.mint) ?? null);
+        setDirectImageFailed(false);
         resolvedImageRef.current = null;
         resolvedForMintRef.current = token.mint;
       }
-    }, [token.mint, token.uri, token.logo]);
+    }, [token.mint]);
 
     useEffect(() => {
       let cancelled = false;
-      const rawUri = token.uri || token.logo;
+      // Resolve the metadata image as a background fallback for the direct CDN
+      // image. token.logo is now the direct CDN image, so use the metadata `uri`
+      // (or token.logo only when it is itself a metadata JSON URL).
+      const rawUri =
+        token.uri ||
+        (token.logo && isMetadataUrl(token.logo) ? token.logo : null);
 
       // Skip if we already resolved for this token
       if (
@@ -2960,7 +2992,14 @@ const TokenListItem = React.memo(
         return;
       }
 
-      if (rawUri && !resolvedImageRef.current) {
+      // Only pay the metadata fetch when we lack a usable direct CDN image or it
+      // has already failed — the common case (CDN image loads) makes zero extra
+      // network calls, matching the token page.
+      if (
+        rawUri &&
+        !resolvedImageRef.current &&
+        (!directImage || directImageFailed)
+      ) {
         fetchTokenMetadata(rawUri).then((data) => {
           if (cancelled) return;
           const img = extractMetaImage(data);
@@ -2977,7 +3016,7 @@ const TokenListItem = React.memo(
       return () => {
         cancelled = true;
       };
-    }, [token.mint, token.uri, token.logo]);
+    }, [token.mint, token.uri, token.logo, directImage, directImageFailed]);
 
     useEffect(() => {
       return () => {
@@ -3006,9 +3045,17 @@ const TokenListItem = React.memo(
       () => shouldFillProtocolBadge(token),
       [token],
     );
+    // Prefer the direct CDN image (same as the token page); swap to the
+    // metadata-resolved fallback only if it fails. token.uri is a metadata JSON
+    // URL (never an image), so it is intentionally NOT an image source here.
     const normalizedLogo = useMemo(
-      () => normalizeAssetUrl(logoUrl || token.uri || token.logo),
-      [logoUrl, token.uri, token.logo],
+      () =>
+        normalizeAssetUrl(
+          directImageFailed
+            ? logoUrl || rawImageFallback
+            : directImage || logoUrl,
+        ),
+      [directImage, directImageFailed, logoUrl, rawImageFallback],
     );
     const fallbackAvatar = useMemo(
       () =>
@@ -3335,6 +3382,7 @@ const TokenListItem = React.memo(
                         <FastImage
                           src={normalizedLogo ?? undefined}
                           fallbackSrc={fallbackAvatar}
+                          onLoadFailed={handleDirectImageFailed}
                           alt={token.name || token.symbol || ""}
                           width={44}
                           height={44}
@@ -3612,6 +3660,7 @@ const TokenListItem = React.memo(
                       <FastImage
                         src={normalizedLogo ?? undefined}
                         fallbackSrc={fallbackAvatar}
+                        onLoadFailed={handleDirectImageFailed}
                         alt={token.name || token.symbol || ""}
                         width={44}
                         height={44}
@@ -3809,6 +3858,7 @@ const TokenListItem = React.memo(
                               <FastImage
                                 src={normalizedLogo ?? undefined}
                                 fallbackSrc={fallbackAvatar}
+                                onLoadFailed={handleDirectImageFailed}
                                 alt={`${token.name || token.symbol || ""} avatar`}
                                 width={56}
                                 height={56}
