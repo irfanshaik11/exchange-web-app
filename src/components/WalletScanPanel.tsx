@@ -428,6 +428,23 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     void loadBalance();
   }, [wallet.address, isUnsupportedChain]);
 
+  // The trades endpoint returns only token_mint + numbers (no image/name), so map
+  // each mint → image/name/symbol from positions (same Go service, already fetched
+  // here, and these DO carry image_url). This is what gives Activity rows their
+  // images without relying on the per-mint /v1/token/{mint} metadata lookup.
+  const positionMetaByMint = useMemo(() => {
+    const map: Record<string, { imageUrl: string | null; tokenName: string | null; tokenSymbol: string | null }> = {};
+    for (const p of goPositions) {
+      if (!p.token_mint) continue;
+      map[p.token_mint] = {
+        imageUrl: p.image_url ?? null,
+        tokenName: p.token_name ?? null,
+        tokenSymbol: p.token_symbol ?? null,
+      };
+    }
+    return map;
+  }, [goPositions]);
+
   // Activity data: convert Go service trades to TradeRow format for Activity component
   const activityData = useMemo((): TradeRow[] => {
     return goTrades.map((t, idx) => {
@@ -436,6 +453,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         t.price_usd > 0 && t.token_amount > 0
           ? t.price_usd * t.token_amount
           : t.sol_amount * currentSolPrice;
+      const meta = positionMetaByMint[t.token_mint];
       return {
         id: idx,
         tokenAddress: t.token_mint,
@@ -449,9 +467,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         usdValue,
         transactionHash: t.signature,
         createdAt: date.toISOString(),
+        // Enrich from positions so rows show the token image/name even when the
+        // /v1/token/{mint} metadata call returns nothing.
+        imageUrl: meta?.imageUrl ?? null,
+        tokenName: meta?.tokenName ?? null,
+        tokenSymbol: meta?.tokenSymbol ?? null,
+        launchpad: t.launchpad_protocol ?? null,
       };
     });
-  }, [goTrades, currentSolPrice]);
+  }, [goTrades, currentSolPrice, positionMetaByMint]);
 
   // (FIFO computations removed — positions are now served pre-computed by Go token service)
 
