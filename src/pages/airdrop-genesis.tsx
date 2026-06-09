@@ -700,6 +700,11 @@ export default function ArenaPage() {
   // Collaboration badges live in grouped.special (one-time SPECIAL quests).
   const badgeQuestIdSet = new Set<string>(BADGE_QUEST_IDS as readonly string[]);
   const badgeQuests = (socialQuests as any[]).filter((q: any) => badgeQuestIdSet.has(q.questId));
+  // Has the user finished "Connect X Account"? If so, their X is linked, so the
+  // "Post about Interstate" quest can skip its Connect-X step (see SnagDailyQuests).
+  const connectXCompleted = (socialQuests as any[]).some(
+    (q: any) => q.questId === 'SOCIAL_CONNECT_X' && q.isCompleted,
+  );
 
   // Calculate pending gold from completed but unclaimed quests
   const allQuests = (questsData as any)?.quests || [];
@@ -1040,6 +1045,7 @@ export default function ArenaPage() {
                   {!questsLoading && !questsError && postDailyQuests.length > 0 && (
                     <SnagDailyQuests
                       quests={postDailyQuests}
+                      connectXCompleted={connectXCompleted}
                       className={`mb-6 ${socialQuests.length > 0 ? '-mt-4' : ''}`}
                     />
                   )}
