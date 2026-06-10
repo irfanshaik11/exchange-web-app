@@ -222,13 +222,18 @@ function useTokenMetadata(mints: string[]) {
           if (!goUrl) return;
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
-          const resp = await fetch(`${goUrl}/v1/token/${mint}`, {
-            signal: controller.signal,
-          });
+          // Use /v1/search, NOT /v1/token: /v1/token's image_url is
+          // cdn.interstate.so/{mint}.webp which 403s; search returns the working
+          // (IPFS) image plus name/symbol/market data (flat on the token).
+          const resp = await fetch(
+            `${goUrl}/v1/search?phrase=${encodeURIComponent(mint)}&limit=1`,
+            { signal: controller.signal },
+          );
           clearTimeout(timeoutId);
           if (!resp.ok) return;
           const data = await resp.json();
-          const token = data?.token;
+          const results = data?.tokens || data?.results || data?.filterTokens?.results || [];
+          const token = results[0]?.token || results[0];
           if (!token) return;
           const md: TokenMeta = {
             symbol: token.symbol ?? null,
