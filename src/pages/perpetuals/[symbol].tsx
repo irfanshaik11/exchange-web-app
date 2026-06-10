@@ -20,7 +20,7 @@ import { useHyperliquidTrades } from "../../hooks/useHyperliquidTrades";
 import { useHyperliquidCandles } from "../../hooks/useHyperliquidCandles";
 import { useHyperliquidPositions } from "../../hooks/useHyperliquidPositions";
 import { useUser } from "../../components/UserContext";
-import { fetchOpenOrders, fetchTradeHistory, cancelOrder, closePosition } from "../../utils/hyperliquidApi";
+import { fetchOpenOrders, fetchTradeHistory, cancelOrder, closePosition, modifyOrder } from "../../utils/hyperliquidApi";
 import type { HyperliquidOHLCItem } from "../../hooks/useHyperliquidCandles";
 import type { HyperliquidOpenOrder, HyperliquidFill, HyperliquidPositionRow } from "../../utils/hyperliquidTypes";
 
@@ -31,24 +31,14 @@ const PerpChart = dynamic(
 );
 
 /* ---------- AXIOM palette (matches trade/[id].tsx) ---------- */
-const AX = {
-  bg: "#111214",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-};
+import { AX } from "../../components/perpetuals/perpTheme";
 
 const MIN_CHART_HEIGHT = 240;
 
 export default function PerpTradePage() {
   const router = useRouter();
   const { symbol } = router.query;
-  const coin = typeof symbol === "string" ? symbol.toUpperCase() : undefined;
+  const rawSymbol = typeof symbol === "string" ? symbol : undefined;
 
   const { user } = useUser();
   const bearerToken = user?.bearerToken;
@@ -60,9 +50,16 @@ export default function PerpTradePage() {
   }, [activateMarkets]);
 
   const market = useMemo(
-    () => (coin ? getMarketBySymbol(coin) : undefined),
-    [coin, getMarketBySymbol]
+    () => (rawSymbol ? getMarketBySymbol(rawSymbol) : undefined),
+    [rawSymbol, getMarketBySymbol]
   );
+
+  // HIP-3 asset names are case-sensitive ("km:OIL") — use the canonical name
+  // from the market row once loaded. While markets load: keep prefixed names
+  // as-given (links already carry canonical case), uppercase bare main-dex coins.
+  const coin =
+    market?.name ??
+    (rawSymbol ? (rawSymbol.includes(":") ? rawSymbol : rawSymbol.toUpperCase()) : undefined);
 
   // ============ Market Data Hooks ============
 
@@ -168,6 +165,26 @@ export default function PerpTradePage() {
     [bearerToken]
   );
 
+  const handleModifyOrder = useCallback(
+    async (order: { coin: string; oid: number; side: string }, newPrice: number, newSize: number) => {
+      if (!bearerToken) return;
+      try {
+        await modifyOrder(bearerToken, order.oid, {
+          coin: order.coin,
+          side: order.side === "B" ? "LONG" : "SHORT",
+          price: newPrice,
+          size: newSize,
+        });
+        const updated = await fetchOpenOrders(bearerToken);
+        setOpenOrders((updated as any) || []);
+      } catch (err) {
+        console.error("Modify order failed:", err);
+        throw err; // let PerpTabs keep the row in edit mode on failure
+      }
+    },
+    [bearerToken]
+  );
+
   const handleOrderPlaced = useCallback(() => {
     refreshPositions();
     if (bearerToken) {
@@ -267,7 +284,7 @@ export default function PerpTradePage() {
                 {/* Collapse / Expand toggle */}
                 <button
                   onClick={() => setOrderBookCollapsed((p) => !p)}
-                  className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-20 w-[18px] h-9 rounded flex items-center justify-center transition-colors hover:bg-[#2A2B33]"
+                  className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-20 w-[18px] h-9 rounded flex items-center justify-center transition-colors hover:bg-[#1f2127]"
                   style={{ backgroundColor: AX.surface2, border: `1px solid ${AX.border}` }}
                   title={orderBookCollapsed ? "Show Order Book" : "Hide Order Book"}
                 >
@@ -365,6 +382,7 @@ export default function PerpTradePage() {
                 tradeHistory={tradeHistory}
                 onClosePosition={handleClosePosition}
                 onCancelOrder={handleCancelOrder}
+                onModifyOrder={handleModifyOrder}
                 onSelectPosition={(c) => {
                   const pos = positions.find((p) => p.coin === c);
                   if (pos) setSelectedPosition(pos);

@@ -6,12 +6,7 @@ import React, { useMemo } from "react";
 import type { OrderBookData } from "../../hooks/useHyperliquidOrderBook";
 import type { HyperliquidL2Level } from "../../utils/hyperliquidTypes";
 
-const AX = {
-  bg: "#111214",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-};
+import { AX } from "./perpTheme";
 
 interface OrderBookPanelProps {
   orderBook: OrderBookData;
@@ -52,9 +47,9 @@ function LevelRow({
   const depthPct = maxCumulative > 0 ? (data.cumulativeUsd / maxCumulative) * 100 : 0;
   const barColor =
     side === "bid"
-      ? "rgba(134, 217, 159, 0.18)"
-      : "rgba(242, 102, 130, 0.18)";
-  const textColor = side === "bid" ? "text-[#86d99f]" : "text-[#f26682]";
+      ? "rgba(24, 196, 140, 0.18)"
+      : "rgba(239, 68, 68, 0.18)";
+  const textColor = side === "bid" ? "text-[#18c48c]" : "text-[#ef4444]";
   // Bar only spans the price column (35% of row width)
   const barWidthPct = Math.min(depthPct, 100) * 0.35;
 
@@ -76,12 +71,12 @@ function LevelRow({
       </span>
 
       {/* Amount (USD) */}
-      <span className="relative z-10 w-[35%] text-right text-[#f0f5f5]">
+      <span className="relative z-10 w-[35%] text-right text-[#f4f4f5]">
         {formatUsdCompact(data.usdAmount)}
       </span>
 
       {/* Total (USD) */}
-      <span className="relative z-10 w-[30%] text-right text-[#9CA3AF]">
+      <span className="relative z-10 w-[30%] text-right text-[#a1a1aa]">
         {formatUsdCompact(data.cumulativeUsd)}
       </span>
     </div>

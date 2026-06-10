@@ -373,32 +373,51 @@ export default function PerpChart({
         charts_storage_api_version: "1.1",
         client_id: "tradingview.com",
         user_id: "public_user_id",
+        // theme:"dark" is needed for the CHROME (toolbars/menus/scales) — without
+        // it they render light. But the dark theme also re-applies its stock
+        // candle palette AFTER constructor `overrides`, so the brand colors are
+        // re-asserted via settings_overrides (applied after theme) and again in
+        // onChartReady via changeTheme().then(applyOverrides).
         theme: "dark",
+        settings_overrides: {
+          "paneProperties.background": "#0c0d10",
+          "paneProperties.backgroundType": "solid",
+          "paneProperties.backgroundGradientStartColor": "#0c0d10",
+          "paneProperties.backgroundGradientEndColor": "#0c0d10",
+          "mainSeriesProperties.candleStyle.upColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.downColor": "#ef4444",
+          "mainSeriesProperties.candleStyle.borderUpColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.borderDownColor": "#ef4444",
+          "mainSeriesProperties.candleStyle.wickUpColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444",
+        },
         time_frames: [
           { text: "1D", resolution: "5", description: "1 Day" },
           { text: "7D", resolution: "30", description: "7 Days" },
           { text: "30D", resolution: "240", description: "30 Days" },
           { text: "180D", resolution: "1D", description: "180 Days" },
         ],
-        custom_css_url: "/charting_library/themed.css",
+        // Perps-only chrome theme — themed.css belongs to the Solana chart
+        // (AdvancedOHLCChart) and must keep its original look.
+        custom_css_url: "/charting_library/perp-themed.css",
         loading_screen: { backgroundColor: "transparent" },
         overrides: {
-          "paneProperties.background": "#111214",
+          "paneProperties.background": "#0c0d10",
           "paneProperties.backgroundType": "solid",
-          "paneProperties.backgroundGradientStartColor": "#111214",
-          "paneProperties.backgroundGradientEndColor": "#111214",
+          "paneProperties.backgroundGradientStartColor": "#0c0d10",
+          "paneProperties.backgroundGradientEndColor": "#0c0d10",
           "paneProperties.vertGridProperties.color": "#1E1F21",
           "paneProperties.horzGridProperties.color": "#1E1F21",
           "symbolWatermarkProperties.transparency": 90,
           "scalesProperties.textColor": "#d1d4dc",
           "scalesProperties.lineColor": "#1E1F21",
           // Candle colors — match existing chart
-          "mainSeriesProperties.candleStyle.upColor": "#86d99f",
-          "mainSeriesProperties.candleStyle.downColor": "#f26682",
-          "mainSeriesProperties.candleStyle.borderUpColor": "#86d99f",
-          "mainSeriesProperties.candleStyle.borderDownColor": "#f26682",
-          "mainSeriesProperties.candleStyle.wickUpColor": "#86d99f",
-          "mainSeriesProperties.candleStyle.wickDownColor": "#f26682",
+          "mainSeriesProperties.candleStyle.upColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.downColor": "#ef4444",
+          "mainSeriesProperties.candleStyle.borderUpColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.borderDownColor": "#ef4444",
+          "mainSeriesProperties.candleStyle.wickUpColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444",
           "mainSeriesProperties.candleStyle.drawWick": true,
           "mainSeriesProperties.candleStyle.drawBorder": true,
           "mainSeriesProperties.showCountdown": false,
@@ -411,7 +430,7 @@ export default function PerpChart({
           "mainSeriesProperties.lineStyle.color": "#26a69a",
           "paneProperties.topMargin": 10,
           "paneProperties.bottomMargin": 10,
-          "paneProperties.legendProperties.background": "#111214",
+          "paneProperties.legendProperties.background": "#0c0d10",
           "paneProperties.legendProperties.color": "#d1d4dc",
           "paneProperties.vertGridProperties.style": 0,
           "paneProperties.horzGridProperties.style": 0,
@@ -425,12 +444,12 @@ export default function PerpChart({
           "mainSeriesProperties.visible": true,
         },
         studies_overrides: {
-          "volume.volume.color.0": "#f26682",
-          "volume.volume.color.1": "#86d99f",
-          "volume.volume.colorup": "#86d99f",
-          "volume.volume.colordown": "#f26682",
-          "volume.volume.plot.color.0": "#f26682",
-          "volume.volume.plot.color.1": "#86d99f",
+          "volume.volume.color.0": "#ef4444",
+          "volume.volume.color.1": "#18c48c",
+          "volume.volume.colorup": "#18c48c",
+          "volume.volume.colordown": "#ef4444",
+          "volume.volume.plot.color.0": "#ef4444",
+          "volume.volume.plot.color.1": "#18c48c",
         },
       });
 
@@ -440,6 +459,38 @@ export default function PerpChart({
         // Volume study is auto-created by TradingView when data includes volume.
         // Colors are set via studies_overrides — do NOT createStudy("Volume") again
         // or you get a duplicate volume pane.
+
+        // The dark theme re-applies its stock candle palette asynchronously and
+        // can land AFTER ready, wiping overrides. changeTheme() returns a
+        // promise — re-asserting our colors in .then() guarantees final order.
+        const BRAND_OVERRIDES = {
+          "paneProperties.background": "#0c0d10",
+          "paneProperties.backgroundType": "solid",
+          "paneProperties.backgroundGradientStartColor": "#0c0d10",
+          "paneProperties.backgroundGradientEndColor": "#0c0d10",
+          "mainSeriesProperties.candleStyle.upColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.downColor": "#ef4444",
+          "mainSeriesProperties.candleStyle.borderUpColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.borderDownColor": "#ef4444",
+          "mainSeriesProperties.candleStyle.wickUpColor": "#18c48c",
+          "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444",
+        };
+        try {
+          const apply = () => {
+            try {
+              widget.applyOverrides(BRAND_OVERRIDES);
+            } catch (err) {
+              console.warn("[PerpChart] applyOverrides failed:", err);
+            }
+          };
+          if (typeof widget.changeTheme === "function") {
+            widget.changeTheme("dark").then(apply).catch(apply);
+          } else {
+            apply();
+          }
+        } catch (err) {
+          console.warn("[PerpChart] theme/override sequencing failed:", err);
+        }
       });
     })();
 
@@ -461,12 +512,35 @@ export default function PerpChart({
 
   return (
     <div
-      ref={containerRef}
+      className="relative"
       style={{
         height: typeof height === "number" ? `${height}px` : height,
         width: typeof width === "number" ? `${width}px` : width,
-        backgroundColor: "#111214",
       }}
-    />
+    >
+      <div
+        ref={containerRef}
+        style={{ height: "100%", width: "100%", backgroundColor: "#0c0d10" }}
+      />
+      {/* Interstate watermark — pointer-transparent overlay (the chart renders
+          in an iframe, so painting into its canvas isn't possible; a faint
+          overlay reads as a background watermark without blocking interaction) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 flex items-center justify-center select-none"
+      >
+        <span
+          style={{
+            fontSize: "clamp(26px, 5vw, 56px)",
+            fontWeight: 600,
+            letterSpacing: "0.08em",
+            color: "rgba(255, 255, 255, 0.04)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          interstate.so
+        </span>
+      </div>
+    </div>
   );
 }

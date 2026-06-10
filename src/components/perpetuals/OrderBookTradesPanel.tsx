@@ -7,13 +7,7 @@ import PerpTrades from "./PerpTrades";
 import type { OrderBookData } from "../../hooks/useHyperliquidOrderBook";
 import type { HyperliquidTrade } from "../../utils/hyperliquidTypes";
 
-const AX = {
-  bg: "#111214",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mint: "#70E0B0",
-};
+import { AX } from "./perpTheme";
 
 type Tab = "orderbook" | "trades";
 

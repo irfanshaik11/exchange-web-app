@@ -10,12 +10,12 @@ interface MarginModeToggleProps {
 
 export default function MarginModeToggle({ isCross, onChange }: MarginModeToggleProps) {
   return (
-    <div className="flex rounded-full overflow-hidden border border-[#2A2B33]">
+    <div className="flex rounded-full overflow-hidden border border-[#1f2127]">
       <button
         className={`flex-1 text-[11px] font-semibold py-1.5 px-3 transition-colors ${
           isCross
-            ? "bg-[#1E1F26] text-[#f0f5f5]"
-            : "bg-transparent text-[#9CA3AF]"
+            ? "bg-[#141619] text-[#f4f4f5]"
+            : "bg-transparent text-[#a1a1aa]"
         }`}
         onClick={() => onChange(true)}
       >
@@ -24,8 +24,8 @@ export default function MarginModeToggle({ isCross, onChange }: MarginModeToggle
       <button
         className={`flex-1 text-[11px] font-semibold py-1.5 px-3 transition-colors ${
           !isCross
-            ? "bg-[#1E1F26] text-[#f0f5f5]"
-            : "bg-transparent text-[#9CA3AF]"
+            ? "bg-[#141619] text-[#f4f4f5]"
+            : "bg-transparent text-[#a1a1aa]"
         }`}
         onClick={() => onChange(false)}
       >

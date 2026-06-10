@@ -3,25 +3,19 @@
 // collateral input, percentage slider, TP/SL, account info.
 // Design: matches reference screenshots with card-style inputs and clean layout.
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import CoinIcon from "./CoinIcon";
-import { placeOrder } from "../../utils/hyperliquidApi";
+import {
+  placeOrder,
+  placeTwapOrder,
+  fetchBuilderFeeStatus,
+  approveBuilderFee,
+  type BuilderFeeStatus,
+} from "../../utils/hyperliquidApi";
 import type { HyperliquidMarketRow } from "../../utils/hyperliquidTypes";
 
 /* ---- AX palette ---- */
-const AX = {
-  bg: "#111214",
-  surface: "#1A1B22",
-  border: "#2A2B33",
-  borderLight: "#353640",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mutedDim: "#6B7280",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-  sellHover: "#e03a6a",
-};
+import { AX } from "./perpTheme";
 
 const TABULAR: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
@@ -36,7 +30,7 @@ interface PerpTradePanelProps {
 }
 
 type Side = "LONG" | "SHORT";
-type OrderType = "market" | "limit";
+type OrderType = "market" | "limit" | "twap";
 
 const PCT_PRESETS = [0, 25, 50, 75, 100];
 
@@ -62,13 +56,33 @@ export default function PerpTradePanel({
   const [leverage, setLeverage] = useState(20);
   const [pctIndex, setPctIndex] = useState(0);
   const [showTpSl, setShowTpSl] = useState(false);
+  const [tpPrice, setTpPrice] = useState("");
+  const [slPrice, setSlPrice] = useState("");
+  const [postOnly, setPostOnly] = useState(false);
+  const [reduceOnly, setReduceOnly] = useState(false);
+  const [twapMinutes, setTwapMinutes] = useState("30");
+  const [twapRandomize, setTwapRandomize] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLeveragePopup, setShowLeveragePopup] = useState(false);
+  const [builderStatus, setBuilderStatus] = useState<BuilderFeeStatus | null>(null);
 
   React.useEffect(() => {
     if (initialPrice) setPrice(initialPrice);
   }, [initialPrice]);
+
+  // Builder-fee status (monetization). Drives the fee line + one-time approval.
+  useEffect(() => {
+    if (!token) {
+      setBuilderStatus(null);
+      return;
+    }
+    let cancelled = false;
+    fetchBuilderFeeStatus(token)
+      .then((s) => { if (!cancelled) setBuilderStatus(s); })
+      .catch(() => { if (!cancelled) setBuilderStatus(null); });
+    return () => { cancelled = true; };
+  }, [token]);
 
   const collateralNum = parseFloat(collateral) || 0;
   const priceNum = parseFloat(price) || markPrice;
@@ -97,17 +111,77 @@ export default function PerpTradePanel({
     setSubmitting(true);
     setError(null);
     try {
-      await placeOrder(token, {
-        coin: market.name,
-        side,
-        size: parseFloat(positionSize.toFixed(market.szDecimals)),
-        price: orderType !== "market" ? priceNum : undefined,
-        orderType,
-        leverage,
-        reduceOnly: false,
-      });
+      // One-time builder-fee approval (server-side Turnkey signature). Best-effort:
+      // a failure here must never block the trade — the order just goes fee-less.
+      if (builderStatus?.enabled && !builderStatus.approved) {
+        try {
+          const r = await approveBuilderFee(token);
+          if (r.success) setBuilderStatus((s) => (s ? { ...s, approved: true } : s));
+        } catch {
+          /* ignore — proceed with the order unmonetized */
+        }
+      }
+
+      if (orderType === "twap") {
+        const minutes = Math.max(5, Math.min(1440, parseInt(twapMinutes) || 30));
+        const result = await placeTwapOrder(token, {
+          coin: market.name,
+          side,
+          size: parseFloat(positionSize.toFixed(market.szDecimals)),
+          durationMinutes: minutes,
+          reduceOnly,
+          randomize: twapRandomize,
+          leverage,
+        });
+        if (!result.success) throw new Error(result.error || "TWAP order failed");
+      } else {
+        const tp = showTpSl ? parseFloat(tpPrice) : NaN;
+        const sl = showTpSl ? parseFloat(slPrice) : NaN;
+
+        // A wrong-side trigger fires the instant it lands on Hyperliquid,
+        // closing the position the user just opened. Validate sides here.
+        if (tp > 0) {
+          if (side === "LONG" && tp <= priceNum) {
+            setError("Take profit must be ABOVE the entry price for a long");
+            setSubmitting(false);
+            return;
+          }
+          if (side === "SHORT" && tp >= priceNum) {
+            setError("Take profit must be BELOW the entry price for a short");
+            setSubmitting(false);
+            return;
+          }
+        }
+        if (sl > 0) {
+          if (side === "LONG" && sl >= priceNum) {
+            setError("Stop loss must be BELOW the entry price for a long");
+            setSubmitting(false);
+            return;
+          }
+          if (side === "SHORT" && sl <= priceNum) {
+            setError("Stop loss must be ABOVE the entry price for a short");
+            setSubmitting(false);
+            return;
+          }
+        }
+
+        await placeOrder(token, {
+          coin: market.name,
+          side,
+          size: parseFloat(positionSize.toFixed(market.szDecimals)),
+          price: orderType !== "market" ? priceNum : undefined,
+          orderType,
+          leverage,
+          reduceOnly,
+          postOnly: orderType === "limit" ? postOnly : false,
+          takeProfitPrice: tp > 0 ? tp : undefined,
+          stopLossPrice: sl > 0 ? sl : undefined,
+        });
+      }
       setCollateral("");
       setPrice("");
+      setTpPrice("");
+      setSlPrice("");
       setPctIndex(0);
       onOrderPlaced?.();
     } catch (err: any) {
@@ -115,10 +189,13 @@ export default function PerpTradePanel({
     } finally {
       setSubmitting(false);
     }
-  }, [market, token, side, orderType, collateralNum, positionSize, priceNum, leverage, onOrderPlaced]);
+  }, [market, token, side, orderType, collateralNum, positionSize, priceNum, leverage, onOrderPlaced, builderStatus, showTpSl, tpPrice, slPrice, reduceOnly, postOnly, twapMinutes, twapRandomize]);
 
   const accentColor = side === "LONG" ? AX.mint : AX.sell;
   const accentHover = side === "LONG" ? AX.mintHover : AX.sellHover;
+  // Canonical Interstate CTA treatment (matches TradeActionPanel buy/sell):
+  // filled accent, near-black text on BOTH sides, soft glow, brighten on hover.
+  const accentGlow = side === "LONG" ? AX.mintGlow : AX.sellGlow;
 
   if (!market) {
     return (
@@ -164,7 +241,7 @@ export default function PerpTradePanel({
         >
           <button
             className={`flex-1 py-2 text-[12px] font-bold rounded-md transition-all duration-150 ${
-              side === "LONG" ? "text-black" : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+              side === "LONG" ? "text-black" : "text-[#a1a1aa] hover:text-[#f4f4f5]"
             }`}
             style={side === "LONG" ? { backgroundColor: AX.mint } : undefined}
             onClick={() => setSide("LONG")}
@@ -173,7 +250,7 @@ export default function PerpTradePanel({
           </button>
           <button
             className={`flex-1 py-2 text-[12px] font-bold rounded-md transition-all duration-150 ${
-              side === "SHORT" ? "text-white" : "text-[#9CA3AF] hover:text-[#f0f5f5]"
+              side === "SHORT" ? "text-white" : "text-[#a1a1aa] hover:text-[#f4f4f5]"
             }`}
             style={side === "SHORT" ? { backgroundColor: AX.sell } : undefined}
             onClick={() => setSide("SHORT")}
@@ -188,11 +265,11 @@ export default function PerpTradePanel({
           style={{ borderBottom: `1px solid ${AX.border}` }}
         >
           <div className="flex items-center">
-            {(["market", "limit"] as OrderType[]).map((type) => (
+            {(["market", "limit", "twap"] as OrderType[]).map((type) => (
               <button
                 key={type}
                 className={`px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${
-                  orderType === type ? "text-white" : "text-[#6B7280] hover:text-[#9CA3AF]"
+                  orderType === type ? "text-white" : "text-[#71717a] hover:text-[#a1a1aa]"
                 }`}
                 style={orderType === type ? { borderBottom: `2px solid ${AX.text}` } : { borderBottom: "2px solid transparent" }}
                 onClick={() => setOrderType(type)}
@@ -350,8 +427,49 @@ export default function PerpTradePanel({
           </div>
         )}
 
+        {/* ── TWAP parameters (when TWAP selected) ── */}
+        {orderType === "twap" && (
+          <div
+            className="rounded-lg px-3 py-2.5 space-y-2"
+            style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px]" style={{ color: AX.muted }}>Duration (minutes, 5–1440)</span>
+              <input
+                type="number"
+                min={5}
+                max={1440}
+                value={twapMinutes}
+                onChange={(e) => setTwapMinutes(e.target.value)}
+                className="w-20 bg-transparent text-right text-[14px] font-medium text-white focus:outline-none"
+                style={TABULAR}
+              />
+            </div>
+            <label
+              className="flex items-center gap-1.5 cursor-pointer"
+              onClick={() => setTwapRandomize((v) => !v)}
+            >
+              <div
+                className="w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors"
+                style={{ borderColor: twapRandomize ? accentColor : AX.border, backgroundColor: twapRandomize ? accentColor : "transparent" }}
+              >
+                {twapRandomize && (
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                )}
+              </div>
+              <span className="text-[11px]" style={{ color: AX.text }}>Randomize slice timing</span>
+            </label>
+            <div className="text-[10px]" style={{ color: AX.mutedDim }}>
+              Order is sliced over the duration to average entry price. Each slice signs separately.
+            </div>
+          </div>
+        )}
+
         {/* ── TP/SL + Est. Liq Price Row ── */}
         <div className="flex items-center justify-between">
+          {orderType === "twap" ? (
+            <span />
+          ) : (
           <label className="flex items-center gap-1.5 cursor-pointer" onClick={() => setShowTpSl(!showTpSl)}>
             <div
               className="w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors"
@@ -368,16 +486,87 @@ export default function PerpTradePanel({
             </div>
             <span className="text-[11px]" style={{ color: AX.text }}>TP/SL</span>
           </label>
+          )}
           <span className="text-[11px]" style={{ color: AX.muted, ...TABULAR }}>
             Est. Liq. Price: {estLiqPrice ? `$${formatPrice(estLiqPrice)}` : "--"}
           </span>
         </div>
 
+        {/* ── TP/SL inputs (shown when TP/SL enabled) ── */}
+        {showTpSl && orderType !== "twap" && (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+              <div className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: AX.mutedDim }}>Take Profit</div>
+              <input
+                inputMode="decimal"
+                value={tpPrice}
+                onChange={(e) => setTpPrice(e.target.value)}
+                placeholder="Price"
+                className="w-full bg-transparent outline-none text-[13px]"
+                style={{ color: AX.mint, ...TABULAR }}
+              />
+            </div>
+            <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: AX.surface, border: `1px solid ${AX.border}` }}>
+              <div className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: AX.mutedDim }}>Stop Loss</div>
+              <input
+                inputMode="decimal"
+                value={slPrice}
+                onChange={(e) => setSlPrice(e.target.value)}
+                placeholder="Price"
+                className="w-full bg-transparent outline-none text-[13px]"
+                style={{ color: AX.sell, ...TABULAR }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── Reduce-only / Post-only toggles ── */}
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-1.5 cursor-pointer" onClick={() => setReduceOnly((v) => !v)}>
+            <div
+              className="w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors"
+              style={{ borderColor: reduceOnly ? accentColor : AX.border, backgroundColor: reduceOnly ? accentColor : "transparent" }}
+            >
+              {reduceOnly && (
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+              )}
+            </div>
+            <span className="text-[11px]" style={{ color: AX.text }}>Reduce Only</span>
+          </label>
+          {orderType === "limit" && (
+            <label className="flex items-center gap-1.5 cursor-pointer" onClick={() => setPostOnly((v) => !v)}>
+              <div
+                className="w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors"
+                style={{ borderColor: postOnly ? accentColor : AX.border, backgroundColor: postOnly ? accentColor : "transparent" }}
+              >
+                {postOnly && (
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                )}
+              </div>
+              <span className="text-[11px]" style={{ color: AX.text }}>Post Only</span>
+            </label>
+          )}
+        </div>
+
+        {/* ── Interstate (builder) fee disclosure ── */}
+        {builderStatus?.enabled && builderStatus.feePercent > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px]" style={{ color: AX.mutedDim }}>
+              Interstate fee
+            </span>
+            <span className="text-[11px]" style={{ color: AX.muted, ...TABULAR }}>
+              {builderStatus.feePercent}%
+              {collateralNum > 0 &&
+                ` (~$${formatPrice((collateralNum * leverage * builderStatus.feePercent) / 100)})`}
+            </span>
+          </div>
+        )}
+
         {/* ── Error ── */}
         {error && (
           <div
             className="text-[11px] px-2.5 py-1.5 rounded-md"
-            style={{ color: AX.sell, backgroundColor: "rgba(255, 77, 127, 0.08)", border: `1px solid rgba(255, 77, 127, 0.15)` }}
+            style={{ color: AX.sell, backgroundColor: "rgba(239, 68, 68, 0.08)", border: `1px solid rgba(239, 68, 68, 0.15)` }}
           >
             {error}
           </div>
@@ -388,7 +577,7 @@ export default function PerpTradePanel({
           <button
             onClick={onAddFunds}
             className="w-full py-2.5 rounded-lg font-bold text-[13px] transition-all duration-150"
-            style={{ backgroundColor: accentColor, color: side === "LONG" ? "#000" : "#fff" }}
+            style={{ backgroundColor: accentColor, color: AX.onAccent, boxShadow: accentGlow }}
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accentHover; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = accentColor; }}
           >
@@ -399,7 +588,7 @@ export default function PerpTradePanel({
             onClick={handleSubmit}
             disabled={submitting || !token || collateralNum <= 0}
             className="w-full py-2.5 rounded-lg font-bold text-[13px] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: accentColor, color: side === "LONG" ? "#000" : "#fff" }}
+            style={{ backgroundColor: accentColor, color: AX.onAccent, boxShadow: accentGlow }}
             onMouseEnter={(e) => {
               if (!(e.currentTarget as HTMLButtonElement).disabled) {
                 e.currentTarget.style.backgroundColor = accentHover;
@@ -426,8 +615,8 @@ export default function PerpTradePanel({
               className="text-[11px] px-1.5 py-0.5 rounded"
               style={{
                 color: AX.mint,
-                backgroundColor: "rgba(112, 224, 176, 0.08)",
-                border: `1px solid rgba(112, 224, 176, 0.15)`,
+                backgroundColor: "rgba(24, 196, 140, 0.08)",
+                border: `1px solid rgba(24, 196, 140, 0.15)`,
                 ...TABULAR,
               }}
             >

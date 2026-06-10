@@ -35,13 +35,13 @@ export default function FundingRateDisplay({ fundingRate }: FundingRateDisplayPr
 
   return (
     <div className="flex items-center justify-between text-[11px]">
-      <span className="text-[#9CA3AF]">Funding Rate</span>
+      <span className="text-[#a1a1aa]">Funding Rate</span>
       <div className="flex items-center gap-2">
-        <span className={isPositive ? "text-[#86d99f]" : "text-[#f26682]"} style={{ fontVariantNumeric: "tabular-nums" }}>
+        <span className={isPositive ? "text-[#18c48c]" : "text-[#ef4444]"} style={{ fontVariantNumeric: "tabular-nums" }}>
           {isPositive ? "+" : ""}
           {(fundingRate * 100).toFixed(4)}%
         </span>
-        <span className="text-[#9CA3AF]" style={{ fontVariantNumeric: "tabular-nums" }}>{countdown}</span>
+        <span className="text-[#a1a1aa]" style={{ fontVariantNumeric: "tabular-nums" }}>{countdown}</span>
       </div>
     </div>
   );

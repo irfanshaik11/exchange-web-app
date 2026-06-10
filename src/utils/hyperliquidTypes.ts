@@ -153,6 +153,7 @@ export interface HyperliquidFill {
 // ============ Frontend Enriched Types ============
 
 export interface HyperliquidMarketRow {
+  /** Full asset name. HIP-3 builder-DEX assets are "{dex}:{coin}". */
   name: string;
   assetIndex: number;
   markPx: number;
@@ -164,6 +165,10 @@ export interface HyperliquidMarketRow {
   funding: number;
   maxLeverage: number;
   szDecimals: number;
+  /** HIP-3 builder DEX short name; undefined/"" = main universe. */
+  dex?: string;
+  /** Symbol without the dex prefix, for display ("OIL" from "km:OIL"). */
+  displaySymbol?: string;
 }
 
 export interface HyperliquidPositionRow {
@@ -187,6 +192,11 @@ export type HyperliquidWsChannel =
   | "trades"
   | "candle"
   | "allMids"
+  | "bbo"
+  | "activeAssetCtx"
+  | "activeAssetData"
+  | "webData2"
+  | "notification"
   | "userEvents"
   | "userFills"
   | "userFundings"

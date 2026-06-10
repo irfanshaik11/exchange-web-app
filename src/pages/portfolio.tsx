@@ -38,6 +38,9 @@ import PnlShareCard from "~/components/PnlShareCard";
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { useImagePreloader } from "~/hooks/useImagePreloader";
 import { extractTokenImage } from "~/utils/images";
+import { useHyperliquidPositions } from "~/hooks/useHyperliquidPositions";
+import { fetchTradeHistory as fetchHlTradeHistory } from "~/utils/hyperliquidApi";
+import type { HyperliquidFill, HyperliquidAssetPosition } from "~/utils/hyperliquidTypes";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
@@ -345,6 +348,60 @@ export default function PortfolioPage() {
   const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
   const { solPrice: contextSolPrice, monPrice } = useSolPrice();
   const router = useRouter();
+
+  // ---- Hyperliquid perps (portfolio tab) ----
+  // Only polls while the Perpetuals tab is active to avoid background load on the
+  // (default) Spot view. Reuses the same hook the /perpetuals page uses.
+  const hlPerpsActive = activeSection === "perpetuals";
+  const {
+    positions: hlPositions,
+    rawPositions: hlRawPositions,
+    marginSummary: hlMarginSummary,
+    loading: hlPositionsLoading,
+  } = useHyperliquidPositions({ token: user?.bearerToken, enabled: hlPerpsActive });
+  const [hlFills, setHlFills] = useState<HyperliquidFill[]>([]);
+  const [hlFillsLoading, setHlFillsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!hlPerpsActive || !user?.bearerToken) return;
+    let cancelled = false;
+    setHlFillsLoading(true);
+    fetchHlTradeHistory(user.bearerToken)
+      .then((data: any) => {
+        if (cancelled) return;
+        const fills: HyperliquidFill[] = Array.isArray(data) ? data : (data?.fills || []);
+        setHlFills(fills);
+      })
+      .catch(() => { if (!cancelled) setHlFills([]); })
+      .finally(() => { if (!cancelled) setHlFillsLoading(false); });
+    return () => { cancelled = true; };
+  }, [hlPerpsActive, user?.bearerToken]);
+
+  // Aggregate lifetime metrics from fills. Volume = Σ(px·sz); PNL = Σ(closedPnl).
+  const hlMetrics = useMemo(() => {
+    let volume = 0;
+    let pnl = 0;
+    for (const f of hlFills) {
+      const px = parseFloat(f.px) || 0;
+      const sz = parseFloat(f.sz) || 0;
+      volume += px * sz;
+      pnl += parseFloat(f.closedPnl) || 0;
+    }
+    const accountValue = hlMarginSummary ? parseFloat(hlMarginSummary.accountValue) || 0 : 0;
+    return { volume, pnl, trades: hlFills.length, accountValue };
+  }, [hlFills, hlMarginSummary]);
+
+  // Mark price isn't on the parsed row (needs mid prices); derive it from the raw
+  // position's notional: markPx = positionValue / |szi|. Keyed by coin for lookup.
+  const hlMarkByCoin = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const ap of (hlRawPositions as HyperliquidAssetPosition[])) {
+      const szi = Math.abs(parseFloat(ap.position.szi) || 0);
+      const notional = parseFloat(ap.position.positionValue) || 0;
+      if (szi > 0) m[ap.position.coin] = notional / szi;
+    }
+    return m;
+  }, [hlRawPositions]);
   // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
@@ -3282,16 +3339,16 @@ export default function PortfolioPage() {
               >
                 Wallets
               </button>
-              {/* <button
-                className={`text-base sm:text-lg font-light transition cursor-pointer ${
+              <button
+                className={`px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer rounded-md ${
                   activeSection === "perpetuals"
-                    ? "text-[#f0f5f5]"
-                    : "text-[#6B7280] hover:text-[#f0f5f5]"
+                    ? "text-[#f4f4f5] bg-white/[0.08] border border-white/[0.08]"
+                    : "text-[#71717a] hover:text-[#a1a1aa] border border-transparent"
                 }`}
                 onClick={() => setActiveSection("perpetuals")}
               >
                 Perpetuals
-              </button> */}
+              </button>
             </div>
 
             {/* Right side controls for Spot section - JTX style */}
@@ -4682,22 +4739,37 @@ export default function PortfolioPage() {
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         All Time Volume
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">
+                        ${formatSmartNumber(hlMetrics.volume)}
+                      </div>
                     </div>
                     <div>
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         All Time PNL
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                      <div
+                        className={`text-2xl font-light ${
+                          hlMetrics.pnl > 0
+                            ? "text-[#70E0B0]"
+                            : hlMetrics.pnl < 0
+                            ? "text-[#FF4D7F]"
+                            : "text-[#f0f5f5]"
+                        }`}
+                      >
+                        {hlMetrics.pnl < 0 ? "-$" : "$"}
+                        {formatSmartNumber(Math.abs(hlMetrics.pnl))}
+                      </div>
                       <div className="text-xs text-[#9CA3AF] mt-1">
-                        Number of Trades: 0
+                        Number of Trades: {hlMetrics.trades}
                       </div>
                     </div>
                     <div className="col-span-2">
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         Account Value
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">
+                        ${formatSmartNumber(hlMetrics.accountValue)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4762,25 +4834,110 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Content based on active tab */}
-                {activePerpetualsTab === 0 && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-center">
-                      <div className="text-[#9CA3AF] text-sm">
-                        No open positions
+                {activePerpetualsTab === 0 &&
+                  (hlPositionsLoading && hlPositions.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-[#9CA3AF] text-sm">Loading positions…</div>
+                    </div>
+                  ) : hlPositions.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <div className="text-[#9CA3AF] text-sm">
+                          No open positions
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div>
+                      {hlPositions.map((p) => {
+                        const mark = hlMarkByCoin[p.coin] || 0;
+                        const notional = p.size * (mark || p.entryPrice);
+                        return (
+                          <div
+                            key={p.coin}
+                            className="grid grid-cols-9 gap-4 px-6 py-3 text-sm text-[#f0f5f5] border-b border-white/[0.04] items-center"
+                          >
+                            <div className="font-medium">{p.coin}</div>
+                            <div className={p.side === "LONG" ? "text-[#70E0B0]" : "text-[#FF4D7F]"}>
+                              {p.side} {formatSmartNumber(p.size)}
+                            </div>
+                            <div>${formatSmartNumber(notional)}</div>
+                            <div>${formatSmartNumber(p.entryPrice)}</div>
+                            <div>{mark ? `$${formatSmartNumber(mark)}` : "—"}</div>
+                            <div>
+                              {p.liquidationPrice
+                                ? `$${formatSmartNumber(p.liquidationPrice)}`
+                                : "—"}
+                            </div>
+                            <div>
+                              ${formatSmartNumber(p.marginUsed)}{" "}
+                              <span className={p.unrealizedPnl >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]"}>
+                                ({p.unrealizedPnl >= 0 ? "+" : "-"}$
+                                {formatSmartNumber(Math.abs(p.unrealizedPnl))})
+                              </span>
+                            </div>
+                            <div className="text-[#9CA3AF]">—</div>
+                            <div>
+                              <button
+                                onClick={() => router.push(`/perpetuals/${p.coin}`)}
+                                className="px-2.5 py-1 text-xs rounded-md bg-white/[0.06] hover:bg-white/[0.1] text-[#f0f5f5] transition-colors cursor-pointer"
+                              >
+                                Manage
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
 
-                {activePerpetualsTab === 1 && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-center">
-                      <div className="text-[#9CA3AF] text-sm">
-                        No trade history
+                {activePerpetualsTab === 1 &&
+                  (hlFillsLoading && hlFills.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-[#9CA3AF] text-sm">Loading trade history…</div>
+                    </div>
+                  ) : hlFills.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <div className="text-[#9CA3AF] text-sm">
+                          No trade history
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div className="max-h-[480px] overflow-y-auto">
+                      {hlFills.slice(0, 100).map((f, i) => {
+                        const px = parseFloat(f.px) || 0;
+                        const sz = parseFloat(f.sz) || 0;
+                        const pnl = parseFloat(f.closedPnl) || 0;
+                        const isBuy = f.side === "B";
+                        return (
+                          <div
+                            key={`${f.tid}-${i}`}
+                            className="grid grid-cols-9 gap-4 px-6 py-3 text-sm text-[#f0f5f5] border-b border-white/[0.04] items-center"
+                          >
+                            <div className="font-medium">{f.coin}</div>
+                            <div className={isBuy ? "text-[#70E0B0]" : "text-[#FF4D7F]"}>
+                              {f.dir || (isBuy ? "Buy" : "Sell")}
+                            </div>
+                            <div>${formatSmartNumber(px * sz)}</div>
+                            <div>${formatSmartNumber(px)}</div>
+                            <div>{formatSmartNumber(sz)}</div>
+                            <div className="text-[#9CA3AF]">—</div>
+                            <div className={pnl >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]"}>
+                              {pnl >= 0 ? "+" : "-"}${formatSmartNumber(Math.abs(pnl))}
+                            </div>
+                            <div className="text-[#9CA3AF]">
+                              ${formatSmartNumber(parseFloat(f.fee) || 0)}
+                            </div>
+                            <div className="text-[#9CA3AF] text-xs">
+                              {new Date(f.time).toLocaleDateString()}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
               </div>
             </div>
           )}

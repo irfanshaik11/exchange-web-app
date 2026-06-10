@@ -9,17 +9,7 @@ import toast from "react-hot-toast";
 import { fetchBalances, deposit, withdraw } from "../../utils/hyperliquidApi";
 
 /* ---- AX palette (matches PerpTradePanel) ---- */
-const AX = {
-  bg: "#111214",
-  surface: "#1A1B22",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  mutedDim: "#6B7280",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-};
+import { AX } from "./perpTheme";
 
 type TabType = "convert" | "deposit" | "buy" | "withdraw";
 
@@ -370,7 +360,7 @@ export default function PerpFundingModal({
                     {/* Warning */}
                     <div
                       className="rounded-lg px-4 py-3"
-                      style={{ backgroundColor: "rgba(255, 77, 127, 0.06)", border: `1px solid rgba(255, 77, 127, 0.15)` }}
+                      style={{ backgroundColor: "rgba(239, 68, 68, 0.06)", border: `1px solid rgba(239, 68, 68, 0.15)` }}
                     >
                       <p className="text-[12px] font-medium" style={{ color: AX.sell }}>
                         Send only USDC on Arbitrum One to this address
@@ -482,7 +472,7 @@ function BalanceCard({
       style={{
         backgroundColor: AX.surface,
         border: accent
-          ? `1px solid rgba(112, 224, 176, 0.2)`
+          ? `1px solid rgba(24, 196, 140, 0.2)`
           : `1px solid ${AX.border}`,
       }}
     >
@@ -508,8 +498,8 @@ function ErrorBanner({ message }: { message: string }) {
       className="text-[12px] px-3 py-2 rounded-lg"
       style={{
         color: AX.sell,
-        backgroundColor: "rgba(255, 77, 127, 0.08)",
-        border: `1px solid rgba(255, 77, 127, 0.15)`,
+        backgroundColor: "rgba(239, 68, 68, 0.08)",
+        border: `1px solid rgba(239, 68, 68, 0.15)`,
       }}
     >
       {message}
