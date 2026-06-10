@@ -18,7 +18,7 @@ import { IoIosCloseCircleOutline } from "react-icons/io";
 import { getProtocolBranding } from "~/utils/protocolBranding";
 import Image from "next/image";
 import { useImagePreloader } from "~/hooks/useImagePreloader";
-import { extractTokenImage } from "~/utils/images";
+import { extractTokenImage, resolveTokenImageByMint } from "~/utils/images";
 import {
   useWalletScan,
   toAggregatedPosition,
@@ -428,6 +428,48 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     void loadBalance();
   }, [wallet.address, isUnsupportedChain]);
 
+  // The trades endpoint returns only token_mint + numbers (no image/name), so map
+  // each mint → image/name/symbol from positions (same Go service, already fetched
+  // here, and these DO carry image_url). This is what gives Activity rows their
+  // images without relying on the per-mint /v1/token/{mint} metadata lookup.
+  const positionMetaByMint = useMemo(() => {
+    const map: Record<string, { imageUrl: string | null; tokenName: string | null; tokenSymbol: string | null }> = {};
+    for (const p of goPositions) {
+      if (!p.token_mint) continue;
+      map[p.token_mint] = {
+        imageUrl: p.image_url ?? null,
+        tokenName: p.token_name ?? null,
+        tokenSymbol: p.token_symbol ?? null,
+      };
+    }
+    return map;
+  }, [goPositions]);
+
+  // Positions/trades carry no usable image (image_url is empty or the 403 CDN URL),
+  // so resolve each mint's image via the token-service search endpoint (working IPFS
+  // image). Powers the History / Active Positions / Top 100 token avatars.
+  const [resolvedImages, setResolvedImages] = useState<Record<string, string>>({});
+  const resolvedImgAttemptedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const mints = Array.from(
+      new Set(goPositions.map((p) => p.token_mint).filter(Boolean)),
+    ).filter(
+      (m) => !resolvedImgAttemptedRef.current.has(m) && !m.toLowerCase().startsWith("0x"),
+    );
+    if (mints.length === 0) return;
+    mints.forEach((m) => resolvedImgAttemptedRef.current.add(m));
+    (async () => {
+      const results = await Promise.allSettled(
+        mints.map(async (m) => ({ mint: m, img: await resolveTokenImageByMint(m) })),
+      );
+      const next: Record<string, string> = {};
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value.img) next[r.value.mint] = r.value.img;
+      }
+      if (Object.keys(next).length > 0) setResolvedImages((prev) => ({ ...prev, ...next }));
+    })();
+  }, [goPositions]);
+
   // Activity data: convert Go service trades to TradeRow format for Activity component
   const activityData = useMemo((): TradeRow[] => {
     return goTrades.map((t, idx) => {
@@ -436,6 +478,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         t.price_usd > 0 && t.token_amount > 0
           ? t.price_usd * t.token_amount
           : t.sol_amount * currentSolPrice;
+      const meta = positionMetaByMint[t.token_mint];
       return {
         id: idx,
         tokenAddress: t.token_mint,
@@ -449,9 +492,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         usdValue,
         transactionHash: t.signature,
         createdAt: date.toISOString(),
+        // Enrich from positions so rows show the token image/name even when the
+        // /v1/token/{mint} metadata call returns nothing.
+        imageUrl: meta?.imageUrl ?? null,
+        tokenName: meta?.tokenName ?? null,
+        tokenSymbol: meta?.tokenSymbol ?? null,
+        launchpad: t.launchpad_protocol ?? null,
       };
     });
-  }, [goTrades, currentSolPrice]);
+  }, [goTrades, currentSolPrice, positionMetaByMint]);
 
   // (FIFO computations removed — positions are now served pre-computed by Go token service)
 
@@ -889,7 +938,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                       Loading history...
                     </div>
                   </div>
-                ) : goError ? (
+                ) : goError && closedOrders.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="text-red-400">{goError}</div>
                   </div>
@@ -989,7 +1038,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                         >
                                           <div className="relative h-10 w-10 overflow-hidden rounded-lg">
                                             <FastImage
-                                              src={order.imageUrl || ""}
+                                              src={resolvedImages[order.mint] || order.imageUrl || ""}
                                               alt={
                                                 displayName ||
                                                 displaySymbol ||
@@ -1165,7 +1214,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               <div className="flex items-center gap-2">
                                 <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
                                   <FastImage
-                                    src={imageUrl}
+                                    src={resolvedImages[position.mint] || imageUrl}
                                     alt={
                                       displayName || displaySymbol || "Token"
                                     }
@@ -1333,7 +1382,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               <div className="flex items-center gap-2">
                                 <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
                                   <FastImage
-                                    src={imageUrl}
+                                    src={resolvedImages[position.mint] || imageUrl}
                                     alt={
                                       displayName || displaySymbol || "Token"
                                     }
@@ -1436,7 +1485,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                       Loading activity...
                     </div>
                   </div>
-                ) : goError ? (
+                ) : goError && activityData.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="text-red-400">{goError}</div>
                   </div>

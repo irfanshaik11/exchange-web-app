@@ -443,6 +443,42 @@ export async function resolveTokenImage(token: any): Promise<string | null> {
 }
 
 /**
+ * Resolve a token's image URL from just its mint address, via the token-service
+ * search endpoint (/v1/search) + resolveTokenImage.
+ *
+ * This is the reliable image source for mint-only contexts (wallet tracker, wallet
+ * scan Activity, notifications): the wallet positions/trades payloads and
+ * /v1/token/{mint} carry no image, but /v1/search does — the same path the token
+ * page and clipboard-paste flow use. Returns null if unavailable.
+ */
+export async function resolveTokenImageByMint(
+  mint: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<string | null> {
+  if (!mint) return null;
+  const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+  if (!goUrl) return null;
+  try {
+    const response = await fetch(
+      `${goUrl}/v1/search?phrase=${encodeURIComponent(mint)}&limit=1`,
+      { signal: options.signal },
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    const results =
+      data?.tokens || data?.results || data?.filterTokens?.results || [];
+    const token = results[0]?.token || results[0] || null;
+    if (!token) return null;
+    // Use extractTokenImage (raw URL), NOT resolveTokenImage: search results put a
+    // raw IPFS image in image_url, which resolveTokenImage would wrongly try to fetch
+    // as metadata JSON and return null. FastImage handles the raw/IPFS URL fine.
+    return extractTokenImage(token);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Extract image URL from token data, checking multiple possible field names
  * This ensures we catch image fields from stream data, HTTP data, and various API formats
  * Priority order: image_url (API), image, logo, uri (WebSocket stream fallback), then others

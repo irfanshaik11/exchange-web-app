@@ -132,19 +132,19 @@ export default function LiveTradesPanel({
               const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 5000);
+              // Use /v1/search, NOT /v1/token: /v1/token's image_url is
+              // cdn.interstate.so/{mint}.webp which 403s; search returns the working
+              // (IPFS) image plus name/symbol/market data (flat on the token).
               const searchResp = await fetch(
-                `${goUrl}/v1/token/${trade.mint}`,
+                `${goUrl}/v1/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`,
                 { signal: controller.signal },
               );
               clearTimeout(timeoutId);
               if (searchResp.ok) {
                 const responseData = await searchResp.json();
-                token = responseData?.token || null;
-                // Merge marketData fields onto token for metadata extraction
-                if (token && responseData?.marketData) {
-                  token.market_cap_usd = responseData.marketData.market_cap_usd || token.market_cap_usd;
-                  token.price_usd = responseData.marketData.price_usd || token.price_usd;
-                }
+                const results =
+                  responseData?.tokens || responseData?.results || responseData?.filterTokens?.results || [];
+                token = results[0]?.token || results[0] || null;
               }
             } catch {
               // Silent fail
