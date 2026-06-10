@@ -42,7 +42,7 @@ const TGLogo = () => (
 const SOCIAL_QUEST_CONFIGS = [
   { questId: 'SOCIAL_CONNECT_X', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Connect', actionUrl: undefined, tooltip: 'Link your X (Twitter) account to Interstate to unlock social quests and earn credits.' },
   { questId: 'SOCIAL_FOLLOW_X', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Follow', actionUrl: 'https://x.com/interstatefdn', tooltip: 'Follow @interstatefdn on X to stay updated and earn credits. Click Follow, then come back and verify.' },
-  { questId: 'SOCIAL_ENGAGE_POST', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Engage', actionUrl: 'https://x.com/interstatefdn/status/2041067022562324801', tooltip: 'Like, comment, AND repost the Interstate post on X. You must do all three to complete this quest.' },
+  { questId: 'SOCIAL_ENGAGE_POST', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Engage', actionUrl: 'https://x.com/interstatefdn/status/2064739369697894660', tooltip: 'Like, repost, and comment on the Interstate post on X. You must do all three to complete this quest.' },
   { questId: 'SOCIAL_JOIN_TG', platform: 'telegram' as const, icon: <TGLogo />, actionLabel: 'Join', actionUrl: 'https://t.me/+DDXGrsJoe3szYTAx', tooltip: 'Join the Interstate Telegram community to connect with other traders and earn credits.' },
 ];
 
