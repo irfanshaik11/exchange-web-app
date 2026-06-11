@@ -1919,8 +1919,42 @@ export interface WalletPortfolioTrade {
 
 async function tokenServiceJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!TOKEN_SERVICE_URL) throw new Error("NEXT_PUBLIC_GO_SERVICE_URL not configured");
-  const res = await fetch(`${TOKEN_SERVICE_URL}${path}`, { signal });
-  if (!res.ok) {
+
+  // Transient backend blips — an instance restarting (deploy/autoscale) makes
+  // the LB return 502/503/504 or reset the connection (fetch rejects). These
+  // are momentary, but a single failure surfaced as "Failed to fetch" on the
+  // wallet-scan tabs. Retry the idempotent GET a few times with backoff so a
+  // blip is invisible. Never retry an aborted request (panel closed / new
+  // wallet) or a 4xx (real client error).
+  const MAX_ATTEMPTS = 3;
+  const backoff = (a: number) =>
+    new Promise((r) => setTimeout(r, 400 * (a + 1)));
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${TOKEN_SERVICE_URL}${path}`, { signal });
+    } catch (err) {
+      // Deliberate abort (panel closed / wallet switched) — never retry.
+      if ((err as { name?: string })?.name === "AbortError") throw err;
+      // Network-level failure (connection reset before headers) → retry.
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await backoff(attempt);
+        continue;
+      }
+      throw err;
+    }
+
+    if (res.ok) return res.json() as Promise<T>;
+
+    // Retry only transient gateway/server statuses; surface everything else.
+    if (
+      (res.status === 502 || res.status === 503 || res.status === 504) &&
+      attempt < MAX_ATTEMPTS - 1
+    ) {
+      await backoff(attempt);
+      continue;
+    }
     let detail = "";
     try {
       const body = await res.json();
@@ -1928,7 +1962,8 @@ async function tokenServiceJson<T>(path: string, signal?: AbortSignal): Promise<
     } catch {}
     throw new Error(detail || `HTTP ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  // Unreachable (loop either returns or throws), but satisfies the type checker.
+  throw new Error("request failed");
 }
 
 export const getWalletPortfolioSummary = (
