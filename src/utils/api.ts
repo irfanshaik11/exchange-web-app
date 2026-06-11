@@ -1910,6 +1910,11 @@ export interface WalletPortfolioTrade {
   pool_address?: string | null;
   fee_lamports?: number | null;
   quote_mint?: string | null;
+  // Enriched server-side from the tokens table (solana_trades carries only the
+  // mint). Without these the Activity tab showed a truncated mint.
+  name?: string | null;
+  symbol?: string | null;
+  image_url?: string | null;
 }
 
 async function tokenServiceJson<T>(path: string, signal?: AbortSignal): Promise<T> {

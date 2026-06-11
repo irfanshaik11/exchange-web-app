@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import type { Wallet, TradeRow } from "~/utils/functions";
 import { formatSmartNumber, fetchWalletBalance } from "~/utils/functions";
 import InterstatePopout from "./InterstatePopout";
-import { FaRegCopy, FaCheck, FaExternalLinkAlt } from "react-icons/fa";
+import { FaRegCopy, FaCheck } from "react-icons/fa";
 import { FiExternalLink } from "react-icons/fi";
 import type { Token } from "~/utils/db";
 import { getWalletSolBalance } from "~/utils/walletTracking";
@@ -12,13 +12,15 @@ import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
   type PnlChartDataPoint,
 } from "./charts/RealizedPnlChart";
-import FastImage from "./FastImage";
 import useDevTokensByWallet from "../hooks/useDevTokensByWallet";
 import { IoIosCloseCircleOutline } from "react-icons/io";
-import { getProtocolBranding } from "~/utils/protocolBranding";
-import Image from "next/image";
 import { useImagePreloader } from "~/hooks/useImagePreloader";
 import { extractTokenImage } from "~/utils/images";
+import { preloadImage } from "~/utils/imagePreloader";
+import {
+  getCachedScanImage,
+  resolveScanImage,
+} from "~/utils/scanImageResolver";
 import {
   useWalletScan,
   toAggregatedPosition,
@@ -26,6 +28,12 @@ import {
   type AggregatedPosition,
   type ClosedOrder,
 } from "~/hooks/useWalletScan";
+import {
+  ScanCard,
+  DistributionRow,
+  WinLossBar,
+  TokenAvatar,
+} from "./WalletScanCards";
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -119,6 +127,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     positions: goPositions,
     trades: goTrades,
     positionsLoading,
+    positionsDegraded,
     tradesLoading,
     error: goError,
     isUnsupportedChain,
@@ -150,10 +159,102 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const timeRanges = ["1d", "7d", "30d", "Max"];
   const [toast, setToast] = useState<string | null>(null);
 
+  // Whale wallets: the positions query can run 15-60s server-side on first
+  // load. After 8s of spinner, swap in an explanatory line so the user knows
+  // it's the wallet's history size, not a hang.
+  const [positionsSlow, setPositionsSlow] = useState(false);
+  useEffect(() => {
+    if (!positionsLoading) {
+      setPositionsSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setPositionsSlow(true), 8000);
+    return () => clearTimeout(t);
+  }, [positionsLoading]);
+
+  // ─── Token avatars (shared resolver w/ localStorage persistence) ─────────────
+  // resolveScanImage handles the full pipeline (direct URL → metadata URI →
+  // token-service → pump.fun/DexScreener cascade) and persists successes to
+  // localStorage, so reloads and revisits paint instantly. Only the rendered
+  // subset (first 1K rows, newest-first) is scanned; 80 fresh lookups per pass.
+  const [metaImages, setMetaImages] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (goPositions.length === 0 && goTrades.length === 0) return;
+    let cancelled = false;
+
+    const fromCache: Record<string, string> = {};
+    const work: { mint: string; raw: string | null; uri: string | null }[] = [];
+    const seen = new Set<string>();
+    const add = (mint: string, raw: string | null, uri: string | null) => {
+      if (seen.has(mint)) return;
+      seen.add(mint);
+      const cached = getCachedScanImage(mint);
+      if (typeof cached === "string") {
+        fromCache[mint] = cached;
+      } else if (cached === undefined) {
+        work.push({ mint, raw, uri });
+      }
+    };
+    for (const p of goPositions.slice(0, 1000)) {
+      add(p.token_mint, p.image_url ?? null, p.uri ?? null);
+    }
+    // Activity rows reference mints the wallet TRADED, which for fast flippers
+    // barely overlap current holdings — resolve those too or the Activity tab
+    // stays letter-tiled (trade rows carry no image fields of their own).
+    for (const t of goTrades) {
+      add(t.token_mint, null, null);
+    }
+    if (Object.keys(fromCache).length > 0) {
+      setMetaImages((prev) => ({ ...prev, ...fromCache }));
+    }
+    if (work.length === 0) return;
+
+    // Drain in batches of 80 until everything visible has been attempted —
+    // the effect only re-fires on data changes, so stragglers must not wait
+    // for one.
+    void (async () => {
+      for (let i = 0; i < work.length && !cancelled; i += 80) {
+        // Collect the batch and commit ONE state update: per-image updates made
+        // every downstream memo (activityData, enrichedPositions) rebuild row
+        // identities up to 80× per batch, which remounted Activity rows and
+        // flickered their borders/protocol badges.
+        const updates: Record<string, string> = {};
+        await Promise.allSettled(
+          work.slice(i, i + 80).map(async ({ mint, raw, uri }) => {
+            const url = await resolveScanImage(mint, raw, uri);
+            if (url) {
+              updates[mint] = url;
+              void preloadImage(url);
+            }
+          }),
+        );
+        if (!cancelled && Object.keys(updates).length > 0) {
+          setMetaImages((prev) => ({ ...prev, ...updates }));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [goPositions, goTrades]);
+
   // ─── Derived data from Go token service ──────────────────────────────────────
+  // The resolved+proxied URL always wins over the raw indexer URL: raw values
+  // are frequently metadata JSON links that FastImage can't render directly.
+  const enrichedPositions = useMemo(
+    () =>
+      goPositions.map((p) =>
+        metaImages[p.token_mint]
+          ? { ...p, image_url: metaImages[p.token_mint] }
+          : p,
+      ),
+    [goPositions, metaImages],
+  );
+
   const allAggregatedPositions = useMemo(
-    () => goPositions.map((p) => toAggregatedPosition(p, currentSolPrice)),
-    [goPositions, currentSolPrice],
+    () => enrichedPositions.map((p) => toAggregatedPosition(p, currentSolPrice)),
+    [enrichedPositions, currentSolPrice],
   );
 
   const aggregatedPositions = useMemo(
@@ -162,11 +263,19 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   );
 
   const closedOrders = useMemo((): ClosedOrder[] => {
-    const closed = goPositions
+    // Whale wallets return 15K+ closed positions with include_closed=1 (measured
+    // 15,348 for one wallet). The History table renders plain <tr> rows with no
+    // virtualization, so an uncapped map freezes the tab. Newest 500 is far more
+    // than anyone scrolls; performanceMetrics still uses the summary's
+    // authoritative totals for the "Max" range, so the bins stay correct.
+    const MAX_HISTORY_ROWS = 500;
+    const closed = enrichedPositions
       .filter((p) => p.remaining_tokens <= 0.001)
       .map((p) => positionToClosedOrder(p, currentSolPrice));
-    return closed.sort((a, b) => b.closedAt - a.closedAt);
-  }, [goPositions, currentSolPrice]);
+    return closed
+      .sort((a, b) => b.closedAt - a.closedAt)
+      .slice(0, MAX_HISTORY_ROWS);
+  }, [enrichedPositions, currentSolPrice]);
 
   // Calculate performance metrics from closed orders
   const performanceMetrics = useMemo(() => {
@@ -430,6 +539,20 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
   // Activity data: convert Go service trades to TradeRow format for Activity component
   const activityData = useMemo((): TradeRow[] => {
+    // Trade rows from the Go service carry no image; the Activity component's
+    // extractTokenImage() therefore always fell back to letter tiles. Reuse the
+    // resolved+proxied avatar map (metaImages) and the positions' raw URLs —
+    // trades and positions share the same mints.
+    const rawByMint = new Map<string, string>();
+    // Fall back to the positions' resolved name/symbol for any trade mint the
+    // server didn't enrich (trades and positions share mints).
+    const nameByMint = new Map<string, string>();
+    const symbolByMint = new Map<string, string>();
+    for (const p of goPositions) {
+      if (p.image_url) rawByMint.set(p.token_mint, p.image_url);
+      if (p.token_name) nameByMint.set(p.token_mint, p.token_name);
+      if (p.token_symbol) symbolByMint.set(p.token_mint, p.token_symbol);
+    }
     return goTrades.map((t, idx) => {
       const date = new Date(t.created_at);
       const usdValue =
@@ -439,6 +562,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       return {
         id: idx,
         tokenAddress: t.token_mint,
+        // Prefer the server-enriched name/symbol, then the positions map; the
+        // Activity component shows tokenAddress only when both are empty.
+        tokenName: t.name || nameByMint.get(t.token_mint) || "",
+        tokenSymbol: t.symbol || symbolByMint.get(t.token_mint) || "",
         pairAddress: t.pool_address ?? undefined,
         blockchain: "sol",
         tradeTime: date.toISOString(),
@@ -449,9 +576,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         usdValue,
         transactionHash: t.signature,
         createdAt: date.toISOString(),
+        imageUrl:
+          t.image_url ??
+          metaImages[t.token_mint] ??
+          rawByMint.get(t.token_mint) ??
+          null,
       };
     });
-  }, [goTrades, currentSolPrice]);
+  }, [goTrades, goPositions, metaImages, currentSolPrice]);
 
   // (FIFO computations removed — positions are now served pre-computed by Go token service)
 
@@ -521,6 +653,18 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     }
   }, [activityData, preloadImages]);
 
+  // Warm the browser cache for every position image as soon as positions land,
+  // so switching to Active Positions / History / Top 100 renders instantly
+  // instead of popping avatars in row by row.
+  useEffect(() => {
+    const sources = enrichedPositions
+      .map((p) => p.image_url)
+      .filter(Boolean) as string[];
+    if (sources.length > 0) {
+      preloadImages(sources, { priority: false, timeout: 4000 });
+    }
+  }, [enrichedPositions, preloadImages]);
+
   useEffect(() => {
     if (!wallet.address) return;
     setTokenLoading(true);
@@ -581,25 +725,25 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         zIndex={99999}
         className="h-auto w-[90%] bg-transparent p-0 shadow-none md:w-[480px]"
       >
-        <div className="relative flex w-full flex-col items-center gap-3 border border-neutral-700 bg-black px-6 py-8 text-center shadow-2xl">
+        <div className="relative flex w-full flex-col items-center gap-3 rounded-xl border border-white/[0.06] bg-[#030304] px-6 py-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-300"
+            className="absolute top-3 right-3 rounded p-1 text-[#71717a] transition-colors hover:bg-white/[0.06] hover:text-[#a1a1aa]"
             aria-label="Close"
           >
             <IoIosCloseCircleOutline className="h-5 w-5" />
           </button>
-          <div className="text-lg font-semibold text-white">
+          <div className="text-lg font-semibold text-[#f4f4f5]">
             {wallet.name || "Wallet"}
           </div>
-          <div className="font-mono text-xs text-neutral-400">
+          <div className="font-mono text-xs text-[#71717a]">
             {truncatedAddress}
           </div>
-          <div className="mt-2 text-sm font-medium text-pink-400">
+          <div className="mt-2 text-sm font-medium text-[#18c48c]">
             Monad wallet scan coming soon
           </div>
-          <p className="max-w-[360px] text-xs leading-relaxed text-neutral-400">
+          <p className="max-w-[360px] text-xs leading-relaxed text-[#71717a]">
             Trade history and PnL for EVM wallets aren't wired yet. Solana
             wallets work as expected.
           </p>
@@ -616,261 +760,293 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       zIndex={99999}
       className="h-[calc(100vh-120px)] w-[90%] bg-transparent p-0 shadow-none md:w-[80%]"
     >
-      <div className="relative flex h-[calc(100vh-120px)] w-full flex-col border border-neutral-700 bg-black shadow-2xl">
-        {/* Header */}
-        <div className="relative flex items-center justify-between border-b border-neutral-800 px-8 pt-6 pb-3">
-          <div className="flex items-center gap-4">
-            <span className="text-lg font-bold text-pink-400">
-              {wallet.name || ""}
+      <div className="relative flex h-[calc(100vh-120px)] w-full flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-[#030304] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
+        {/* Header — slim identity row + time-range pills + close */}
+        <div className="relative flex flex-shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-[#0c0e12] text-sm">
+              👛
             </span>
-            <span className="flex items-center gap-1 font-mono text-sm text-neutral-400">
+            {wallet.name ? (
+              <span className="truncate text-sm font-semibold text-[#f4f4f5]">
+                {wallet.name}
+              </span>
+            ) : null}
+            <span className="flex items-center gap-1.5 font-mono text-xs text-[#71717a]">
               {typeof wallet.address === "string" && wallet.address.length >= 10
                 ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
                 : wallet.address || "—"}
               <button
-                className="ml-1 rounded p-1 text-xs text-neutral-400 transition-colors hover:bg-neutral-800"
+                className="rounded p-1 text-[#52525b] transition-colors hover:bg-white/[0.06] hover:text-[#a1a1aa]"
                 onClick={handleCopy}
                 title="Copy address"
                 type="button"
               >
                 {copied ? (
-                  <FaCheck className="text-base text-emerald-400" />
+                  <FaCheck className="text-xs text-[#18c48c]" />
                 ) : (
-                  <FaRegCopy className="text-base" />
+                  <FaRegCopy className="text-xs" />
                 )}
               </button>
-              {copied && (
-                <span className="ml-1 text-xs text-emerald-400">Copied!</span>
-              )}
+              <button
+                className="rounded p-1 text-[#52525b] transition-colors hover:bg-white/[0.06] hover:text-[#a1a1aa]"
+                title="Open in Solscan"
+                type="button"
+                onClick={() => {
+                  window.open(
+                    `https://solscan.io/account/${wallet.address}`,
+                    "_blank",
+                  );
+                  setToast("Wallet updated successfully");
+                }}
+              >
+                <FiExternalLink className="text-xs" />
+              </button>
               {tokenBalanceLoading ||
               tokenLoading ? null : tokenBalanceError ? (
                 <>
-                  <span className="mx-2 text-neutral-500">|</span>
-                  <span className="text-red-400">Error</span>
+                  <span className="text-white/10">|</span>
+                  <span className="text-[#ef4444]">Error</span>
                 </>
               ) : tokenBalance !== null && token ? (
                 <>
-                  <span className="mx-2 text-neutral-500">|</span>
-                  <span className="text-neutral-300">
+                  <span className="text-white/10">|</span>
+                  <span className="text-[#a1a1aa]">
                     {tokenBalance} {token.symbol}
                   </span>
                 </>
-              ) : (
-                <>
-                  <span className="mx-2 text-neutral-500">|</span>
-                  <span className="text-red-400">No balance</span>
-                </>
-              )}
+              ) : null}
             </span>
           </div>
-          <div className="absolute top-1/2 right-16 flex -translate-y-1/2 items-center gap-4">
-            <FaExternalLinkAlt
-              className="cursor-pointer text-base text-neutral-500 hover:text-blue-400"
-              title="Open in Solscan"
-              onClick={() => {
-                window.open(
-                  `https://solscan.io/account/${wallet.address}`,
-                  "_blank",
-                );
-                setToast("Wallet updated successfully");
-              }}
-            />
-            <span className="mx-2 text-neutral-700">|</span>
-            {timeRanges.map((label) => (
-              <button
-                key={label}
-                className={`rounded px-2 py-1 text-xs font-semibold ${selectedRange === label ? "text-blue-400" : "text-neutral-400 hover:text-blue-400"} transition-colors hover:bg-neutral-800`}
-                onClick={() => setSelectedRange(label)}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <div className="flex items-center gap-0.5 rounded-md border border-white/[0.06] bg-[#0c0e12]/60 p-0.5">
+              {timeRanges.map((label) => (
+                <button
+                  key={label}
+                  className={`rounded px-2.5 py-1 text-[11px] font-medium transition-all duration-200 ${
+                    selectedRange === label
+                      ? "bg-white/[0.08] text-[#f4f4f5]"
+                      : "text-[#71717a] hover:text-[#a1a1aa]"
+                  }`}
+                  onClick={() => setSelectedRange(label)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-md p-1 text-[#71717a] transition-colors hover:bg-white/[0.06] hover:text-[#f4f4f5]"
+              aria-label="Close"
+              type="button"
+            >
+              <IoIosCloseCircleOutline className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="absolute top-1/2 right-4 -translate-y-1/2 rounded px-2 py-1 text-2xl font-bold text-neutral-400 transition-colors hover:text-white"
-          >
-            ×
-          </button>
         </div>
         {/* Main Content */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Top: Balance, PNL, Performance */}
-          <div className="flex flex-row gap-8 px-8 pt-6 pb-2">
-            {/* Balance */}
-            <div className="min-w-[180px] flex-1">
-              <div className="mt-2 text-xs text-neutral-500">
-                Available Balance
+          {/* Top: Balance, PNL, Performance — 3-column card grid */}
+          <div className="grid flex-shrink-0 grid-cols-1 gap-3 px-5 pt-4 pb-3 lg:grid-cols-3">
+            {/* Balance card */}
+            <ScanCard label="Balance">
+              <div className="text-[10px] uppercase tracking-wide text-[#52525b]">
+                Total Value
               </div>
-              <div className="text-lg font-semibold text-white">
-                {loading ? (
-                  <span className="animate-pulse text-neutral-500">
-                    Loading...
-                  </span>
-                ) : walletBalance ? (
-                  <div className="flex flex-col">
-                    {typeof walletBalance.usd === "number" &&
-                    Number.isFinite(walletBalance.usd) ? (
-                      <span>${formatSmartNumber(walletBalance.usd)}</span>
-                    ) : walletBalance.usdFormatted ? (
-                      <span>{walletBalance.usdFormatted}</span>
-                    ) : typeof walletBalance.sol === "number" &&
-                      Number.isFinite(walletBalance.sol) ? (
-                      <span>
-                        $
-                        {formatSmartNumber(walletBalance.sol * currentSolPrice)}
-                      </span>
-                    ) : (
-                      <span className="text-red-400">No balance</span>
-                    )}
-                    <span className="text-sm font-normal text-neutral-400">
-                      {walletBalance.sol.toFixed(4)} SOL
+              {loading ? (
+                <span className="mt-1 animate-pulse text-sm text-[#52525b]">
+                  Loading…
+                </span>
+              ) : (
+                <div className="mt-0.5 text-2xl font-semibold tabular-nums text-[#f4f4f5]">
+                  ${formatSmartNumber(portfolioMetrics.totalValue)}
+                </div>
+              )}
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-[10px] uppercase tracking-wide text-[#52525b]">
+                  Unrealized PnL
+                </span>
+                <span
+                  className="text-sm font-semibold tabular-nums"
+                  style={{
+                    color:
+                      portfolioMetrics.unrealizedPnl >= 0 ? "#18c48c" : "#ef4444",
+                  }}
+                >
+                  {portfolioMetrics.unrealizedPnl >= 0 ? "+" : "-"}$
+                  {formatSmartNumber(Math.abs(portfolioMetrics.unrealizedPnl))}
+                </span>
+              </div>
+              <div className="my-3 h-px w-full bg-white/[0.06]" />
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-[#71717a]">SOL Balance</span>
+                {walletBalance ? (
+                  <div className="flex flex-col items-end">
+                    <span className="text-sm font-semibold tabular-nums text-[#f4f4f5]">
+                      ◎ {walletBalance.sol.toFixed(4)}
+                    </span>
+                    <span className="text-[11px] tabular-nums text-[#71717a]">
+                      {typeof walletBalance.usd === "number" &&
+                      Number.isFinite(walletBalance.usd)
+                        ? `$${formatSmartNumber(walletBalance.usd)}`
+                        : walletBalance.usdFormatted
+                          ? walletBalance.usdFormatted
+                          : typeof walletBalance.sol === "number" &&
+                              Number.isFinite(walletBalance.sol)
+                            ? `$${formatSmartNumber(walletBalance.sol * currentSolPrice)}`
+                            : "—"}
                     </span>
                   </div>
                 ) : balance !== null ? (
-                  <div className="flex flex-col">
-                    <span>${formatSmartNumber(balance * currentSolPrice)}</span>
-                    <span className="text-sm font-normal text-neutral-400">
-                      {balance.toFixed(4)} SOL
+                  <div className="flex flex-col items-end">
+                    <span className="text-sm font-semibold tabular-nums text-[#f4f4f5]">
+                      ◎ {balance.toFixed(4)}
+                    </span>
+                    <span className="text-[11px] tabular-nums text-[#71717a]">
+                      ${formatSmartNumber(balance * currentSolPrice)}
                     </span>
                   </div>
                 ) : (
-                  <span className="text-red-400">No balance</span>
+                  <span className="text-xs text-[#ef4444]">No balance</span>
                 )}
               </div>
-            </div>
-            {/* Realized PNL with chart */}
-            <div className="flex min-w-[260px] flex-[2] flex-col">
-              <div className="mb-1 flex items-center gap-2 text-xs text-neutral-400">
-                Realized PNL
-                <span
-                  className="text-[10px] text-neutral-500"
-                  title="Cumulative realized PnL from closed positions over the selected time range. Bars show per-trade PnL; the line shows running total."
-                >
-                  (i)
-                </span>
-              </div>
+            </ScanCard>
+            {/* PnL chart card */}
+            <ScanCard
+              label={
+                <>
+                  PNL
+                  <span
+                    className="text-[10px] normal-case text-[#52525b]"
+                    title="Cumulative realized PnL from closed positions over the selected time range. Bars show per-trade PnL; the line shows running total."
+                  >
+                    (i)
+                  </span>
+                </>
+              }
+            >
               <div
-                className={`text-3xl font-bold ${performanceMetrics.totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                className="text-2xl font-semibold tabular-nums"
+                style={{
+                  color:
+                    performanceMetrics.totalPnl >= 0 ? "#18c48c" : "#ef4444",
+                }}
               >
                 {performanceMetrics.totalPnl >= 0 ? "+" : "-"}$
                 {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
               </div>
               <div
-                className={`text-sm font-semibold ${realizedPnlPercentage >= 0 ? "text-emerald-400/80" : "text-red-400/80"}`}
+                className="text-xs font-medium tabular-nums"
+                style={{
+                  color:
+                    realizedPnlPercentage >= 0 ? "#18c48c" : "#ef4444",
+                }}
               >
                 {realizedPnlPercentage >= 0 ? "+" : ""}
                 {realizedPnlPercentage.toFixed(2)}%
               </div>
-              <div className="mt-2 h-[180px] w-full">
+              <div className="mt-2 h-[150px] w-full">
                 {positionsLoading ? (
-                  <div className="flex h-full items-center justify-center text-xs text-neutral-500">
-                    Loading chart...
+                  <div className="flex h-full items-center justify-center text-xs text-[#52525b]">
+                    Loading chart…
                   </div>
                 ) : pnlChartData.length <= 1 ? (
-                  <div className="flex h-full items-center justify-center text-xs text-neutral-500">
+                  <div className="flex h-full items-center justify-center text-xs text-[#52525b]">
                     No closed trades in this range
                   </div>
                 ) : (
                   <RealizedPnlChart data={pnlChartData} />
                 )}
               </div>
-            </div>
-            {/* Performance */}
-            <div className="min-w-[180px] flex-1">
-              <div className="mb-1 flex items-center gap-2 text-xs text-neutral-400">
-                Performance
-                <span
-                  className="text-[10px] text-neutral-500"
-                  title="Performance ranges show the number of positions with PNL in each range. Example: >500% means positions with more than 500% profit."
-                >
-                  (?)
-                </span>
-              </div>
-              <div className="mb-2 flex flex-row items-center justify-between">
-                <span className="text-xs text-neutral-400">
-                  {selectedRange === "Max"
-                    ? "Total PNL"
-                    : `${selectedRange} PNL`}
-                </span>
-                <span className="text-xs text-neutral-400">
-                  {selectedRange === "Max"
-                    ? "Total TXNS"
-                    : `${selectedRange} TXNS`}
-                </span>
-              </div>
-              <div className="mb-2 flex flex-row items-center justify-between">
-                <span className="font-semibold text-white">
-                  {performanceMetrics.totalPnl >= 0 ? "+" : "-"}$
-                  {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
-                </span>
-                <span className="font-semibold text-white">
-                  {performanceMetrics.completedTransactions} /{" "}
-                  {performanceMetrics.totalTransactions}
-                </span>
-              </div>
-              <div className="mt-2">
-                <div className="mt-2 mb-2 flex flex-col gap-1">
-                  <div className="flex items-center gap-2 text-xs text-neutral-400">
-                    <span className="inline-block h-3 w-3 rounded-full bg-green-900" />
-                    <span>&gt;500%</span>
-                    <span className="ml-auto">
-                      {performanceMetrics.categoryCounts.over500}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-neutral-400">
-                    <span className="inline-block h-3 w-3 rounded-full bg-green-700" />
-                    <span>200% ~ 500%</span>
-                    <span className="ml-auto">
-                      {performanceMetrics.categoryCounts.twoHundredTo500}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-neutral-400">
-                    <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
-                    <span>0% ~ 200%</span>
-                    <span className="ml-auto">
-                      {performanceMetrics.categoryCounts.zeroTo200}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-neutral-400">
-                    <span className="inline-block h-3 w-3 rounded-full bg-rose-900" />
-                    <span>0% ~ -50%</span>
-                    <span className="ml-auto">
-                      {performanceMetrics.categoryCounts.zeroToNeg50}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-neutral-400">
-                    <span className="inline-block h-3 w-3 rounded-full bg-rose-700" />
-                    <span>&lt;-50%</span>
-                    <span className="ml-auto">
-                      {performanceMetrics.categoryCounts.underNeg50}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-1 h-2 w-full rounded-full bg-neutral-800">
-                  <div
-                    className="h-2 rounded-full bg-pink-500"
+            </ScanCard>
+            {/* Performance card */}
+            <ScanCard
+              label={
+                <>
+                  Performance
+                  <span
+                    className="text-[10px] normal-case text-[#52525b]"
+                    title="Performance ranges show the number of positions with PNL in each range. Example: >500% means positions with more than 500% profit."
+                  >
+                    (?)
+                  </span>
+                </>
+              }
+            >
+              <div className="flex items-end justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-wide text-[#52525b]">
+                    {selectedRange === "Max" ? "Total PNL" : `${selectedRange} PNL`}
+                  </span>
+                  <span
+                    className="text-xl font-semibold tabular-nums"
                     style={{
-                      width: `${Math.min(
-                        100,
-                        Math.max(0, performanceMetrics.progressPercentage),
-                      )}%`,
+                      color:
+                        performanceMetrics.totalPnl >= 0 ? "#18c48c" : "#ef4444",
                     }}
-                  />
+                  >
+                    {performanceMetrics.totalPnl >= 0 ? "+" : "-"}$
+                    {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
+                  </span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] uppercase tracking-wide text-[#52525b]">
+                    {selectedRange === "Max" ? "Total TXNS" : `${selectedRange} TXNS`}
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-[#f4f4f5]">
+                    {performanceMetrics.completedTransactions} /{" "}
+                    {performanceMetrics.totalTransactions}
+                  </span>
                 </div>
               </div>
-            </div>
+              <div className="mt-3 flex flex-col gap-1.5 border-t border-white/[0.06] pt-3">
+                <DistributionRow
+                  dotColor="#18c48c"
+                  label=">500%"
+                  count={performanceMetrics.categoryCounts.over500}
+                />
+                <DistributionRow
+                  dotColor="#3fcf8e"
+                  label="200% ~ 500%"
+                  count={performanceMetrics.categoryCounts.twoHundredTo500}
+                />
+                <DistributionRow
+                  dotColor="#86efac"
+                  label="0% ~ 200%"
+                  count={performanceMetrics.categoryCounts.zeroTo200}
+                />
+                <DistributionRow
+                  dotColor="#fb7185"
+                  label="0% ~ -50%"
+                  count={performanceMetrics.categoryCounts.zeroToNeg50}
+                />
+                <DistributionRow
+                  dotColor="#ef4444"
+                  label="< -50%"
+                  count={performanceMetrics.categoryCounts.underNeg50}
+                />
+              </div>
+              <div className="mt-3">
+                <WinLossBar
+                  winPercentage={performanceMetrics.progressPercentage}
+                />
+              </div>
+            </ScanCard>
           </div>
-          {/* Tabs */}
-          <div className="mt-2 flex items-center justify-between border-b border-neutral-800 px-8">
-            <div className="mt-2 flex flex-row gap-10 text-sm">
+          {/* Tabs — understated text tabs with active underline */}
+          <div className="flex flex-shrink-0 items-center border-b border-white/[0.06] px-5">
+            <div className="flex flex-row gap-6 text-sm">
               {TABS.map((t) => {
                 const label =
                   t === "Dev Tokens" ? `Dev Tokens (${devTokens.length})` : t;
                 return (
                   <button
                     key={t}
-                    className={`border-b-2 py-2 transition-colors duration-200 ${tab === t ? "border-blue-400 font-semibold text-blue-400" : "border-transparent text-neutral-400 hover:text-white"}`}
+                    className={`relative -mb-px border-b-2 py-2.5 text-xs font-medium transition-colors duration-200 ${
+                      tab === t
+                        ? "border-[#18c48c] text-[#f4f4f5]"
+                        : "border-transparent text-[#71717a] hover:text-[#a1a1aa]"
+                    }`}
                     onClick={() => setTab(t)}
                   >
                     {label}
@@ -880,42 +1056,51 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             </div>
           </div>
           {/* Tab Content Area */}
-          <div className="flex-1 overflow-auto px-8">
+          <div className="flex-1 overflow-auto px-5 pb-2">
             {tab === "History" && (
               <div className="h-full w-full">
                 {positionsLoading ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="animate-pulse text-neutral-400">
+                    <div className="animate-pulse text-[#52525b]">
                       Loading history...
                     </div>
                   </div>
                 ) : goError ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-red-400">{goError}</div>
+                    <div className="text-[#ef4444]">{goError}</div>
                   </div>
                 ) : closedOrders.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-neutral-500">
-                      No closed orders found
+                    <div className="text-[#52525b]">
+                      {positionsDegraded
+                        ? "Trade history for this heavy wallet is still being computed — Active Positions shows live on-chain holdings meanwhile."
+                        : "No closed orders found"}
                     </div>
                   </div>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 border-b border-neutral-800 bg-black">
-                      <tr className="text-xs text-neutral-400 uppercase">
-                        <th className="px-4 py-3 text-left font-semibold">
+                  <table className="w-full table-fixed text-sm"><colgroup><col className="w-[8%]" /><col className="w-[32%]" /><col className="w-[20%]" /><col className="w-[20%]" /><col className="w-[20%]" /></colgroup>
+                    <thead
+                      className="sticky top-0 z-20"
+                      style={{
+                        backdropFilter: "blur(16px)",
+                        WebkitBackdropFilter: "blur(16px)",
+                        background: "rgba(3,3,4,0.85)",
+                      }}
+                    >
+                      <tr className="border-b border-white/[0.06]">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Time
                         </th>
-                        <th className="px-4 py-3 text-left font-semibold">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Token
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Bought
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Sold
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           PnL
                         </th>
                         {/* <th className="px-4 py-3 text-center font-semibold">
@@ -923,7 +1108,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         </th> */}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-neutral-800">
+                    <tbody>
                       {closedOrders.map((order, idx) => {
                         // Format time - when the position was closed (sell time)
                         const timeAgo = formatTimeAgo(order.closedAt);
@@ -946,90 +1131,28 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         return (
                           <tr
                             key={order.mint || idx}
-                            className="transition-colors hover:bg-neutral-800"
+                            className="border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
                           >
-                            <td className="px-4 py-3 text-neutral-300">
-                              <div className="font-mono text-sm">{timeAgo}</div>
+                            <td className="px-4 py-2.5 text-[#a1a1aa]">
+                              <div className="font-mono text-xs">{timeAgo}</div>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-2.5">
                               {(() => {
-                                const protocolSource =
-                                  order.launchpadProtocol ||
-                                  (order.mint?.toLowerCase().endsWith("pump")
-                                    ? "pumpfun"
-                                    : "");
-                                const branding = getProtocolBranding(
-                                  protocolSource || "",
-                                );
-                                const protocolColor = branding.color;
-                                const tokenIcon = branding.iconUrl;
-                                const isFullCircleImage = branding.isFullCircle;
                                 const shortAddress = order.mint
                                   ? `${order.mint.slice(0, 4)}...${order.mint.slice(-4)}`
                                   : "";
                                 return (
                                   <div className="flex items-center gap-3">
-                                    <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
-                                      <div
-                                        className="relative rounded-lg transition-all duration-300 ease-out"
-                                        style={{
-                                          border: protocolSource
-                                            ? `1px solid ${protocolColor}`
-                                            : "1px solid rgba(128, 128, 128, 0.3)",
-                                          padding: "2px",
-                                        }}
-                                      >
-                                        <div
-                                          className="relative rounded-lg"
-                                          style={{
-                                            border:
-                                              "1px solid rgba(192, 192, 192, 0.5)",
-                                            padding: "2px",
-                                          }}
-                                        >
-                                          <div className="relative h-10 w-10 overflow-hidden rounded-lg">
-                                            <FastImage
-                                              src={order.imageUrl || ""}
-                                              alt={
-                                                displayName ||
-                                                displaySymbol ||
-                                                "Token"
-                                              }
-                                              symbol={
-                                                displaySymbol || undefined
-                                              }
-                                              name={displayName || undefined}
-                                              width={40}
-                                              height={40}
-                                              className="h-full w-full object-cover"
-                                              showBubble={false}
-                                            />
-                                          </div>
-                                        </div>
-                                      </div>
-                                      {protocolSource && tokenIcon && (
-                                        <div
-                                          className="absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full bg-white"
-                                          style={{
-                                            width: 18,
-                                            height: 18,
-                                            border: `2px solid ${protocolColor}`,
-                                            boxShadow: `0 0 4px ${protocolColor}60`,
-                                          }}
-                                        >
-                                          <Image
-                                            src={tokenIcon}
-                                            alt={`${protocolSource} logo`}
-                                            width={14}
-                                            height={14}
-                                            className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
+                                    <TokenAvatar
+                                      imageUrl={order.imageUrl}
+                                      name={displayName}
+                                      symbol={displaySymbol}
+                                      mint={order.mint}
+                                      protocol={order.launchpadProtocol}
+                                    />
                                     <div className="flex min-w-0 flex-col">
                                       <span
-                                        className="truncate text-sm font-medium text-neutral-100"
+                                        className="truncate text-sm font-semibold text-neutral-100"
                                         title={order.mint || undefined}
                                       >
                                         {truncateTokenName(
@@ -1040,7 +1163,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                       </span>
                                       {shortAddress && (
                                         <span
-                                          className="truncate font-mono text-xs text-neutral-400"
+                                          className="truncate font-mono text-[11px] text-[#52525b]"
                                           title={order.mint || undefined}
                                         >
                                           {shortAddress}
@@ -1051,29 +1174,31 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 );
                               })()}
                             </td>
-                            <td className="px-4 py-3 text-right text-neutral-300">
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[#d4d4d8]">
                               {boughtDisplay}
                             </td>
-                            <td className="px-4 py-3 text-right text-neutral-300">
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[#d4d4d8]">
                               {soldDisplay}
                             </td>
-                            <td className="px-4 py-3 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <div className="flex flex-col items-end">
                                 <div
-                                  className={`font-semibold ${
-                                    order.pnl >= 0
-                                      ? "text-emerald-400"
-                                      : "text-red-400"
-                                  }`}
+                                  className="font-semibold tabular-nums"
+                                  style={{
+                                    color:
+                                      order.pnl >= 0 ? "#18c48c" : "#ef4444",
+                                  }}
                                 >
                                   {pnlDisplay}
                                 </div>
                                 <div
-                                  className={`text-xs ${
-                                    order.pnlPercentage >= 0
-                                      ? "text-emerald-400/70"
-                                      : "text-red-400/70"
-                                  }`}
+                                  className="text-xs tabular-nums"
+                                  style={{
+                                    color:
+                                      order.pnlPercentage >= 0
+                                        ? "rgba(24,196,140,0.7)"
+                                        : "rgba(239,68,68,0.7)",
+                                  }}
                                 >
                                   {pnlPercentageDisplay}
                                 </div>
@@ -1101,43 +1226,65 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             {tab === "Active Positions" && (
               <div className="h-full w-full overflow-auto">
                 {positionsLoading ? (
-                  <div className="flex h-full items-center justify-center">
-                    <div className="animate-pulse text-neutral-400">
+                  <div className="flex h-full flex-col items-center justify-center gap-2">
+                    <div className="animate-pulse text-[#52525b]">
                       Loading positions...
+                    </div>
+                    {positionsSlow && (
+                      <div className="max-w-xs text-center text-xs text-[#3f3f46]">
+                        Heavy trading history — first load for this wallet can
+                        take up to a minute. It&apos;s cached after that.
+                      </div>
+                    )}
+                  </div>
+                ) : goError && aggregatedPositions.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="max-w-sm text-center text-xs text-[#ef4444]">
+                      Positions are temporarily unavailable for this wallet —
+                      the history is too large for the current query and it
+                      timed out. The Activity tab still works; try again in a
+                      bit.
                     </div>
                   </div>
                 ) : aggregatedPositions.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-neutral-500">
+                    <div className="text-[#52525b]">
                       No active positions found
                     </div>
                   </div>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 border-b border-neutral-800 bg-black">
-                      <tr className="text-xs text-neutral-400 uppercase">
-                        <th className="px-4 py-3 text-left font-semibold">
+                  <table className="w-full table-fixed text-sm"><colgroup><col className="w-[28%]" /><col className="w-[13%]" /><col className="w-[13%]" /><col className="w-[13%]" /><col className="w-[14%]" /><col className="w-[13%]" /><col className="w-[6%]" /></colgroup>
+                    <thead
+                      className="sticky top-0 z-20"
+                      style={{
+                        backdropFilter: "blur(16px)",
+                        WebkitBackdropFilter: "blur(16px)",
+                        background: "rgba(3,3,4,0.85)",
+                      }}
+                    >
+                      <tr className="border-b border-white/[0.06]">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Token
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Bought
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Sold
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Remaining
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           PNL ↑
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           $
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold"></th>
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-neutral-800">
+                    <tbody>
                       {aggregatedPositions.map((position, idx) => {
                         const displayName =
                           position.tokenName || position.tokenSymbol || null;
@@ -1151,10 +1298,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         return (
                           <tr
                             key={position.mint || idx}
-                            className="transition-colors hover:bg-neutral-800/60"
+                            className="border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
                           >
                             <td
-                              className="cursor-pointer px-4 py-2"
+                              className="cursor-pointer px-4 py-2.5"
                               onClick={() => {
                                 const addr = position.mint;
                                 if (addr) {
@@ -1162,96 +1309,93 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 }
                               }}
                             >
-                              <div className="flex items-center gap-2">
-                                <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
-                                  <FastImage
-                                    src={imageUrl}
-                                    alt={
-                                      displayName || displaySymbol || "Token"
-                                    }
-                                    symbol={displaySymbol || undefined}
-                                    name={displayName || undefined}
-                                    width={32}
-                                    height={32}
-                                    className="h-full w-full object-cover"
-                                    showBubble={false}
-                                  />
-                                </div>
+                              <div className="flex items-center gap-3">
+                                <TokenAvatar
+                                  imageUrl={imageUrl}
+                                  name={displayName}
+                                  symbol={displaySymbol}
+                                  mint={position.mint}
+                                  protocol={position.launchpadProtocol}
+                                />
                                 <div className="flex min-w-0 flex-col">
                                   <span
-                                    className="truncate text-sm font-semibold text-white hover:text-blue-400"
+                                    className="truncate text-sm font-semibold text-neutral-100 transition-colors hover:text-[#18c48c]"
                                     title={position.mint || undefined}
                                   >
                                     {truncateTokenName(
                                       displayName || displaySymbol,
                                     )}
                                   </span>
-                                  <span className="truncate text-[11px] text-neutral-500">
+                                  <span className="truncate text-[11px] text-[#52525b]">
                                     {displaySymbol}
                                   </span>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <div className="flex flex-col items-end">
-                                <span className="font-semibold text-neutral-100">
+                                <span className="font-semibold tabular-nums text-neutral-100">
                                   ${formatSmartNumber(position.boughtValue)}
                                 </span>
-                                <span className="text-xs text-neutral-500">
+                                <span className="text-xs tabular-nums text-[#52525b]">
                                   {formatSmartNumber(position.boughtAmount)}{" "}
                                   {displaySymbol}
                                 </span>
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <div className="flex flex-col items-end">
-                                <span className="font-semibold text-neutral-100">
+                                <span className="font-semibold tabular-nums text-neutral-100">
                                   ${formatSmartNumber(position.soldValue)}
                                 </span>
-                                <span className="text-xs text-neutral-500">
+                                <span className="text-xs tabular-nums text-[#52525b]">
                                   {formatSmartNumber(position.soldAmount)}{" "}
                                   {displaySymbol}
                                 </span>
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <div className="flex flex-col items-end">
-                                <span className="font-semibold text-neutral-100">
+                                <span className="font-semibold tabular-nums text-neutral-100">
                                   ${formatSmartNumber(position.remainingValue)}
                                 </span>
-                                <span className="text-xs text-neutral-500">
+                                <span className="text-xs tabular-nums text-[#52525b]">
                                   {formatSmartNumber(position.remainingAmount)}{" "}
                                   {displaySymbol}
                                 </span>
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <span
-                                className={`font-semibold ${
-                                  position.pnlPercentage >= 0
-                                    ? "text-emerald-400"
-                                    : "text-red-400"
-                                }`}
+                                className="font-semibold tabular-nums"
+                                style={{
+                                  color:
+                                    position.pnlPercentage >= 0
+                                      ? "#18c48c"
+                                      : "#ef4444",
+                                }}
                               >
                                 {position.pnlPercentage >= 0 ? "+" : ""}
                                 {position.pnlPercentage.toFixed(1)}%
                               </span>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <span
-                                className={`font-semibold ${
-                                  position.totalPnl >= 0
-                                    ? "text-emerald-400"
-                                    : "text-red-400"
-                                }`}
+                                className="font-semibold tabular-nums"
+                                style={{
+                                  color:
+                                    position.totalPnl >= 0
+                                      ? "#18c48c"
+                                      : "#ef4444",
+                                }}
                               >
                                 {position.totalPnl >= 0 ? "+" : ""}$
                                 {formatSmartNumber(Math.abs(position.totalPnl))}
                               </span>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <button
-                                className="text-neutral-400 transition-colors hover:text-white"
+                                className="text-[#52525b] transition-colors hover:text-[#f4f4f5]"
                                 onClick={() => {
                                   const addr = position.mint;
                                   if (addr) {
@@ -1275,37 +1419,44 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               <div className="h-full w-full overflow-auto">
                 {positionsLoading ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="animate-pulse text-neutral-400">
+                    <div className="animate-pulse text-[#52525b]">
                       Loading top positions...
                     </div>
                   </div>
                 ) : top100Positions.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-neutral-500">No positions found</div>
+                    <div className="text-[#52525b]">No positions found</div>
                   </div>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 border-b border-neutral-800 bg-black">
-                      <tr className="text-xs text-neutral-400 uppercase">
-                        <th className="px-4 py-3 text-left font-semibold">
+                  <table className="w-full table-fixed text-sm"><colgroup><col className="w-[30%]" /><col className="w-[16%]" /><col className="w-[16%]" /><col className="w-[16%]" /><col className="w-[16%]" /><col className="w-[6%]" /></colgroup>
+                    <thead
+                      className="sticky top-0 z-20"
+                      style={{
+                        backdropFilter: "blur(16px)",
+                        WebkitBackdropFilter: "blur(16px)",
+                        background: "rgba(3,3,4,0.85)",
+                      }}
+                    >
+                      <tr className="border-b border-white/[0.06]">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Token
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Bought
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Sold
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           PNL ↑
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           $
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold"></th>
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-neutral-800">
+                    <tbody>
                       {top100Positions.map((position, idx) => {
                         const displayName =
                           position.tokenName || position.tokenSymbol || null;
@@ -1319,10 +1470,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         return (
                           <tr
                             key={position.mint || idx}
-                            className="transition-colors hover:bg-neutral-800/60"
+                            className="border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
                           >
                             <td
-                              className="cursor-pointer px-4 py-2"
+                              className="cursor-pointer px-4 py-2.5"
                               onClick={() => {
                                 const addr = position.mint;
                                 if (addr) {
@@ -1330,85 +1481,82 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 }
                               }}
                             >
-                              <div className="flex items-center gap-2">
-                                <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-neutral-800">
-                                  <FastImage
-                                    src={imageUrl}
-                                    alt={
-                                      displayName || displaySymbol || "Token"
-                                    }
-                                    symbol={displaySymbol || undefined}
-                                    name={displayName || undefined}
-                                    width={32}
-                                    height={32}
-                                    className="h-full w-full object-cover"
-                                    showBubble={false}
-                                  />
-                                </div>
+                              <div className="flex items-center gap-3">
+                                <TokenAvatar
+                                  imageUrl={imageUrl}
+                                  name={displayName}
+                                  symbol={displaySymbol}
+                                  mint={position.mint}
+                                  protocol={position.launchpadProtocol}
+                                />
                                 <div className="flex min-w-0 flex-col">
                                   <span
-                                    className="truncate text-sm font-semibold text-white hover:text-blue-400"
+                                    className="truncate text-sm font-semibold text-neutral-100 transition-colors hover:text-[#18c48c]"
                                     title={position.mint || undefined}
                                   >
                                     {truncateTokenName(
                                       displayName || displaySymbol,
                                     )}
                                   </span>
-                                  <span className="truncate text-[11px] text-neutral-500">
+                                  <span className="truncate text-[11px] text-[#52525b]">
                                     {displaySymbol}
                                   </span>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <div className="flex flex-col items-end">
-                                <span className="font-semibold text-neutral-100">
+                                <span className="font-semibold tabular-nums text-neutral-100">
                                   ${formatSmartNumber(position.boughtValue)}
                                 </span>
-                                <span className="text-xs text-neutral-500">
+                                <span className="text-xs tabular-nums text-[#52525b]">
                                   {formatSmartNumber(position.boughtAmount)}{" "}
                                   {displaySymbol}
                                 </span>
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <div className="flex flex-col items-end">
-                                <span className="font-semibold text-neutral-100">
+                                <span className="font-semibold tabular-nums text-neutral-100">
                                   ${formatSmartNumber(position.soldValue)}
                                 </span>
-                                <span className="text-xs text-neutral-500">
+                                <span className="text-xs tabular-nums text-[#52525b]">
                                   {formatSmartNumber(position.soldAmount)}{" "}
                                   {displaySymbol}
                                 </span>
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <span
-                                className={`font-semibold ${
-                                  position.pnlPercentage >= 0
-                                    ? "text-emerald-400"
-                                    : "text-red-400"
-                                }`}
+                                className="font-semibold tabular-nums"
+                                style={{
+                                  color:
+                                    position.pnlPercentage >= 0
+                                      ? "#18c48c"
+                                      : "#ef4444",
+                                }}
                               >
                                 {position.pnlPercentage >= 0 ? "+" : ""}
                                 {position.pnlPercentage.toFixed(1)}%
                               </span>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <span
-                                className={`font-semibold ${
-                                  position.totalPnl >= 0
-                                    ? "text-emerald-400"
-                                    : "text-red-400"
-                                }`}
+                                className="font-semibold tabular-nums"
+                                style={{
+                                  color:
+                                    position.totalPnl >= 0
+                                      ? "#18c48c"
+                                      : "#ef4444",
+                                }}
                               >
                                 {position.totalPnl >= 0 ? "+" : ""}$
                                 {formatSmartNumber(Math.abs(position.totalPnl))}
                               </span>
                             </td>
-                            <td className="px-4 py-2 text-right">
+                            <td className="px-4 py-2.5 text-right">
                               <button
-                                className="text-neutral-400 transition-colors hover:text-white"
+                                className="text-[#52525b] transition-colors hover:text-[#f4f4f5]"
                                 onClick={() => {
                                   const addr = position.mint;
                                   if (addr) {
@@ -1432,17 +1580,17 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               <div className="h-full w-full">
                 {tradesLoading ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="animate-pulse text-neutral-400">
+                    <div className="animate-pulse text-[#52525b]">
                       Loading activity...
                     </div>
                   </div>
                 ) : goError ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-red-400">{goError}</div>
+                    <div className="text-[#ef4444]">{goError}</div>
                   </div>
                 ) : activityData.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-neutral-500">No activity found</div>
+                    <div className="text-[#52525b]">No activity found</div>
                   </div>
                 ) : (
                   <div className="h-full w-full">
@@ -1460,35 +1608,42 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               <div className="h-full w-full">
                 {devTokensLoading ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="animate-pulse text-neutral-400">
+                    <div className="animate-pulse text-[#52525b]">
                       Loading dev tokens...
                     </div>
                   </div>
                 ) : devTokens.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-neutral-500">
+                    <div className="text-[#52525b]">
                       No tokens launched by this wallet
                     </div>
                   </div>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 z-10 border-b border-neutral-800 bg-black text-xs text-neutral-400">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-semibold">
+                  <table className="w-full table-fixed text-sm"><colgroup><col className="w-[40%]" /><col className="w-[14%]" /><col className="w-[23%]" /><col className="w-[23%]" /></colgroup>
+                    <thead
+                      className="sticky top-0 z-20"
+                      style={{
+                        backdropFilter: "blur(16px)",
+                        WebkitBackdropFilter: "blur(16px)",
+                        background: "rgba(3,3,4,0.85)",
+                      }}
+                    >
+                      <tr className="border-b border-white/[0.06]">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Token
                         </th>
-                        <th className="px-4 py-3 text-left font-semibold">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Migrated
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Market Cap
                         </th>
-                        <th className="px-4 py-3 text-right font-semibold">
+                        <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30">
                           Liquidity
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-neutral-800">
+                    <tbody>
                       {devTokens.map((dt) => {
                         const isMigrated = !!dt.token.migrated_pool_address;
                         const ageSec = Math.max(
@@ -1514,7 +1669,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         return (
                           <tr
                             key={dt.token.address}
-                            className="cursor-pointer transition-colors hover:bg-neutral-800"
+                            className="cursor-pointer border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
                             onClick={() =>
                               window.open(
                                 `/trade/${dt.token.address}`,
@@ -1522,36 +1677,45 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               )
                             }
                           >
-                            <td className="px-4 py-3">
-                              <div className="flex flex-col">
-                                <span
-                                  className="font-semibold text-white"
-                                  title={dt.token.address}
-                                >
-                                  {truncateTokenName(
-                                    dt.token.symbol ||
-                                      dt.token.name ||
-                                      `${dt.token.address.slice(0, 4)}...${dt.token.address.slice(-4)}`,
-                                  )}
-                                </span>
-                                <span className="text-xs text-neutral-500">
-                                  {age} ago
-                                </span>
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-3">
+                                <TokenAvatar
+                                  imageUrl={dt.token.image}
+                                  name={dt.token.name}
+                                  symbol={dt.token.symbol}
+                                  mint={dt.token.address}
+                                  protocol={dt.token.launchpad_protocol}
+                                />
+                                <div className="flex min-w-0 flex-col">
+                                  <span
+                                    className="truncate font-semibold text-neutral-100"
+                                    title={dt.token.address}
+                                  >
+                                    {truncateTokenName(
+                                      dt.token.symbol ||
+                                        dt.token.name ||
+                                        `${dt.token.address.slice(0, 4)}...${dt.token.address.slice(-4)}`,
+                                    )}
+                                  </span>
+                                  <span className="text-xs text-[#52525b]">
+                                    {age} ago
+                                  </span>
+                                </div>
                               </div>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-2.5">
                               {isMigrated ? (
-                                <span className="text-emerald-400">✓</span>
+                                <span className="text-[#18c48c]">✓</span>
                               ) : (
-                                <span className="text-rose-400">
+                                <span className="text-[#ef4444]">
                                   <IoIosCloseCircleOutline size={16} />
                                 </span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-right text-neutral-300">
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[#d4d4d8]">
                               {formatUsdShort(dt.marketCap)}
                             </td>
-                            <td className="px-4 py-3 text-right text-neutral-300">
+                            <td className="px-4 py-2.5 text-right tabular-nums text-[#d4d4d8]">
                               {formatUsdShort(dt.liquidity)}
                             </td>
                           </tr>
@@ -1566,7 +1730,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         </div>
       </div>
       {toast && (
-        <div className="animate-fade-in fixed top-12 left-1/2 z-50 -translate-x-1/2 rounded-md bg-neutral-800 px-4 py-2 text-sm font-semibold text-white shadow-md">
+        <div className="animate-fade-in fixed top-12 left-1/2 z-50 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#0c0e12]/95 px-4 py-2 text-sm font-semibold text-[#f4f4f5] shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl">
           {toast}
         </div>
       )}
