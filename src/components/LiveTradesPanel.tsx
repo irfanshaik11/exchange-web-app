@@ -273,7 +273,7 @@ export default function LiveTradesPanel({
         </defs>
       </svg>
 
-      <table className="mt-2 w-full min-w-[600px] text-[10px] sm:min-w-[720px] sm:text-xs">
+      <table className="w-full min-w-[600px] text-[10px] sm:min-w-[720px] sm:text-xs">
         <thead
           className="sticky top-0 z-10"
           style={{
@@ -283,25 +283,25 @@ export default function LiveTradesPanel({
           }}
         >
           <tr className="border-b border-white/[0.06]">
-            <th className="py-2 pl-4 pr-1 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:pl-6 sm:pr-2">
+            <th className="py-2.5 pl-4 pr-1 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30 sm:pl-6 sm:pr-2">
               Time
             </th>
-            <th className="px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-2">
+            <th className="px-1 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30 sm:px-2">
               Wallet
             </th>
-            <th className="px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-2">
+            <th className="px-1 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30 sm:px-2">
               Side
             </th>
-            <th className="px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-2">
+            <th className="px-1 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30 sm:px-2">
               Token
             </th>
-            <th className="px-1 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-2">
+            <th className="px-1 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30 sm:px-2">
               Amount
             </th>
-            <th className="px-1 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-2">
+            <th className="px-1 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30 sm:px-2">
               MC
             </th>
-            <th className="py-2 pl-1 pr-4 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:pl-2 sm:pr-6">
+            <th className="py-2.5 pl-1 pr-4 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30 sm:pl-2 sm:pr-6">
               Quick Buy
             </th>
           </tr>
@@ -345,25 +345,25 @@ export default function LiveTradesPanel({
                 style={{
                   backgroundColor:
                     trade.side === "buy"
-                      ? "rgba(24, 196, 140, 0.025)"
-                      : "rgba(239, 68, 68, 0.025)",
+                      ? "rgba(24, 196, 140, 0.02)"
+                      : "rgba(239, 68, 68, 0.02)",
                 }}
               >
                 {/* TIME */}
-                <td className="relative py-2 pl-4 pr-1 text-[9px] tabular-nums text-neutral-500 sm:pl-6 sm:pr-2 sm:text-xs">
+                <td className="relative py-2.5 pl-4 pr-1 text-[9px] tabular-nums text-neutral-500 sm:pl-6 sm:pr-2 sm:text-xs">
                   <span
                     className="absolute inset-y-0 left-0 w-[2px]"
                     style={{
                       backgroundColor:
                         trade.side === "buy" ? "#18c48c" : "#ef4444",
-                      opacity: 0.5,
+                      opacity: 0.4,
                     }}
                   />
                   {timeAgo}
                 </td>
 
                 {/* WALLET */}
-                <td className="px-1 py-2 font-mono text-[9px] text-neutral-300 sm:px-2 sm:text-xs">
+                <td className="px-1 py-2.5 font-mono text-[9px] text-neutral-300 sm:px-2 sm:text-xs">
                   <span className="flex items-center gap-1 truncate" title={trade.wallet}>
                     <span className="text-sm leading-none">
                       {wallet?.emoji || "💼"}
@@ -375,7 +375,7 @@ export default function LiveTradesPanel({
                 </td>
 
                 {/* SIDE */}
-                <td className="px-1 py-2 sm:px-2">
+                <td className="px-1 py-2.5 sm:px-2">
                   <span
                     className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide sm:text-[10px] ${
                       trade.side === "buy"
@@ -388,7 +388,7 @@ export default function LiveTradesPanel({
                 </td>
 
                 {/* TOKEN (clickable) */}
-                <td className="px-1 py-2 sm:px-2">
+                <td className="px-1 py-2.5 sm:px-2">
                   <button
                     type="button"
                     onMouseEnter={() => {

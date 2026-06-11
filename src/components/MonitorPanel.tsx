@@ -76,6 +76,23 @@ function formatUsdShort(n: number): string {
   return `$${n.toFixed(4)}`;
 }
 
+/**
+ * Compact "held for" duration label derived from a wallet's first→last
+ * (or first→now) timestamps. Pure presentational formatter — no data fetch.
+ */
+function formatHeldFor(fromMs: number, toMs: number): string {
+  const ms = toMs - fromMs;
+  if (!ms || ms <= 0) return "0s";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
+}
+
 // ── Aggregation ─────────────────────────────────────────────────────────
 
 interface WalletAgg {
@@ -368,7 +385,7 @@ export default function MonitorPanel({
 
   return (
     <div className="scrollbar-hide -mx-3 flex-1 overflow-auto sm:-mx-5">
-      <div className="flex flex-col gap-2 px-3 py-2 sm:px-5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3 px-3 py-3 sm:px-5">
         {tokenAggs.map((token) => {
           const meta = metadata.get(token.mint);
           const displaySymbol =
@@ -395,7 +412,6 @@ export default function MonitorPanel({
           const ageMs = meta?.createdAt
             ? now - new Date(meta.createdAt as any).getTime()
             : now - token.firstAt;
-          const lastTxMs = now - token.lastAt;
 
           const marketCap = meta?.market_cap_usd ?? token.marketCapUsd ?? null;
           const liquidity = meta?.liquidity_usd ?? null;
@@ -432,16 +448,16 @@ export default function MonitorPanel({
           return (
             <div
               key={token.mint}
-              className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-colors hover:border-white/[0.1]"
+              className="@container flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-colors hover:border-white/[0.1]"
             >
               {/* HEADER ROW */}
-              <div className="flex items-start gap-3 px-3 py-3 sm:px-4">
+              <div className="flex items-start gap-3 px-3.5 py-3.5">
                 {/* Icon */}
                 <button
                   type="button"
                   onClick={goToTrade}
                   onMouseEnter={preload}
-                  className="relative flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center sm:h-11 sm:w-11"
+                  className="relative flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center"
                   aria-label={`Open ${displaySymbol}`}
                 >
                   <div
@@ -452,7 +468,7 @@ export default function MonitorPanel({
                       backgroundColor: "#06070b",
                     }}
                   >
-                    <div className="relative h-7 w-7 overflow-hidden rounded-md sm:h-9 sm:w-9">
+                    <div className="relative h-8 w-8 overflow-hidden rounded-md">
                       <FastImage
                         src={tokenImageUrl}
                         fallbackSrc={fallbackAvatar}
@@ -483,115 +499,73 @@ export default function MonitorPanel({
                   </div>
                 </button>
 
-                {/* Name + ticker + stats */}
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <div className="flex items-center gap-2">
+                {/* Name + ticker + mint line */}
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <div className="flex min-w-0 items-baseline gap-1.5">
                     <button
                       type="button"
                       onClick={goToTrade}
                       onMouseEnter={preload}
-                      className="cursor-pointer truncate text-left text-sm font-semibold text-white hover:text-emerald-300 sm:text-[15px]"
+                      className="max-w-full cursor-pointer truncate text-left text-[15px] font-semibold leading-tight text-white hover:text-emerald-300"
                       title={displayName ?? undefined}
                     >
                       {displaySymbol}
                     </button>
-                    <span
-                      className="max-w-[140px] truncate text-xs text-neutral-500 sm:max-w-[220px]"
-                      title={displayName ?? undefined}
-                    >
-                      {displayName !== displaySymbol ? displayName : ""}
+                    {displayName !== displaySymbol && (
+                      <span
+                        className="min-w-0 truncate text-xs text-neutral-500"
+                        title={displayName ?? undefined}
+                      >
+                        {displayName}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-white/40">
+                    <span className="tabular-nums text-[#18c48c]">
+                      {formatAge(ageMs)}
+                    </span>
+                    <span className="text-white/20">·</span>
+                    <span className="truncate font-mono text-white/35">
+                      {token.mint.slice(0, 4)}…{token.mint.slice(-4)}
                     </span>
                     <button
                       type="button"
                       onClick={() => copyMint(token.mint)}
                       title="Copy mint address"
-                      className="cursor-pointer text-neutral-500 hover:text-neutral-200"
+                      className="flex-shrink-0 cursor-pointer text-neutral-500 transition-colors hover:text-neutral-200"
                     >
                       <FiCopy className="h-3 w-3" />
                     </button>
                     {copiedMint === token.mint && (
-                      <span className="text-[10px] text-emerald-400">
+                      <span className="flex-shrink-0 text-[10px] text-emerald-400">
                         Copied
                       </span>
                     )}
                     <button
                       type="button"
                       title="Star"
-                      className="cursor-pointer text-neutral-500 hover:text-yellow-300"
+                      className="flex-shrink-0 cursor-pointer text-neutral-500 transition-colors hover:text-yellow-300"
                     >
                       <FiStar className="h-3 w-3" />
                     </button>
                   </div>
-                  <div className="mt-0.5 text-[11px] font-medium tabular-nums text-[#18c48c]">
-                    {formatAge(ageMs)}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px]">
-                    <span className="flex items-center gap-1">
-                      <span className="text-[10px] uppercase tracking-wide text-white/30">
-                        H
-                      </span>
-                      <span className="font-semibold tabular-nums text-white">
-                        {holders}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="text-[10px] uppercase tracking-wide text-white/30">
-                        MC
-                      </span>
-                      <span className="font-semibold tabular-nums text-[#18c48c]">
-                        {marketCap ? `$${formatMarketCap(marketCap)}` : "-"}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="text-[10px] uppercase tracking-wide text-white/30">
-                        L
-                      </span>
-                      <span className="font-semibold tabular-nums text-white">
-                        {liquidity ? `$${formatMarketCap(liquidity)}` : "-"}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="text-[10px] uppercase tracking-wide text-white/30">
-                        TX
-                      </span>
-                      <span className="font-semibold tabular-nums text-white">
-                        {totalTx}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="text-[10px] uppercase tracking-wide text-white/30">
-                        Last
-                      </span>
-                      <span className="font-semibold tabular-nums text-white">
-                        {formatAge(lastTxMs)}
-                      </span>
-                    </span>
-                  </div>
                 </div>
 
                 {/* Buy/sell summary + quick buy */}
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-2 text-[11px] sm:text-xs">
-                    <span className="font-semibold tabular-nums text-[#18c48c]">
-                      {token.buyCount}
-                      <span className="text-neutral-600"> / </span>
-                      {formatUsdShort(token.buyUsd)}
+                <div className="flex flex-shrink-0 flex-col items-end gap-2">
+                  <div className="flex flex-col items-end leading-tight">
+                    <span className="hidden text-[9px] uppercase tracking-wider text-white/30 @[20rem]:block">
+                      Buys / Sells
                     </span>
-                    <span className="text-neutral-700">·</span>
-                    <span className="font-semibold tabular-nums text-[#ef4444]">
-                      {token.sellCount}
+                    <span className="text-xs tabular-nums">
+                      <span className="font-semibold text-[#18c48c]">
+                        {token.buyCount}
+                      </span>
                       <span className="text-neutral-600"> / </span>
-                      {formatUsdShort(token.sellUsd)}
+                      <span className="font-semibold text-[#ef4444]">
+                        {token.sellCount}
+                      </span>
                     </span>
-                  </div>
-                  <div className="flex h-1.5 w-[120px] overflow-hidden rounded-full bg-[#080a0d]">
-                    <div
-                      className="h-full bg-[#18c48c] transition-all duration-300"
-                      style={{
-                        width: `${Math.max(2, Math.min(98, buyShare * 100))}%`,
-                      }}
-                    />
-                    <div className="h-full flex-1 bg-[#ef4444] transition-all duration-300" />
                   </div>
                   <button
                     type="button"
@@ -600,36 +574,94 @@ export default function MonitorPanel({
                       e.stopPropagation();
                       onQuickBuy(token.lastTrade);
                     }}
-                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-[#18c48c]/20 bg-[#18c48c]/10 text-[#18c48c] transition-colors hover:bg-[#18c48c]/20 hover:text-[#18c48c]"
+                    className="flex cursor-pointer items-center gap-1 rounded-full border border-[#18c48c]/20 bg-[#18c48c]/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-[#18c48c] transition-colors hover:bg-[#18c48c]/20"
                     title={`Quick buy ${quickBuyAmount} SOL`}
                   >
-                    <HiLightningBolt className="h-3.5 w-3.5" />
+                    <HiLightningBolt className="h-3 w-3" />
+                    <span>{quickBuyAmount}</span>
                   </button>
                 </div>
               </div>
 
-              {/* WALLETS TABLE */}
-              <div className="border-t border-white/[0.06] bg-[#08090c]">
-                <table className="w-full min-w-[640px] text-[11px] sm:text-xs">
+              {/* SECONDARY STAT STRIP — progressive disclosure by card width.
+                  MC + TX always show; Holders/Vol/Liq reveal on wider cards. */}
+              <div className="flex items-center gap-x-4 gap-y-1.5 border-t border-white/[0.06] px-3.5 py-2.5">
+                {[
+                  {
+                    label: "MC",
+                    value: marketCap ? `$${formatMarketCap(marketCap)}` : "-",
+                    show: "", // always
+                  },
+                  {
+                    label: "TX",
+                    value: String(totalTx),
+                    show: "", // always
+                  },
+                  {
+                    label: "Vol",
+                    value: formatUsdShort(token.buyUsd + token.sellUsd),
+                    show: "hidden @[19rem]:flex",
+                  },
+                  {
+                    label: "Holders",
+                    value: String(holders),
+                    show: "hidden @[24rem]:flex",
+                  },
+                  {
+                    label: "Liq",
+                    value: liquidity ? `$${formatMarketCap(liquidity)}` : "-",
+                    show: "hidden @[28rem]:flex",
+                  },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    className={`min-w-0 flex-col leading-tight ${stat.show || "flex"}`}
+                  >
+                    <span className="text-[9px] uppercase tracking-wider text-white/30">
+                      {stat.label}
+                    </span>
+                    <span className="truncate text-[11px] font-semibold tabular-nums text-white/80">
+                      {stat.value}
+                    </span>
+                  </div>
+                ))}
+                <div className="ml-auto flex h-1.5 w-[64px] flex-shrink-0 overflow-hidden rounded-full bg-[#080a0d]">
+                  <div
+                    className="h-full bg-[#18c48c] transition-all duration-300"
+                    style={{
+                      width: `${Math.max(2, Math.min(98, buyShare * 100))}%`,
+                    }}
+                  />
+                  <div className="h-full flex-1 bg-[#ef4444] transition-all duration-300" />
+                </div>
+              </div>
+
+              {/* WALLETS TABLE — "Held For" + txn sublines hide on narrow cards */}
+              <div className="mt-auto border-t border-white/[0.06] bg-[#08090c]">
+                <table className="w-full table-fixed text-[11px]">
+                  <colgroup>
+                    <col className="w-[34%] @[22rem]:w-[28%]" />
+                    <col className="hidden @[22rem]:table-column @[22rem]:w-[14%]" />
+                    <col className="w-[22%] @[22rem]:w-[20%]" />
+                    <col className="w-[22%] @[22rem]:w-[20%]" />
+                    <col className="w-[22%] @[22rem]:w-[18%]" />
+                  </colgroup>
                   <thead>
                     <tr className="border-b border-white/[0.06]">
-                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
+                      <th className="px-3.5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         Wallet
                       </th>
-                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
-                        Time in Trade
+                      <th className="hidden px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30 @[22rem]:table-cell">
+                        Held For
                       </th>
-                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         Bought
                       </th>
-                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         Sold
                       </th>
-                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
+                      <th className="px-3.5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         PNL
-                      </th>
-                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
-                        Remaining
                       </th>
                     </tr>
                   </thead>
@@ -645,51 +677,61 @@ export default function MonitorPanel({
                       // Total PnL = (sold value + current value of remaining) - bought value.
                       const pnl =
                         w.soldUsd + remainingUsd - w.boughtUsd;
-                      const timeInTradeMs = now - w.firstAt;
+                      const stillHolding = remainingTokens > 0.001;
+                      const heldTo = stillHolding ? now : w.lastAt;
                       const pnlPositive = pnl >= 0;
                       return (
                         <tr
                           key={w.wallet}
                           className="border-b border-white/[0.04] transition-colors last:border-b-0 hover:bg-white/[0.04]"
                         >
-                          <td className="px-3 py-2.5 sm:px-4">
+                          <td className="px-3.5 py-2.5">
                             <span
-                              className="inline-flex items-center gap-1.5 text-neutral-200"
+                              className="flex min-w-0 items-center gap-1.5 text-neutral-200"
                               title={w.wallet}
                             >
-                              <span className="text-sm leading-none">
+                              <span className="flex-shrink-0 text-sm leading-none">
                                 {w.walletEmoji}
                               </span>
-                              <span className="truncate font-medium">
+                              <span className="min-w-0 truncate font-medium">
                                 {w.walletName}
                               </span>
+                              {/* Holding dot shows here when "Held For" column is collapsed */}
+                              {stillHolding && (
+                                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#18c48c] @[22rem]:hidden" />
+                              )}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 tabular-nums text-neutral-400 sm:px-4">
-                            {formatAge(timeInTradeMs)}
+                          <td className="hidden px-2 py-2.5 @[22rem]:table-cell">
+                            <span className="inline-flex items-center gap-1 tabular-nums text-neutral-400">
+                              {stillHolding && (
+                                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#18c48c]" />
+                              )}
+                              {formatHeldFor(w.firstAt, heldTo)}
+                            </span>
                           </td>
-                          <td className="px-3 py-2.5 text-right sm:px-4">
-                            <div className="flex flex-col items-end">
+                          <td className="px-2 py-2.5 text-right">
+                            <div className="flex flex-col items-end leading-tight">
                               <span className="font-semibold tabular-nums text-[#18c48c]">
                                 {formatUsdShort(w.boughtUsd)}
                               </span>
-                              <span className="text-[10px] tabular-nums text-neutral-500">
+                              <span className="hidden text-[10px] tabular-nums text-neutral-500 @[24rem]:block">
                                 {w.buyCount} txn{w.buyCount === 1 ? "" : "s"}
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-right sm:px-4">
-                            <div className="flex flex-col items-end">
+                          <td className="px-2 py-2.5 text-right">
+                            <div className="flex flex-col items-end leading-tight">
                               <span className="font-semibold tabular-nums text-[#ef4444]">
                                 {formatUsdShort(w.soldUsd)}
                               </span>
-                              <span className="text-[10px] tabular-nums text-neutral-500">
+                              <span className="hidden text-[10px] tabular-nums text-neutral-500 @[24rem]:block">
                                 {w.sellCount} txn
                                 {w.sellCount === 1 ? "" : "s"}
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-right sm:px-4">
+                          <td className="px-3.5 py-2.5 text-right">
                             <span
                               className="font-semibold tabular-nums"
                               style={{
@@ -699,11 +741,6 @@ export default function MonitorPanel({
                               {pnlPositive ? "+" : "-"}
                               {formatUsdShort(Math.abs(pnl))}
                             </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-neutral-200 sm:px-4">
-                            {remainingUsd > 0
-                              ? formatUsdShort(remainingUsd)
-                              : "-"}
                           </td>
                         </tr>
                       );
