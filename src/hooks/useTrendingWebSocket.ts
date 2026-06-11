@@ -496,6 +496,15 @@ function connectGlobal() {
                   // snapshot rank until the next full snapshot/reconnect. `??` keeps the
                   // existing rank on deltas that don't include a rank change.
                   rank: update.rank ?? existing.rank,
+                  // Display identity can arrive AFTER the token first charts: dex_trade
+                  // discoveries enter the board with a mint-fallback name, then the
+                  // indexer's metadata backfill names them minutes later and the
+                  // broadcaster emits name/symbol/image deltas. Without these merges an
+                  // open session shows "EW8Z…CSrQ"-style names until a full refresh.
+                  name: update.name ?? existing.name,
+                  symbol: update.symbol ?? existing.symbol,
+                  image: update.image ?? existing.image,
+                  image_url: update.image ?? existing.image_url,
                   price_usd: update.price_usd ?? existing.price_usd,
                   priceUsd: update.price_usd ?? existing.priceUsd,
                   fully_diluted_value:
