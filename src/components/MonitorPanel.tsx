@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useResolvedTokenImages } from "~/hooks/useResolvedTokenImages";
 import { useRouter } from "next/router";
 import FastImage from "~/components/FastImage";
 import { HiLightningBolt } from "react-icons/hi";
@@ -307,6 +308,23 @@ export default function MonitorPanel({
   const mints = useMemo(() => tokenAggs.map((t) => t.mint), [tokenAggs]);
   const metadata = useTokenMetadata(mints);
 
+  // Resolve token avatars through the shared cascade (proxy + cache + server
+  // DAS heal) — the raw image_url from /v1/token frequently 403s or is an
+  // unresolved IPFS/metadata link.
+  const imageItems = useMemo(
+    () =>
+      tokenAggs.map((t) => {
+        const meta = metadata.get(t.mint);
+        return {
+          mint: t.mint,
+          raw: meta?.image_url ?? meta?.image ?? null,
+          uri: meta?.uri ?? null,
+        };
+      }),
+    [tokenAggs, metadata],
+  );
+  const resolvedImages = useResolvedTokenImages(imageItems);
+
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const copyMint = (mint: string) => {
     if (!navigator?.clipboard) return;
@@ -358,7 +376,9 @@ export default function MonitorPanel({
             meta?.symbol ||
             (token.mint ? token.mint.slice(0, 6) + "…" : "Unknown");
           const displayName = token.name || meta?.name || displaySymbol;
-          const tokenImageUrl = meta ? extractTokenImage(meta) : null;
+          const tokenImageUrl =
+            resolvedImages[token.mint] ||
+            (meta ? extractTokenImage(meta) : null);
           const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol || "T")}&background=0f1012&color=E6E7EA&size=40`;
           const launchpadProtocol = (
             meta?.launchpad_protocol || ""

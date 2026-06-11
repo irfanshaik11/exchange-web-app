@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import FastImage from "~/components/FastImage";
+import { useResolvedTokenImages } from "~/hooks/useResolvedTokenImages";
 import { useRouter } from "next/router";
 import { HiLightningBolt } from "react-icons/hi";
 import { SiSolana } from "react-icons/si";
@@ -107,6 +108,22 @@ export default function LiveTradesPanel({
     new Map(),
   );
   const fetchedMintsRef = useRef<Set<string>>(new Set());
+
+  // Resolve token avatars through the shared cascade (proxy + cache + server
+  // DAS heal) — the raw image_url from /v1/token is often a CDN URL that 403s.
+  const imageItems = useMemo(
+    () =>
+      trades.map((t) => {
+        const meta = tokenMetadata.get(t.mint);
+        return {
+          mint: t.mint,
+          raw: meta?.image_url ?? meta?.image ?? null,
+          uri: meta?.uri ?? null,
+        };
+      }),
+    [trades, tokenMetadata],
+  );
+  const resolvedImages = useResolvedTokenImages(imageItems);
 
   useEffect(() => {
     if (trades.length === 0) return;
@@ -294,7 +311,11 @@ export default function LiveTradesPanel({
               metadata?.name ||
               trade.mint.slice(0, 8) + "...";
             const displayName = trade.name || metadata?.name;
-            const tokenImageUrl = metadata ? extractTokenImage(metadata) : null;
+            // Prefer the cascade-resolved+proxied avatar; fall back to the raw
+            // extract only while the resolver is still working.
+            const tokenImageUrl =
+              resolvedImages[trade.mint] ||
+              (metadata ? extractTokenImage(metadata) : null);
             const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol || "T")}&background=0f1012&color=E6E7EA&size=28`;
             const launchpadProtocol =
               metadata?.launchpad_protocol?.toLowerCase() || "";
