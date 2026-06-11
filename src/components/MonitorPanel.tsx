@@ -231,6 +231,8 @@ function useTokenMetadata(mints: string[]) {
       (m) => m && !metadata.has(m) && !fetchedRef.current.has(m),
     );
     if (todo.length === 0) return;
+    // Mark in-flight to dedupe; a FAILED fetch is un-marked below so it retries
+    // on the next data tick instead of being permanently stuck on "-" / no image.
     todo.forEach((m) => fetchedRef.current.add(m));
 
     Promise.allSettled(
@@ -238,16 +240,44 @@ function useTokenMetadata(mints: string[]) {
         try {
           const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
           if (!goUrl) return;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-          const resp = await fetch(`${goUrl}/v1/token/${mint}`, {
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          if (!resp.ok) return;
-          const data = await resp.json();
+          // Retry transient 502/503/504 (deploy/restart churn) — a single blip
+          // used to leave MC as "-" for the whole session because the mint was
+          // pre-marked fetched and never retried.
+          let data: any = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 5000);
+              const resp = await fetch(`${goUrl}/v1/token/${mint}`, {
+                signal: controller.signal,
+              });
+              clearTimeout(timeoutId);
+              if (resp.ok) {
+                data = await resp.json();
+                break;
+              }
+              if (
+                (resp.status === 502 ||
+                  resp.status === 503 ||
+                  resp.status === 504) &&
+                attempt < 2
+              ) {
+                await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+                continue;
+              }
+              break; // non-retryable status
+            } catch {
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+                continue;
+              }
+            }
+          }
           const token = data?.token;
-          if (!token) return;
+          if (!token) {
+            fetchedRef.current.delete(mint); // allow a later retry
+            return;
+          }
           const md: TokenMeta = {
             symbol: token.symbol ?? null,
             name: token.name ?? null,

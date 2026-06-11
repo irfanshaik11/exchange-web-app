@@ -258,7 +258,18 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   );
 
   const aggregatedPositions = useMemo(
-    () => allAggregatedPositions.filter((p) => p.isOpen),
+    () =>
+      allAggregatedPositions
+        .filter((p) => p.isOpen)
+        // Hide zero-cost-basis airdrop dust: tokens the wallet never bought
+        // (boughtAmount === 0 → received via transfer/airdrop) AND worth under
+        // $1. KOL wallets get flooded with these — they otherwise bury the real
+        // positions under a wall of "$0 bought / $0 sold / +0.0% PnL" rows.
+        // Meaningful airdrops (≥ $1) and every actually-traded position stay.
+        .filter((p) => !(p.boughtAmount === 0 && p.remainingValue < 1))
+        // Default to value-sorted so the largest holdings lead instead of the
+        // zero-PnL airdrops clustering at the top.
+        .sort((a, b) => b.remainingValue - a.remainingValue),
     [allAggregatedPositions],
   );
 
