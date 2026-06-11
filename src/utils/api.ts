@@ -1812,6 +1812,9 @@ export interface WalletPortfolioPosition {
   token_name?: string | null;
   token_symbol?: string | null;
   image_url?: string | null;
+  /** Raw on-chain metadata URI (tokens.uri) — resolve the real image from it
+   * when image_url is NULL. mint→image is immutable, so cache the result. */
+  uri?: string | null;
   launchpad_protocol?: string | null;
   bought_tokens: number;
   sold_tokens: number;
@@ -1931,9 +1934,22 @@ export const getWalletPortfolioSummary = (
 
 export const getWalletPortfolioPositions = (
   address: string,
-  opts?: { includeClosed?: boolean; signal?: AbortSignal },
-): Promise<{ wallet_address: string; count: number; positions: WalletPortfolioPosition[] }> => {
-  const qs = opts?.includeClosed ? "?include_closed=1" : "";
+  opts?: { includeClosed?: boolean; fresh?: boolean; signal?: AbortSignal },
+): Promise<{
+  wallet_address: string;
+  count: number;
+  positions: WalletPortfolioPosition[];
+  /** True when the trade aggregation timed out (heavy wallet) and the server
+   * fell back to chain-holdings only — no closed rows / PnL in this response. */
+  degraded?: boolean;
+}> => {
+  const params: string[] = [];
+  if (opts?.includeClosed) params.push("include_closed=1");
+  // fresh=1 bypasses the server's stale-while-revalidate cache. Sent on the
+  // WS-trade-triggered refetch so a wallet's positions recompute the moment it
+  // trades (never on a normal load — keeps idle views on the fast cache path).
+  if (opts?.fresh) params.push("fresh=1");
+  const qs = params.length ? `?${params.join("&")}` : "";
   return tokenServiceJson(`/v1/wallet/${encodeURIComponent(address)}/positions${qs}`, opts?.signal);
 };
 

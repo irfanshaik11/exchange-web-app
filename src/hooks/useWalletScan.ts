@@ -581,7 +581,7 @@ export function useWalletScan(
     [],
   );
 
-  const fetchAll = useCallback(async (): Promise<void> => {
+  const fetchAll = useCallback(async (fresh = false): Promise<void> => {
     if (!address) return;
     // A positions query for a whale wallet runs 15-60s server-side. Aborting
     // and restarting it on every refetch signal — and live trades arrive
@@ -624,6 +624,7 @@ export function useWalletScan(
 
     const positionsP = getWalletPortfolioPositions(address, {
       includeClosed: true,
+      fresh, // revalidate (bypass server cache) only on trade-triggered refetch
       signal: ac.signal,
     })
       .then((p) => {
@@ -657,7 +658,8 @@ export function useWalletScan(
       // Trailing refetch: signals that arrived mid-flight collapsed into one.
       if (pendingRefetchRef.current && !ac.signal.aborted) {
         pendingRefetchRef.current = false;
-        void fetchAll();
+        // A coalesced refetch was triggered by a trade signal → keep it fresh.
+        void fetchAll(fresh);
       }
     });
   }, [address]);
@@ -833,7 +835,9 @@ export function useWalletScan(
     }
     refetchDebounceRef.current = setTimeout(() => {
       refetchDebounceRef.current = null;
-      void fetchAll();
+      // Trade-triggered → revalidate with fresh=1 so the server recomputes the
+      // wallet's positions instead of returning the ≤150s-stale warmer cache.
+      void fetchAll(true);
     }, 2000);
   }, [opts?.refetchSignal, address, fetchAll]);
 
