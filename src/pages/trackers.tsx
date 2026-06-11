@@ -92,6 +92,7 @@ import MonitorPanel from "../components/MonitorPanel";
 import KolScanTrackerContent from "../components/KolScanTrackerContent";
 import kolWalletTrackerData from "../data/kol-wallet-tracker.json";
 import { useSolPrice } from "../components/SolPriceContext";
+import { prefetchWalletScan } from "../hooks/useWalletScan";
 import {
   getWalletPortfolioSummary,
   type WalletPortfolioSummary,
@@ -2628,6 +2629,18 @@ export default function TrackersPage() {
                                                       handleRemoveWallet
                                                     }
                                                     onClick={(wallet) => {
+                                                      // Kick off all scan
+                                                      // fetches (summary +
+                                                      // positions + trades) in
+                                                      // parallel BEFORE the
+                                                      // panel mounts, so the
+                                                      // slow positions request
+                                                      // starts ~100-300ms
+                                                      // earlier. useWalletScan
+                                                      // dedupes against this.
+                                                      void prefetchWalletScan(
+                                                        wallet.address,
+                                                      );
                                                       setScannedWallet(wallet);
                                                     }}
                                                     onNotificationToggle={async (
