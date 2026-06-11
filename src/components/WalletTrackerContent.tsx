@@ -2,8 +2,9 @@
 
 const isDev = process.env.NODE_ENV !== "production";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/router";
+import { useResolvedTokenImages } from "~/hooks/useResolvedTokenImages";
 import { useUser } from "./UserContext";
 import { useWalletTracker } from "./WalletTrackerContext";
 import { useQuickBuy } from "./QuickBuyContext";
@@ -525,6 +526,26 @@ export default function WalletTrackerContent() {
   const filteredLatestTrades = latestTrades.filter((trade) =>
     watchedWalletAddresses.has(trade.wallet),
   );
+
+  // Background image preload for BOTH tabs at the always-mounted parent level.
+  // Monitor and Live Trades are conditionally rendered (only the active tab is
+  // mounted), so each tab's own image-resolver runs only while you're looking
+  // at it. Resolving + preloading every trade-feed mint's avatar here — keyed
+  // on the full latestTrades set, regardless of activeTab — means images load
+  // and stay cached in the background, ready the instant you switch tabs or a
+  // token scrolls into view (not lazily on first sight).
+  const trackerImageItems = useMemo(() => {
+    const seen = new Set<string>();
+    const items: { mint: string }[] = [];
+    for (const t of latestTrades) {
+      if (t.mint && !seen.has(t.mint)) {
+        seen.add(t.mint);
+        items.push({ mint: t.mint });
+      }
+    }
+    return items;
+  }, [latestTrades]);
+  useResolvedTokenImages(trackerImageItems);
 
   // Quick buy handler (metadata is managed inside LiveTradesPanel)
   const handleQuickBuy = async (trade: TradeEvent) => {

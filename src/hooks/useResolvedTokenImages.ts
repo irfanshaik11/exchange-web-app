@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { preloadImages } from "~/utils/imagePreloader";
 import {
   getCachedScanImage,
   resolveScanImage,
@@ -61,6 +62,10 @@ export function useResolvedTokenImages(
     }
     if (Object.keys(fromCache).length > 0) {
       setImages((prev) => ({ ...prev, ...fromCache }));
+      // Warm the browser cache + retain the decoded bitmaps for the cached
+      // URLs too — so a token that's currently off-screen (virtualized) is
+      // already loaded and stays loaded when it scrolls into view.
+      void preloadImages(Object.values(fromCache), { maxConcurrent: 8 });
     }
     if (work.length === 0) return;
 
@@ -81,6 +86,9 @@ export function useResolvedTokenImages(
         );
         if (!cancelled && Object.keys(updates).length > 0) {
           setImages((prev) => ({ ...prev, ...updates }));
+          // Preload the freshly-resolved bytes in the background so every
+          // token's avatar is ready before it renders — not lazily on scroll.
+          void preloadImages(Object.values(updates), { maxConcurrent: 8 });
         }
       }
     })();
