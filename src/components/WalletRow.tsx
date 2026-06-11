@@ -10,6 +10,7 @@ import { FiBell, FiBarChart2, FiTrash2 } from "react-icons/fi";
 // import { TbChartBubble } from "react-icons/tb";  // TODO: Re-enable when analytics feature is built
 // import { IoLogoRss } from "react-icons/io5";      // TODO: Re-enable when feed feature is built
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import { prefetchWalletScan } from "~/hooks/useWalletScan";
 
 // Chain-aware icon component
 const ChainIcon = ({
@@ -415,14 +416,18 @@ export default function WalletRow({
   return (
     <tr
       key={wallet.address}
-      className="group border-b border-white/[0.03] transition-colors duration-150 hover:border-white/[0.06] hover:bg-white/[0.03] active:bg-white/[0.05]"
+      className="group cursor-pointer border-b border-white/[0.06] transition-colors duration-150 hover:bg-white/[0.04] active:bg-white/[0.06]"
       onClick={handleRowClick}
+      // Hover = intent: background-warm the scan-panel data (summary/positions/
+      // trades) so opening the panel paints from cache instantly. Deduped and
+      // cache-aware inside prefetchWalletScan — repeated hovers are free.
+      onMouseEnter={() => void prefetchWalletScan(wallet.address)}
     >
-      <td className="px-1 py-2.5 sm:px-2 sm:py-3">
+      <td className="px-1 py-3 sm:px-3">
         <div className="flex w-full items-center gap-2 sm:gap-4">
           <button
             type="button"
-            className="flex w-16 justify-center text-[9px] text-neutral-400 transition-colors hover:text-white sm:w-28 sm:text-xs"
+            className="flex w-16 justify-center text-[9px] tabular-nums text-neutral-500 transition-colors hover:text-neutral-200 sm:w-28 sm:text-xs"
             onClick={(e) => {
               e.stopPropagation();
               if (wallet.address) {
@@ -436,21 +441,26 @@ export default function WalletRow({
           >
             {formatCreated(wallet.createdAt)}
           </button>
-          <div className="flex min-w-0 flex-1 items-start gap-1.5 sm:gap-2">
-            <span className="text-base sm:text-lg">{wallet.emoji || "💼"}</span>
-            <div className="flex min-w-0 flex-col">
-              <span className="truncate text-[10px] font-medium text-neutral-100 sm:text-xs">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+            <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#0c0e12] text-sm sm:h-8 sm:w-8 sm:text-base">
+              {wallet.emoji || "💼"}
+            </span>
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate text-[11px] font-semibold text-neutral-100 sm:text-sm">
                 {wallet.name || "N/A"}
               </span>
               <Tooltip label={copied ? "Copied!" : "Click to copy"}>
                 <button
-                  className="mt-0.5 w-fit cursor-pointer font-mono text-[9px] text-neutral-400 underline-offset-2 transition-colors hover:text-neutral-200 focus-visible:outline-none sm:text-[10px]"
+                  className="mt-0.5 flex w-fit cursor-pointer items-center gap-1 font-mono text-[9px] text-neutral-500 transition-colors hover:text-neutral-300 focus-visible:outline-none sm:text-[10px]"
                   onClick={handleCopyAddress}
                   title="Copy wallet address"
                 >
                   {wallet.address
                     ? `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`
                     : ""}
+                  {copied && (
+                    <span className="text-[#18c48c]">✓</span>
+                  )}
                 </button>
               </Tooltip>
             </div>
@@ -458,21 +468,24 @@ export default function WalletRow({
           <span className="w-20 text-[9px] text-neutral-300 sm:w-36 sm:text-xs">
             {balance !== undefined ? (
               <span
-                className={`flex items-center gap-0.5 font-mono font-semibold sm:gap-1 ${watchedWallet?.chain === "monad" ? "text-[#7FFFC9]" : "text-green-400"}`}
+                className="flex items-center gap-1 font-mono font-semibold tabular-nums"
+                style={{
+                  color: watchedWallet?.chain === "monad" ? "#7FFFC9" : "#18c48c",
+                }}
               >
-                <ChainIcon chain={watchedWallet?.chain} size={10} />
-                <span className="text-[9px] sm:text-xs">
+                <ChainIcon chain={watchedWallet?.chain} size={11} />
+                <span className="text-[9px] tabular-nums sm:text-xs">
                   {balance.toFixed(4)}
                 </span>
               </span>
             ) : (
-              <span className="text-[9px] text-neutral-500 sm:text-xs">—</span>
+              <span className="text-[9px] text-neutral-600 sm:text-xs">—</span>
             )}
           </span>
-          <span className="hidden w-28 text-[9px] text-neutral-300 sm:inline sm:text-xs">
+          <span className="hidden w-28 text-[9px] tabular-nums text-neutral-500 sm:inline sm:text-xs">
             {formatLastActive(lastActive)}
           </span>
-          <div className="flex flex-1 items-center justify-end gap-0.5 sm:gap-1.5">
+          <div className="flex flex-1 items-center justify-end gap-0.5 sm:gap-1">
             {/* Bell - Notification Toggle */}
             <Tooltip
               label={
@@ -480,12 +493,12 @@ export default function WalletRow({
               }
             >
               <button
-                className={`rounded-md p-1 transition-all duration-200 sm:p-2 ${isTogglingNotification ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/[0.05]"}`}
+                className={`rounded-md p-1.5 transition-colors duration-150 sm:p-2 ${isTogglingNotification ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/[0.06]"}`}
                 onClick={handleToggleNotifications}
                 disabled={isTogglingNotification}
               >
                 <FiBell
-                  className={`text-sm sm:text-base ${notificationsEnabled ? "text-pink-500" : "text-neutral-500"}`}
+                  className={`text-sm transition-colors sm:text-base ${notificationsEnabled ? "text-pink-500" : "text-neutral-500"}`}
                 />
               </button>
             </Tooltip>
@@ -527,13 +540,13 @@ export default function WalletRow({
             {/* Chart - Scan Address */}
             <Tooltip label="Scan Wallet">
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
+                className="group/icon cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.06] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClick && onClick(wallet);
                 }}
               >
-                <FiBarChart2 className="text-sm text-neutral-500 transition-colors hover:text-pink-500 sm:text-base" />
+                <FiBarChart2 className="text-sm text-neutral-500 transition-colors group-hover/icon:text-pink-500 sm:text-base" />
               </button>
             </Tooltip>
 
@@ -556,10 +569,10 @@ export default function WalletRow({
             ) : (
               <Tooltip label="Delete Wallet">
                 <button
-                  className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
+                  className="group/trash cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-[#ef4444]/10 sm:p-2"
                   onClick={handleDeleteClick}
                 >
-                  <FiTrash2 className="text-sm text-neutral-500 transition-colors hover:text-pink-500 sm:text-base" />
+                  <FiTrash2 className="text-sm text-neutral-500 transition-colors group-hover/trash:text-[#ef4444] sm:text-base" />
                 </button>
               </Tooltip>
             )}

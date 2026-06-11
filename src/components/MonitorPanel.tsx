@@ -432,10 +432,10 @@ export default function MonitorPanel({
           return (
             <div
               key={token.mint}
-              className="overflow-hidden rounded-md border border-white/[0.05] bg-[#0a0b0e]/60"
+              className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-colors hover:border-white/[0.1]"
             >
               {/* HEADER ROW */}
-              <div className="flex items-start gap-3 px-3 py-2.5 sm:px-4 sm:py-3">
+              <div className="flex items-start gap-3 px-3 py-3 sm:px-4">
                 {/* Icon */}
                 <button
                   type="button"
@@ -522,34 +522,47 @@ export default function MonitorPanel({
                       <FiStar className="h-3 w-3" />
                     </button>
                   </div>
-                  <div className="mt-0.5 text-[11px] text-emerald-400">
+                  <div className="mt-0.5 text-[11px] font-medium tabular-nums text-[#18c48c]">
                     {formatAge(ageMs)}
                   </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-neutral-400">
-                    <span>
-                      H{" "}
-                      <span className="font-semibold text-white">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px]">
+                    <span className="flex items-center gap-1">
+                      <span className="text-[10px] uppercase tracking-wide text-white/30">
+                        H
+                      </span>
+                      <span className="font-semibold tabular-nums text-white">
                         {holders}
                       </span>
                     </span>
-                    <span>
-                      MC{" "}
-                      <span className="font-semibold text-emerald-400">
+                    <span className="flex items-center gap-1">
+                      <span className="text-[10px] uppercase tracking-wide text-white/30">
+                        MC
+                      </span>
+                      <span className="font-semibold tabular-nums text-[#18c48c]">
                         {marketCap ? `$${formatMarketCap(marketCap)}` : "-"}
                       </span>
                     </span>
-                    <span>
-                      L{" "}
-                      <span className="font-semibold text-white">
+                    <span className="flex items-center gap-1">
+                      <span className="text-[10px] uppercase tracking-wide text-white/30">
+                        L
+                      </span>
+                      <span className="font-semibold tabular-nums text-white">
                         {liquidity ? `$${formatMarketCap(liquidity)}` : "-"}
                       </span>
                     </span>
-                    <span>
-                      TX <span className="font-semibold text-white">{totalTx}</span>
+                    <span className="flex items-center gap-1">
+                      <span className="text-[10px] uppercase tracking-wide text-white/30">
+                        TX
+                      </span>
+                      <span className="font-semibold tabular-nums text-white">
+                        {totalTx}
+                      </span>
                     </span>
-                    <span>
-                      Last TX{" "}
-                      <span className="font-semibold text-white">
+                    <span className="flex items-center gap-1">
+                      <span className="text-[10px] uppercase tracking-wide text-white/30">
+                        Last
+                      </span>
+                      <span className="font-semibold tabular-nums text-white">
                         {formatAge(lastTxMs)}
                       </span>
                     </span>
@@ -559,26 +572,26 @@ export default function MonitorPanel({
                 {/* Buy/sell summary + quick buy */}
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex items-center gap-2 text-[11px] sm:text-xs">
-                    <span className="font-semibold text-emerald-400 tabular-nums">
+                    <span className="font-semibold tabular-nums text-[#18c48c]">
                       {token.buyCount}
-                      <span className="text-neutral-500"> /</span>
+                      <span className="text-neutral-600"> / </span>
                       {formatUsdShort(token.buyUsd)}
                     </span>
-                    <span className="text-neutral-600">·</span>
-                    <span className="font-semibold text-red-400 tabular-nums">
+                    <span className="text-neutral-700">·</span>
+                    <span className="font-semibold tabular-nums text-[#ef4444]">
                       {token.sellCount}
-                      <span className="text-neutral-500"> /</span>
+                      <span className="text-neutral-600"> / </span>
                       {formatUsdShort(token.sellUsd)}
                     </span>
                   </div>
-                  <div className="flex h-1 w-[120px] overflow-hidden rounded-full bg-neutral-800">
+                  <div className="flex h-1.5 w-[120px] overflow-hidden rounded-full bg-[#080a0d]">
                     <div
-                      className="h-full bg-emerald-500"
+                      className="h-full bg-[#18c48c] transition-all duration-300"
                       style={{
                         width: `${Math.max(2, Math.min(98, buyShare * 100))}%`,
                       }}
                     />
-                    <div className="h-full flex-1 bg-red-500" />
+                    <div className="h-full flex-1 bg-[#ef4444] transition-all duration-300" />
                   </div>
                   <button
                     type="button"
@@ -587,7 +600,7 @@ export default function MonitorPanel({
                       e.stopPropagation();
                       onQuickBuy(token.lastTrade);
                     }}
-                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-blue-500/15 text-blue-400 transition-colors hover:bg-blue-500/25 hover:text-blue-300"
+                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-[#18c48c]/20 bg-[#18c48c]/10 text-[#18c48c] transition-colors hover:bg-[#18c48c]/20 hover:text-[#18c48c]"
                     title={`Quick buy ${quickBuyAmount} SOL`}
                   >
                     <HiLightningBolt className="h-3.5 w-3.5" />
@@ -596,26 +609,26 @@ export default function MonitorPanel({
               </div>
 
               {/* WALLETS TABLE */}
-              <div className="border-t border-white/[0.04] bg-black/40">
+              <div className="border-t border-white/[0.06] bg-[#08090c]">
                 <table className="w-full min-w-[640px] text-[11px] sm:text-xs">
                   <thead>
-                    <tr className="text-neutral-500">
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                    <tr className="border-b border-white/[0.06]">
+                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
                         Wallet
                       </th>
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                      <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
                         Time in Trade
                       </th>
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
                         Bought
                       </th>
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
                         Sold
                       </th>
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
                         PNL
                       </th>
-                      <th className="px-3 py-2 text-right font-normal sm:px-4">
+                      <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30 sm:px-4">
                         Remaining
                       </th>
                     </tr>
@@ -637,54 +650,57 @@ export default function MonitorPanel({
                       return (
                         <tr
                           key={w.wallet}
-                          className="border-t border-white/[0.03] hover:bg-white/[0.02]"
+                          className="border-b border-white/[0.04] transition-colors last:border-b-0 hover:bg-white/[0.04]"
                         >
-                          <td className="px-3 py-2 sm:px-4">
+                          <td className="px-3 py-2.5 sm:px-4">
                             <span
                               className="inline-flex items-center gap-1.5 text-neutral-200"
                               title={w.wallet}
                             >
-                              <FiStar className="h-3 w-3 text-yellow-400" />
-                              <span className="truncate">{w.walletName}</span>
+                              <span className="text-sm leading-none">
+                                {w.walletEmoji}
+                              </span>
+                              <span className="truncate font-medium">
+                                {w.walletName}
+                              </span>
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-neutral-300 sm:px-4">
+                          <td className="px-3 py-2.5 tabular-nums text-neutral-400 sm:px-4">
                             {formatAge(timeInTradeMs)}
                           </td>
-                          <td className="px-3 py-2 sm:px-4">
-                            <div className="flex flex-col">
-                              <span className="font-semibold text-emerald-400 tabular-nums">
+                          <td className="px-3 py-2.5 text-right sm:px-4">
+                            <div className="flex flex-col items-end">
+                              <span className="font-semibold tabular-nums text-[#18c48c]">
                                 {formatUsdShort(w.boughtUsd)}
                               </span>
-                              <span className="text-[10px] text-neutral-500">
+                              <span className="text-[10px] tabular-nums text-neutral-500">
                                 {w.buyCount} txn{w.buyCount === 1 ? "" : "s"}
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2 sm:px-4">
-                            <div className="flex flex-col">
-                              <span className="font-semibold text-red-400 tabular-nums">
+                          <td className="px-3 py-2.5 text-right sm:px-4">
+                            <div className="flex flex-col items-end">
+                              <span className="font-semibold tabular-nums text-[#ef4444]">
                                 {formatUsdShort(w.soldUsd)}
                               </span>
-                              <span className="text-[10px] text-neutral-500">
+                              <span className="text-[10px] tabular-nums text-neutral-500">
                                 {w.sellCount} txn
                                 {w.sellCount === 1 ? "" : "s"}
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2 sm:px-4">
+                          <td className="px-3 py-2.5 text-right sm:px-4">
                             <span
-                              className={`font-semibold tabular-nums ${
-                                pnlPositive
-                                  ? "text-emerald-400"
-                                  : "text-red-400"
-                              }`}
+                              className="font-semibold tabular-nums"
+                              style={{
+                                color: pnlPositive ? "#18c48c" : "#ef4444",
+                              }}
                             >
                               {pnlPositive ? "+" : "-"}
                               {formatUsdShort(Math.abs(pnl))}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-neutral-200 sm:px-4">
+                          <td className="px-3 py-2.5 text-right tabular-nums text-neutral-200 sm:px-4">
                             {remainingUsd > 0
                               ? formatUsdShort(remainingUsd)
                               : "-"}
