@@ -5,6 +5,14 @@ export interface UnifiedTokenMetadata {
   protocol?: string;
   launchpad?: string | null;
   imageUrl?: string;
+  /**
+   * Raw on-chain metadata URI (ipfs://… / arweave). Kept separate from
+   * imageUrl because the token service emits a SPECULATIVE
+   * cdn.interstate.so/{mint}.webp as image_url, which 403s for any token the
+   * CDN hasn't warmed — consumers need the uri to resolve the real image
+   * (same special-case as pulseWorkerBridge.prewarmTokenImage).
+   */
+  uri?: string;
   createdAt?: string | number;
   priceUsd?: number;
   marketCapUsd?: number;
@@ -364,7 +372,14 @@ async function fetchSolanaMetadata(
           symbol: token.symbol || undefined,
           protocol: token.launchpad_protocol || token.protocol || undefined,
           launchpad: token.launchpad_protocol || token.protocol || undefined,
-          imageUrl: token.image_url || token.image || token.logo || token.uri || undefined,
+          // Prefer `image` (the server-healed, real resolved avatar written to
+          // tokens.image by the image-backfill scanner) over `image_url`, which
+          // is a speculative cdn.interstate.so/{mint}.webp URL that 403s (no CDN
+          // exists). image_url was winning here, so the healed image was never
+          // used → letter tiles. resolveScanImage still discards any leftover
+          // cdn.interstate.so value and falls back to the uri.
+          imageUrl: token.image || token.image_url || token.logo || token.uri || undefined,
+          uri: token.uri || undefined,
           createdAt: token.created_timestamp || token.created_at,
           priceUsd: toOptionalNumber(market.price_usd ?? token.usd_price ?? token.price_usd),
           marketCapUsd: toOptionalNumber(market.market_cap_usd ?? token.market_cap_usd ?? token.market_cap),

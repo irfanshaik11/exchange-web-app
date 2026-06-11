@@ -125,16 +125,23 @@ export function resolveScanImage(
   if (pending) return pending;
 
   const p = (async (): Promise<string | null> => {
+    // Speculative cdn.interstate.so/{mint}.webp URLs 403 (no CDN exists) — never
+    // treat one as a usable direct image; drop it so we resolve the real avatar
+    // from the metadata URI / server-healed tokens.image instead of proxying a 404.
+    const usableRaw =
+      raw && !raw.includes("cdn.interstate.so/") ? raw : null;
     try {
       // 1. Direct image URL → proxy, done.
-      if (raw && !isMetadataUrl(raw)) {
-        const proxied = computeHashImageUrl(raw, 40) || raw;
+      if (usableRaw && !isMetadataUrl(usableRaw)) {
+        const proxied = computeHashImageUrl(usableRaw, 40) || usableRaw;
         setEntry(mint, proxied);
         return proxied;
       }
       // 2. Raw is a metadata JSON URL → resolve → proxy.
-      if (raw) {
-        const resolved = await resolveMetadataImage(raw, true).catch(() => null);
+      if (usableRaw) {
+        const resolved = await resolveMetadataImage(usableRaw, true).catch(
+          () => null,
+        );
         if (resolved) {
           const proxied = computeHashImageUrl(resolved, 40) || resolved;
           setEntry(mint, proxied);
