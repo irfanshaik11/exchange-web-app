@@ -4,7 +4,6 @@
 Successfully replaced MoonPay with Onramper as the fiat onramp provider.
 
 ## Changes Made
-     
 ### 1. DepositModal.tsx (`/src/components/DepositModal.tsx`)
 
 #### Removed:
