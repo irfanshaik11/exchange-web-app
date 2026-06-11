@@ -567,6 +567,7 @@ export default function PortfolioPage() {
     previousBalances: `previousBalances_${user?.id || 'anonymous'}_${currentChain}`,
     cumulativeRealizedPnl: `cumulativeRealizedPnl_${user?.id || 'anonymous'}_${currentChain}`,
     initialNativeBalance: `initialNativeBalance_${user?.id || 'anonymous'}_${currentChain}`,
+    balanceHistory: `balanceHistory_${user?.id || 'anonymous'}_${currentChain}`,
   });
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
@@ -1414,12 +1415,11 @@ export default function PortfolioPage() {
 
     // Reset chain-scoped refs/state when switching chains to avoid cross-chain bleed
     initialNativeBalanceRef.current = null;
-    setBalanceHistory([]);
     previousBalancesRef.current = {};
     cumulativeRealizedPnlRef.current = 0;
 
     const storageKeys = getStorageKeys();
-    
+
     try {
       // Load previous balances from localStorage
       const savedBalances = localStorage.getItem(storageKeys.previousBalances);
@@ -1427,22 +1427,36 @@ export default function PortfolioPage() {
         previousBalancesRef.current = JSON.parse(savedBalances);
         isDev && console.log("📊 Loaded previous balances from localStorage:", previousBalancesRef.current);
       }
-      
+
       // Load cumulative realized PNL
       const savedCumulative = localStorage.getItem(storageKeys.cumulativeRealizedPnl);
       if (savedCumulative) {
         cumulativeRealizedPnlRef.current = parseFloat(savedCumulative) || 0;
         isDev && console.log("📊 Loaded cumulative realized PNL:", cumulativeRealizedPnlRef.current);
       }
-      
+
       // Load initial native balance
       const savedInitialBalance = localStorage.getItem(storageKeys.initialNativeBalance);
       if (savedInitialBalance) {
         initialNativeBalanceRef.current = parseFloat(savedInitialBalance);
         isDev && console.log("📊 Loaded initial native balance:", initialNativeBalanceRef.current, currentChain === "monad" ? "MON" : "SOL");
       }
+
+      // Load persisted balance history (per chain) so the 1d/7d/30d/Max chart has real data
+      const savedBalanceHistory = localStorage.getItem(storageKeys.balanceHistory);
+      if (savedBalanceHistory) {
+        const parsed = JSON.parse(savedBalanceHistory);
+        if (Array.isArray(parsed)) {
+          setBalanceHistory(parsed);
+        } else {
+          setBalanceHistory([]);
+        }
+      } else {
+        setBalanceHistory([]);
+      }
     } catch (error) {
       console.error("Error loading persisted data:", error);
+      setBalanceHistory([]);
     }
   }, [user?.id, currentChain]);
 
@@ -1476,8 +1490,18 @@ export default function PortfolioPage() {
     setActualBalanceChangePnlPercentage(0);
     setActualBalanceChangeNative(0);
     setActualBalanceChangeNativePercentage(0);
-    setBalanceHistory([]);
   }, [currentChain]);
+
+  // Persist balance history so the 1d/7d/30d/Max chart has real data across reloads
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storageKeys = getStorageKeys();
+      localStorage.setItem(storageKeys.balanceHistory, JSON.stringify(balanceHistory));
+    } catch (error) {
+      console.error("Error saving balance history:", error);
+    }
+  }, [balanceHistory, user?.id, currentChain]);
 
   // Update previous balances when actual balances come in - but ONLY if we don't have a saved value
   useEffect(() => {
@@ -2836,6 +2860,25 @@ export default function PortfolioPage() {
   );
 }, [balanceHistory, selectedTimeframe]);
 
+  // Balance change stats for the selected timeframe (drives both the stat box and the chart)
+  const timeframeBalanceStats = useMemo(() => {
+    const currentNativeBalance = Number(chainBalance || 0);
+
+    if (filteredBalanceHistory.length === 0) {
+      return { nativeChange: 0, nativeChangePercent: 0, usdChange: 0, usdChangePercent: 0 };
+    }
+
+    const startBalance = filteredBalanceHistory[0]?.balance ?? currentNativeBalance;
+    const nativeChange = currentNativeBalance - startBalance;
+    const nativeChangePercent = startBalance > 0 ? (nativeChange / startBalance) * 100 : 0;
+
+    const startBalanceUsd = startBalance * nativePriceForDisplay;
+    const usdChange = nativeChange * nativePriceForDisplay;
+    const usdChangePercent = startBalanceUsd >= 1 ? (usdChange / startBalanceUsd) * 100 : 0;
+
+    return { nativeChange, nativeChangePercent, usdChange, usdChangePercent };
+  }, [filteredBalanceHistory, chainBalance, nativePriceForDisplay]);
+
   const handleRedistributeFunds = async (mode: "split" | "consolidate") => {
     if (!user?.bearerToken) {
       toast.error("Please log in first");
@@ -3607,53 +3650,53 @@ export default function PortfolioPage() {
                       <div
                         className="text-xl sm:text-2xl font-semibold mb-2 tabular-nums"
                         style={{
-                          color: actualBalanceChangePnl >= 0 ? "#18c48c" : "#ef4444",
+                          color: timeframeBalanceStats.usdChange >= 0 ? "#18c48c" : "#ef4444",
                         }}
                       >
                         {sortByUSD && nativePriceForDisplay > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
-                            {formatSmartNumber(Math.abs(actualBalanceChangePnl) / (nativePriceForDisplay || 1))}
+                            {formatSmartNumber(Math.abs(timeframeBalanceStats.usdChange) / (nativePriceForDisplay || 1))}
                           </>
                         ) : (
-                          `${actualBalanceChangePnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(actualBalanceChangePnl))}`
+                          `${timeframeBalanceStats.usdChange >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(timeframeBalanceStats.usdChange))}`
                         )}
                       </div>
                       {/* Show native balance change (MON or SOL) */}
-                      <div 
+                      <div
                         className="text-sm mb-1 tabular-nums"
                         style={{
-                          color: actualBalanceChangeNative >= 0 ? "#18c48c" : "#ef4444",
+                          color: timeframeBalanceStats.nativeChange >= 0 ? "#18c48c" : "#ef4444",
                         }}
                       >
-                        {actualBalanceChangeNative >= 0 ? "+" : "-"}
-                        {formatSmartNumber(Math.abs(actualBalanceChangeNative))} {currentChain === 'monad' ? 'MON' : 'SOL'}
+                        {timeframeBalanceStats.nativeChange >= 0 ? "+" : "-"}
+                        {formatSmartNumber(Math.abs(timeframeBalanceStats.nativeChange))} {currentChain === 'monad' ? 'MON' : 'SOL'}
                       </div>
                       {/* Show native percentage change (clamped to ±999.99%) */}
-                      {actualBalanceChangeNativePercentage !== 0 && (() => {
-                        const clampedNativePct = Math.max(-999.99, Math.min(999.99, actualBalanceChangeNativePercentage));
-                        const isNativeClamped = Math.abs(actualBalanceChangeNativePercentage) > 999.99;
+                      {timeframeBalanceStats.nativeChangePercent !== 0 && (() => {
+                        const clampedNativePct = Math.max(-999.99, Math.min(999.99, timeframeBalanceStats.nativeChangePercent));
+                        const isNativeClamped = Math.abs(timeframeBalanceStats.nativeChangePercent) > 999.99;
                         return (
                           <div
                             className="text-sm mb-2 tabular-nums"
                             style={{
-                              color: actualBalanceChangeNativePercentage >= 0 ? "#18c48c" : "#ef4444",
+                              color: timeframeBalanceStats.nativeChangePercent >= 0 ? "#18c48c" : "#ef4444",
                             }}
                           >
                             {isNativeClamped
-                              ? (actualBalanceChangeNativePercentage > 0 ? ">+999.99%" : "<-999.99%")
+                              ? (timeframeBalanceStats.nativeChangePercent > 0 ? ">+999.99%" : "<-999.99%")
                               : `${clampedNativePct >= 0 ? "+" : ""}${formatSmallPrice(clampedNativePct)}%`
                             }
                           </div>
                         );
                       })()}
-                      {actualBalanceChangePnlPercentage !== 0 && (() => {
-                        const clampedUsdPct = Math.max(-999.99, Math.min(999.99, actualBalanceChangePnlPercentage));
-                        const isUsdClamped = Math.abs(actualBalanceChangePnlPercentage) > 999.99;
+                      {timeframeBalanceStats.usdChangePercent !== 0 && (() => {
+                        const clampedUsdPct = Math.max(-999.99, Math.min(999.99, timeframeBalanceStats.usdChangePercent));
+                        const isUsdClamped = Math.abs(timeframeBalanceStats.usdChangePercent) > 999.99;
                         return (
-                          <div className={`text-sm mb-3 tabular-nums ${actualBalanceChangePnlPercentage >= 0 ? 'text-[#18c48c]' : 'text-[#ef4444]'}`}>
+                          <div className={`text-sm mb-3 tabular-nums ${timeframeBalanceStats.usdChangePercent >= 0 ? 'text-[#18c48c]' : 'text-[#ef4444]'}`}>
                             {isUsdClamped
-                              ? (actualBalanceChangePnlPercentage > 0 ? ">+999.99% (USD)" : "<-999.99% (USD)")
+                              ? (timeframeBalanceStats.usdChangePercent > 0 ? ">+999.99% (USD)" : "<-999.99% (USD)")
                               : `${clampedUsdPct >= 0 ? "+" : ""}${formatSmallPrice(clampedUsdPct)}% (USD)`
                             }
                           </div>
