@@ -30,6 +30,10 @@ import {
   extractTokenImage,
   resolveTokenImage,
 } from "~/utils/images";
+import {
+  getCachedScanImage,
+  resolveScanImage,
+} from "~/utils/scanImageResolver";
 import FastImage from "~/components/FastImage";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { FiBell } from "react-icons/fi";
@@ -757,14 +761,23 @@ export function WalletTrackerProvider({
 
       // Show toast notification using enhanced toast only if enabled
       if (displayNotificationsEnabled) {
-        // Get token image from metadata using extractTokenImage (handles all field names + normalization)
+        // Resolve the toast avatar through the shared scan cascade (proxy +
+        // server-DAS heal + registries) — the same pipeline that fixed letter
+        // tiles everywhere else. The parent WalletTrackerContent preloads every
+        // trade-feed image, so getCachedScanImage is usually a sync hit; the
+        // await is the fallback for a brand-new mint.
+        const cachedMeta0 = tokenMetadata.get(normalizedEvent.mint);
+        const cascadeImage =
+          getCachedScanImage(normalizedEvent.mint) ??
+          (await resolveScanImage(
+            normalizedEvent.mint,
+            resolvedImage ?? cachedMeta0?.image_url ?? cachedMeta0?.image ?? null,
+            cachedMeta0?.uri ?? null,
+          ));
         const tokenImage =
+          cascadeImage ||
           resolvedImage ||
-          (() => {
-            const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
-            if (!cachedMetadata) return null;
-            return extractTokenImage(cachedMetadata);
-          })();
+          (cachedMeta0 ? extractTokenImage(cachedMeta0) : null);
 
         const isBuy = normalizedEvent.side === "buy";
         const sideColor = isBuy ? "#70E0B0" : "#ff6b6b";
