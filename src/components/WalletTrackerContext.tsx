@@ -710,6 +710,22 @@ export function WalletTrackerProvider({
       // Add to latest trades list (keep last hour, max 50)
       setLatestTrades((prev) => mergeTrades(prev, [normalizedEvent]));
 
+      // A live trade means this wallet is active RIGHT NOW and its SOL balance
+      // just changed — but Last Active and Balance were only fetched on add, so
+      // they'd show stale values (e.g. "1 day" / old balance) despite the trade
+      // we just saw. Update Last Active immediately and refresh the balance
+      // (debounced per wallet so a burst of trades doesn't spam RPC).
+      {
+        const tradeAt =
+          typeof normalizedEvent.at === "number" ? normalizedEvent.at : Date.now();
+        setLastActiveMap((prev) => {
+          const cur = prev[normalizedEvent.wallet];
+          if (typeof cur === "number" && cur >= tradeAt) return prev;
+          return { ...prev, [normalizedEvent.wallet]: tradeAt };
+        });
+        scheduleBalanceRefresh(normalizedEvent.wallet);
+      }
+
       // Deduplicate toasts — skip if we already showed a toast for this tx
       if (shownToastTxsRef.current.has(normalizedEvent.tx)) return;
       shownToastTxsRef.current.add(normalizedEvent.tx);
@@ -1142,6 +1158,31 @@ export function WalletTrackerProvider({
   const fetchedAddressesRef = useRef<Set<string>>(new Set());
   const balanceInFlightRef = useRef<Set<string>>(new Set());
   const [balanceRetryTick, setBalanceRetryTick] = useState(0);
+
+  // Debounced per-wallet balance refresh, triggered when a live trade for that
+  // wallet arrives (the trade changed its SOL balance). Coalesces a burst of
+  // trades into one refetch per wallet every ~8s.
+  const balanceRefreshTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  const scheduleBalanceRefresh = useCallback((address: string) => {
+    const timers = balanceRefreshTimersRef.current;
+    if (timers.has(address)) return; // already pending
+    const wallet = watchedWalletsRef.current.find((w) => w.address === address);
+    const chain = wallet?.chain === "monad" ? "monad" : "sol";
+    const t = setTimeout(async () => {
+      timers.delete(address);
+      try {
+        const res = await fetchBatchBalances([address], chain);
+        if (res && typeof res[address] === "number") {
+          setWalletBalances((prev) => ({ ...prev, [address]: res[address] }));
+        }
+      } catch {
+        /* transient — next trade re-triggers */
+      }
+    }, 8000);
+    timers.set(address, t);
+  }, []);
   useEffect(() => {
     if (!user?.id || watchedWallets.length === 0) return;
 
