@@ -783,7 +783,7 @@ export default function ArenaPage() {
 
               {/* Main title with info tooltip */}
               <div className="flex items-center justify-center gap-3">
-                <h1 className="text-5xl md:text-6xl font-black tracking-tight text-white text-center">
+                <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight text-white text-center">
                   AIRDROP GENESIS
                 </h1>
                 <ArenaInfoTooltip />
@@ -1290,7 +1290,7 @@ export default function ArenaPage() {
                     /* Unlocked state - show actual rewards breakdown */
                     <div className="space-y-4">
                       {/* Stats row */}
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-3 gap-2 sm:gap-4">
                         <div className="bg-neutral-900/60 rounded-lg p-4 border border-neutral-800/50">
                           <p className="text-neutral-500 text-xs mb-1">Total Earned</p>
                           <div className="flex items-center gap-1.5">
@@ -1353,7 +1353,7 @@ export default function ArenaPage() {
                       {/* Blurred preview of what the breakdown will look like */}
                       <div className="blur-[6px] opacity-40 pointer-events-none select-none">
                         {/* Stats row preview */}
-                        <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4">
                           <div className="bg-neutral-800/60 rounded-lg p-4">
                             <div className="h-3 w-16 bg-neutral-700 rounded mb-2" />
                             <div className="h-5 w-20 bg-neutral-600 rounded" />

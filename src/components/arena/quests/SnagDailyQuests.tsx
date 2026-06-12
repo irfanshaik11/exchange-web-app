@@ -175,7 +175,7 @@ export default function SnagDailyQuests({ quests, connectXCompleted = false, cla
               : 'bg-neutral-900/30 border border-neutral-800/50'}
         `}
       >
-        <div className="relative flex items-center justify-between py-3 px-4 gap-3">
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 px-4 gap-2 sm:gap-3">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {isComplete ? (
               <div className="w-5 h-5 rounded-full border-2 border-emerald-500 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] flex items-center justify-center flex-shrink-0">
@@ -188,7 +188,7 @@ export default function SnagDailyQuests({ quests, connectXCompleted = false, cla
             )}
             <div className="flex-1 min-w-0">
               <span className="flex items-center gap-1.5">
-                <span className={`text-[14px] truncate ${isClaimed ? 'text-neutral-600 line-through' : 'text-white'}`}>
+                <span className={`text-[13px] sm:text-[14px] break-words sm:truncate min-w-0 ${isClaimed ? 'text-neutral-600 line-through' : 'text-white'}`}>
                   {postQuest.title}
                 </span>
                 {postQuest.description && (
@@ -202,7 +202,7 @@ export default function SnagDailyQuests({ quests, connectXCompleted = false, cla
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0 pl-8 sm:pl-0">
             <div className="flex items-center gap-1.5">
               <CreditsCoin className="w-4 h-4" />
               <span className={`font-bold text-sm ${isClaimed ? 'text-neutral-600' : isComplete ? 'text-emerald-400' : 'text-amber-400'}`}>
