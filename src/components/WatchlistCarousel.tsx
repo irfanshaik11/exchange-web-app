@@ -1,5 +1,6 @@
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -16,50 +17,42 @@ import useTrendingWebSocket, {
 } from "../hooks/useTrendingWebSocket";
 import { formatFixedAbbrev, type Token } from "../utils/db";
 
-/**
- * Watchlist carousel — replaces the legacy "Watchlist ticker" bar in
- * the Header.
- *
- *  - Pinned strip on the left (solid bg, z=1) — user-managed via
- *    `useWatchlist()`. Stays put while the carousel scrolls past
- *    underneath it.
- *  - Infinite-loop scroller on the right (z=0) — sourced from the
- *    existing trending WS so we don't add a new data feed. Items are
- *    rendered twice back-to-back inside one flex row; a CSS keyframe
- *    translates the row by -50% over a long duration, then loops back
- *    to 0 — the duplicate makes the seam invisible.
- *  - Each row shows: star, PFP (16px), SYM, name truncated, tiny
- *    sparkline (synth from %change so we don't fetch OHLC per item),
- *    1h % change, market cap. Mono / tabular-nums for column alignment
- *    across rows.
- *  - Hover any row -> after 200ms, a portal-rendered tooltip styled
- *    like the redesigned Pulse identity row appears below, with a
- *    large star pin/unpin button.
- *  - `prefers-reduced-motion: reduce` swaps the animation for a
- *    horizontally-scrollable static row (no auto-loop).
- *
- * Performance notes:
- *  - CSS-only loop (no rAF / no JS scroll handler).
- *  - Sparkline is a synth 6-point SVG path derived from the
- *    `price_percent_change_1h` field — zero network requests per item.
- *  - Pinned + carousel slice memoized; star clicks update WatchlistContext
- *    which the carousel re-reads.
- */
+const CAROUSEL_MAX = 24;
+// The carousel scrolls continuously — users can't read individual values
+// at scroll speed, so refreshing on every WS push (multiple/sec) wastes
+// render cycles on 48 items. Snapshot every 15s instead.
+const CAROUSEL_THROTTLE_MS = 15_000;
+
 export function WatchlistCarousel() {
   const { watchlist, isHydrated, addToWatchlist, removeFromWatchlist } =
     useWatchlist();
 
-  // Top markets — reuse the trending WS that /discover already mounts.
-  // When /discover isn't mounted yet, the WS still kicks in here (it's a
-  // global singleton inside the hook) so the carousel boots from the
-  // localStorage snapshot then fills in from live data.
   const { tokens: trendingTokens } = useTrendingWebSocket({
     timeframe: "1h",
     enabled: true,
   });
 
-  // Build the pinned set keyed by mint so the carousel below can skip
-  // any token the user has already pinned (no point showing it twice).
+  /* ── Throttle carousel data ──────────────────────────────────────── */
+  const latestTokensRef = useRef(trendingTokens);
+  latestTokensRef.current = trendingTokens;
+  const [carouselTokens, setCarouselTokens] = useState(trendingTokens);
+
+  // Show data immediately on first load
+  useEffect(() => {
+    if (carouselTokens.length === 0 && trendingTokens.length > 0) {
+      setCarouselTokens(trendingTokens);
+    }
+  }, [trendingTokens]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh from latest WS data every CAROUSEL_THROTTLE_MS
+  useEffect(() => {
+    const id = setInterval(() => {
+      setCarouselTokens(latestTokensRef.current);
+    }, CAROUSEL_THROTTLE_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  /* ── Pinned set ──────────────────────────────────────────────────── */
   const pinnedMints = useMemo(() => {
     const s = new Set<string>();
     for (const t of watchlist) {
@@ -69,22 +62,78 @@ export function WatchlistCarousel() {
     return s;
   }, [watchlist]);
 
-  // Cap the carousel at a sensible row count. Too many rows and the
-  // loop duration has to slow to a crawl to keep individual rows
-  // legible; too few and the loop seam shows up quickly.
-  const CAROUSEL_MAX = 24;
+  /* ── Carousel items (filtered, capped) ───────────────────────────── */
   const carouselItems = useMemo(() => {
     const items: NormalizedTrendingToken[] = [];
-    for (const t of trendingTokens) {
+    for (const t of carouselTokens) {
       if (pinnedMints.has(t.mint)) continue;
       items.push(t);
       if (items.length >= CAROUSEL_MAX) break;
     }
     return items;
-  }, [trendingTokens, pinnedMints]);
+  }, [carouselTokens, pinnedMints]);
 
-  // Empty state: only render the bar's frame; the inner content stays
-  // empty so the page chrome doesn't shift around.
+  /* ── Tooltip state (single instance for all 48 items) ────────────── */
+  const [tooltip, setTooltip] = useState<{
+    mint: string;
+    left: number;
+    top: number;
+  } | null>(null);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onItemEnter = useCallback((mint: string, el: HTMLElement) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => {
+      const r = el.getBoundingClientRect();
+      setTooltip({
+        mint,
+        left: Math.round(r.left + r.width / 2),
+        top: Math.round(r.bottom + 6),
+      });
+    }, 200);
+  }, []);
+
+  const onItemLeave = useCallback(() => {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+    setTooltip(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    };
+  }, []);
+
+  /* ── Stable pin/unpin callbacks ──────────────────────────────────── */
+  const trendingByMint = useMemo(() => {
+    const map = new Map<string, NormalizedTrendingToken>();
+    for (const t of carouselTokens) map.set(t.mint, t);
+    return map;
+  }, [carouselTokens]);
+
+  const handlePin = useCallback(
+    (mint: string) => {
+      if (pinnedMints.has(mint)) {
+        removeFromWatchlist(mint);
+      } else {
+        const token = trendingByMint.get(mint);
+        if (token) addToWatchlist(trendingToToken(token));
+      }
+    },
+    [pinnedMints, trendingByMint, addToWatchlist, removeFromWatchlist],
+  );
+
+  const handleUnpin = useCallback(
+    (mint: string) => {
+      if (mint) removeFromWatchlist(mint);
+    },
+    [removeFromWatchlist],
+  );
+
+  /* ── Empty state ─────────────────────────────────────────────────── */
   if (!isHydrated) {
     return <div className="flex h-7 items-center" aria-hidden />;
   }
@@ -92,18 +141,30 @@ export function WatchlistCarousel() {
   const hasPinned = watchlist.length > 0;
   const hasCarousel = carouselItems.length > 0;
 
+  // Resolve tooltip token for the single portal
+  const tooltipData = tooltip
+    ? (() => {
+        const ct = carouselItems.find((t) => t.mint === tooltip.mint);
+        if (ct)
+          return {
+            token: normalizeTrendingToken(ct),
+            pinned: pinnedMints.has(ct.mint),
+          };
+        const wt = watchlist.find(
+          (t) => ((t as any).mint || t.pair_address) === tooltip.mint,
+        );
+        if (wt) return { token: tokenToCarouselShape(wt), pinned: true };
+        return null;
+      })()
+    : null;
+
   return (
     <div className="watchlist-carousel-root flex h-7 flex-1 items-center overflow-hidden">
-      {/* Pinned strip — sits ABOVE the carousel (z=1) on a solid bg so
-          the scroller visibly passes underneath. The right edge gets a
-          tiny linear-gradient mask so the seam between pinned and
-          scroller fades instead of slamming. */}
       {hasPinned ? (
         <div
           className="relative z-10 flex shrink-0 items-center gap-1.5 pr-3"
           style={{
             backgroundColor: "#13151b",
-            // Right-edge fade so the carousel slides under, not cuts off.
             maskImage:
               "linear-gradient(to right, black calc(100% - 12px), transparent)",
             WebkitMaskImage:
@@ -111,26 +172,23 @@ export function WatchlistCarousel() {
           }}
         >
           {watchlist.map((token) => {
-            const key =
+            const mint =
               (token as any).mint || token.pair_address || token.symbol || "";
             return (
               <WatchlistItem
-                key={key}
+                key={mint}
                 token={tokenToCarouselShape(token)}
                 pinned
-                onPinToggle={() => {
-                  const addr =
-                    (token as any).mint || token.pair_address || "";
-                  if (addr) removeFromWatchlist(addr);
-                }}
+                mint={mint}
+                onPin={handleUnpin}
+                onMouseEnter={onItemEnter}
+                onMouseLeave={onItemLeave}
               />
             );
           })}
         </div>
       ) : null}
 
-      {/* Vertical pipe between pinned + scroller — tiny, faint, only
-          shown when both halves have content. */}
       {hasPinned && hasCarousel ? (
         <div
           aria-hidden
@@ -139,51 +197,48 @@ export function WatchlistCarousel() {
         />
       ) : null}
 
-      {/* Infinite loop scroller. Two copies of the list back-to-back +
-          a CSS keyframe translating -50% gives a seamless loop. Pause
-          on hover so users can read a value. */}
       {hasCarousel ? (
         <div className="watchlist-carousel-viewport relative min-w-0 flex-1 overflow-hidden">
           <div className="watchlist-carousel-track flex items-center gap-3 pl-3 pr-3">
-            {carouselItems.map((t, i) => {
-              const isPinned = pinnedMints.has(t.mint);
-              return (
-                <WatchlistItem
-                  key={`a-${t.mint}-${i}`}
-                  token={t}
-                  pinned={isPinned}
-                  onPinToggle={() => {
-                    if (isPinned) {
-                      removeFromWatchlist(t.mint);
-                    } else {
-                      addToWatchlist(trendingToToken(t));
-                    }
-                  }}
-                />
-              );
-            })}
-            {/* Duplicate set — invisible to the eye thanks to the loop
-                math (-50% translate spans exactly one copy). */}
-            {carouselItems.map((t, i) => {
-              const isPinned = pinnedMints.has(t.mint);
-              return (
-                <WatchlistItem
-                  key={`b-${t.mint}-${i}`}
-                  token={t}
-                  pinned={isPinned}
-                  onPinToggle={() => {
-                    if (isPinned) {
-                      removeFromWatchlist(t.mint);
-                    } else {
-                      addToWatchlist(trendingToToken(t));
-                    }
-                  }}
-                />
-              );
-            })}
+            {carouselItems.map((t, i) => (
+              <WatchlistItem
+                key={`a-${t.mint}-${i}`}
+                token={t}
+                pinned={pinnedMints.has(t.mint)}
+                mint={t.mint}
+                onPin={handlePin}
+                onMouseEnter={onItemEnter}
+                onMouseLeave={onItemLeave}
+              />
+            ))}
+            {carouselItems.map((t, i) => (
+              <WatchlistItem
+                key={`b-${t.mint}-${i}`}
+                token={t}
+                pinned={pinnedMints.has(t.mint)}
+                mint={t.mint}
+                onPin={handlePin}
+                onMouseEnter={onItemEnter}
+                onMouseLeave={onItemLeave}
+              />
+            ))}
           </div>
         </div>
       ) : null}
+
+      {/* Single tooltip portal for the entire carousel */}
+      {tooltip && tooltipData
+        ? createPortal(
+            <CarouselTooltip
+              token={tooltipData.token}
+              pinned={tooltipData.pinned}
+              onPinToggle={() => handlePin(tooltip.mint)}
+              anchorLeft={tooltip.left}
+              anchorTop={tooltip.top}
+            />,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -250,54 +305,56 @@ function trendingToToken(t: NormalizedTrendingToken): Token {
 interface WatchlistItemProps {
   token: CarouselToken | NormalizedTrendingToken;
   pinned: boolean;
-  onPinToggle: () => void;
+  mint: string;
+  onPin: (mint: string) => void;
+  onMouseEnter: (mint: string, el: HTMLElement) => void;
+  onMouseLeave: () => void;
 }
+
+// Hoisted style objects — avoids 48 identical allocations per render cycle.
+const MC_STYLE: CSSProperties = {
+  fontFamily: "var(--font-geist-mono)",
+  fontVariantNumeric: "tabular-nums",
+  color: "#cbd2d9",
+  fontSize: "10.5px",
+  fontWeight: 500,
+};
+const CHANGE_STYLE_POS: CSSProperties = {
+  fontFamily: "var(--font-geist-mono)",
+  fontVariantNumeric: "tabular-nums",
+  color: "#22d99a",
+  fontSize: "10.5px",
+  fontWeight: 500,
+};
+const CHANGE_STYLE_NEG: CSSProperties = {
+  fontFamily: "var(--font-geist-mono)",
+  fontVariantNumeric: "tabular-nums",
+  color: "#f26681",
+  fontSize: "10.5px",
+  fontWeight: 500,
+};
+const CHANGE_STYLE_NEUTRAL: CSSProperties = {
+  fontFamily: "var(--font-geist-mono)",
+  fontVariantNumeric: "tabular-nums",
+  color: "#7c8694",
+  fontSize: "10.5px",
+  fontWeight: 500,
+};
 
 const WatchlistItem = memo(function WatchlistItem({
   token,
   pinned,
-  onPinToggle,
+  mint,
+  onPin,
+  onMouseEnter,
+  onMouseLeave,
 }: WatchlistItemProps) {
   const t: CarouselToken =
     "fully_diluted_value" in (token as object)
       ? normalizeTrendingToken(token as NormalizedTrendingToken)
       : (token as CarouselToken);
 
-  const [hovered, setHovered] = useState(false);
-  const [anchor, setAnchor] = useState<{
-    left: number;
-    top: number;
-  } | null>(null);
-  const itemRef = useRef<HTMLDivElement | null>(null);
-  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (showTimer.current) clearTimeout(showTimer.current);
-    };
-  }, []);
-
-  const openTooltip = () => {
-    if (showTimer.current) clearTimeout(showTimer.current);
-    showTimer.current = setTimeout(() => {
-      const el = itemRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      setAnchor({
-        left: Math.round(r.left + r.width / 2),
-        top: Math.round(r.bottom + 6),
-      });
-      setHovered(true);
-    }, 200);
-  };
-  const closeTooltip = () => {
-    if (showTimer.current) {
-      clearTimeout(showTimer.current);
-      showTimer.current = null;
-    }
-    setHovered(false);
-    setAnchor(null);
-  };
+  const itemRef = useRef<HTMLDivElement>(null);
 
   const positive = t.changePct1h > 0;
   const negative = t.changePct1h < 0;
@@ -306,125 +363,94 @@ const WatchlistItem = memo(function WatchlistItem({
     : negative
       ? "#f26681"
       : "#7c8694";
-  const sparklineStroke = positive
-    ? "#22d99a"
-    : negative
-      ? "#f26681"
-      : "#7c8694";
 
   const trade = t.mint ? `/trade/${t.mint}` : "#";
-
-  const mcStyle: CSSProperties = {
-    fontFamily: "var(--font-geist-mono)",
-    fontVariantNumeric: "tabular-nums",
-    color: "#cbd2d9",
-    fontSize: "10.5px",
-    fontWeight: 500,
-  };
-  const changeStyle: CSSProperties = {
-    fontFamily: "var(--font-geist-mono)",
-    fontVariantNumeric: "tabular-nums",
-    color: changeColor,
-    fontSize: "10.5px",
-    fontWeight: 500,
-  };
+  const changeStyle = positive
+    ? CHANGE_STYLE_POS
+    : negative
+      ? CHANGE_STYLE_NEG
+      : CHANGE_STYLE_NEUTRAL;
 
   return (
-    <>
-      <div
-        ref={itemRef}
-        className="flex shrink-0 items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-white/[0.04]"
-        onMouseEnter={openTooltip}
-        onMouseLeave={closeTooltip}
+    <div
+      ref={itemRef}
+      className="flex shrink-0 items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-white/[0.04]"
+      onMouseEnter={() =>
+        itemRef.current && onMouseEnter(mint, itemRef.current)
+      }
+      onMouseLeave={onMouseLeave}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onPin(mint);
+        }}
+        className="flex h-4 w-4 items-center justify-center text-[10px] transition-colors"
+        style={{
+          color: pinned ? "#f0c54a" : "#5e636c",
+        }}
+        title={pinned ? "Unpin" : "Pin to watchlist"}
+        aria-label={pinned ? "Unpin from watchlist" : "Pin to watchlist"}
+        aria-pressed={pinned}
       >
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onPinToggle();
-          }}
-          className="flex h-4 w-4 items-center justify-center text-[10px] transition-colors"
-          style={{
-            color: pinned ? "#f0c54a" : "#5e636c",
-          }}
-          title={pinned ? "Unpin" : "Pin to watchlist"}
-          aria-label={pinned ? "Unpin from watchlist" : "Pin to watchlist"}
-          aria-pressed={pinned}
+        {pinned ? <FaStar size={10} /> : <FaRegStar size={10} />}
+      </button>
+
+      <Link
+        href={trade}
+        className="flex shrink-0 items-center gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span
+          className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm"
+          style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+          aria-hidden
         >
-          {pinned ? <FaStar size={10} /> : <FaRegStar size={10} />}
-        </button>
+          {t.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={t.image}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <span className="text-[8px] text-zinc-500">
+              {(t.symbol || "?").slice(0, 1)}
+            </span>
+          )}
+        </span>
 
-        <Link
-          href={trade}
-          className="flex shrink-0 items-center gap-1.5"
-          onClick={(e) => e.stopPropagation()}
+        <span
+          className="text-[11px] font-semibold leading-none"
+          style={{ color: "#f4f4f5" }}
         >
-          <span
-            className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm"
-            style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
-            aria-hidden
-          >
-            {t.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={t.image}
-                alt=""
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <span className="text-[8px] text-zinc-500">
-                {(t.symbol || "?").slice(0, 1)}
-              </span>
-            )}
-          </span>
+          {t.symbol || "—"}
+        </span>
 
-          <span
-            className="text-[11px] font-semibold leading-none"
-            style={{ color: "#f4f4f5" }}
-          >
-            {t.symbol || "—"}
-          </span>
+        <span
+          className="hidden truncate text-[10.5px] leading-none lg:inline"
+          style={{ color: "#7c8694", maxWidth: 84 }}
+        >
+          {t.name}
+        </span>
 
-          <span
-            className="hidden truncate text-[10.5px] leading-none lg:inline"
-            style={{ color: "#7c8694", maxWidth: 84 }}
-          >
-            {t.name}
-          </span>
+        <SyntheticSparkline changePct={t.changePct1h} stroke={changeColor} />
 
-          <SyntheticSparkline
-            changePct={t.changePct1h}
-            stroke={sparklineStroke}
-          />
+        <span style={changeStyle}>
+          {positive ? "+" : ""}
+          {Math.abs(t.changePct1h) >= 100
+            ? `${Math.round(t.changePct1h)}%`
+            : `${t.changePct1h.toFixed(2)}%`}
+        </span>
 
-          <span style={changeStyle}>
-            {positive ? "+" : ""}
-            {Math.abs(t.changePct1h) >= 100
-              ? `${Math.round(t.changePct1h)}%`
-              : `${t.changePct1h.toFixed(2)}%`}
-          </span>
-
-          <span style={mcStyle}>
-            ${t.marketCap > 0 ? formatFixedAbbrev(t.marketCap) : "—"}
-          </span>
-        </Link>
-      </div>
-
-      {hovered && anchor
-        ? createPortal(
-            <CarouselTooltip
-              token={t}
-              pinned={pinned}
-              onPinToggle={onPinToggle}
-              anchorLeft={anchor.left}
-              anchorTop={anchor.top}
-            />,
-            document.body,
-          )
-        : null}
-    </>
+        <span style={MC_STYLE}>
+          ${t.marketCap > 0 ? formatFixedAbbrev(t.marketCap) : "—"}
+        </span>
+      </Link>
+    </div>
   );
 });
 
@@ -432,7 +458,7 @@ const WatchlistItem = memo(function WatchlistItem({
    Synthetic sparkline
    ───────────────────────────────────────────────────────────────────── */
 
-function SyntheticSparkline({
+const SyntheticSparkline = memo(function SyntheticSparkline({
   changePct,
   stroke,
 }: {
@@ -470,7 +496,7 @@ function SyntheticSparkline({
       />
     </svg>
   );
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────
    Hover tooltip
