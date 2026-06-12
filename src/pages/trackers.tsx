@@ -1613,6 +1613,16 @@ export default function TrackersPage() {
       /* keep local poolAddress */
     }
 
+    // Token price for pre-trade validation (executeEnhancedTrade →
+    // preTransactionValidation reads usd_price/price_usd to size expected
+    // output). The TradeEvent carries price_usd; without it the trade was
+    // rejected with "Token Price Unknown". Fall back to metadata.
+    const tokenPriceUsd =
+      trade.price_usd ??
+      (metadata as any)?.price_usd ??
+      (metadata as any)?.usd_price ??
+      null;
+
     // Construct a Token object from the TradeEvent
     const token = {
       mint: trade.mint,
@@ -1623,6 +1633,8 @@ export default function TrackersPage() {
       image: metadata?.image || null,
       launchpad_protocol: metadata?.launchpad_protocol || null,
       market_cap_usd: metadata?.market_cap_usd || null,
+      usd_price: tokenPriceUsd,
+      price_usd: tokenPriceUsd,
       // Add other required Token fields with sensible defaults
     } as unknown as Token;
 
