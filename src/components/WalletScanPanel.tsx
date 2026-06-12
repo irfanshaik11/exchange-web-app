@@ -267,9 +267,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         // positions under a wall of "$0 bought / $0 sold / +0.0% PnL" rows.
         // Meaningful airdrops (≥ $1) and every actually-traded position stay.
         .filter((p) => !(p.boughtAmount === 0 && p.remainingValue < 1))
-        // Default to value-sorted so the largest holdings lead instead of the
-        // zero-PnL airdrops clustering at the top.
-        .sort((a, b) => b.remainingValue - a.remainingValue),
+        // Real positions (the wallet actually bought) first, airdrops/received
+        // (no cost basis) sink to the bottom — so the user sees their actual
+        // active positions up top. Within each group, sort by value.
+        .sort((a, b) => {
+          const aAir = a.boughtAmount === 0 ? 1 : 0;
+          const bAir = b.boughtAmount === 0 ? 1 : 0;
+          if (aAir !== bAir) return aAir - bAir;
+          return b.remainingValue - a.remainingValue;
+        }),
     [allAggregatedPositions],
   );
 
