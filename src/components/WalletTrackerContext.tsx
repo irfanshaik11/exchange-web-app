@@ -812,19 +812,21 @@ export function WalletTrackerProvider({
 
       // Show toast notification using enhanced toast only if enabled
       if (displayNotificationsEnabled) {
-        // Resolve the toast avatar through the shared scan cascade (proxy +
-        // server-DAS heal + registries) — the same pipeline that fixed letter
-        // tiles everywhere else. The parent WalletTrackerContent preloads every
-        // trade-feed image, so getCachedScanImage is usually a sync hit; the
-        // await is the fallback for a brand-new mint.
+        // Toast avatar: use the SYNC cached image only — never await image
+        // resolution here, or the toast lags behind the trade already showing in
+        // the table. The parent WalletTrackerContent preloads every trade-feed
+        // image, so getCachedScanImage is usually a hit; on a miss we fall back
+        // to the metadata image and kick off a non-blocking resolve to warm the
+        // cache for next time. FastImage letter-tiles gracefully in the gap.
         const cachedMeta0 = tokenMetadata.get(normalizedEvent.mint);
-        const cascadeImage =
-          getCachedScanImage(normalizedEvent.mint) ??
-          (await resolveScanImage(
+        const cascadeImage = getCachedScanImage(normalizedEvent.mint) ?? null;
+        if (!cascadeImage) {
+          void resolveScanImage(
             normalizedEvent.mint,
             resolvedImage ?? cachedMeta0?.image_url ?? cachedMeta0?.image ?? null,
             cachedMeta0?.uri ?? null,
-          ));
+          );
+        }
         const tokenImage =
           cascadeImage ||
           resolvedImage ||
