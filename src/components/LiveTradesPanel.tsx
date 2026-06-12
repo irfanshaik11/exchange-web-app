@@ -273,7 +273,18 @@ export default function LiveTradesPanel({
         </defs>
       </svg>
 
-      <table className="w-full min-w-[600px] text-[10px] sm:min-w-[720px] sm:text-xs">
+      <table className="w-full min-w-[600px] table-fixed text-[10px] sm:min-w-[720px] sm:text-xs">
+        {/* Fixed column widths so the table doesn't reflow/shift as rows enrich
+            (symbols, market caps load async) — the cause of the open-lag jump. */}
+        <colgroup>
+          <col className="w-[12%]" />
+          <col className="w-[18%]" />
+          <col className="w-[9%]" />
+          <col className="w-[20%]" />
+          <col className="w-[13%]" />
+          <col className="w-[12%]" />
+          <col className="w-[16%]" />
+        </colgroup>
         <thead
           className="sticky top-0 z-10"
           style={{
