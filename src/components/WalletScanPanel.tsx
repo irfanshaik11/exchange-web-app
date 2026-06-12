@@ -565,10 +565,13 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // server didn't enrich (trades and positions share mints).
     const nameByMint = new Map<string, string>();
     const symbolByMint = new Map<string, string>();
+    const protocolByMint = new Map<string, string>();
     for (const p of goPositions) {
       if (p.image_url) rawByMint.set(p.token_mint, p.image_url);
       if (p.token_name) nameByMint.set(p.token_mint, p.token_name);
       if (p.token_symbol) symbolByMint.set(p.token_mint, p.token_symbol);
+      if (p.launchpad_protocol)
+        protocolByMint.set(p.token_mint, p.launchpad_protocol);
     }
     return goTrades.map((t, idx) => {
       const date = new Date(t.created_at);
@@ -583,6 +586,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         // Activity component shows tokenAddress only when both are empty.
         tokenName: t.name || nameByMint.get(t.token_mint) || "",
         tokenSymbol: t.symbol || symbolByMint.get(t.token_mint) || "",
+        // Carry the protocol so the Activity row's border color + AMM badge
+        // render WITH the image instead of popping in after the async metadata
+        // fetch. /trades is server-enriched with launchpad_protocol; fall back
+        // to the positions map.
+        launchpad: t.launchpad_protocol || protocolByMint.get(t.token_mint) || "",
         pairAddress: t.pool_address ?? undefined,
         blockchain: "sol",
         tradeTime: date.toISOString(),
