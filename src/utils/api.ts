@@ -1901,6 +1901,11 @@ export interface WalletPortfolioSummary {
   realized_pnl_7d_usd?: number;
   realized_pnl_30d_usd?: number;
   realized_pnl_max_usd?: number;
+  /** Net-of-cost USD (gross − network fee − router/platform/tip). GMGN-comparable. */
+  realized_pnl_1d_net_usd?: number;
+  realized_pnl_7d_net_usd?: number;
+  realized_pnl_30d_net_usd?: number;
+  realized_pnl_max_net_usd?: number;
 }
 
 export interface WalletPortfolioTopToken {
@@ -1998,8 +2003,12 @@ export interface WalletDailyPnlDay {
   date: string;
   /** Realized PnL in SOL (gross avg-cost, chain-grounded) for that day */
   realized_pnl_sol: number;
-  /** Realized PnL in USD, time-accurate (per-trade price_usd, not current price) */
+  /** GROSS realized PnL in USD, time-accurate (per-trade price_usd) */
   realized_pnl_usd: number;
+  /** All-in trading cost that day (network fee + router/platform/tip), USD */
+  cost_usd: number;
+  /** Net = gross − cost (the GMGN-comparable number; FE headline) */
+  net_pnl_usd: number;
   /** Gross winning-token contribution that day (profit_usd + loss_usd == realized_pnl_usd) */
   profit_usd: number;
   /** Gross losing-token contribution that day (≤ 0) */

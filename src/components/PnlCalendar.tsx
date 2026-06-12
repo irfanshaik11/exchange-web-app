@@ -102,8 +102,12 @@ export default function PnlCalendar({
     return m;
   }, [days]);
 
+  // USD shows NET (gross − costs) to match GMGN; SOL shows gross realized (cost
+  // is only computed in USD). net_pnl_usd is absent on an older backend → gross.
   const valueOf = (d: WalletDailyPnlDay) =>
-    currency === "USD" ? d.realized_pnl_usd : d.realized_pnl_sol;
+    currency === "USD"
+      ? (d.net_pnl_usd ?? d.realized_pnl_usd)
+      : d.realized_pnl_sol;
 
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const firstWeekday = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
@@ -366,6 +370,25 @@ export default function PnlCalendar({
         >
           <div className="pb-2 text-xs font-semibold text-[#f4f4f5]">{hover.dateLabel}</div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+            <div>
+              <div className="text-[#71717a]">Net PnL</div>
+              <div
+                className="font-semibold tabular-nums"
+                style={{ color: (hover.day.net_pnl_usd ?? hover.day.realized_pnl_usd) >= 0 ? GREEN : RED }}
+              >
+                {fmtMoney(hover.day.net_pnl_usd ?? hover.day.realized_pnl_usd, "USD")}
+              </div>
+            </div>
+            <div>
+              <div className="text-[#71717a]">Gross / Cost</div>
+              <div className="font-semibold tabular-nums text-[#d4d4d8]">
+                <span style={{ color: hover.day.realized_pnl_usd >= 0 ? GREEN : RED }}>
+                  {fmtMoney(hover.day.realized_pnl_usd, "USD")}
+                </span>
+                <span className="text-[#52525b]"> / </span>
+                <span style={{ color: RED }}>−{fmtMoney(hover.day.cost_usd ?? 0, "USD", false)}</span>
+              </div>
+            </div>
             <div>
               <div className="text-[#71717a]">Today&apos;s Profit</div>
               <div className="font-semibold tabular-nums" style={{ color: GREEN }}>

@@ -339,9 +339,18 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   // Undefined ⇒ older backend without these fields ⇒ callers fall back.
   const serverRangePnlUsd = useMemo<number | undefined>(() => {
     if (!goSummary) return undefined;
-    // Prefer the server's time-accurate USD (earned at historical prices). Only
-    // fall back to SOL × current price if the USD field is absent (older backend),
-    // which drifts when SOL has moved since the trades were made.
+    // Prefer NET-of-cost USD (GMGN-comparable: gross − fees − router/tip costs),
+    // then gross USD, then SOL × current price (older backend). All time-accurate
+    // except the last, which drifts as SOL moves since the trades were made.
+    const net =
+      selectedRange === "1d"
+        ? goSummary.realized_pnl_1d_net_usd
+        : selectedRange === "7d"
+          ? goSummary.realized_pnl_7d_net_usd
+          : selectedRange === "30d"
+            ? goSummary.realized_pnl_30d_net_usd
+            : goSummary.realized_pnl_max_net_usd;
+    if (net !== undefined && net !== null) return net;
     const usd =
       selectedRange === "1d"
         ? goSummary.realized_pnl_1d_usd
