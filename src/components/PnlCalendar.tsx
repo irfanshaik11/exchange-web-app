@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
 
 /**
@@ -7,54 +7,66 @@ import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
  * Data comes from the token-service `/v1/wallet/:addr/daily-pnl` endpoint, which
  * computes each UTC day's realized PnL from raw on-chain swaps (chain-grounded
  * avg-cost; USD is time-accurate via per-trade price_usd). Verified within ~7% of
- * GMGN's own monthly figure for whale wallets — the residual is fee/FIFO method.
+ * GMGN's own monthly figure for whale wallets; per-day buy/sell txns + volume
+ * match GMGN to the dollar.
  *
- * Win/loss day counts and positive streaks are derived here from the daily values:
- * a "win day" is realized > 0; an inactive ($0) day breaks a streak; the current
- * streak is the length of the most recent win run, the best is the longest run.
+ * Win/loss day counts and positive streaks are derived here: a "win day" is
+ * realized > 0; an inactive ($0) day breaks a streak; current streak = the most
+ * recent win run, best = the longest run in the month.
  */
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
-const GREEN = "#18c48c";
-const RED = "#ef4444";
-const AMBER = "#f8be6e"; // top-profit-day highlight (matches GMGN)
+const GREEN = "#2bd4a0";
+const RED = "#fb4b69";
+const AMBER = "#f8be6e"; // top-profit-day highlight (GMGN convention)
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
 /** Compact money: +$11.4K / -$1.2M / +$320 */
-function fmtMoney(n: number, currency: "USD" | "SOL"): string {
-  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
+function fmtMoney(n: number, currency: "USD" | "SOL", signed = true): string {
+  const sign = n > 0 ? (signed ? "+" : "") : n < 0 ? "-" : "";
   const abs = Math.abs(n);
   const sym = currency === "USD" ? "$" : "◎";
   let body: string;
   if (abs >= 1_000_000) body = `${(abs / 1_000_000).toFixed(2)}M`;
-  else if (abs >= 1_000) body = `${(abs / 1_000).toFixed(abs >= 10_000 ? 1 : 2)}K`;
+  else if (abs >= 1_000) body = `${(abs / 1_000).toFixed(abs >= 100_000 ? 0 : 1)}K`;
   else if (abs >= 1) body = abs.toFixed(currency === "SOL" ? 2 : 0);
   else body = abs.toFixed(currency === "SOL" ? 3 : 2);
   return `${sign}${sym}${body}`;
 }
 
+type HoverState = {
+  day: WalletDailyPnlDay;
+  dateLabel: string;
+  x: number;
+  y: number;
+} | null;
+
 export default function PnlCalendar({ address }: { address: string }) {
-  // Month being viewed, anchored to UTC (the data is bucketed by UTC day).
   const [monthDate, setMonthDate] = useState(() => {
     const d = new Date();
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
   });
   const [days, setDays] = useState<WalletDailyPnlDay[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadedMonth, setLoadedMonth] = useState<string | null>(null);
   const [currency, setCurrency] = useState<"USD" | "SOL">("USD");
+  const [hover, setHover] = useState<HoverState>(null);
 
   const year = monthDate.getUTCFullYear();
-  const month = monthDate.getUTCMonth(); // 0-based
+  const month = monthDate.getUTCMonth();
   const monthStr = `${year}-${pad2(month + 1)}`;
 
   useEffect(() => {
     const ac = new AbortController();
     setLoading(true);
     getWalletDailyPnl(address, { month: monthStr, signal: ac.signal })
-      .then((r) => setDays(r.days || []))
+      .then((r) => {
+        setDays(r.days || []);
+        setLoadedMonth(monthStr);
+      })
       .catch(() => {
         /* aborted or transient — keep prior data */
       })
@@ -71,37 +83,21 @@ export default function PnlCalendar({ address }: { address: string }) {
   const valueOf = (d: WalletDailyPnlDay) =>
     currency === "USD" ? d.realized_pnl_usd : d.realized_pnl_sol;
 
-  // Grid geometry. Monday-first week (Mon=0 … Sun=6).
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const firstWeekday = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
 
   const stats = useMemo(() => {
-    let total = 0;
-    let winDays = 0;
-    let winSum = 0;
-    let lossDays = 0;
-    let lossSum = 0;
-    let topVal = 0;
-    let run = 0;
-    let best = 0;
-    let current = 0;
+    let total = 0, winDays = 0, winSum = 0, lossDays = 0, lossSum = 0;
+    let topVal = 0, run = 0, best = 0, current = 0;
     for (let dnum = 1; dnum <= daysInMonth; dnum++) {
-      const key = `${monthStr}-${pad2(dnum)}`;
-      const d = byDate.get(key);
+      const d = byDate.get(`${monthStr}-${pad2(dnum)}`);
       const v = d ? valueOf(d) : 0;
       total += v;
       if (v > 0) {
-        winDays++;
-        winSum += v;
-        topVal = Math.max(topVal, v);
-        run++;
-        current = run;
-        best = Math.max(best, run);
+        winDays++; winSum += v; topVal = Math.max(topVal, v);
+        run++; current = run; best = Math.max(best, run);
       } else {
-        if (v < 0) {
-          lossDays++;
-          lossSum += v;
-        }
+        if (v < 0) { lossDays++; lossSum += v; }
         run = 0;
       }
     }
@@ -109,158 +105,192 @@ export default function PnlCalendar({ address }: { address: string }) {
   }, [byDate, daysInMonth, monthStr, currency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const monthLabel = monthDate.toLocaleString("en-US", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
+    month: "short", year: "numeric", timeZone: "UTC",
   });
-
   const shiftMonth = (delta: number) =>
     setMonthDate(new Date(Date.UTC(year, month + delta, 1)));
-
-  // Don't allow navigating into future months.
   const now = new Date();
   const atCurrentMonth =
     year === now.getUTCFullYear() && month === now.getUTCMonth();
-
   const winPct =
     stats.winDays + stats.lossDays > 0
       ? (stats.winDays / (stats.winDays + stats.lossDays)) * 100
-      : 0;
+      : stats.winDays > 0 ? 100 : 0;
 
-  // Cell background: scale opacity by magnitude relative to the top day; the top
-  // profit day gets an amber tint (GMGN convention).
-  const cellStyle = (v: number): React.CSSProperties => {
-    if (v === 0) return { background: "rgba(255,255,255,0.015)" };
-    const isTop = v > 0 && v === stats.topVal && stats.topVal > 0;
-    const color = v > 0 ? (isTop ? AMBER : GREEN) : RED;
-    const intensity =
-      stats.topVal > 0 ? Math.min(0.22, 0.06 + (Math.abs(v) / stats.topVal) * 0.16) : 0.1;
-    return {
-      background: isTop
-        ? "rgba(248,190,110,0.14)"
-        : v > 0
-          ? `rgba(24,196,140,${intensity})`
-          : `rgba(239,68,68,${Math.min(0.2, intensity)})`,
-      borderColor: isTop ? "rgba(248,190,110,0.4)" : "transparent",
-      color,
-    };
+  // First load (no data for this month yet) → skeleton; month-nav keeps old grid.
+  const showSkeleton = loading && loadedMonth !== monthStr;
+
+  const onCellEnter = (e: React.MouseEvent, d: WalletDailyPnlDay) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const dt = new Date(`${d.date}T00:00:00Z`);
+    setHover({
+      day: d,
+      dateLabel: dt.toLocaleDateString("en-US", {
+        weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
+      }),
+      x: r.left + r.width / 2,
+      y: r.top,
+    });
   };
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header: title, currency toggle, month nav, totals */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-[#f4f4f5]">PnL Calendar</span>
           <button
             onClick={() => setCurrency((c) => (c === "USD" ? "SOL" : "USD"))}
-            className="rounded-md border border-white/[0.08] bg-[#0c0e12] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] transition-colors hover:text-[#f4f4f5]"
-            title="Toggle USD / SOL"
+            className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] transition-colors hover:border-white/20 hover:text-[#f4f4f5]"
           >
             {currency === "USD" ? "$ USD" : "◎ SOL"}
           </button>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => shiftMonth(-1)}
-            className="flex h-6 w-6 items-center justify-center rounded-md border border-white/[0.06] text-[#a1a1aa] transition-colors hover:text-[#f4f4f5]"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[#a1a1aa] transition-colors hover:bg-white/[0.06] hover:text-[#f4f4f5]"
             aria-label="Previous month"
-          >
-            ‹
-          </button>
-          <span className="min-w-[110px] text-center font-mono text-xs text-[#d4d4d8]">
+          >‹</button>
+          <span className="min-w-[112px] text-center text-xs font-medium text-[#d4d4d8]">
             {monthLabel} UTC
           </span>
           <button
             onClick={() => shiftMonth(1)}
             disabled={atCurrentMonth}
-            className="flex h-6 w-6 items-center justify-center rounded-md border border-white/[0.06] text-[#a1a1aa] transition-colors enabled:hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[#a1a1aa] transition-colors enabled:hover:bg-white/[0.06] enabled:hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-25"
             aria-label="Next month"
-          >
-            ›
-          </button>
+          >›</button>
         </div>
       </div>
 
-      {/* Monthly total + win/loss summary */}
+      {/* Monthly total + win/loss bar */}
       <div className="pb-2">
-        <div
-          className="text-2xl font-semibold tabular-nums"
-          style={{ color: stats.total >= 0 ? GREEN : RED }}
-        >
-          {fmtMoney(stats.total, currency)}
-        </div>
-        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-[#ef4444]/30">
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${winPct}%`, background: GREEN }}
-          />
-        </div>
-        <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums">
-          <span style={{ color: GREEN }}>
-            {stats.winDays} / {fmtMoney(stats.winSum, currency)}
+        <div className="flex items-baseline gap-2">
+          <span
+            className="text-[26px] font-bold leading-none tabular-nums"
+            style={{ color: stats.total >= 0 ? GREEN : RED }}
+          >
+            {fmtMoney(stats.total, currency)}
           </span>
-          <span style={{ color: RED }}>
-            {stats.lossDays} / {fmtMoney(stats.lossSum, currency)}
-          </span>
+          {loading && (
+            <span className="text-[10px] text-[#52525b]">updating…</span>
+          )}
+        </div>
+        <div className="mt-2 flex h-1 w-full overflow-hidden rounded-full bg-[#fb4b69]/25">
+          <div className="h-full rounded-full transition-all" style={{ width: `${winPct}%`, background: GREEN }} />
+        </div>
+        <div className="mt-1 flex items-center justify-between text-[11px] font-medium tabular-nums">
+          <span style={{ color: GREEN }}>{stats.winDays} / {fmtMoney(stats.winSum, currency)}</span>
+          <span style={{ color: RED }}>{stats.lossDays} / {fmtMoney(stats.lossSum, currency)}</span>
         </div>
       </div>
 
       {/* Weekday header */}
       <div className="grid grid-cols-7 gap-1.5 pb-1.5">
         {WEEKDAYS.map((w, i) => (
-          <div key={i} className="text-center text-[10px] font-medium text-[#52525b]">
-            {w}
-          </div>
+          <div key={i} className="text-center text-[10px] font-medium uppercase tracking-wide text-[#52525b]">{w}</div>
         ))}
       </div>
 
       {/* Day grid */}
-      <div className="grid flex-1 grid-cols-7 gap-1.5">
-        {Array.from({ length: firstWeekday }).map((_, i) => (
-          <div key={`blank-${i}`} />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const dnum = i + 1;
-          const key = `${monthStr}-${pad2(dnum)}`;
-          const d = byDate.get(key);
-          const v = d ? valueOf(d) : 0;
-          const st = cellStyle(v);
-          return (
-            <div
-              key={key}
-              className="relative flex min-h-[52px] flex-col justify-between rounded-lg border p-1.5 transition-colors"
-              style={st}
-              title={
-                d
-                  ? `${key} — ${fmtMoney(v, currency)} · ${d.sell_count} sells / ${d.buy_count} buys`
-                  : `${key} — no activity`
-              }
-            >
-              <span className="text-[10px] font-medium text-[#71717a]">{dnum}</span>
-              <span
-                className="text-center text-[11px] font-semibold leading-tight tabular-nums"
-                style={{ color: v === 0 ? "#3f3f46" : (st.color as string) }}
-              >
-                {v === 0 ? "$0" : fmtMoney(v, currency)}
-              </span>
-            </div>
-          );
-        })}
+      <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-1.5" onMouseLeave={() => setHover(null)}>
+        {showSkeleton
+          ? Array.from({ length: 35 }).map((_, i) => (
+              <div key={`sk-${i}`} className="min-h-[58px] animate-pulse rounded-lg bg-white/[0.03]" />
+            ))
+          : (
+            <>
+              {Array.from({ length: firstWeekday }).map((_, i) => (
+                <div key={`blank-${i}`} />
+              ))}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const dnum = i + 1;
+                const key = `${monthStr}-${pad2(dnum)}`;
+                const d = byDate.get(key);
+                const v = d ? valueOf(d) : 0;
+                const isTop = v > 0 && v === stats.topVal && stats.topVal > 0;
+                const color = v > 0 ? (isTop ? AMBER : GREEN) : v < 0 ? RED : "#3f3f46";
+                const intensity =
+                  v !== 0 && stats.topVal > 0
+                    ? Math.min(0.16, 0.05 + (Math.abs(v) / stats.topVal) * 0.11)
+                    : 0;
+                const bg = isTop
+                  ? "rgba(248,190,110,0.12)"
+                  : v > 0
+                    ? `rgba(43,212,160,${intensity})`
+                    : v < 0
+                      ? `rgba(251,75,105,${Math.min(0.14, intensity)})`
+                      : "rgba(255,255,255,0.012)";
+                return (
+                  <div
+                    key={key}
+                    onMouseEnter={d ? (e) => onCellEnter(e, d) : undefined}
+                    className="relative flex min-h-[58px] flex-col rounded-lg border p-1.5 transition-colors"
+                    style={{
+                      background: bg,
+                      borderColor: isTop ? "rgba(248,190,110,0.45)" : "rgba(255,255,255,0.04)",
+                    }}
+                  >
+                    <span className="text-[10px] font-medium text-[#71717a]">{dnum}</span>
+                    <span
+                      className="flex flex-1 items-center justify-center text-[13px] font-bold leading-none tabular-nums"
+                      style={{ color }}
+                    >
+                      {v === 0 ? "$0" : fmtMoney(v, currency)}
+                    </span>
+                  </div>
+                );
+              })}
+            </>
+          )}
       </div>
 
       {/* Streak footer */}
       <div className="flex items-center gap-4 pt-2.5 text-[11px] text-[#71717a]">
-        <span>
-          Current Positive Streak:{" "}
-          <span className="font-semibold text-[#d4d4d8]">{stats.current}d</span>
-        </span>
-        <span>
-          Best Positive Streak in {monthLabel.split(" ")[0]}:{" "}
-          <span className="font-semibold text-[#d4d4d8]">{stats.best}d</span>
-        </span>
-        {loading && <span className="text-[#52525b]">loading…</span>}
+        <span>Current Positive Streak: <span className="font-semibold text-[#d4d4d8]">{stats.current}d</span></span>
+        <span>Best Positive Streak in {monthLabel.split(" ")[0]}: <span className="font-semibold text-[#d4d4d8]">{stats.best}d</span></span>
       </div>
+
+      {/* Hover tooltip (fixed-position, GMGN-style breakdown) */}
+      {hover && (
+        <div
+          className="pointer-events-none fixed z-50 w-[260px] -translate-x-1/2 -translate-y-full rounded-lg border border-white/10 bg-[#0c0e12]/95 p-3 shadow-[0_12px_40px_rgba(0,0,0,0.6)] backdrop-blur-sm"
+          style={{ left: hover.x, top: hover.y - 8 }}
+        >
+          <div className="pb-2 text-xs font-semibold text-[#f4f4f5]">{hover.dateLabel}</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+            <div>
+              <div className="text-[#71717a]">Today&apos;s Profit</div>
+              <div className="font-semibold tabular-nums" style={{ color: GREEN }}>
+                {fmtMoney(hover.day.profit_usd, "USD", false)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[#71717a]">Today&apos;s Loss</div>
+              <div className="font-semibold tabular-nums" style={{ color: RED }}>
+                {fmtMoney(hover.day.loss_usd, "USD", false)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[#71717a]">Buy/Sell Txns</div>
+              <div className="font-semibold tabular-nums text-[#d4d4d8]">
+                <span style={{ color: GREEN }}>{hover.day.buy_count}</span>
+                {" / "}
+                <span style={{ color: RED }}>{hover.day.sell_count}</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[#71717a]">Buy/Sell Volume</div>
+              <div className="font-semibold tabular-nums text-[#d4d4d8]">
+                <span style={{ color: GREEN }}>{fmtMoney(hover.day.buy_volume_usd, "USD", false)}</span>
+                {" / "}
+                <span style={{ color: RED }}>{fmtMoney(hover.day.sell_volume_usd, "USD", false)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

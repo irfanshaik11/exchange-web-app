@@ -2000,6 +2000,12 @@ export interface WalletDailyPnlDay {
   realized_pnl_sol: number;
   /** Realized PnL in USD, time-accurate (per-trade price_usd, not current price) */
   realized_pnl_usd: number;
+  /** Gross winning-token contribution that day (profit_usd + loss_usd == realized_pnl_usd) */
+  profit_usd: number;
+  /** Gross losing-token contribution that day (≤ 0) */
+  loss_usd: number;
+  buy_volume_usd: number;
+  sell_volume_usd: number;
   sell_volume_sol: number;
   trade_count: number;
   buy_count: number;
