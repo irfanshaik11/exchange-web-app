@@ -1701,6 +1701,25 @@ export default function TrackersPage() {
     const tokenImage = getResolvedTokenImage(token as any);
     const tokenName = token.symbol || token.name || "Token";
 
+    // Build the Solscan link via DOM APIs (never innerHTML) so the tx signature
+    // can't be parsed as HTML — XSS-safe even though txHash is a trusted base58
+    // signature. Replaces the canonical surfaces' innerHTML pattern.
+    const setSolscanLink = (linkEl: HTMLElement, txHash: string) => {
+      const a = document.createElement("a");
+      a.href = `https://solscan.io/tx/${encodeURIComponent(txHash)}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.className = "hover:opacity-80 transition-opacity";
+      const img = document.createElement("img");
+      img.src = "https://avatars.githubusercontent.com/u/92743431?s=200&v=4";
+      img.alt = "Solana";
+      img.className = "w-4 h-4 rounded-full";
+      img.style.cursor = "pointer";
+      a.appendChild(img);
+      linkEl.replaceChildren(a);
+      linkEl.className = "";
+    };
+
     hotToast(
       () => (
         <div className="flex items-center gap-3">
@@ -1838,11 +1857,7 @@ export default function TrackersPage() {
         onTxHash: ({ txHash }) => {
           if (txHash) {
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
-            if (linkEl) {
-              const explorerUrl = `https://solscan.io/tx/${txHash}`;
-              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-              linkEl.className = "";
-            }
+            if (linkEl) setSolscanLink(linkEl, txHash);
             broadcastTradeCompleted({
               tokenAddress: baseMint,
               tradeType: "buy",
@@ -1869,11 +1884,7 @@ export default function TrackersPage() {
 
       if (firstTxHash && !isMultiWallet) {
         const linkEl = document.getElementById(`link-${uniqueToastId}`);
-        if (linkEl) {
-          const explorerUrl = `https://solscan.io/tx/${firstTxHash}`;
-          linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4" alt="Solana" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
-          linkEl.className = "";
-        }
+        if (linkEl) setSolscanLink(linkEl, firstTxHash);
         if (timerHandle) cancelAnimationFrame(timerHandle);
         setTimeout(() => hotToast.dismiss(uniqueToastId), 10000);
       }
