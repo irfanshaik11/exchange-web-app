@@ -348,10 +348,10 @@ export default function PnlCalendar({
           <span>Current Streak: <span className="font-semibold text-[#d4d4d8]">{stats.current}d</span></span>
           <span>Best in {monthLabel.split(" ")[0]}: <span className="font-semibold text-[#d4d4d8]">{stats.best}d</span></span>
         </div>
-        <div className="flex flex-shrink-0 items-center gap-1.5 opacity-80">
+        <div className="flex flex-shrink-0 items-center gap-2 opacity-90">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/interstate-logo-icon.png" alt="Interstate" className="h-4 w-4 rounded" />
-          <span className="text-[11px] font-semibold tracking-tight text-[#d4d4d8]">Interstate</span>
+          <img src="/interstate/logo.png" alt="Interstate" className="h-6 w-6 object-contain sm:h-7 sm:w-7" />
+          <span className="text-sm font-bold tracking-tight text-[#e4e4e7]">Interstate</span>
         </div>
       </div>
 
@@ -421,10 +421,10 @@ export default function PnlCalendar({
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/interstate-logo-icon.png" alt="" width={24} height={24} style={{ borderRadius: 6 }} />
-                  <span style={{ color: "#f4f4f5", fontWeight: 700, fontSize: 16, letterSpacing: "-0.02em" }}>Interstate</span>
+                  <img src="/interstate/logo.png" alt="" width={38} height={38} style={{ objectFit: "contain" }} />
+                  <span style={{ color: "#f4f4f5", fontWeight: 800, fontSize: 22, letterSpacing: "-0.02em" }}>Interstate</span>
                 </div>
                 <span style={{ color: "#71717a", fontSize: 12, fontWeight: 600 }}>PnL Calendar</span>
               </div>

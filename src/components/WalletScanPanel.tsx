@@ -963,10 +963,12 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             </button>
           </div>
         </div>
-        {/* Main Content */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Top: Balance, PNL, Performance — 3-column card grid */}
-          <div className="grid flex-shrink-0 grid-cols-1 gap-3 px-5 pt-4 pb-3 lg:grid-cols-3">
+        {/* Main Content — scrolls as a whole so nothing is clipped on short
+            viewports / mobile (cards + tabs + tab content share one scroll). */}
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          {/* Top: Balance, PNL, Performance — go side-by-side at md so they're a
+              compact row on desktop instead of a tall stack that clips. */}
+          <div className="grid flex-shrink-0 grid-cols-1 gap-3 px-5 pt-4 pb-3 md:grid-cols-3">
             {/* Balance card */}
             <ScanCard label="Balance">
               <div className="text-[10px] uppercase tracking-wide text-[#52525b]">
@@ -1152,8 +1154,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               </div>
             </ScanCard>
           </div>
-          {/* Tabs — understated text tabs with active underline */}
-          <div className="flex flex-shrink-0 items-center border-b border-white/[0.06] px-5">
+          {/* Tabs — understated text tabs with active underline. Sticky so they
+              stay reachable while the modal body scrolls. */}
+          <div className="sticky top-0 z-20 flex flex-shrink-0 items-center border-b border-white/[0.06] bg-[#030304] px-5">
             <div className="flex flex-row gap-6 text-sm">
               {TABS.map((t) => {
                 const label =
@@ -1174,8 +1177,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               })}
             </div>
           </div>
-          {/* Tab Content Area */}
-          <div className="flex-1 overflow-auto px-5 pb-2">
+          {/* Tab Content Area — min-height so it never collapses; when cards +
+              this exceed the viewport, the Main Content scroll above takes over. */}
+          <div className="flex-1 overflow-auto px-5 pb-2 min-h-[420px]">
             {tab === "PnL Calendar" && (
               <div className="h-full w-full py-1">
                 <PnlCalendar address={wallet.address} initial={calendarPrefetch} />
