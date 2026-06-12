@@ -348,10 +348,13 @@ export default function PnlCalendar({
           <span>Current Streak: <span className="font-semibold text-[#d4d4d8]">{stats.current}d</span></span>
           <span>Best in {monthLabel.split(" ")[0]}: <span className="font-semibold text-[#d4d4d8]">{stats.best}d</span></span>
         </div>
+        {/* Matches the nav logo lockup: ring + Orbitron uppercase wordmark */}
         <div className="flex flex-shrink-0 items-center gap-2 opacity-90">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/interstate/logo.png" alt="Interstate" className="h-6 w-6 object-contain sm:h-7 sm:w-7" />
-          <span className="text-sm font-bold tracking-tight text-[#e4e4e7]">Interstate</span>
+          <span className="!font-orbitron text-sm font-semibold uppercase tracking-wider text-[#e4e4e7]">
+            interstate
+          </span>
         </div>
       </div>
 
@@ -424,7 +427,12 @@ export default function PnlCalendar({
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/interstate/logo.png" alt="" width={38} height={38} style={{ objectFit: "contain" }} />
-                  <span style={{ color: "#f4f4f5", fontWeight: 800, fontSize: 22, letterSpacing: "-0.02em" }}>Interstate</span>
+                  <span
+                    className="!font-orbitron"
+                    style={{ color: "#f4f4f5", fontWeight: 600, fontSize: 21, textTransform: "uppercase", letterSpacing: "0.08em" }}
+                  >
+                    interstate
+                  </span>
                 </div>
                 <span style={{ color: "#71717a", fontSize: 12, fontWeight: 600 }}>PnL Calendar</span>
               </div>
