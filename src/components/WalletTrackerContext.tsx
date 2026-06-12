@@ -134,6 +134,57 @@ const pruneTrades = (trades: TradeEvent[]) => {
     .slice(0, LIVE_TRADES_CACHE_MAX_ITEMS);
 };
 
+// Slim projection persisted to localStorage — only the fields needed to restore
+// the feed on reload, stripping any runtime-added bloat that inflates the cache.
+const slimTradeForStorage = (t: TradeEvent): TradeEvent => ({
+  type: "trade",
+  wallet: t.wallet,
+  mint: t.mint,
+  pair_address: t.pair_address,
+  symbol: t.symbol ?? null,
+  name: t.name ?? null,
+  side: t.side,
+  amount: t.amount,
+  sol_spent: t.sol_spent ?? null,
+  price_usd: t.price_usd ?? null,
+  market_cap_usd: t.market_cap_usd ?? null,
+  venue: t.venue ?? null,
+  tx: t.tx,
+  at: t.at,
+});
+
+// Write the trades cache without ever throwing on QuotaExceededError. The
+// in-memory feed is the source of truth; the cache is a reload convenience, so
+// when storage is full (other caches — images/OHLCV/pulse — fill the ~5MB
+// budget) we shrink our own payload and retry, then give up and free our key.
+const persistTradesQuotaSafe = (key: string, slim: TradeEvent[]) => {
+  if (typeof window === "undefined") return;
+  let items = slim;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(items));
+      return;
+    } catch (err) {
+      const quota =
+        err instanceof DOMException &&
+        (err.name === "QuotaExceededError" ||
+          err.name === "NS_ERROR_DOM_QUOTA_REACHED");
+      if (!quota || items.length <= 10) {
+        // Non-quota error, or already tiny and still failing → free our key
+        // so we never hold space we can't write, and stop.
+        try {
+          window.localStorage.removeItem(key);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      // Halve and retry — keep the newest trades.
+      items = items.slice(0, Math.floor(items.length / 2));
+    }
+  }
+};
+
 const mergeTrades = (existing: TradeEvent[], additions: TradeEvent[]) => {
   if (!Array.isArray(additions) || additions.length === 0) {
     return pruneTrades(existing);
@@ -1225,14 +1276,20 @@ export function WalletTrackerProvider({
         return;
       }
 
-      const payload = JSON.stringify(pruned);
-
-      window.localStorage.setItem(getCacheKey(), payload);
-      if (user?.id) {
-        window.localStorage.setItem(getCacheKey(user.id), payload);
-      }
+      // Persist a SLIM projection (only fields needed to restore the feed) — the
+      // full enriched TradeEvent can be large, and 100 of them blew the ~5MB
+      // localStorage quota. Write once to the most-specific key (user when
+      // logged in, else global) instead of duplicating the payload to both.
+      const slim = pruned.map(slimTradeForStorage);
+      const key = user?.id ? getCacheKey(user.id) : getCacheKey();
+      // Keep the non-active key from going stale/duplicating quota.
+      const otherKey = user?.id ? getCacheKey() : null;
+      if (otherKey) window.localStorage.removeItem(otherKey);
+      persistTradesQuotaSafe(key, slim);
     } catch (error) {
-      console.error("Failed to persist live trades cache:", error);
+      // Never let a storage failure surface — the in-memory feed is the source
+      // of truth; the cache is only a reload convenience.
+      console.warn("Live trades cache persist skipped:", error);
     }
   }, [latestTrades, user?.id]);
 
