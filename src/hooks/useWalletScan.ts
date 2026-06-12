@@ -717,18 +717,21 @@ export function useWalletScan(
     const tradesFresh =
       !!entry && entry.tradesTs > 0 && t - entry.tradesTs < CACHE_FRESH_MS;
 
-    // Stale-while-revalidate: if we already seeded stale data above, the
-    // refetch below runs WITHOUT flipping the tab back to a spinner.
+    // True stale-while-revalidate: ALWAYS refetch on open, even if the cache is
+    // "fresh" (<30s). A wallet you just traded on changes the instant the trade
+    // lands, so a 30s-cached snapshot can show stale values (e.g. a just-bought
+    // position with $0 cost basis from the pre-aggregation moment). The cache is
+    // still painted instantly below (setXLoading(!hasX) → no spinner when we
+    // have cached data), so there's NO added latency — the refetch runs in the
+    // background and swaps in fresh data when it arrives (~1.5s). summaryFresh/
+    // positionsFresh/tradesFresh are intentionally no longer used to skip the
+    // fetch; kept only for reference.
+    void summaryFresh;
+    void positionsFresh;
+    void tradesFresh;
     const hasSummary = !!entry?.summary;
     const hasPositions = !!entry && entry.positionsTs > 0;
     const hasTrades = !!entry && entry.tradesTs > 0;
-
-    if (summaryFresh && positionsFresh && tradesFresh) {
-      setSummaryLoading(false);
-      setPositionsLoading(false);
-      setTradesLoading(false);
-      return;
-    }
 
     const ac = new AbortController();
     inflightRef.current = ac;
@@ -746,10 +749,11 @@ export function useWalletScan(
       );
     };
 
-    if (!summaryFresh) {
-      setSummaryLoading(!hasSummary);
-      mountFetches.push(
-        getWalletPortfolioSummary(address, ac.signal)
+    // Always revalidate. setXLoading(!hasX) keeps the spinner OFF when cached
+    // data is already showing → instant paint, background refresh, no latency.
+    setSummaryLoading(!hasSummary);
+    mountFetches.push(
+      getWalletPortfolioSummary(address, ac.signal)
         .then((s) => {
           if (ac.signal.aborted) return;
           const safe = sanitizeSummary(s);
@@ -760,54 +764,43 @@ export function useWalletScan(
         .finally(() => {
           if (!ac.signal.aborted) setSummaryLoading(false);
         }),
-      );
-    } else {
-      setSummaryLoading(false);
-    }
+    );
 
-    if (!positionsFresh) {
-      setPositionsLoading(!hasPositions);
-      mountFetches.push(
-        getWalletPortfolioPositions(address, {
-          includeClosed: true,
-          signal: ac.signal,
+    setPositionsLoading(!hasPositions);
+    mountFetches.push(
+      getWalletPortfolioPositions(address, {
+        includeClosed: true,
+        signal: ac.signal,
+      })
+        .then((p) => {
+          if (ac.signal.aborted) return;
+          const guarded = applyResurrectionGuard(p.positions);
+          setPositions(address, guarded);
+          setPositionsState(guarded);
+          setPositionsDegraded(p.degraded === true);
         })
-          .then((p) => {
-            if (ac.signal.aborted) return;
-            const guarded = applyResurrectionGuard(p.positions);
-            setPositions(address, guarded);
-            setPositionsState(guarded);
-            setPositionsDegraded(p.degraded === true);
-          })
-          .catch(onErr)
-          .finally(() => {
-            if (!ac.signal.aborted) setPositionsLoading(false);
-          }),
-      );
-    } else {
-      setPositionsLoading(false);
-    }
+        .catch(onErr)
+        .finally(() => {
+          if (!ac.signal.aborted) setPositionsLoading(false);
+        }),
+    );
 
-    if (!tradesFresh) {
-      setTradesLoading(!hasTrades);
-      mountFetches.push(
-        getWalletPortfolioTrades(address, {
-          limit: TRADES_LIMIT,
-          signal: ac.signal,
+    setTradesLoading(!hasTrades);
+    mountFetches.push(
+      getWalletPortfolioTrades(address, {
+        limit: TRADES_LIMIT,
+        signal: ac.signal,
+      })
+        .then((tr) => {
+          if (ac.signal.aborted) return;
+          setTrades(address, tr.trades);
+          setTradesState(tr.trades);
         })
-          .then((tr) => {
-            if (ac.signal.aborted) return;
-            setTrades(address, tr.trades);
-            setTradesState(tr.trades);
-          })
-          .catch(onErr)
-          .finally(() => {
-            if (!ac.signal.aborted) setTradesLoading(false);
-          }),
-      );
-    } else {
-      setTradesLoading(false);
-    }
+        .catch(onErr)
+        .finally(() => {
+          if (!ac.signal.aborted) setTradesLoading(false);
+        }),
+    );
 
     void Promise.allSettled(mountFetches).then(() => {
       fetchInFlightRef.current = false;
