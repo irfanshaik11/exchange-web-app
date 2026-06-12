@@ -34,10 +34,6 @@ import {
   getCachedScanImage,
   resolveScanImage,
 } from "~/utils/scanImageResolver";
-import {
-  playNotificationSound,
-  getSelectedNotificationSound,
-} from "~/utils/notificationSounds";
 import FastImage from "~/components/FastImage";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { FiBell } from "react-icons/fi";
@@ -827,9 +823,28 @@ export function WalletTrackerProvider({
         }
       })();
 
-      // Play the user's chosen notification sound if enabled.
+      // Play notification sound if enabled — soft gentle ping
       if (transactionSoundsEnabled && typeof window !== "undefined") {
-        playNotificationSound(getSelectedNotificationSound());
+        try {
+          const ac = new (window.AudioContext ||
+            (window as any).webkitAudioContext)();
+          const osc = ac.createOscillator();
+          const gain = ac.createGain();
+          osc.type = "sine";
+          osc.frequency.value = 880; // A5 — clean, gentle tone
+          osc.connect(gain);
+          gain.connect(ac.destination);
+
+          const t = ac.currentTime;
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.08, t + 0.01); // Soft peak
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3); // Gentle fade
+
+          osc.start(t);
+          osc.stop(t + 0.3);
+        } catch (error) {
+          // Silent fail if audio context fails (e.g., user hasn't interacted with page)
+        }
       }
 
       // Show toast notification using enhanced toast only if enabled

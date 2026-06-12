@@ -5,13 +5,6 @@ import { createPortal } from 'react-dom';
 import { FaTimes, FaCheckCircle } from 'react-icons/fa';
 import { IoIosNotificationsOutline } from 'react-icons/io';
 import { showEnhancedToast } from '~/utils/enhancedToast';
-import {
-  NOTIFICATION_SOUNDS,
-  NOTIFICATION_SOUND_STORAGE_KEY,
-  getSelectedNotificationSound,
-  playNotificationSound,
-  type NotificationSoundId,
-} from '~/utils/notificationSounds';
 
 interface NotificationSettingsModalProps {
   isOpen: boolean;
@@ -69,9 +62,6 @@ const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({ i
   const [displayNotifications, setDisplayNotifications] = useState(getInitialDisplayNotifications);
   const [toastPosition, setToastPosition] = useState<ToastPosition>(getInitialToastPosition);
   const [transactionSounds, setTransactionSounds] = useState(getInitialTransactionSounds);
-  const [soundChoice, setSoundChoice] = useState<NotificationSoundId>(
-    getSelectedNotificationSound,
-  );
   const [animatingPosition, setAnimatingPosition] = useState<ToastPosition | null>(null);
 
   // Save settings to localStorage
@@ -94,12 +84,6 @@ const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({ i
       localStorage.setItem('transaction-sounds-enabled', String(transactionSounds));
     }
   }, [transactionSounds]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(NOTIFICATION_SOUND_STORAGE_KEY, soundChoice);
-    }
-  }, [soundChoice]);
 
   const handlePositionClick = (position: ToastPosition) => {
     setToastPosition(position);
@@ -292,50 +276,6 @@ const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({ i
               />
             </button>
           </div>
-
-          {/* Sound picker — only when sounds are enabled */}
-          {transactionSounds && (
-            <div className="flex items-center justify-between -mt-2">
-              <div className="text-xs" style={{ color: AX.muted }}>
-                Sound
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={soundChoice}
-                  onChange={(e) => {
-                    const id = e.target.value as NotificationSoundId;
-                    setSoundChoice(id);
-                    playNotificationSound(id); // preview on pick
-                  }}
-                  className="rounded-md px-2 py-1 text-xs outline-none cursor-pointer"
-                  style={{
-                    backgroundColor: AX.surface,
-                    border: `1px solid ${AX.border}`,
-                    color: AX.text,
-                  }}
-                >
-                  {NOTIFICATION_SOUNDS.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => playNotificationSound(soundChoice)}
-                  title="Preview"
-                  className="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-                  style={{
-                    backgroundColor: AX.surface,
-                    border: `1px solid ${AX.border}`,
-                    color: AX.mint,
-                  }}
-                >
-                  ▶
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Toast Position */}
           <div>
