@@ -260,7 +260,7 @@ export default function LeaderboardPage() {
                     <div className="h-px w-16 bg-gradient-to-l from-transparent via-amber-500/50 to-amber-500/20" />
                   </div>
 
-                  <h1 className="text-center text-5xl font-black tracking-tight text-white md:text-6xl">
+                  <h1 className="text-center text-3xl font-black tracking-tight text-white sm:text-5xl md:text-6xl">
                     LEADERBOARD
                   </h1>
 
@@ -316,8 +316,8 @@ export default function LeaderboardPage() {
 
                   {/* Season selector + countdown. Future seasons lock with
                    * a tooltip explaining when they start. */}
-                  <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-                    <div className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1">
+                  <div className="flex w-full flex-col items-center justify-center gap-4 sm:w-auto sm:flex-row">
+                    <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto scrollbar-hide rounded-full border border-white/[0.08] bg-white/[0.04] p-1">
                       {SEASONS.map((season) => {
                         const active = period === season.key;
                         const locked = isSeasonLocked(season.key);
@@ -341,7 +341,7 @@ export default function LeaderboardPage() {
                                 ? `${season.label} begins ${startLabel}`
                                 : undefined
                             }
-                            className={`rounded-full px-4 py-1.5 text-xs font-medium tracking-wider uppercase transition-colors ${
+                            className={`flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium tracking-wider uppercase transition-colors sm:px-4 ${
                               active
                                 ? "bg-white/[0.1] text-white"
                                 : locked
