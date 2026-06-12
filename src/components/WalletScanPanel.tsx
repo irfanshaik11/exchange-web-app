@@ -9,6 +9,7 @@ import { getWalletSolBalance } from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
 import PnlCalendar from "./PnlCalendar";
+import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
 import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
   type PnlChartDataPoint,
@@ -141,7 +142,40 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [loading, setLoading] = useState(contextBalance === null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState("PnL Calendar");
+  // Land on Activity: it's a bounded LIMIT-100 read (~200ms cold), so the panel
+  // is instantly useful. The PnL Calendar's cold path scans the wallet's whole
+  // trade history for cost basis (~1.6s for a whale), so we DON'T land on it —
+  // instead we prefetch its current month in the background (below) so it's warm
+  // by the time the user clicks the tab. (The other tabs' data is already
+  // prefetched by useWalletScan on open.)
+  const [tab, setTab] = useState("Activity");
+  const [calendarPrefetch, setCalendarPrefetch] = useState<{
+    month: string;
+    days: WalletDailyPnlDay[];
+  } | null>(null);
+
+  // Background-warm the PnL calendar's current month so switching to the
+  // (cold-slow) calendar tab is instant. Delayed ~900ms so this heavy
+  // full-history scan doesn't contend with the summary/positions/trades requests
+  // the landing (Activity) tab needs first. Fire-and-forget; the result both
+  // seeds the component and warms the server cache.
+  useEffect(() => {
+    if (!wallet?.address) return;
+    const ac = new AbortController();
+    const timer = setTimeout(() => {
+      const now = new Date();
+      const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+      getWalletDailyPnl(wallet.address, { month, signal: ac.signal })
+        .then((r) => setCalendarPrefetch({ month, days: r.days || [] }))
+        .catch(() => {
+          /* aborted or transient — calendar will fetch on its own when opened */
+        });
+    }, 900);
+    return () => {
+      clearTimeout(timer);
+      ac.abort();
+    };
+  }, [wallet?.address]);
 
   const [walletBalance, setWalletBalance] = useState<{
     sol: number;
@@ -1144,7 +1178,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           <div className="flex-1 overflow-auto px-5 pb-2">
             {tab === "PnL Calendar" && (
               <div className="h-full w-full py-1">
-                <PnlCalendar address={wallet.address} />
+                <PnlCalendar address={wallet.address} initial={calendarPrefetch} />
               </div>
             )}
             {tab === "History" && (

@@ -44,14 +44,24 @@ type HoverState = {
   y: number;
 } | null;
 
-export default function PnlCalendar({ address }: { address: string }) {
+export default function PnlCalendar({
+  address,
+  initial,
+}: {
+  address: string;
+  /** Background-prefetched current month (from WalletScanPanel) so the tab is
+   * instant on first open instead of paying the ~1.6s cold cost-basis scan. */
+  initial?: { month: string; days: WalletDailyPnlDay[] } | null;
+}) {
   const [monthDate, setMonthDate] = useState(() => {
     const d = new Date();
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
   });
-  const [days, setDays] = useState<WalletDailyPnlDay[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadedMonth, setLoadedMonth] = useState<string | null>(null);
+  const [days, setDays] = useState<WalletDailyPnlDay[]>(initial?.days ?? []);
+  const [loading, setLoading] = useState(!initial);
+  const [loadedMonth, setLoadedMonth] = useState<string | null>(
+    initial?.month ?? null,
+  );
   const [currency, setCurrency] = useState<"USD" | "SOL">("USD");
   const [hover, setHover] = useState<HoverState>(null);
 
@@ -59,7 +69,19 @@ export default function PnlCalendar({ address }: { address: string }) {
   const month = monthDate.getUTCMonth();
   const monthStr = `${year}-${pad2(month + 1)}`;
 
+  // Seed from a background prefetch that resolves after this mounts (user opened
+  // the tab before the warm-up finished).
   useEffect(() => {
+    if (initial && initial.month === monthStr && loadedMonth !== monthStr) {
+      setDays(initial.days);
+      setLoadedMonth(initial.month);
+      setLoading(false);
+    }
+  }, [initial, monthStr, loadedMonth]);
+
+  useEffect(() => {
+    // Already have this month (prefetched or previously loaded) → no refetch.
+    if (loadedMonth === monthStr) return;
     const ac = new AbortController();
     setLoading(true);
     getWalletDailyPnl(address, { month: monthStr, signal: ac.signal })
@@ -72,7 +94,7 @@ export default function PnlCalendar({ address }: { address: string }) {
       })
       .finally(() => setLoading(false));
     return () => ac.abort();
-  }, [address, monthStr]);
+  }, [address, monthStr, loadedMonth]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, WalletDailyPnlDay>();
