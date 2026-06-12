@@ -2457,6 +2457,26 @@ export default function Header({
               </div>
             )}
 
+            {/* Top-level Deposit Button */}
+            {user && !userLoading && (
+              <button
+                onClick={() => handleDepositClick()}
+                className="hidden h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-all duration-200 ease-out sm:flex"
+                style={{
+                  backgroundColor: AX.mint,
+                  color: "#000000",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.mintHover;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.mint;
+                }}
+              >
+                Deposit
+              </button>
+            )}
+
             {/* Notifications Button */}
             <div ref={notificationsRef} className="relative flex-shrink-0">
               <button
