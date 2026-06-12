@@ -1880,6 +1880,27 @@ export interface WalletPortfolioSummary {
   unique_tokens_traded: number;
   first_activity_at?: string | null;
   last_activity_at?: string | null;
+  /**
+   * Windowed realized PnL (SOL), computed server-side from raw solana_trades
+   * (on-chain swap truth) — NOT from the double-counted wallet_holder_positions
+   * aggregate. Use these for the 1d/7d/30d/Max ranges instead of summing the
+   * client-side closed-position slice (which is capped at ~500 and wildly
+   * understates whale windows). realized_pnl_max_sol is the chain-accurate
+   * lifetime figure and may differ from total_realized_pnl_sol (whp-sourced).
+   */
+  realized_pnl_1d_sol?: number;
+  realized_pnl_7d_sol?: number;
+  realized_pnl_30d_sol?: number;
+  realized_pnl_max_sol?: number;
+  /**
+   * Time-accurate USD (per-trade price_usd, NOT current-price conversion).
+   * Prefer these for the PnL card — converting the SOL figure by the live SOL
+   * price drifts, because realized PnL was earned at historical prices.
+   */
+  realized_pnl_1d_usd?: number;
+  realized_pnl_7d_usd?: number;
+  realized_pnl_30d_usd?: number;
+  realized_pnl_max_usd?: number;
 }
 
 export interface WalletPortfolioTopToken {
@@ -1971,6 +1992,35 @@ export const getWalletPortfolioSummary = (
   signal?: AbortSignal,
 ): Promise<WalletPortfolioSummary> =>
   tokenServiceJson<WalletPortfolioSummary>(`/v1/wallet/${encodeURIComponent(address)}`, signal);
+
+export interface WalletDailyPnlDay {
+  /** UTC calendar day, YYYY-MM-DD */
+  date: string;
+  /** Realized PnL in SOL (gross avg-cost, chain-grounded) for that day */
+  realized_pnl_sol: number;
+  /** Realized PnL in USD, time-accurate (per-trade price_usd, not current price) */
+  realized_pnl_usd: number;
+  sell_volume_sol: number;
+  trade_count: number;
+  buy_count: number;
+  sell_count: number;
+}
+
+/**
+ * Per-UTC-day realized PnL for one calendar month — backs the PnL calendar.
+ * Only days with activity are returned; the UI fills the rest of the grid as $0.
+ * `month` is "YYYY-MM"; omit to get the current UTC month.
+ */
+export const getWalletDailyPnl = (
+  address: string,
+  opts?: { month?: string; signal?: AbortSignal },
+): Promise<{ month: string; days: WalletDailyPnlDay[] }> => {
+  const qs = opts?.month ? `?month=${encodeURIComponent(opts.month)}` : "";
+  return tokenServiceJson(
+    `/v1/wallet/${encodeURIComponent(address)}/daily-pnl${qs}`,
+    opts?.signal,
+  );
+};
 
 export const getWalletPortfolioPositions = (
   address: string,

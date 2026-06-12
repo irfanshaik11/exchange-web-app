@@ -8,6 +8,7 @@ import type { Token } from "~/utils/db";
 import { getWalletSolBalance } from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
+import PnlCalendar from "./PnlCalendar";
 import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
   type PnlChartDataPoint,
@@ -41,6 +42,7 @@ interface WalletScanPanelProps {
 }
 
 const TABS = [
+  "PnL Calendar",
   "Active Positions",
   "History",
   "Top 100",
@@ -139,7 +141,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [loading, setLoading] = useState(contextBalance === null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState("Activity");
+  const [tab, setTab] = useState("PnL Calendar");
 
   const [walletBalance, setWalletBalance] = useState<{
     sol: number;
@@ -295,15 +297,49 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   }, [enrichedPositions, currentSolPrice]);
 
   // Calculate performance metrics from closed orders
+  // Authoritative realized PnL for the selected range, in USD. Comes from the
+  // server, which computes each window from raw solana_trades over the COMPLETE
+  // token set — NOT from the capped (~500) client position slice (which
+  // understates whale windows ~10x), and NOT from wallet_holder_positions
+  // (whose columns double-count ~2x unevenly). SOL→USD via currentSolPrice.
+  // Undefined ⇒ older backend without these fields ⇒ callers fall back.
+  const serverRangePnlUsd = useMemo<number | undefined>(() => {
+    if (!goSummary) return undefined;
+    // Prefer the server's time-accurate USD (earned at historical prices). Only
+    // fall back to SOL × current price if the USD field is absent (older backend),
+    // which drifts when SOL has moved since the trades were made.
+    const usd =
+      selectedRange === "1d"
+        ? goSummary.realized_pnl_1d_usd
+        : selectedRange === "7d"
+          ? goSummary.realized_pnl_7d_usd
+          : selectedRange === "30d"
+            ? goSummary.realized_pnl_30d_usd
+            : goSummary.realized_pnl_max_usd;
+    if (usd !== undefined && usd !== null) return usd;
+    const sol =
+      selectedRange === "1d"
+        ? goSummary.realized_pnl_1d_sol
+        : selectedRange === "7d"
+          ? goSummary.realized_pnl_7d_sol
+          : selectedRange === "30d"
+            ? goSummary.realized_pnl_30d_sol
+            : goSummary.realized_pnl_max_sol;
+    return sol !== undefined && sol !== null ? sol * currentSolPrice : undefined;
+  }, [goSummary, selectedRange, currentSolPrice]);
+
   const performanceMetrics = useMemo(() => {
     if (!closedOrders || closedOrders.length === 0) {
       // Even with no closed orders, the summary may have realized PnL
       // (positions endpoint doesn't capture all trades).
-      const summaryPnl = goSummary
-        ? goSummary.total_realized_pnl_usd !== 0
-          ? goSummary.total_realized_pnl_usd
-          : goSummary.total_realized_pnl_sol * currentSolPrice
-        : 0;
+      const summaryPnl =
+        serverRangePnlUsd !== undefined
+          ? serverRangePnlUsd
+          : goSummary
+            ? goSummary.total_realized_pnl_usd !== 0
+              ? goSummary.total_realized_pnl_usd
+              : goSummary.total_realized_pnl_sol * currentSolPrice
+            : 0;
       return {
         totalPnl: summaryPnl,
         totalTransactions: 0,
@@ -333,18 +369,21 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       filteredOrders = closedOrders.filter((order) => order.closedAt >= cutoff);
     }
 
-    // For "Max" range, use the summary's authoritative total rather than
-    // summing per-position PnL (positions don't capture all trades).
+    // Every range now has an authoritative server figure (chain-truth, complete
+    // token set). Prefer it; the client position sum is only a fallback for an
+    // older backend that doesn't send the windowed fields.
     const positionPnl = filteredOrders.reduce(
       (sum, order) => sum + order.pnl,
       0,
     );
     const totalPnl =
-      selectedRange === "Max" && goSummary
-        ? goSummary.total_realized_pnl_usd !== 0
-          ? goSummary.total_realized_pnl_usd
-          : goSummary.total_realized_pnl_sol * currentSolPrice
-        : positionPnl;
+      serverRangePnlUsd !== undefined
+        ? serverRangePnlUsd
+        : selectedRange === "Max" && goSummary
+          ? goSummary.total_realized_pnl_usd !== 0
+            ? goSummary.total_realized_pnl_usd
+            : goSummary.total_realized_pnl_sol * currentSolPrice
+          : positionPnl;
     const totalTransactions = filteredOrders.length;
     const completedTransactions = filteredOrders.length;
 
@@ -386,7 +425,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       categoryCounts,
       progressPercentage,
     };
-  }, [closedOrders, selectedRange, goSummary, currentSolPrice]);
+  }, [closedOrders, selectedRange, goSummary, currentSolPrice, serverRangePnlUsd]);
 
   // Build per-trade Realized PnL chart data, scoped to selectedRange
   const pnlChartData = useMemo((): PnlChartDataPoint[] => {
@@ -449,8 +488,29 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       });
     });
 
+    // Anchor the terminal cumulative to the authoritative server figure for this
+    // range. The client only holds a capped slice of a whale's closed positions,
+    // so the raw cumulative under-counts and would end far below the headline
+    // number. Scale proportionally — trajectory shape is preserved, endpoint tells
+    // the truth. Guarded to same-sign, non-trivial factors: scaling across a sign
+    // flip would invert the curve and mislead, so in that rare case we leave raw.
+    if (
+      serverRangePnlUsd !== undefined &&
+      Number.isFinite(serverRangePnlUsd) &&
+      cum !== 0 &&
+      Math.sign(serverRangePnlUsd) === Math.sign(cum)
+    ) {
+      const factor = serverRangePnlUsd / cum;
+      if (Number.isFinite(factor) && factor > 0 && Math.abs(factor - 1) > 0.01) {
+        for (const p of points) {
+          p.cumulativePnl *= factor;
+          p.tradePnl *= factor;
+        }
+      }
+    }
+
     return points;
-  }, [closedOrders, selectedRange]);
+  }, [closedOrders, selectedRange, serverRangePnlUsd]);
 
   const realizedPnlPercentage = useMemo(() => {
     // For "Max" range, derive percentage from summary's authoritative totals.
@@ -1082,6 +1142,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           </div>
           {/* Tab Content Area */}
           <div className="flex-1 overflow-auto px-5 pb-2">
+            {tab === "PnL Calendar" && (
+              <div className="h-full w-full py-1">
+                <PnlCalendar address={wallet.address} />
+              </div>
+            )}
             {tab === "History" && (
               <div className="h-full w-full">
                 {positionsLoading ? (
