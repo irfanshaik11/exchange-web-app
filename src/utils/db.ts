@@ -250,9 +250,11 @@ export function formatSmartNumber(
     return num.toFixed(1);
   }
 
-  // Handle small values (< $1) with 1 decimal place
+  // Handle small values (< $1). toFixed(1) was the bug: a value like 0.024
+  // (≥ 0.01 so it skips the subscript branch above) rounded to "0.0" → "$0".
+  // Use enough precision that sub-$0.10 values survive, and trim trailing zeros.
   if (abs < 1) {
-    return num.toFixed(1);
+    return String(parseFloat(num.toFixed(abs < 0.1 ? 4 : 2)));
   }
 
   // Handle values < $1000 with 1 decimal place
