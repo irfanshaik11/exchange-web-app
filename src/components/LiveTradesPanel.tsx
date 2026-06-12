@@ -322,6 +322,10 @@ export default function LiveTradesPanel({
             // extract only while the resolver is still working.
             const tokenImageUrl =
               resolvedImages[trade.mint] ||
+              // The server-healed tokens.image (from the metadata fetch we do
+              // anyway for symbol/MC) shows instantly instead of a letter tile
+              // while the async resolver hook works. extractTokenImage last.
+              metadata?.image ||
               (metadata ? extractTokenImage(metadata) : null);
             const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol || "T")}&background=0f1012&color=E6E7EA&size=28`;
             const launchpadProtocol =

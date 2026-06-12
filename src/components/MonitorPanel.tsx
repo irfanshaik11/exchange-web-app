@@ -425,6 +425,8 @@ export default function MonitorPanel({
           const displayName = token.name || meta?.name || displaySymbol;
           const tokenImageUrl =
             resolvedImages[token.mint] ||
+            // Server-healed tokens.image shows instantly vs the async hook.
+            meta?.image ||
             (meta ? extractTokenImage(meta) : null);
           const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol || "T")}&background=0f1012&color=E6E7EA&size=40`;
           const launchpadProtocol = (

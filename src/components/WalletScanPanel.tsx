@@ -1341,9 +1341,19 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                       displayName || displaySymbol,
                                     )}
                                   </span>
-                                  <span className="truncate text-[11px] text-[#52525b]">
-                                    {displaySymbol}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="truncate text-[11px] text-[#52525b]">
+                                      {displaySymbol}
+                                    </span>
+                                    {isAirdrop && (
+                                      <span
+                                        className="shrink-0 rounded bg-[#18c48c]/10 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-[#18c48c]/80"
+                                        title="Received with no buy trades — airdrop or transfer (no cost basis)"
+                                      >
+                                        Airdropped
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </td>
@@ -1537,9 +1547,19 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                       displayName || displaySymbol,
                                     )}
                                   </span>
-                                  <span className="truncate text-[11px] text-[#52525b]">
-                                    {displaySymbol}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="truncate text-[11px] text-[#52525b]">
+                                      {displaySymbol}
+                                    </span>
+                                    {isAirdrop && (
+                                      <span
+                                        className="shrink-0 rounded bg-[#18c48c]/10 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-[#18c48c]/80"
+                                        title="Received with no buy trades — airdrop or transfer (no cost basis)"
+                                      >
+                                        Airdropped
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </td>
