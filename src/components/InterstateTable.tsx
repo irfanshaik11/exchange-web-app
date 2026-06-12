@@ -3232,6 +3232,24 @@ export default function InterstateTable({
     if (!sortKey) return filteredRows;
 
     return [...filteredRows].sort((a, b) => {
+      // Backend rank: rank<=0/missing means "unranked" and must ALWAYS sink below
+      // ranked rows, regardless of direction (mirrors the useTrendingWebSocket sort
+      // guard). The generic numeric path below would put rank=0 at the TOP under
+      // "asc" — i.e. an unranked stray would render as the #1 trending token.
+      if (sortKey === "rank") {
+        const aRank =
+          typeof (a.token as any).rank === "number" ? (a.token as any).rank : 0;
+        const bRank =
+          typeof (b.token as any).rank === "number" ? (b.token as any).rank : 0;
+        if (aRank > 0 && bRank > 0 && aRank !== bRank) {
+          return sortDirection === "asc" ? aRank - bRank : bRank - aRank;
+        }
+        if (aRank > 0 && bRank <= 0) return -1;
+        if (bRank > 0 && aRank <= 0) return 1;
+        const aAddress = a.token.pair_address || a.token.mint || "";
+        const bAddress = b.token.pair_address || b.token.mint || "";
+        return aAddress.localeCompare(bAddress);
+      }
       const aVal = getSortableValue(
         a.token,
         sortKey,

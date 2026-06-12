@@ -451,7 +451,23 @@ export function DiscoverPageContent({
     }
     return "rank";
   });
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  // Must mirror the sortKey initializer above: every tab's default sort is descending
+  // EXCEPT Trending, whose default key is the backend-assigned rank where rank 1 is the
+  // best token — ascending. A hardcoded "desc" here rendered the Trending board REVERSED
+  // on first page load (backend #98 shown at the top until the user switched tabs, which
+  // restored "asc" via the per-tab snapshot map below).
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedTab = localStorage.getItem("discover_tab_v4");
+        // Anything other than Trending (or first visit, when nothing is saved)
+        // keeps the previous "desc" mount default.
+        if (savedTab && savedTab !== "trending") return "desc";
+      } catch {}
+    }
+    // Trending (the default tab) sorts by rank ascending.
+    return "asc";
+  });
 
   // Per-tab remembered UI state for the trending-data tabs (Trending, Top,
   // Gainers). Each tab opens to its own default and remembers user overrides
