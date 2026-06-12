@@ -1305,6 +1305,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                           position.mint?.slice(0, 8) + "..." ||
                           "Unknown";
                         const imageUrl = position.imageUrl || "";
+                        // No buy trades → the wallet received this (airdrop /
+                        // transfer), so there's no cost basis. Show it as such
+                        // instead of a misleading "$0 bought / +0.0% PnL".
+                        const isAirdrop = position.boughtAmount === 0;
 
                         return (
                           <tr
@@ -1344,26 +1348,39 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               </div>
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <div className="flex flex-col items-end">
-                                <span className="font-semibold tabular-nums text-neutral-100">
-                                  ${formatSmartNumber(position.boughtValue)}
+                              {isAirdrop ? (
+                                <span
+                                  className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#8b8b94]"
+                                  title="Received with no buy trades (airdrop or transfer) — no cost basis"
+                                >
+                                  Airdrop
                                 </span>
-                                <span className="text-xs tabular-nums text-[#52525b]">
-                                  {formatSmartNumber(position.boughtAmount)}{" "}
-                                  {displaySymbol}
-                                </span>
-                              </div>
+                              ) : (
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold tabular-nums text-neutral-100">
+                                    ${formatSmartNumber(position.boughtValue)}
+                                  </span>
+                                  <span className="text-xs tabular-nums text-[#52525b]">
+                                    {formatSmartNumber(position.boughtAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <div className="flex flex-col items-end">
-                                <span className="font-semibold tabular-nums text-neutral-100">
-                                  ${formatSmartNumber(position.soldValue)}
-                                </span>
-                                <span className="text-xs tabular-nums text-[#52525b]">
-                                  {formatSmartNumber(position.soldAmount)}{" "}
-                                  {displaySymbol}
-                                </span>
-                              </div>
+                              {isAirdrop && position.soldAmount === 0 ? (
+                                <span className="text-sm text-[#52525b]">—</span>
+                              ) : (
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold tabular-nums text-neutral-100">
+                                    ${formatSmartNumber(position.soldValue)}
+                                  </span>
+                                  <span className="text-xs tabular-nums text-[#52525b]">
+                                    {formatSmartNumber(position.soldAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right">
                               <div className="flex flex-col items-end">
@@ -1377,32 +1394,42 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               </div>
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <span
-                                className="font-semibold tabular-nums"
-                                style={{
-                                  color:
-                                    position.pnlPercentage >= 0
-                                      ? "#18c48c"
-                                      : "#ef4444",
-                                }}
-                              >
-                                {position.pnlPercentage >= 0 ? "+" : ""}
-                                {position.pnlPercentage.toFixed(1)}%
-                              </span>
+                              {isAirdrop ? (
+                                <span className="text-sm text-[#52525b]">—</span>
+                              ) : (
+                                <span
+                                  className="font-semibold tabular-nums"
+                                  style={{
+                                    color:
+                                      position.pnlPercentage >= 0
+                                        ? "#18c48c"
+                                        : "#ef4444",
+                                  }}
+                                >
+                                  {position.pnlPercentage >= 0 ? "+" : ""}
+                                  {position.pnlPercentage.toFixed(1)}%
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <span
-                                className="font-semibold tabular-nums"
-                                style={{
-                                  color:
-                                    position.totalPnl >= 0
-                                      ? "#18c48c"
-                                      : "#ef4444",
-                                }}
-                              >
-                                {position.totalPnl >= 0 ? "+" : ""}$
-                                {formatSmartNumber(Math.abs(position.totalPnl))}
-                              </span>
+                              {isAirdrop ? (
+                                <span className="text-sm text-[#52525b]">—</span>
+                              ) : (
+                                <span
+                                  className="font-semibold tabular-nums"
+                                  style={{
+                                    color:
+                                      position.totalPnl >= 0
+                                        ? "#18c48c"
+                                        : "#ef4444",
+                                  }}
+                                >
+                                  {position.totalPnl >= 0 ? "+" : ""}$
+                                  {formatSmartNumber(
+                                    Math.abs(position.totalPnl),
+                                  )}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right">
                               <button
@@ -1477,6 +1504,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                           position.mint?.slice(0, 8) + "..." ||
                           "Unknown";
                         const imageUrl = position.imageUrl || "";
+                        const isAirdrop = position.boughtAmount === 0;
 
                         return (
                           <tr
@@ -1516,54 +1544,77 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               </div>
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <div className="flex flex-col items-end">
-                                <span className="font-semibold tabular-nums text-neutral-100">
-                                  ${formatSmartNumber(position.boughtValue)}
+                              {isAirdrop ? (
+                                <span
+                                  className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#8b8b94]"
+                                  title="Received with no buy trades (airdrop or transfer) — no cost basis"
+                                >
+                                  Airdrop
                                 </span>
-                                <span className="text-xs tabular-nums text-[#52525b]">
-                                  {formatSmartNumber(position.boughtAmount)}{" "}
-                                  {displaySymbol}
-                                </span>
-                              </div>
+                              ) : (
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold tabular-nums text-neutral-100">
+                                    ${formatSmartNumber(position.boughtValue)}
+                                  </span>
+                                  <span className="text-xs tabular-nums text-[#52525b]">
+                                    {formatSmartNumber(position.boughtAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <div className="flex flex-col items-end">
-                                <span className="font-semibold tabular-nums text-neutral-100">
-                                  ${formatSmartNumber(position.soldValue)}
-                                </span>
-                                <span className="text-xs tabular-nums text-[#52525b]">
-                                  {formatSmartNumber(position.soldAmount)}{" "}
-                                  {displaySymbol}
-                                </span>
-                              </div>
+                              {isAirdrop && position.soldAmount === 0 ? (
+                                <span className="text-sm text-[#52525b]">—</span>
+                              ) : (
+                                <div className="flex flex-col items-end">
+                                  <span className="font-semibold tabular-nums text-neutral-100">
+                                    ${formatSmartNumber(position.soldValue)}
+                                  </span>
+                                  <span className="text-xs tabular-nums text-[#52525b]">
+                                    {formatSmartNumber(position.soldAmount)}{" "}
+                                    {displaySymbol}
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <span
-                                className="font-semibold tabular-nums"
-                                style={{
-                                  color:
-                                    position.pnlPercentage >= 0
-                                      ? "#18c48c"
-                                      : "#ef4444",
-                                }}
-                              >
-                                {position.pnlPercentage >= 0 ? "+" : ""}
-                                {position.pnlPercentage.toFixed(1)}%
-                              </span>
+                              {isAirdrop ? (
+                                <span className="text-sm text-[#52525b]">—</span>
+                              ) : (
+                                <span
+                                  className="font-semibold tabular-nums"
+                                  style={{
+                                    color:
+                                      position.pnlPercentage >= 0
+                                        ? "#18c48c"
+                                        : "#ef4444",
+                                  }}
+                                >
+                                  {position.pnlPercentage >= 0 ? "+" : ""}
+                                  {position.pnlPercentage.toFixed(1)}%
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right">
-                              <span
-                                className="font-semibold tabular-nums"
-                                style={{
-                                  color:
-                                    position.totalPnl >= 0
-                                      ? "#18c48c"
-                                      : "#ef4444",
-                                }}
-                              >
-                                {position.totalPnl >= 0 ? "+" : ""}$
-                                {formatSmartNumber(Math.abs(position.totalPnl))}
-                              </span>
+                              {isAirdrop ? (
+                                <span className="text-sm text-[#52525b]">—</span>
+                              ) : (
+                                <span
+                                  className="font-semibold tabular-nums"
+                                  style={{
+                                    color:
+                                      position.totalPnl >= 0
+                                        ? "#18c48c"
+                                        : "#ef4444",
+                                  }}
+                                >
+                                  {position.totalPnl >= 0 ? "+" : ""}$
+                                  {formatSmartNumber(
+                                    Math.abs(position.totalPnl),
+                                  )}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-right">
                               <button
