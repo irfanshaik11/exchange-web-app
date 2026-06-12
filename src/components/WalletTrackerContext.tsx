@@ -1138,17 +1138,24 @@ export function WalletTrackerProvider({
   // Batch fetch wallet balances — runs on mount AND when new wallets are added
   // Tracks which addresses have been fetched to avoid redundant RPC calls
   const fetchedAddressesRef = useRef<Set<string>>(new Set());
+  const balanceInFlightRef = useRef<Set<string>>(new Set());
+  const [balanceRetryTick, setBalanceRetryTick] = useState(0);
   useEffect(() => {
     if (!user?.id || watchedWallets.length === 0) return;
 
-    // Find wallets whose balance we haven't fetched yet
+    // Find wallets whose balance we haven't fetched yet (and aren't mid-fetch).
     const unfetched = watchedWallets.filter(
-      (w) => !fetchedAddressesRef.current.has(w.address),
+      (w) =>
+        !fetchedAddressesRef.current.has(w.address) &&
+        !balanceInFlightRef.current.has(w.address),
     );
     if (unfetched.length === 0) return;
 
-    // Mark as fetched immediately to prevent duplicate calls on re-render
-    unfetched.forEach((w) => fetchedAddressesRef.current.add(w.address));
+    // Mark in-flight (not fetched) so a re-render doesn't double-fetch, but a
+    // FAILED fetch can still retry. The bug this fixes: marking as fetched
+    // up-front meant a transient batch failure (fetchBatchBalances returns {}
+    // on any error) left a just-added wallet's Balance stuck on "—" forever.
+    unfetched.forEach((w) => balanceInFlightRef.current.add(w.address));
 
     const doFetch = async () => {
       const solWallets = unfetched
@@ -1159,23 +1166,39 @@ export function WalletTrackerProvider({
         .map((w) => w.address);
 
       const results: Record<string, number> = {};
-
-      if (solWallets.length > 0) {
-        const solBalances = await fetchBatchBalances(solWallets, "sol");
-        Object.assign(results, solBalances);
-      }
-      if (monadWallets.length > 0) {
-        const monadBalances = await fetchBatchBalances(monadWallets, "monad");
-        Object.assign(results, monadBalances);
+      try {
+        if (solWallets.length > 0) {
+          Object.assign(results, await fetchBatchBalances(solWallets, "sol"));
+        }
+        if (monadWallets.length > 0) {
+          Object.assign(
+            results,
+            await fetchBatchBalances(monadWallets, "monad"),
+          );
+        }
+      } finally {
+        unfetched.forEach((w) => balanceInFlightRef.current.delete(w.address));
       }
 
       if (Object.keys(results).length > 0) {
+        // Mark ONLY the addresses we actually got a balance for; the rest stay
+        // unfetched so the next render/poll retries them.
+        Object.keys(results).forEach((a) => fetchedAddressesRef.current.add(a));
         setWalletBalances((prev) => ({ ...prev, ...results }));
+      }
+
+      // Any wallet still missing a balance (transient failure / omitted by the
+      // endpoint) → retry once shortly so a new wallet doesn't sit on "—".
+      const stillMissing = unfetched.filter(
+        (w) => !fetchedAddressesRef.current.has(w.address),
+      );
+      if (stillMissing.length > 0) {
+        setTimeout(() => setBalanceRetryTick((t) => t + 1), 4000);
       }
     };
 
     doFetch();
-  }, [user?.id, watchedWallets]);
+  }, [user?.id, watchedWallets, balanceRetryTick]);
 
   // Reset fetched addresses and cached balances when user changes
   useEffect(() => {
