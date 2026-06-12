@@ -770,6 +770,14 @@ export function useWalletScan(
     mountFetches.push(
       getWalletPortfolioPositions(address, {
         includeClosed: true,
+        // fresh=1 so the open-revalidate recomputes server-side instead of
+        // serving a stale cached snapshot. The server caches positions, and a
+        // wallet you just traded on can sit in cache with pre-aggregation values
+        // (e.g. a just-bought position with cost_basis=0 → $0 bought) until the
+        // TTL turns over. fresh bypasses that; it's singleflight-deduped server-
+        // side so concurrent opens still share one recompute. No UI latency —
+        // the cache already painted instantly above.
+        fresh: true,
         signal: ac.signal,
       })
         .then((p) => {
