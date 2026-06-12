@@ -13,7 +13,6 @@ import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
 import dynamic from 'next/dynamic';
 import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
-import WalletExportGuard from "../components/WalletExportGuard";
 import { UserLimitProvider, useUserLimit } from "../components/UserLimitContext";
 import UserLimitBlocker from "../components/UserLimitBlocker";
 
@@ -914,7 +913,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                       </SearchProvider>
                     </QuickBuyProvider>
                     <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-                    <WalletExportGuard />
+
                     <UserLimitBlockerWrapper />
                   </ThemeProvider>
                 </SolPriceProvider>

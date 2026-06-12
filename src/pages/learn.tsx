@@ -270,7 +270,7 @@ export default function Landing() {
           <div className="lq-product-glow" />
           <div className="lq-app-shot">
             <img
-              src="/interstate/app-screenshot.png"
+              src="/pulse.png"
               alt="Interstate trading app showing the Trenches dashboard with live markets"
               width={3438}
               height={1816}

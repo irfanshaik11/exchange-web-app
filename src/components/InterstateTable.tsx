@@ -3232,6 +3232,28 @@ export default function InterstateTable({
     if (!sortKey) return filteredRows;
 
     return [...filteredRows].sort((a, b) => {
+      // Backend rank: rank<=0/missing means "unranked" and must ALWAYS sink below
+      // ranked rows, regardless of direction (mirrors the useTrendingWebSocket sort
+      // guard). The generic numeric path below would put rank=0 at the TOP under
+      // "asc" — i.e. an unranked stray would render as the #1 trending token.
+      if (sortKey === "rank") {
+        // Number.isFinite (not typeof) so a NaN/Infinity rank from a buggy feed counts
+        // as unranked instead of slipping past both branches below.
+        const aRaw = a.token.rank;
+        const bRaw = b.token.rank;
+        const aRank = typeof aRaw === "number" && Number.isFinite(aRaw) ? aRaw : 0;
+        const bRank = typeof bRaw === "number" && Number.isFinite(bRaw) ? bRaw : 0;
+        if (aRank > 0 && bRank > 0 && aRank !== bRank) {
+          return sortDirection === "asc" ? aRank - bRank : bRank - aRank;
+        }
+        if (aRank > 0 && bRank <= 0) return -1;
+        if (bRank > 0 && aRank <= 0) return 1;
+        // Equal positive ranks (BE shouldn't emit duplicates, but a delta race can) and
+        // both-unranked pairs: stable address tiebreaker, direction-blind by design.
+        const aAddress = a.token.pair_address || a.token.mint || "";
+        const bAddress = b.token.pair_address || b.token.mint || "";
+        return aAddress.localeCompare(bAddress);
+      }
       const aVal = getSortableValue(
         a.token,
         sortKey,

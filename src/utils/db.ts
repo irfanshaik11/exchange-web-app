@@ -33,6 +33,9 @@ export interface DexPairsResponse {
 export type Token = {
   id: number;
   mint: string;
+  // Backend-assigned trending rank (1 = best). Present on rows sourced from the
+  // trending WebSocket feed (NormalizedTrendingToken); absent elsewhere.
+  rank?: number;
   standard: string;
   name: string;
   symbol: string;
@@ -334,6 +337,72 @@ export function formatMarketCap(
 
   // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
   return num.toFixed(1);
+}
+
+export function formatFixedAbbrev(
+  val: string | number | null | undefined,
+  decimals = 2,
+): string {
+  if (val === null || val === undefined) return "-";
+
+  const num = typeof val === "string" ? parseFloat(val) : val;
+
+  if (isNaN(num) || !isFinite(num)) {
+    return "-";
+  }
+
+  const abs = Math.abs(num);
+
+  if (abs > 0 && abs < 0.01) {
+    const str = abs.toFixed(20);
+    const decIdx = str.indexOf(".");
+    if (decIdx !== -1) {
+      let zeroCount = 0;
+      let sigDigits = "";
+      for (let i = decIdx + 1; i < str.length; i++) {
+        if (str[i] === "0") {
+          zeroCount++;
+        } else {
+          sigDigits = str
+            .substring(i, Math.min(i + 4, str.length))
+            .replace(/0+$/, "");
+          break;
+        }
+      }
+      if (zeroCount >= 2 && sigDigits) {
+        const subMap: Record<string, string> = {
+          "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
+          "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
+        };
+        const sub = zeroCount
+          .toString()
+          .split("")
+          .map((c) => subMap[c] || c)
+          .join("");
+        return `${num < 0 ? "-" : ""}0.0${sub}${sigDigits}`;
+      }
+    }
+    return num.toFixed(decimals);
+  }
+
+  if (abs < 1000) {
+    return num.toFixed(decimals);
+  }
+
+  const abbreviations = [
+    { value: 1e12, suffix: "T" },
+    { value: 1e9, suffix: "B" },
+    { value: 1e6, suffix: "M" },
+    { value: 1e3, suffix: "K" },
+  ];
+
+  for (const { value, suffix } of abbreviations) {
+    if (abs >= value) {
+      return `${(num / value).toFixed(decimals)}${suffix}`;
+    }
+  }
+
+  return num.toFixed(decimals);
 }
 
 /**

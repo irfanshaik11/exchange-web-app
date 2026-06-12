@@ -30,6 +30,7 @@ import {
 } from "~/utils/api";
 import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
+import ExportWalletModal from "./ExportWalletModal";
 import {
   confirmOptimisticMarker,
   insertOptimisticMarker,
@@ -38,6 +39,7 @@ import {
 import { useCreditsSummary } from "~/hooks/useArena";
 import { useSolPrice } from "./SolPriceContext";
 import { useWatchlist } from "./WatchlistContext";
+import { WatchlistCarousel } from "./WatchlistCarousel";
 import { useQuickBuy } from "./QuickBuyContext";
 import { useSearch } from "./ui/SearchContext";
 import { formatSmartNumber, formatMarketCap } from "../utils/db";
@@ -707,6 +709,7 @@ export default function Header({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [showExportWalletModal, setShowExportWalletModal] = useState(false);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -2457,6 +2460,26 @@ export default function Header({
               </div>
             )}
 
+            {/* Top-level Deposit Button */}
+            {user && !userLoading && (
+              <button
+                onClick={() => handleDepositClick()}
+                className="hidden h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-all duration-200 ease-out sm:flex"
+                style={{
+                  backgroundColor: AX.mint,
+                  color: "#000000",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.mintHover;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.mint;
+                }}
+              >
+                Deposit
+              </button>
+            )}
+
             {/* Notifications Button */}
             <div ref={notificationsRef} className="relative flex-shrink-0">
               <button
@@ -3053,6 +3076,43 @@ export default function Header({
                           Edit Username
                         </button>
 
+                        {/* Export Wallet Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            setShowExportWalletModal(true);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                          style={{
+                            color: AX.text,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                            />
+                          </svg>
+                          Export Wallet
+                        </button>
+
                         {/* Logout Button */}
                         <button
                           onClick={() => {
@@ -3180,290 +3240,7 @@ export default function Header({
             </div>
             END COMMENTED OUT: Active Positions icon */}
 
-              {/* Watchlist label button — opens watchlist modal */}
-              <button
-                className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1"
-                style={{ color: "#c5cdd8" }}
-                onClick={() => setWatchlistOpen(true)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(255, 255, 255, 0.06)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
-                <span className="text-xs font-medium">Watchlist</span>
-                <FaSortAmountDown size={10} style={{ color: "#8b94a5" }} />
-              </button>
-
-              {/* COMMENTED OUT: Watchlist Star icon — replaced with text label above
-            <div className="group relative">
-              <button
-                className="relative cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
-                style={{ color: AX.muted }}
-                onClick={() => setWatchlistOpen(true)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(24, 196, 140, 0.08)";
-                  e.currentTarget.style.color = AX.mint;
-                  e.currentTarget.style.boxShadow =
-                    "0 0 6px rgba(24, 196, 140, 0.25), 0 0 12px rgba(24, 196, 140, 0.12)";
-                  e.currentTarget.style.transform = "scale(1.05)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                  e.currentTarget.style.color = AX.muted;
-                  e.currentTarget.style.boxShadow = "none";
-                  e.currentTarget.style.transform = "scale(1)";
-                }}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-              </button>
-              <div
-                className="pointer-events-none absolute top-1/2 left-full z-50 ml-2 -translate-y-1/2 transform rounded px-2 py-1 text-sm font-medium whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                style={{
-                  backgroundColor: AX.surface,
-                  color: AX.text,
-                  border: `1px solid ${AX.border}`,
-                  boxShadow:
-                    "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-                }}
-              >
-                Watchlist
-                <div
-                  className="absolute top-1/2 right-full h-0 w-0 -translate-y-1/2 transform border-t-4 border-r-4 border-b-4 border-transparent"
-                  style={{ borderRightColor: AX.surface }}
-                ></div>
-              </div>
-            </div>
-            END COMMENTED OUT: Watchlist Star icon */}
-
-              {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
-              {isHydrated && watchlist.length > 0 && (
-                <div
-                  className="h-4 border-r"
-                  style={{ borderColor: "#262a35" }}
-                />
-              )}
-
-              {/* COMMENTED OUT: "All" dropdown — replaced by "Watchlist" label above
-            {isHydrated && watchlist.length > 0 && (
-              <div className="flex items-center">
-                <span className="text-xs font-medium" style={{ color: '#c5cdd8' }}>
-                  All
-                </span>
-                <FaChevronDown size={8} className="ml-1" style={{ color: '#8b94a5' }} />
-              </div>
-            )}
-            END COMMENTED OUT: "All" dropdown */}
-
-              {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
-              {isHydrated && enrichedWatchlist.length > 0 && (
-                <div
-                  className="scrollbar-hide flex flex-1 items-center gap-3 overflow-x-auto pr-3 pl-1"
-                  style={{
-                    minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
-                    scrollbarWidth: "none", // Firefox
-                    msOverflowStyle: "none", // IE/Edge
-                  }}
-                >
-                  {enrichedWatchlist.map((token, index) => {
-                    const tokenKey =
-                      token.pair_address || (token as any).mint || token.symbol;
-                    const tokenAddress =
-                      (token as any).mint || token.pair_address || "";
-                    const actualMint =
-                      (token as any).mint || token.pair_address || "";
-                    // Use helper function to get correctly mapped price and price change
-                    const { price, priceChange } =
-                      getWatchlistTokenPriceAndChange(token);
-                    const marketCap =
-                      (token as any).market_cap_usd ??
-                      (token as any).marketCapUSD ??
-                      (token as any).fully_diluted_value ??
-                      0;
-
-                    const rawImg = extractTokenImage(token as any);
-
-                    return (
-                      <div
-                        key={tokenKey}
-                        className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all duration-200 hover:bg-white/[0.07]"
-                        onMouseEnter={() => {
-                          // Prefetch OHLC + route + metadata + trades on hover
-                          const isMonadToken =
-                            actualMint.startsWith("0x") ||
-                            actualMint.startsWith("0X");
-                          // Build tradeUrl matching the onClick navigation exactly
-                          const hoverQueryParams = new URLSearchParams();
-                          if (token.name)
-                            hoverQueryParams.set("_name", token.name);
-                          if (token.symbol)
-                            hoverQueryParams.set("_symbol", token.symbol);
-                          if (price > 0)
-                            hoverQueryParams.set("_price", price.toString());
-                          if (
-                            token.market_cap_usd ||
-                            (token as any).fully_diluted_value
-                          ) {
-                            hoverQueryParams.set(
-                              "_mcap",
-                              (
-                                token.market_cap_usd ||
-                                (token as any).fully_diluted_value ||
-                                0
-                              ).toString(),
-                            );
-                          }
-                          const hoverTradeUrl = isMonadToken
-                            ? `/trade/monad/${tokenAddress}`
-                            : `/trade/${tokenAddress}`;
-                          preloadTradeChart(
-                            {
-                              mint: actualMint,
-                              pairAddress:
-                                token.pair_address || (token as any).mint,
-                              chain: isMonadToken ? "monad" : "sol",
-                              name: token.name,
-                              symbol: token.symbol,
-                              priceUsd: price,
-                              marketCapUsd:
-                                token.market_cap_usd ||
-                                (token as any).fully_diluted_value,
-                              image: rawImg || "",
-                              launchpadProtocol: (token as any)
-                                .launchpad_protocol,
-                            },
-                            { router, tradeUrl: hoverTradeUrl },
-                          );
-                        }}
-                        onClick={() => {
-                          if (tokenAddress) {
-                            // Check if it's a Monad token (starts with 0x)
-                            const isMonadToken =
-                              actualMint.startsWith("0x") ||
-                              actualMint.startsWith("0X");
-
-                            if (isMonadToken) {
-                              // Build Monad trade URL with query parameters
-                              const queryParams = new URLSearchParams();
-                              if (token.name)
-                                queryParams.set("_name", token.name);
-                              if (token.symbol)
-                                queryParams.set("_symbol", token.symbol);
-                              if (price > 0)
-                                queryParams.set("_price", price.toString());
-                              if (
-                                token.market_cap_usd ||
-                                (token as any).fully_diluted_value
-                              ) {
-                                queryParams.set(
-                                  "_mcap",
-                                  (
-                                    token.market_cap_usd ||
-                                    (token as any).fully_diluted_value ||
-                                    0
-                                  ).toString(),
-                                );
-                              }
-                              const imageUrl =
-                                extractTokenImage(token as any) || "";
-                              if (imageUrl) queryParams.set("_image", imageUrl);
-                              queryParams.set("_mint", tokenAddress);
-                              if ((token as any).launchpad_protocol)
-                                queryParams.set(
-                                  "_launchpad_protocol",
-                                  (token as any).launchpad_protocol,
-                                );
-                              queryParams.set("chain", "monad");
-
-                              const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
-                              router.push(url);
-                            } else {
-                              // For Solana tokens, include chain=sol query parameter
-                              router.push(`/trade/${tokenAddress}`);
-                            }
-                          }
-                        }}
-                      >
-                        {/* Token Image */}
-                        <FastImage
-                          src={rawImg ?? undefined}
-                          alt={token.symbol || ""}
-                          width={16}
-                          height={16}
-                          className="rounded-full ring-1 ring-white/10"
-                          symbol={token.symbol}
-                          name={token.name}
-                          showBubble={false}
-                          stableId={tokenAddress || undefined}
-                        />
-
-                        {/* Token Symbol */}
-                        <span
-                          className="text-xs font-semibold"
-                          style={{ color: "#d1d5db" }}
-                        >
-                          {token.symbol}
-                        </span>
-
-                        {/* Market Cap */}
-                        <span
-                          className="text-xs font-medium"
-                          style={{ color: "#a3e635" }}
-                        >
-                          ${formatMarketCap(marketCap)}
-                        </span>
-
-                        {/* COMMENTED OUT: Quick Buy + Unstar buttons — may re-enable later
-                  {isHovered && (
-                    <>
-                      <button
-                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all duration-150"
-                        style={{
-                          backgroundColor: 'rgba(133, 217, 159, 0.15)',
-                          color: '#85d99f',
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleWatchlistQuickBuy(token);
-                        }}
-                      >
-                        <HiLightningBolt size={10} />
-                        <span>{quickBuyAmount} {currentChain === 'monad' ? 'MON' : 'SOL'}</span>
-                      </button>
-
-                      <button
-                        className="p-0.5 transition-colors duration-150"
-                        style={{ color: '#f2c367' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFromWatchlist(tokenAddress);
-                        }}
-                        title="Remove from watchlist"
-                      >
-                        <FaStar size={12} />
-                      </button>
-                    </>
-                  )}
-                  END COMMENTED OUT: Quick Buy + Unstar buttons */}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <WatchlistCarousel />
             </div>
           </div>
         )}
@@ -3817,6 +3594,21 @@ export default function Header({
           }}
           updates={PLATFORM_UPDATES}
           storageKey={isFirstLogin ? "" : "header-updates-viewed"}
+        />
+      )}
+
+      {/* Export Wallet Modal */}
+      {showExportWalletModal && (
+        <ExportWalletModal
+          isOpen={showExportWalletModal}
+          onClose={() => setShowExportWalletModal(false)}
+          walletId={user?.walletId || undefined}
+          walletAddress={
+            walletList?.find((w: any) => w.isPrimary)?.solanaAddress?.trim() ||
+            primaryWalletAddresses?.solana ||
+            user?.publicKey ||
+            undefined
+          }
         />
       )}
 
