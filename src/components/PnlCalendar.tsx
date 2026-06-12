@@ -155,6 +155,68 @@ export default function PnlCalendar({
     });
   };
 
+  // --- Share card (PNG export, Axiom-style) ---
+  const shareCardRef = useRef<HTMLDivElement>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [busy, setBusy] = useState<null | "download" | "copy">(null);
+  const shortAddr =
+    address.length > 10 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;
+
+  const renderCard = async (): Promise<HTMLCanvasElement | null> => {
+    if (!shareCardRef.current) return null;
+    // The card uses inline hex/rgb styles only (no Tailwind oklch colors), which
+    // html2canvas 1.4.1 can't parse — so capture is reliable.
+    const { default: html2canvas } = await import("html2canvas");
+    return html2canvas(shareCardRef.current, {
+      backgroundColor: "#0a0b0d",
+      scale: 2,
+      logging: false,
+      useCORS: true,
+    });
+  };
+  const downloadCard = async () => {
+    setBusy("download");
+    try {
+      const c = await renderCard();
+      if (c) {
+        const a = document.createElement("a");
+        a.href = c.toDataURL("image/png");
+        a.download = `interstate-pnl-${monthStr}.png`;
+        a.click();
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(null);
+    }
+  };
+  const copyCard = async () => {
+    setBusy("copy");
+    try {
+      const c = await renderCard();
+      if (c) {
+        await new Promise<void>((resolve) =>
+          c.toBlob(async (blob) => {
+            try {
+              if (blob && "clipboard" in navigator && "write" in navigator.clipboard) {
+                await navigator.clipboard.write([
+                  new ClipboardItem({ "image/png": blob }),
+                ]);
+              }
+            } catch {
+              /* clipboard unsupported */
+            }
+            resolve();
+          }, "image/png"),
+        );
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -166,6 +228,18 @@ export default function PnlCalendar({
             className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] transition-colors hover:border-white/20 hover:text-[#f4f4f5]"
           >
             {currency === "USD" ? "$ USD" : "◎ SOL"}
+          </button>
+          <button
+            onClick={() => setShareOpen(true)}
+            className="flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] transition-colors hover:border-[#2bd4a0]/40 hover:text-[#2bd4a0]"
+            title="Share this month's PnL"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+            Share
           </button>
         </div>
         <div className="flex items-center gap-1">
@@ -209,17 +283,17 @@ export default function PnlCalendar({
       </div>
 
       {/* Weekday header */}
-      <div className="grid grid-cols-7 gap-1.5 pb-1.5">
+      <div className="grid grid-cols-7 gap-1 pb-1.5 sm:gap-1.5">
         {WEEKDAYS.map((w, i) => (
-          <div key={i} className="text-center text-[10px] font-medium uppercase tracking-wide text-[#52525b]">{w}</div>
+          <div key={i} className="text-center text-[9px] font-medium uppercase tracking-wide text-[#52525b] sm:text-[10px]">{w}</div>
         ))}
       </div>
 
       {/* Day grid */}
-      <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-1.5" onMouseLeave={() => setHover(null)}>
+      <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-1 sm:gap-1.5" onMouseLeave={() => setHover(null)}>
         {showSkeleton
           ? Array.from({ length: 35 }).map((_, i) => (
-              <div key={`sk-${i}`} className="min-h-[58px] animate-pulse rounded-lg bg-white/[0.03]" />
+              <div key={`sk-${i}`} className="min-h-[40px] animate-pulse rounded-lg bg-white/[0.03] sm:min-h-[58px]" />
             ))
           : (
             <>
@@ -248,15 +322,15 @@ export default function PnlCalendar({
                   <div
                     key={key}
                     onMouseEnter={d ? (e) => onCellEnter(e, d) : undefined}
-                    className="relative flex min-h-[58px] flex-col rounded-lg border p-1.5 transition-colors"
+                    className="relative flex min-h-[40px] flex-col rounded-md border p-1 transition-colors sm:min-h-[58px] sm:rounded-lg sm:p-1.5"
                     style={{
                       background: bg,
                       borderColor: isTop ? "rgba(248,190,110,0.45)" : "rgba(255,255,255,0.04)",
                     }}
                   >
-                    <span className="text-[10px] font-medium text-[#71717a]">{dnum}</span>
+                    <span className="text-[8px] font-medium text-[#71717a] sm:text-[10px]">{dnum}</span>
                     <span
-                      className="flex flex-1 items-center justify-center text-[13px] font-bold leading-none tabular-nums"
+                      className="flex flex-1 items-center justify-center text-[10px] font-bold leading-none tabular-nums sm:text-[13px]"
                       style={{ color }}
                     >
                       {v === 0 ? "$0" : fmtMoney(v, currency)}
@@ -268,10 +342,17 @@ export default function PnlCalendar({
           )}
       </div>
 
-      {/* Streak footer */}
-      <div className="flex items-center gap-4 pt-2.5 text-[11px] text-[#71717a]">
-        <span>Current Positive Streak: <span className="font-semibold text-[#d4d4d8]">{stats.current}d</span></span>
-        <span>Best Positive Streak in {monthLabel.split(" ")[0]}: <span className="font-semibold text-[#d4d4d8]">{stats.best}d</span></span>
+      {/* Streak footer + Interstate branding (bottom-right) */}
+      <div className="flex items-center justify-between gap-3 pt-2.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-[#71717a] sm:text-[11px]">
+          <span>Current Streak: <span className="font-semibold text-[#d4d4d8]">{stats.current}d</span></span>
+          <span>Best in {monthLabel.split(" ")[0]}: <span className="font-semibold text-[#d4d4d8]">{stats.best}d</span></span>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-1.5 opacity-80">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/interstate-logo-icon.png" alt="Interstate" className="h-4 w-4 rounded" />
+          <span className="text-[11px] font-semibold tracking-tight text-[#d4d4d8]">Interstate</span>
+        </div>
       </div>
 
       {/* Hover tooltip (fixed-position, GMGN-style breakdown) */}
@@ -309,6 +390,109 @@ export default function PnlCalendar({
                 {" / "}
                 <span style={{ color: RED }}>{fmtMoney(hover.day.sell_volume_usd, "USD", false)}</span>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share modal — branded, exportable card */}
+      {shareOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setShareOpen(false)}
+        >
+          <div
+            className="w-full max-w-[460px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* The capture target — inline hex styles only (html2canvas-safe) */}
+            <div
+              ref={shareCardRef}
+              style={{
+                position: "relative",
+                borderRadius: 16,
+                overflow: "hidden",
+                background:
+                  "linear-gradient(135deg, #0d0f14 0%, #0a0b0d 55%, #0c1410 100%)",
+                border: "1px solid rgba(43,212,160,0.18)",
+                padding: 24,
+                fontFamily:
+                  "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/interstate-logo-icon.png" alt="" width={24} height={24} style={{ borderRadius: 6 }} />
+                  <span style={{ color: "#f4f4f5", fontWeight: 700, fontSize: 16, letterSpacing: "-0.02em" }}>Interstate</span>
+                </div>
+                <span style={{ color: "#71717a", fontSize: 12, fontWeight: 600 }}>PnL Calendar</span>
+              </div>
+
+              <div style={{ color: "#a1a1aa", fontSize: 14, fontWeight: 600, marginTop: 22 }}>
+                {monthLabel} · {shortAddr}
+              </div>
+              <div
+                style={{
+                  color: stats.total >= 0 ? GREEN : RED,
+                  fontSize: 46,
+                  fontWeight: 800,
+                  lineHeight: 1.05,
+                  marginTop: 4,
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                {fmtMoney(stats.total, currency)}
+              </div>
+
+              <div style={{ display: "flex", gap: 28, marginTop: 18 }}>
+                <div>
+                  <div style={{ color: "#71717a", fontSize: 11 }}>Win Rate</div>
+                  <div style={{ color: "#f4f4f5", fontSize: 17, fontWeight: 700 }}>{winPct.toFixed(0)}%</div>
+                </div>
+                <div>
+                  <div style={{ color: "#71717a", fontSize: 11 }}>Win / Loss Days</div>
+                  <div style={{ fontSize: 17, fontWeight: 700 }}>
+                    <span style={{ color: GREEN }}>{stats.winDays}</span>
+                    <span style={{ color: "#52525b" }}> / </span>
+                    <span style={{ color: RED }}>{stats.lossDays}</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: "#71717a", fontSize: 11 }}>Best Streak</div>
+                  <div style={{ color: "#f4f4f5", fontSize: 17, fontWeight: 700 }}>{stats.best}d</div>
+                </div>
+              </div>
+
+              <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "20px 0 14px" }} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ color: "#2bd4a0", fontSize: 12, fontWeight: 600 }}>app.interstate.so</span>
+                <span style={{ color: "#52525b", fontSize: 11 }}>Trade smarter on Interstate</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShareOpen(false)}
+                className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-[#a1a1aa] transition-colors hover:text-[#f4f4f5]"
+              >
+                Close
+              </button>
+              <button
+                onClick={copyCard}
+                disabled={busy !== null}
+                className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d4d4d8] transition-colors hover:text-[#f4f4f5] disabled:opacity-50"
+              >
+                {busy === "copy" ? "Copying…" : "Copy"}
+              </button>
+              <button
+                onClick={downloadCard}
+                disabled={busy !== null}
+                className="rounded-md bg-[#2bd4a0] px-3 py-1.5 text-xs font-semibold text-[#06120d] transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy === "download" ? "Saving…" : "Download"}
+              </button>
             </div>
           </div>
         </div>
