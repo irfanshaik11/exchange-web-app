@@ -1614,14 +1614,34 @@ export default function TrackersPage() {
     }
 
     // Token price for pre-trade validation (executeEnhancedTrade →
-    // preTransactionValidation reads usd_price/price_usd to size expected
-    // output). The TradeEvent carries price_usd; without it the trade was
-    // rejected with "Token Price Unknown". Fall back to metadata.
-    const tokenPriceUsd =
+    // preTransactionValidation reads usd_price/price_usd to size expected output
+    // for pump.fun tokens). The live-feed TradeEvent often has price_usd=null
+    // and the cached metadata only keeps market_cap — so without a price the
+    // trade was rejected with "Token Price Unknown". Fetch it fresh from
+    // /v1/token (marketData.price_usd) when missing, like the other surfaces have.
+    let tokenPriceUsd: number | null =
       trade.price_usd ??
       (metadata as any)?.price_usd ??
       (metadata as any)?.usd_price ??
       null;
+    if (!tokenPriceUsd || tokenPriceUsd <= 0) {
+      try {
+        const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+        const r = await fetch(`${goUrl}/v1/token/${trade.mint}`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          tokenPriceUsd =
+            d?.marketData?.price_usd ??
+            d?.token?.price_usd ??
+            d?.token?.usd_price ??
+            null;
+        }
+      } catch {
+        /* leave null — validation will surface the price-unknown message */
+      }
+    }
 
     // Construct a Token object from the TradeEvent
     const token = {
