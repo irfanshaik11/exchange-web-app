@@ -2386,6 +2386,48 @@ export default function TrackersPage() {
 
                               {/* Right: action buttons - JTX style */}
                               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+                                {/* Quick-buy amount editor — sets the SOL used by
+                                    every Quick Buy button in Live Trades / Monitor. */}
+                                {(activeTab === 1 || activeTab === 2) && (
+                                  <div className="flex items-center gap-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2 py-1 backdrop-blur-sm sm:gap-1.5 sm:px-2.5 sm:py-1.5">
+                                    <HiLightningBolt className="h-3 w-3 text-[#18c48c] sm:h-3.5 sm:w-3.5" />
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      aria-label="Quick buy amount (SOL)"
+                                      value={quickBuyAmount}
+                                      onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                                          setQuickBuyAmount(v);
+                                          try {
+                                            if (v !== "" && !isNaN(parseFloat(v)))
+                                              localStorage.setItem("quickBuyAmount", v);
+                                          } catch {
+                                            /* ignore */
+                                          }
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        if (
+                                          quickBuyAmount === "" ||
+                                          isNaN(parseFloat(quickBuyAmount))
+                                        ) {
+                                          setQuickBuyAmount("0.0001");
+                                          try {
+                                            localStorage.setItem("quickBuyAmount", "0.0001");
+                                          } catch {
+                                            /* ignore */
+                                          }
+                                        }
+                                      }}
+                                      className="w-12 bg-transparent text-[10px] font-semibold text-white outline-none sm:w-16 sm:text-xs"
+                                    />
+                                    <span className="text-[10px] font-medium text-[#52525b] sm:text-xs">
+                                      SOL
+                                    </span>
+                                  </div>
+                                )}
                                 {activeTab === 0 && user && (
                                   <>
                                     {selectedChain === "sol" && (
