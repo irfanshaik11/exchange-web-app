@@ -330,9 +330,9 @@ const Activity: React.FC<ActivityProps> = ({
   }, [trades, tokenMetadata, pumpfunImages]);
 
   return (
-    <div className="w-full">
+    <div className="flex h-full w-full flex-col">
       {trades.length > 0 ? (
-        <div className="relative">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           {/* Header Row - Fixed */}
           <div className="grid gap-4 px-6 py-3 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr', background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%)', boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.02)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
             <div>Type</div>
@@ -343,11 +343,11 @@ const Activity: React.FC<ActivityProps> = ({
             <div>Explorer</div>
           </div>
           
-          {/* Scrollable Data Rows */}
-          <div 
-            className="overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
-            style={{ 
-              maxHeight: '500px',
+          {/* Scrollable Data Rows — fill the remaining modal height (was a
+              hardcoded 500px cap that left a large empty gap on tall screens). */}
+          <div
+            className="min-h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+            style={{
               scrollBehavior: 'smooth',
               WebkitOverflowScrolling: 'touch'
             } as React.CSSProperties}
