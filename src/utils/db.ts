@@ -33,6 +33,9 @@ export interface DexPairsResponse {
 export type Token = {
   id: number;
   mint: string;
+  // Backend-assigned trending rank (1 = best). Present on rows sourced from the
+  // trending WebSocket feed (NormalizedTrendingToken); absent elsewhere.
+  rank?: number;
   standard: string;
   name: string;
   symbol: string;
