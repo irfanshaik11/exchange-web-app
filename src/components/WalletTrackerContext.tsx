@@ -352,6 +352,10 @@ export function WalletTrackerProvider({
   const hydrationRef = useRef(false);
   const initialHistoryFetchedRef = useRef(false);
   const shownToastTxsRef = useRef<Set<string>>(new Set());
+  // Source-level idempotency: tx signatures whose trade event has already been
+  // fully processed (table + toast), so duplicate WS deliveries are no-ops.
+  const PROCESSED_TX_MAX = 4000;
+  const processedTxRef = useRef<Set<string>>(new Set());
   const activeTradeToastIdsRef = useRef<string[]>([]);
 
   // Keep ref in sync with state
@@ -506,6 +510,23 @@ export function WalletTrackerProvider({
 
     const handleTradeEvent = async (event: TradeEvent) => {
       const normalizedEvent = normalizeTradeForState(event);
+
+      // Idempotency guard at the SOURCE: the same trade can be delivered more
+      // than once (a leaked/duplicate WS connection, server re-delivery). Skip
+      // the WHOLE handler — table append AND toast — for a tx we've already
+      // processed, so one trade never produces multiple rows or multiple toasts.
+      // Guard before any async work so concurrent duplicate deliveries can't
+      // race past the check. Empty-tx events (rare) fall through unguarded.
+      if (normalizedEvent.tx) {
+        if (processedTxRef.current.has(normalizedEvent.tx)) return;
+        processedTxRef.current.add(normalizedEvent.tx);
+        if (processedTxRef.current.size > PROCESSED_TX_MAX) {
+          const keep = Array.from(processedTxRef.current).slice(
+            -Math.floor(PROCESSED_TX_MAX / 2),
+          );
+          processedTxRef.current = new Set(keep);
+        }
+      }
 
       // Get token name/symbol FIRST and enrich the event before showing
       let tokenName = normalizedEvent.symbol || normalizedEvent.name;
@@ -1057,6 +1078,17 @@ export function WalletTrackerProvider({
 
     const initializeWebSocket = () => {
       try {
+        // Close any existing connection FIRST. Reconnect called this without
+        // closing the old socket, so stale connections leaked and each kept
+        // delivering trades — causing the same trade to fire multiple toasts.
+        if (connection) {
+          try {
+            connection.close();
+          } catch {
+            /* ignore */
+          }
+          connection = null;
+        }
         connection = createWalletTrackerWebSocket(
           handleTradeEvent,
           handleConnect,
