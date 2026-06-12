@@ -92,6 +92,7 @@ import MonitorPanel from "../components/MonitorPanel";
 import KolScanTrackerContent from "../components/KolScanTrackerContent";
 import kolWalletTrackerData from "../data/kol-wallet-tracker.json";
 import { useSolPrice } from "../components/SolPriceContext";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
 import { prefetchWalletScan } from "../hooks/useWalletScan";
 import {
   getWalletPortfolioSummary,
@@ -1595,10 +1596,28 @@ export default function TrackersPage() {
     // Get token metadata from the tokenMetadata map
     const metadata = tokenMetadata.get(trade.mint);
 
+    // Resolve the VERIFIED pair/pool address before trading — the same step the
+    // canonical surfaces (SearchModal, PulseTable, Watchlist, Discover) run.
+    // A TradeEvent's pair_address can be stale or absent (then it fell back to
+    // the mint), which misroutes the swap — especially for migrated tokens.
+    // fetchVerifiedPairAddress returns the live pool so the trade hits the right
+    // market. Falls back to the local value on lookup failure.
+    let poolAddress =
+      (metadata as any)?.migrated_pool_address ||
+      trade.pair_address ||
+      trade.mint;
+    try {
+      const verified = await fetchVerifiedPairAddress(trade.mint);
+      if (verified) poolAddress = verified;
+    } catch {
+      /* keep local poolAddress */
+    }
+
     // Construct a Token object from the TradeEvent
     const token = {
       mint: trade.mint,
-      pair_address: trade.pair_address || trade.mint,
+      pair_address: poolAddress,
+      migrated_pool_address: (metadata as any)?.migrated_pool_address || null,
       symbol: trade.symbol || metadata?.symbol || "UNKNOWN",
       name: trade.name || metadata?.name || "Unknown Token",
       image: metadata?.image || null,
@@ -1615,7 +1634,7 @@ export default function TrackersPage() {
       settings,
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
-      solPriceUsd: 150, // TODO: Get real SOL price
+      solPriceUsd: currentSolPrice || 150, // real SOL price (was hardcoded)
       walletContext: {
         selectedWalletIds: selectedWalletIds?.sol || [],
         walletList: walletList || [],
