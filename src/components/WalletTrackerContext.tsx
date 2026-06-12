@@ -438,16 +438,25 @@ export function WalletTrackerProvider({
     initialHistoryFetchedRef.current = false;
   }, [user?.id]);
 
-  // Save notifications to localStorage whenever latestTrades changes
+  // Save notifications to localStorage whenever latestTrades changes.
+  // Quota-safe: persist the SLIM projection and shrink-and-retry on a full disk
+  // (same as the live-trades cache) so this never throws QuotaExceededError —
+  // the in-memory feed is the source of truth; the cache is reload convenience.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      // Prune old trades before saving
-      const pruned = pruneTrades(latestTrades);
-      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(pruned));
-    } catch (error) {
-      console.error("Failed to save notifications to localStorage:", error);
+    const pruned = pruneTrades(latestTrades);
+    if (pruned.length === 0) {
+      try {
+        window.localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return;
     }
+    persistTradesQuotaSafe(
+      NOTIFICATIONS_STORAGE_KEY,
+      pruned.map(slimTradeForStorage),
+    );
   }, [latestTrades]);
 
   // Adaptive initial history fetch: 1h window first, expand to 24h if sparse
