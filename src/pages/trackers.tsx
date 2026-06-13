@@ -2647,9 +2647,6 @@ export default function TrackersPage() {
                                         borderColor: active ? c : `${c}30`,
                                         background: active ? `${c}1f` : "transparent",
                                         color: active ? c : `${c}b0`,
-                                        boxShadow: active
-                                          ? `0 0 14px ${c}40, inset 0 0 12px ${c}14`
-                                          : "none",
                                       }}
                                     >
                                       {tab}
