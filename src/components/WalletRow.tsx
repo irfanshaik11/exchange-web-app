@@ -7,6 +7,7 @@ import { toggleWalletNotifications } from "~/utils/walletTracking";
 import { SolanaIcon } from "./Footer";
 import { Sparkline } from "./MicroChart";
 import { KolDpCircle } from "./KolDpCircle";
+import { KOL_ADDRESS_MAP } from "~/utils/kolLookup";
 import { useUser } from "./UserContext";
 import { FiBell, FiBarChart2, FiTrash2 } from "react-icons/fi";
 // import { TbChartBubble } from "react-icons/tb";  // TODO: Re-enable when analytics feature is built
@@ -468,8 +469,16 @@ export default function WalletRow({
             {/* KOL profile pic (between emoji and name) — null for non-KOLs */}
             <KolDpCircle address={wallet.address} size={28} />
             <div className="flex min-w-0 flex-col leading-tight">
-              <span className="truncate text-[11px] font-semibold text-neutral-100 sm:text-sm">
-                {wallet.name || "N/A"}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-[11px] font-semibold text-neutral-100 sm:text-sm">
+                  {wallet.name || "N/A"}
+                </span>
+                {wallet.address &&
+                  KOL_ADDRESS_MAP.has(wallet.address.toLowerCase()) && (
+                    <span className="flex-shrink-0 rounded border border-[#7FFFC9]/30 bg-[#7FFFC9]/10 px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-[#7FFFC9] uppercase sm:text-[9px]">
+                      KOL
+                    </span>
+                  )}
               </span>
               <Tooltip label={copied ? "Copied!" : "Click to copy"}>
                 <button
