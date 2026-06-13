@@ -1241,8 +1241,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        WebkitBackdropFilter: "blur(16px)",
-                        background: "rgba(3,3,4,0.85)",
+                        background: "#0c0e12",
                       }}
                     >
                       <tr className="border-b border-white/[0.06]">
@@ -1417,8 +1416,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        WebkitBackdropFilter: "blur(16px)",
-                        background: "rgba(3,3,4,0.85)",
+                        background: "#0c0e12",
                       }}
                     >
                       <tr className="border-b border-white/[0.06]">
@@ -1630,8 +1628,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        WebkitBackdropFilter: "blur(16px)",
-                        background: "rgba(3,3,4,0.85)",
+                        background: "#0c0e12",
                       }}
                     >
                       <tr className="border-b border-white/[0.06]">
@@ -1856,8 +1853,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        WebkitBackdropFilter: "blur(16px)",
-                        background: "rgba(3,3,4,0.85)",
+                        background: "#0c0e12",
                       }}
                     >
                       <tr className="border-b border-white/[0.06]">

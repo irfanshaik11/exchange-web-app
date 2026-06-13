@@ -285,13 +285,7 @@ export default function LiveTradesPanel({
           <col className="w-[12%]" />
           <col className="w-[16%]" />
         </colgroup>
-        <thead
-          className="sticky top-0 z-10"
-          style={{
-            WebkitBackdropFilter: "blur(16px)",
-            background: "rgba(3,3,4,0.85)",
-          }}
-        >
+        <thead className="sticky top-0 z-10 bg-[#0c0e12]">
           <tr className="border-b border-white/[0.06]">
             <th className="py-2.5 pl-4 pr-1 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30 sm:pl-6 sm:pr-2">
               Time

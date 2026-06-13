@@ -13,9 +13,14 @@ import { getProtocolBranding } from "~/utils/protocolBranding";
  */
 
 export const GAIN = "#18c48c";
-export const LOSS = "#ef4444";
+export const LOSS = "#F0616D";
 
-/** A stat card shell with the portfolio's corner-bracket chrome. */
+/**
+ * Stat-card shell — flat-futuristic. No corner brackets, no shadow. Definition
+ * comes from a slightly-raised surface (#0e1116) + a hairline border, and a tiny
+ * green accent bar on the label rail (the "terminal" cue) with a divider under
+ * the header so content reads as a structured block, not a hollow box.
+ */
 export const ScanCard: React.FC<{
   label: React.ReactNode;
   right?: React.ReactNode;
@@ -23,19 +28,13 @@ export const ScanCard: React.FC<{
   children: React.ReactNode;
 }> = ({ label, right, className, children }) => (
   <div
-    className={`relative flex flex-col rounded-lg border border-white/[0.06] bg-[#0c0e12] p-4 ${
+    className={`relative flex flex-col rounded-lg border border-white/[0.08] bg-[#0e1116] p-4 ${
       className ?? ""
     }`}
   >
-    {/* Mini corner brackets */}
-    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
-      <div className="absolute left-1.5 top-1.5 h-2.5 w-2.5 border-l border-t border-white/[0.08]" />
-      <div className="absolute right-1.5 top-1.5 h-2.5 w-2.5 border-r border-t border-white/[0.08]" />
-      <div className="absolute bottom-1.5 left-1.5 h-2.5 w-2.5 border-b border-l border-white/[0.08]" />
-      <div className="absolute bottom-1.5 right-1.5 h-2.5 w-2.5 border-b border-r border-white/[0.08]" />
-    </div>
-    <div className="mb-3 flex items-center justify-between">
-      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#f4f4f5]">
+    <div className="mb-3 flex items-center justify-between border-b border-white/[0.05] pb-2.5">
+      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#71717a]">
+        <span className="h-2.5 w-[2px] rounded-full bg-[#18c48c]" />
         {label}
       </div>
       {right}
@@ -143,15 +142,9 @@ export const WinLossBar: React.FC<{ winPercentage: number }> = ({
 }) => {
   const pct = Math.min(100, Math.max(0, winPercentage));
   return (
-    <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-[#080a0d]">
-      <div
-        className="h-full bg-[#18c48c]"
-        style={{ width: `${pct}%` }}
-      />
-      <div
-        className="h-full bg-[#ef4444]"
-        style={{ width: `${100 - pct}%` }}
-      />
+    <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
+      <div className="h-full" style={{ width: `${pct}%`, background: "#18c48c" }} />
+      <div className="h-full" style={{ width: `${100 - pct}%`, background: "#F0616D" }} />
     </div>
   );
 };
