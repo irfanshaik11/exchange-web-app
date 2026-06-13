@@ -21,14 +21,23 @@ import { KOL_ADDRESS_MAP } from "~/utils/kolLookup";
  */
 const KolPicCircle: React.FC<{ address?: string }> = ({ address }) => {
   const kol = address ? KOL_ADDRESS_MAP.get(address.toLowerCase()) : undefined;
-  const [failed, setFailed] = useState(false);
+  // 3-stage src fallback: local backfilled file -> live unavatar (per-user IP,
+  // no central rate limit) -> colored initial. Never a broken image.
+  const [stage, setStage] = useState(0);
   if (!kol) return null;
-  if (failed || !kol.avatarUrl) {
+  const handle = kol.twitterUsername;
+  const src =
+    stage === 0 && kol.avatarUrl
+      ? kol.avatarUrl
+      : stage <= 1 && handle
+        ? `https://unavatar.io/x/${encodeURIComponent(handle)}?fallback=false`
+        : null;
+  if (!src) {
     return (
       <span
         className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
         style={{ backgroundColor: kol.hexColor }}
-        title={`@${kol.twitterUsername}`}
+        title={handle ? `@${handle}` : kol.name}
       >
         {kol.label}
       </span>
@@ -37,11 +46,11 @@ const KolPicCircle: React.FC<{ address?: string }> = ({ address }) => {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={kol.avatarUrl}
+      src={src}
       alt={kol.name}
-      title={`@${kol.twitterUsername}`}
+      title={`@${handle}`}
       className="h-7 w-7 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10"
-      onError={() => setFailed(true)}
+      onError={() => setStage((s) => s + 1)}
     />
   );
 };

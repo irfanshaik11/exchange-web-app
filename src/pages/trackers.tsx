@@ -157,13 +157,22 @@ function hslAvatarBg(seed: string): string {
 }
 
 function KolAvatar({ name, handle }: { name: string; handle: string }) {
-  const [failed, setFailed] = useState(false);
+  // 3-stage src fallback: local backfilled file -> live unavatar (per-user IP,
+  // sidesteps the central backfill rate limit) -> colored initial.
+  const [stage, setStage] = useState(0);
   const raw = (name.trim().charAt(0) ||
     handle.trim().charAt(0) ||
     "?") as string;
   const initial = raw.toUpperCase();
 
-  if (failed) {
+  const src =
+    stage === 0 && handle
+      ? `/kol-avatars/${handle}.jpg`
+      : stage <= 1 && handle
+        ? `https://unavatar.io/x/${encodeURIComponent(handle)}?fallback=false`
+        : null;
+
+  if (!src) {
     return (
       <div
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white sm:h-10 sm:w-10 sm:text-sm"
@@ -177,10 +186,10 @@ function KolAvatar({ name, handle }: { name: string; handle: string }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/kol-avatars/${handle}.jpg`}
+      src={src}
       alt=""
       className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10"
-      onError={() => setFailed(true)}
+      onError={() => setStage((s) => s + 1)}
     />
   );
 }
