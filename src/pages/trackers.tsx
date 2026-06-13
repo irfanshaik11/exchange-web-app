@@ -3164,7 +3164,7 @@ export default function TrackersPage() {
                     {/* RIGHT: SOCIAL TRACKERS (X + TG) - JTX premium card */}
                     {showSocialSection && (
                       <div
-                        className="relative flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] px-4 sm:px-5"
+                        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] px-4 sm:px-5"
                         aria-label="Social Tracker"
                         style={
                           isMobile
@@ -3175,7 +3175,7 @@ export default function TrackersPage() {
                               }
                             : {
                                 width: `${sidebarWidth}px`,
-                                minWidth: "480px",
+                                minWidth: "340px",
                                 maxWidth: "600px",
                                 maxHeight: "calc(100vh - 240px)",
                                 boxShadow:
