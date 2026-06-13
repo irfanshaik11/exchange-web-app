@@ -924,11 +924,6 @@ function updateTokenInArray(arr, mint, update) {
     getNum(update.bonding_pct) ?? getNum(update.bonding_curve_progress),
     token.bonding_pct,
   );
-  const holderValue = keepIfPositive(
-    update.holders ?? update.holder_count ?? update.total_holders,
-    token.holders,
-  );
-
   // Price changes - not sent by price_update, keep existing
   const priceChange5mValue =
     getNum(update.price_percent_change_5m) ??
@@ -978,10 +973,13 @@ function updateTokenInArray(arr, mint, update) {
     liquidityUSD: String(liquidityValue),
     total_liquidity_usd: liquidityValue,
 
-    // Holders (ALL format variants)
-    holders: holderValue,
-    holder_count: holderValue,
-    total_holders: holderValue,
+    // Holders: do NOT take from price_update — its holder_count is stale/wrong
+    // (observed stuck at ~20-30 on prod while the real count is in the thousands).
+    // The authoritative live count arrives via holder_count_update + metrics_update,
+    // so preserve whatever those set rather than letting price_update clobber it.
+    holders: token.holders,
+    holder_count: token.holder_count,
+    total_holders: token.total_holders,
 
     // Unique wallets (price_update sends 5m)
     unique_wallets_5m: keepIfPositive(
@@ -1086,15 +1084,21 @@ function updateTokenInArray(arr, mint, update) {
       token.total_sell_volume_24h,
     ),
 
-    // Percentages (NOT sent by price_update, keep existing)
-    dev_percent: keepIfPositive(
-      update.dev_percent ?? update.dev_held_percentage,
-      token.dev_percent,
-    ),
-    dev_held_percentage: keepIfPositive(
-      update.dev_held_percentage ?? update.dev_percent,
-      token.dev_held_percentage,
-    ),
+    // Holder-analysis percentages: price_update carries these but with WRONG
+    // values (e.g. dev/insider/bundle that disagree with the authoritative feed
+    // for ~90% of tokens on prod). The correct values come from metrics_update
+    // (handleMetricsUpdate), so DO NOT let price_update touch dev/insider/bundle —
+    // preserve whatever metrics_update / snapshot set. keepIfPositive at price's
+    // ~170/sec would otherwise constantly clobber the correct metrics values.
+    dev_percent: token.dev_percent,
+    dev_held_percentage: token.dev_held_percentage,
+    insider_percent: token.insider_percent,
+    insider_held_percentage: token.insider_held_percentage,
+    bundle_percent: token.bundle_percent,
+    bundled_percentage: token.bundled_percentage,
+    bundler_held_percentage: token.bundler_held_percentage,
+    // Sniper IS still sourced from price_update: metrics_update does not carry it
+    // (sniper % is a launch-window property), so price/snapshot remain its source.
     sniper_percent: keepIfPositive(
       update.sniper_percent ?? update.sniper_held_percentage,
       token.sniper_percent,
@@ -1104,26 +1108,6 @@ function updateTokenInArray(arr, mint, update) {
       token.sniper_held_percentage,
     ),
     total_snipers: keepIfPositive(update.total_snipers, token.total_snipers),
-    insider_percent: keepIfPositive(
-      update.insider_percent ?? update.insider_held_percentage,
-      token.insider_percent,
-    ),
-    insider_held_percentage: keepIfPositive(
-      update.insider_held_percentage ?? update.insider_percent,
-      token.insider_held_percentage,
-    ),
-    bundle_percent: keepIfPositive(
-      update.bundle_percent ?? update.bundled_percentage,
-      token.bundle_percent,
-    ),
-    bundled_percentage: keepIfPositive(
-      update.bundled_percentage ?? update.bundle_percent,
-      token.bundled_percentage,
-    ),
-    bundler_held_percentage: keepIfPositive(
-      update.bundler_held_percentage,
-      token.bundler_held_percentage,
-    ),
 
     // Bonding curve (NOT sent by price_update, keep existing)
     bondingCurveProgress: bondingValue,
