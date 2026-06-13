@@ -22,14 +22,14 @@ for (let i = 0; i < handles.length; i++) {
   const out = path.join(DIR, `${h}.jpg`);
   if (fs.existsSync(out)) continue;
   try {
+    // wsrv.nl image proxy fetches unavatar from ITS IP (bypasses our rate
+    // limit). Failures come back as JSON; only image/* content is a real pic.
     const res = await fetch(
-      `https://unavatar.io/x/${encodeURIComponent(h)}?fallback=false`,
-      { signal: AbortSignal.timeout(15000) },
+      `https://wsrv.nl/?url=ssl:unavatar.io/x/${encodeURIComponent(h)}%3Ffallback=false&output=jpg`,
+      { signal: AbortSignal.timeout(20000) },
     );
-    if (res.status === 404) {
-      missing++;
-      process.stdout.write(`[${i + 1}/${handles.length}] ${h}: no pic (404)\n`);
-    } else if (res.ok && (res.headers.get("content-type") || "").startsWith("image")) {
+    const ct = res.headers.get("content-type") || "";
+    if (res.ok && ct.startsWith("image")) {
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length > 500) {
         fs.writeFileSync(out, buf);
@@ -39,8 +39,8 @@ for (let i = 0; i < handles.length; i++) {
         missing++;
       }
     } else {
-      errored++;
-      process.stdout.write(`[${i + 1}/${handles.length}] ${h}: HTTP ${res.status}\n`);
+      missing++;
+      process.stdout.write(`[${i + 1}/${handles.length}] ${h}: no pic (${res.status} ${ct})\n`);
     }
   } catch (e) {
     errored++;
