@@ -1,10 +1,11 @@
 const isDev = process.env.NODE_ENV !== 'production';
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import type { Wallet } from "~/utils/functions";
 import type { WatchWallet, WalletEvent } from "~/utils/walletTracking";
 import { toggleWalletNotifications } from "~/utils/walletTracking";
 import { SolanaIcon } from "./Footer";
+import { Sparkline } from "./MicroChart";
 import { useUser } from "./UserContext";
 import { FiBell, FiBarChart2, FiTrash2 } from "react-icons/fi";
 // import { TbChartBubble } from "react-icons/tb";  // TODO: Re-enable when analytics feature is built
@@ -88,6 +89,24 @@ export default function WalletRow({
   onNotificationToggle,
 }: WalletRowProps) {
   const { user } = useUser();
+
+  // Real recent-activity sparkline: cumulative net-SOL flow across this
+  // wallet's tracked events (oldest→newest). Sells add SOL, buys spend it.
+  // Derived entirely from `events` — no synthetic data. Empty when the wallet
+  // has <2 events (the "No activity yet" rows render nothing, not a fake line).
+  const activitySeries = useMemo(() => {
+    if (!events || events.length < 2) return [];
+    const sorted = [...events].sort(
+      (a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime(),
+    );
+    let cum = 0;
+    return sorted.map((e) => {
+      const v = Math.abs(parseFloat(e.solSpent || "0") || 0);
+      cum += e.side === "sell" ? v : -v;
+      return cum;
+    });
+  }, [events]);
+
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   // const [analyticsEnabled, setAnalyticsEnabled] = React.useState(false);  // TODO: Re-enable when analytics feature is built
@@ -479,6 +498,11 @@ export default function WalletRow({
               <span className="text-[9px] text-neutral-600 sm:text-xs">—</span>
             )}
           </span>
+          <span className="hidden w-14 flex-shrink-0 items-center justify-center sm:flex">
+            {activitySeries.length > 1 ? (
+              <Sparkline values={activitySeries} width={56} height={20} strokeWidth={1.25} />
+            ) : null}
+          </span>
           <span className="hidden w-28 text-[9px] tabular-nums text-neutral-500 sm:inline sm:text-xs">
             {formatLastActive(lastActive)}
           </span>
@@ -566,10 +590,10 @@ export default function WalletRow({
             ) : (
               <Tooltip label="Delete Wallet">
                 <button
-                  className="group/trash cursor-pointer rounded-md p-1.5 hover:bg-[#ef4444]/10 sm:p-2"
+                  className="group/trash cursor-pointer rounded-md p-1.5 hover:bg-[#F0616D]/10 sm:p-2"
                   onClick={handleDeleteClick}
                 >
-                  <FiTrash2 className="text-sm text-neutral-500 group-hover/trash:text-[#ef4444] sm:text-base" />
+                  <FiTrash2 className="text-sm text-neutral-500 group-hover/trash:text-[#F0616D] sm:text-base" />
                 </button>
               </Tooltip>
             )}
