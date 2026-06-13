@@ -395,6 +395,17 @@ function handleMessage(channel, data) {
         handleTokenInfoUpdate(data.data || data);
         break;
 
+      // metrics_update: authoritative holder-analysis stats recomputed by the
+      // indexer (top10 %, dev %, insider %, bundle %, holder_count) and rebroadcast
+      // by token-service (metrics.update Redis channel -> pulse WS). The initial
+      // lifecycle event carries zeros because these are computed seconds after a
+      // token appears; this is the message that fills the badges in. Without this
+      // case the real values were silently dropped, so badges stayed at 0.00%.
+      case "metrics_update":
+      case "metricsUpdate":
+        handleMetricsUpdate(data.data || data);
+        break;
+
       case "pong":
         // Heartbeat pong received — clear the timeout to prevent reconnect
         if (heartbeatTimeouts[channel]) {
@@ -1179,6 +1190,69 @@ function handleTokenInfoUpdate(update) {
   };
 
   // Apply to all arrays where token exists
+  applyAndSendDelta(newTokens);
+  applyAndSendDelta(finalStretchTokens);
+  applyAndSendDelta(migratedTokens);
+}
+
+// handleMetricsUpdate: merge authoritative holder-analysis stats (top10 %, dev %,
+// insider %, bundle %, holder_count) onto the matching token in each board.
+//
+// Field aliases mirror normalizeToken() so the card components (BottomCardInfoHolder)
+// pick the value up regardless of which alias they read.
+//
+// keepIfPositive semantics: only overwrite when the incoming value is > 0. This is
+// the same rule handlePriceUpdate already uses for these percentage fields and it
+// prevents an early/partial metrics_update (which can carry 0 before the indexer has
+// finished computing) from blanking a value we already resolved. Sniper % is NOT in
+// the metrics_update payload, so it is intentionally left untouched here.
+function handleMetricsUpdate(update) {
+  const mint = update.mint_address || update.mint || update.address;
+  if (!mint) return;
+
+  const num = (val) => {
+    const n = Number(val);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const keepIfPositive = (newVal, existing) => (newVal > 0 ? newVal : existing);
+
+  const top10 = num(update.top10_holders_pct ?? update.top_10_holders_percent);
+  const dev = num(update.dev_percent ?? update.dev_held_percentage);
+  const insider = num(update.insider_percent ?? update.insider_held_percentage);
+  const bundle = num(update.bundle_percent ?? update.bundled_percentage);
+  const holderCount = num(update.holder_count);
+
+  const applyAndSendDelta = (arr) => {
+    const idx = arr.findIndex((t) => t.mint === mint);
+    if (idx === -1) return false;
+
+    const token = arr[idx];
+    const updatedToken = {
+      ...token,
+      top10_holders_pct: keepIfPositive(top10, token.top10_holders_pct),
+      dev_percent: keepIfPositive(dev, token.dev_percent),
+      dev_held_percentage: keepIfPositive(dev, token.dev_held_percentage),
+      insider_percent: keepIfPositive(insider, token.insider_percent),
+      insider_held_percentage: keepIfPositive(
+        insider,
+        token.insider_held_percentage,
+      ),
+      bundle_percent: keepIfPositive(bundle, token.bundle_percent),
+      bundled_percentage: keepIfPositive(bundle, token.bundled_percentage),
+      bundler_held_percentage: keepIfPositive(
+        bundle,
+        token.bundler_held_percentage,
+      ),
+      holder_count: keepIfPositive(holderCount, token.holder_count),
+      holders: keepIfPositive(holderCount, token.holders),
+    };
+    arr[idx] = updatedToken;
+
+    // Reuse the token_info delta path - the bridge merges these fields onto the row.
+    sendTokenDelta("token_info", updatedToken);
+    return true;
+  };
+
   applyAndSendDelta(newTokens);
   applyAndSendDelta(finalStretchTokens);
   applyAndSendDelta(migratedTokens);
