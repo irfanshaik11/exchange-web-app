@@ -273,7 +273,7 @@ export default function LiveTradesPanel({
         </defs>
       </svg>
 
-      <table className="w-full min-w-[600px] table-fixed text-[10px] sm:min-w-[720px] sm:text-xs">
+      <table className="w-full min-w-[600px] table-fixed border-separate border-spacing-y-[6px] text-[10px] sm:min-w-[720px] sm:text-xs">
         {/* Fixed column widths so the table doesn't reflow/shift as rows enrich
             (symbols, market caps load async) — the cause of the open-lag jump. */}
         <colgroup>
@@ -349,22 +349,21 @@ export default function LiveTradesPanel({
             return (
               <tr
                 key={`${trade.tx}-${idx}`}
-                className="group relative border-b border-white/[0.04] hover:bg-white/[0.04]"
+                className="group relative"
                 style={{
                   backgroundColor:
                     trade.side === "buy"
-                      ? "rgba(24, 196, 140, 0.02)"
-                      : "rgba(239, 68, 68, 0.02)",
+                      ? "rgba(24, 196, 140, 0.05)"
+                      : "rgba(240, 97, 109, 0.055)",
                 }}
               >
                 {/* TIME */}
-                <td className="relative py-2.5 pl-4 pr-1 text-[9px] tabular-nums text-neutral-500 sm:pl-6 sm:pr-2 sm:text-xs">
+                <td className="relative overflow-hidden rounded-l-lg py-2.5 pl-4 pr-1 text-[9px] tabular-nums text-neutral-500 sm:pl-6 sm:pr-2 sm:text-xs">
                   <span
                     className="absolute inset-y-0 left-0 w-[2px]"
                     style={{
                       backgroundColor:
-                        trade.side === "buy" ? "#18c48c" : "#ef4444",
-                      opacity: 0.4,
+                        trade.side === "buy" ? "#18c48c" : "#F0616D",
                     }}
                   />
                   {timeAgo}
@@ -547,7 +546,7 @@ export default function LiveTradesPanel({
                 </td>
 
                 {/* QUICK BUY */}
-                <td className="py-2 pl-1 pr-4 sm:pl-2 sm:pr-6">
+                <td className="rounded-r-lg py-2 pl-1 pr-4 sm:pl-2 sm:pr-6">
                   <div className="flex items-center justify-end">
                     <button
                       type="button"

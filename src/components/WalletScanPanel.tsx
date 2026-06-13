@@ -10,6 +10,7 @@ import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
 import PnlCalendar from "./PnlCalendar";
 import { Sparkline } from "./MicroChart";
+import { SolanaIcon } from "./Footer";
 import { pnlColor, pnlHeat } from "~/utils/trackersTheme";
 import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
 import { useSolPrice } from "./SolPriceContext";
@@ -1031,8 +1032,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 <span className="text-[11px] text-[#71717a]">SOL Balance</span>
                 {walletBalance ? (
                   <div className="flex flex-col items-end">
-                    <span className="text-sm font-semibold tabular-nums text-[#f4f4f5]">
-                      ◎ {walletBalance.sol.toFixed(4)}
+                    <span className="flex items-center justify-end gap-1.5 text-sm font-semibold tabular-nums text-[#f4f4f5]">
+                      <SolanaIcon size={13} /> {walletBalance.sol.toFixed(4)}
                     </span>
                     <span className="text-[11px] tabular-nums text-[#71717a]">
                       {typeof walletBalance.usd === "number" &&
@@ -1048,8 +1049,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   </div>
                 ) : balance !== null ? (
                   <div className="flex flex-col items-end">
-                    <span className="text-sm font-semibold tabular-nums text-[#f4f4f5]">
-                      ◎ {balance.toFixed(4)}
+                    <span className="flex items-center justify-end gap-1.5 text-sm font-semibold tabular-nums text-[#f4f4f5]">
+                      <SolanaIcon size={13} /> {balance.toFixed(4)}
                     </span>
                     <span className="text-[11px] tabular-nums text-[#71717a]">
                       ${formatSmartNumber(balance * currentSolPrice)}
