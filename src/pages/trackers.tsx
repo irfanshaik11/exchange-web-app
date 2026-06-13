@@ -2579,9 +2579,7 @@ export default function TrackersPage() {
                     {/* LEFT: WALLET SECTION - JTX premium card style */}
                     {showWalletSection && (
                       <div
-                        className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06] px-4 pb-4 sm:px-5 ${
-                          activeTab === 2 ? "bg-[#0c0e12]" : "bg-[#1E1F26]"
-                        }`}
+                        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] px-4 pb-4 sm:px-5"
                         style={{
                           boxShadow:
                             "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
