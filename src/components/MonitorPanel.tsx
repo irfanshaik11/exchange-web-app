@@ -431,7 +431,7 @@ export default function MonitorPanel({
 
   return (
     <div className="scrollbar-hide -mx-3 flex-1 overflow-auto sm:-mx-5">
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] items-start gap-3 px-3 py-3 sm:px-5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3 px-3 py-3 sm:px-5">
         {tokenAggs.map((token) => {
           const meta = metadata.get(token.mint);
           const displaySymbol =
