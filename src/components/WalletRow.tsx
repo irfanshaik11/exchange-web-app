@@ -366,29 +366,6 @@ export default function WalletRow({
     }
   };
 
-  // Helper to format date or relative time
-  const formatCreated = (timestamp: number) => {
-    const today = new Date().toLocaleDateString();
-    if (!timestamp || isNaN(timestamp)) return today;
-    const now = Date.now();
-    const diff = now - timestamp;
-    const min = 60 * 1000;
-    const hour = 60 * min;
-    const day = 24 * hour;
-    if (diff < day) {
-      if (diff < hour) {
-        const mins = Math.max(1, Math.floor(diff / min));
-        return `${mins} min`;
-      } else {
-        const hours = Math.floor(diff / hour);
-        return `${hours}h`;
-      }
-    } else {
-      const date = new Date(timestamp);
-      return isNaN(date.getTime()) ? today : date.toLocaleDateString();
-    }
-  };
-
   const formatLastActive = (timestamp: number | null | undefined) => {
     if (timestamp === undefined) {
       return "—";
@@ -446,28 +423,12 @@ export default function WalletRow({
     >
       <td className="px-1 py-3 sm:px-3">
         <div className="flex w-full items-center gap-2 sm:gap-4">
-          <button
-            type="button"
-            className="flex w-16 justify-center text-[9px] tabular-nums text-neutral-500 hover:text-neutral-200 sm:w-28 sm:text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (wallet.address) {
-                window.open(
-                  `https://solscan.io/account/${wallet.address}`,
-                  "_blank",
-                );
-              }
-            }}
-            title="View wallet on Solscan"
-          >
-            {formatCreated(wallet.createdAt)}
-          </button>
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+            {/* KOL profile pic first, then the wallet emoji — null for non-KOLs */}
+            <KolDpCircle address={wallet.address} size={28} />
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#0c0e12] text-sm sm:h-8 sm:w-8 sm:text-base">
               {wallet.emoji || "💼"}
             </span>
-            {/* KOL profile pic (between emoji and name) — null for non-KOLs */}
-            <KolDpCircle address={wallet.address} size={28} />
             <div className="flex min-w-0 flex-col leading-tight">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-[11px] font-semibold text-neutral-100 sm:text-sm">

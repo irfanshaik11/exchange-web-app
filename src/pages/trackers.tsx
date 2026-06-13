@@ -2920,9 +2920,6 @@ export default function TrackersPage() {
                                     <>
                                       <div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
                                         <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
-                                          <span className="flex w-16 justify-center sm:w-28">
-                                            Created
-                                          </span>
                                           <span className="min-w-0 flex-1">
                                             Name
                                           </span>
