@@ -594,7 +594,7 @@ export default function MonitorPanel({
                         {token.buyCount}
                       </span>
                       <span className="text-neutral-600"> / </span>
-                      <span className="font-semibold text-[#ef4444]">
+                      <span className="font-semibold text-[#F0616D]">
                         {token.sellCount}
                       </span>
                     </span>
@@ -664,7 +664,7 @@ export default function MonitorPanel({
                       width: `${Math.max(2, Math.min(98, buyShare * 100))}%`,
                     }}
                   />
-                  <div className="h-full flex-1 bg-[#ef4444]" />
+                  <div className="h-full flex-1 bg-[#F0616D]" />
                 </div>
               </div>
 
@@ -754,7 +754,7 @@ export default function MonitorPanel({
                           </td>
                           <td className="px-2 py-2.5 text-right">
                             <div className="flex flex-col items-end leading-tight">
-                              <span className="font-semibold tabular-nums text-[#ef4444]">
+                              <span className="font-semibold tabular-nums text-[#F0616D]">
                                 {formatUsdShort(w.soldUsd)}
                               </span>
                               <span className="hidden text-[10px] tabular-nums text-neutral-500 @[24rem]:block">
@@ -765,9 +765,12 @@ export default function MonitorPanel({
                           </td>
                           <td className="px-3.5 py-2.5 text-right">
                             <span
-                              className="font-semibold tabular-nums"
+                              className="inline-block rounded-md px-1.5 py-0.5 font-semibold tabular-nums"
                               style={{
-                                color: pnlPositive ? "#18c48c" : "#ef4444",
+                                color: pnlPositive ? "#18c48c" : "#F0616D",
+                                backgroundColor: pnlPositive
+                                  ? "rgba(24,196,140,0.08)"
+                                  : "rgba(240,97,109,0.08)",
                               }}
                             >
                               {pnlPositive ? "+" : "-"}
