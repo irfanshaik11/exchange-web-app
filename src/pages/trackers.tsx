@@ -2528,31 +2528,31 @@ export default function TrackersPage() {
                     className={`flex min-h-0 flex-1 flex-col gap-2 ${!isMobile ? "flex-row" : ""}`}
                   >
                     {isMobile && (
-                      <div className="flex w-full rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-1 text-[10px] font-medium text-[#52525b] backdrop-blur-xl sm:p-1.5 sm:text-xs">
+                      <div className="flex w-full rounded-lg border border-white/[0.06] bg-[#0c0e12] p-1 text-[10px] font-medium text-[#52525b] sm:p-1.5 sm:text-xs">
                         <button
-                          className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                          className={`relative flex-1 rounded-md px-3 py-2 sm:px-4 sm:py-2.5 ${
                             mobileMainTab === "wallets"
-                              ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
+                              ? "bg-[#18c48c]/15 font-semibold text-[#18c48c]"
                               : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                           }`}
                           onClick={() => setMobileMainTab("wallets")}
                         >
                           Wallet Tracker
                           {mobileMainTab === "wallets" && (
-                            <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                           )}
                         </button>
                         <button
-                          className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                          className={`relative flex-1 rounded-md px-3 py-2 sm:px-4 sm:py-2.5 ${
                             mobileMainTab === "social"
-                              ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
+                              ? "bg-[#18c48c]/15 font-semibold text-[#18c48c]"
                               : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                           }`}
                           onClick={() => setMobileMainTab("social")}
                         >
                           Social
                           {mobileMainTab === "social" && (
-                            <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                           )}
                         </button>
                       </div>
@@ -2561,7 +2561,7 @@ export default function TrackersPage() {
                     {/* LEFT: WALLET SECTION - JTX premium card style */}
                     {showWalletSection && (
                       <div
-                        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 pb-4 backdrop-blur-xl sm:px-5"
+                        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] px-4 pb-4 sm:px-5"
                         style={{
                           boxShadow:
                             "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
@@ -2580,7 +2580,7 @@ export default function TrackersPage() {
                         {/* If user is not logged in, show JTX-style empty state */}
                         {!user ? (
                           <div className="flex flex-1 items-center justify-center">
-                            <div className="relative flex flex-col items-center rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-8 text-center backdrop-blur-sm">
+                            <div className="relative flex flex-col items-center rounded-lg border border-white/[0.06] bg-[#08090c] p-8 text-center">
                               {/* Mini corner brackets */}
                               <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
                                 <div className="absolute top-1.5 left-1.5 h-2.5 w-2.5 border-t border-l border-white/[0.1]" />
@@ -2596,7 +2596,7 @@ export default function TrackersPage() {
                                 Monitor wallets and catch trades in real-time
                               </p>
                               <button
-                                className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#18c48c] px-6 py-2.5 text-xs font-semibold text-[#030304] shadow-[0_0_16px_rgba(24,196,140,0.3)] transition-all duration-200 hover:brightness-110"
+                                className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#18c48c] px-6 py-2.5 text-xs font-semibold text-[#030304] hover:brightness-110"
                                 onClick={() => {
                                   const event = new CustomEvent(
                                     "open-login-modal",
@@ -2617,7 +2617,7 @@ export default function TrackersPage() {
                                 {TABS.map((tab, i) => (
                                   <button
                                     key={tab}
-                                    className={`group relative cursor-pointer rounded-md px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-4 sm:py-2 sm:text-xs ${
+                                    className={`group relative cursor-pointer rounded-md px-3 py-1.5 text-[10px] whitespace-nowrap sm:px-4 sm:py-2 sm:text-xs ${
                                       activeTab === i
                                         ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
                                         : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
@@ -2626,11 +2626,11 @@ export default function TrackersPage() {
                                   >
                                     <span className="relative z-10">{tab}</span>
                                     {activeTab === i && (
-                                      <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                                     )}
                                   </button>
                                 ))}
-                                <div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1 text-[10px] backdrop-blur-sm sm:px-3 sm:py-1.5 sm:text-[11px]">
+                                <div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-[11px]">
                                   {activeTab === 3 ? (
                                     <>
                                       <span className="text-neutral-500">
@@ -2662,7 +2662,7 @@ export default function TrackersPage() {
                                 {/* Quick-buy amount editor — sets the SOL used by
                                     every Quick Buy button in Live Trades / Monitor. */}
                                 {(activeTab === 1 || activeTab === 2) && (
-                                  <div className="flex items-center gap-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2 py-1 backdrop-blur-sm sm:gap-1.5 sm:px-2.5 sm:py-1.5">
+                                  <div className="flex items-center gap-1 rounded-md border border-white/[0.06] bg-[#08090c] px-2 py-1 sm:gap-1.5 sm:px-2.5 sm:py-1.5">
                                     <HiLightningBolt className="h-3 w-3 text-[#18c48c] sm:h-3.5 sm:w-3.5" />
                                     <input
                                       type="text"
@@ -2705,7 +2705,7 @@ export default function TrackersPage() {
                                   <>
                                     {selectedChain === "sol" && (
                                       <button
-                                        className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
+                                        className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
                                         onClick={handleAddDefault150Wallets}
                                         disabled={
                                           isAtWalletLimit ||
@@ -2719,7 +2719,7 @@ export default function TrackersPage() {
                                       </button>
                                     )}
                                     <button
-                                      className="cursor-pointer rounded-md bg-[#18c48c] px-4 py-1.5 text-[9px] font-semibold whitespace-nowrap text-[#030304] shadow-[0_0_12px_rgba(24,196,140,0.25)] transition-all duration-200 hover:brightness-110 sm:px-5 sm:py-2 sm:text-xs"
+                                      className="cursor-pointer rounded-md bg-[#18c48c] px-4 py-1.5 text-[9px] font-semibold whitespace-nowrap text-[#030304] hover:brightness-110 sm:px-5 sm:py-2 sm:text-xs"
                                       onClick={handleOpenAddWalletModal}
                                     >
                                       Add Wallet
@@ -2739,7 +2739,7 @@ export default function TrackersPage() {
                                   Monitor wallets and catch trades in real-time
                                 </p>
                                 <button
-                                  className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
+                                  className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 hover:brightness-90"
                                   type="button"
                                   onClick={() => {
                                     window.dispatchEvent(
@@ -2761,7 +2761,7 @@ export default function TrackersPage() {
                                         <input
                                           type="text"
                                           placeholder="Search by address"
-                                          className="w-full rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#080a0d]/80 focus:shadow-[0_0_12px_rgba(24,196,140,0.1)] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                          className="w-full rounded-md border border-white/[0.06] bg-[#08090c] px-4 py-2 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#080a0d]/80 focus: focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                           disabled={false}
                                           value={searchTerm}
                                           onChange={(e) =>
@@ -2775,7 +2775,7 @@ export default function TrackersPage() {
                                         {activeTab === 0 && (
                                           <>
                                             <button
-                                              className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+                                              className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
                                               onClick={() =>
                                                 setShowImportModal(true)
                                               }
@@ -2789,7 +2789,7 @@ export default function TrackersPage() {
                                                 </div>
                                               )}
                                               <button
-                                                className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+                                                className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
                                                 onClick={handleExportAddresses}
                                               >
                                                 Export
@@ -2798,18 +2798,18 @@ export default function TrackersPage() {
 
                                             {/* Icon buttons - hide some on mobile */}
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
                                             <button
-                                              className={`flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-200 sm:h-9 sm:w-9 ${
+                                              className={`flex h-8 w-8 items-center justify-center rounded-md border sm:h-9 sm:w-9 ${
                                                 isTogglingAllNotifications
-                                                  ? "cursor-not-allowed border-white/[0.06] bg-[#080a0d]/60 opacity-40"
+                                                  ? "cursor-not-allowed border-white/[0.06] bg-[#08090c] opacity-40"
                                                   : allNotificationsEnabled
                                                     ? "cursor-pointer border-[#ef4444]/40 bg-[#ef4444]/15 text-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.2)] hover:bg-[#ef4444]/25"
-                                                    : "cursor-pointer border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#a1a1aa]"
+                                                    : "cursor-pointer border-white/[0.06] bg-[#08090c] text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#a1a1aa]"
                                               }`}
                                               type="button"
                                               onClick={
@@ -2835,13 +2835,13 @@ export default function TrackersPage() {
                                               />
                                             </button>
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -2859,7 +2859,7 @@ export default function TrackersPage() {
                                     <input
                                       type="text"
                                       placeholder="Search by name, @handle, or wallet"
-                                      className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                      className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                       value={kolSearchTerm}
                                       onChange={(e) =>
                                         setKolSearchTerm(e.target.value)
@@ -2888,7 +2888,7 @@ export default function TrackersPage() {
                                           </span>
                                           <div className="flex flex-1 items-center justify-end">
                                             <button
-                                              className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
+                                              className="text-[10px] font-semibold whitespace-nowrap text-red-400 hover:text-red-300 sm:text-xs"
                                               onClick={() =>
                                                 handleRemoveWallet("all")
                                               }
@@ -3010,12 +3010,12 @@ export default function TrackersPage() {
                                               kol.wallet,
                                             );
                                             const iconBtn =
-                                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-300 sm:h-8 sm:w-8";
+                                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-white/[0.06] hover:text-neutral-300 sm:h-8 sm:w-8";
                                             return (
                                               <li
                                                 key={kol.wallet}
                                                 role="presentation"
-                                                className={`flex cursor-pointer items-center gap-2 border-b border-white/[0.06] px-2 py-2.5 transition-colors hover:bg-white/[0.03] sm:gap-3 sm:py-3 ${
+                                                className={`flex cursor-pointer items-center gap-2 border-b border-white/[0.06] px-2 py-2.5 hover:bg-white/[0.03] sm:gap-3 sm:py-3 ${
                                                   muted ? "opacity-40" : ""
                                                 }`}
                                                 onClick={(e) => {
@@ -3128,17 +3128,17 @@ export default function TrackersPage() {
                     {/* RESIZE HANDLE — JTX style */}
                     {showSocialSection && !isMobile && (
                       <div
-                        className="group relative hidden h-full min-h-[530px] w-1.5 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#18c48c]/5 lg:flex"
+                        className="group relative hidden h-full min-h-[530px] w-1.5 cursor-ew-resize items-center justify-center hover:bg-[#18c48c]/5 lg:flex"
                         onMouseDown={() => setIsResizing(true)}
                       >
-                        <div className="absolute h-20 w-0.5 rounded-full bg-[#52525b] transition-colors group-hover:bg-[#18c48c] group-hover:shadow-[0_0_6px_rgba(24,196,140,0.4)]" />
+                        <div className="absolute h-20 w-0.5 rounded-full bg-[#52525b] group-hover:bg-[#18c48c] group-hover:shadow-[0_0_6px_rgba(24,196,140,0.4)]" />
                       </div>
                     )}
 
                     {/* RIGHT: SOCIAL TRACKERS (X + TG) - JTX premium card */}
                     {showSocialSection && (
                       <div
-                        className="relative flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 backdrop-blur-xl sm:px-5"
+                        className="relative flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] px-4 sm:px-5"
                         aria-label="Social Tracker"
                         style={
                           isMobile
@@ -3170,7 +3170,7 @@ export default function TrackersPage() {
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("twitter")}
-                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              className={`cursor-pointer text-sm font-semibold tracking-tight sm:text-base ${
                                 socialPanelTab === "twitter"
                                   ? "text-[#f4f4f5]"
                                   : "text-[#52525b] hover:text-[#a1a1aa]"
@@ -3181,7 +3181,7 @@ export default function TrackersPage() {
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("telegram")}
-                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              className={`cursor-pointer text-sm font-semibold tracking-tight sm:text-base ${
                                 socialPanelTab === "telegram"
                                   ? "text-[#f4f4f5]"
                                   : "text-[#52525b] hover:text-[#a1a1aa]"
@@ -3192,7 +3192,7 @@ export default function TrackersPage() {
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("kolscan")}
-                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              className={`cursor-pointer text-sm font-semibold tracking-tight sm:text-base ${
                                 socialPanelTab === "kolscan"
                                   ? "text-[#f4f4f5]"
                                   : "text-[#52525b] hover:text-[#a1a1aa]"
@@ -3212,7 +3212,7 @@ export default function TrackersPage() {
                                 {TELEGRAM_TABS.map((label, i) => (
                                   <button
                                     key={label}
-                                    className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-3 sm:py-2 sm:text-xs ${
+                                    className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap sm:px-3 sm:py-2 sm:text-xs ${
                                       telegramTab === i
                                         ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
                                         : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
@@ -3225,7 +3225,7 @@ export default function TrackersPage() {
                                       {label}
                                     </span>
                                     {telegramTab === i && (
-                                      <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                                     )}
                                   </button>
                                 ))}
@@ -3235,7 +3235,7 @@ export default function TrackersPage() {
                                   type="button"
                                   onClick={handleRestoreTelegramDefaults}
                                   disabled={restoringTelegramDefaults}
-                                  className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] disabled:opacity-40 sm:px-3 sm:py-2 sm:text-xs"
+                                  className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] disabled:opacity-40 sm:px-3 sm:py-2 sm:text-xs"
                                 >
                                   {restoringTelegramDefaults
                                     ? "Adding…"
@@ -3333,7 +3333,7 @@ export default function TrackersPage() {
                                     </span>
                                     <button
                                       type="button"
-                                      className="mt-5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-xs font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5]"
+                                      className="mt-5 rounded-md border border-white/[0.06] bg-[#08090c] px-4 py-2 text-xs font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5]"
                                       onClick={() => loadTelegramFeed(true)}
                                     >
                                       Retry
@@ -3347,7 +3347,7 @@ export default function TrackersPage() {
                                         href={`https://t.me/${msg.channelUsername}/${msg.id}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="relative block rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-3.5 text-left backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-[#080a0d]/80"
+                                        className="relative block rounded-lg border border-white/[0.06] bg-[#08090c] p-3.5 text-left hover:border-white/[0.1] hover:bg-[#080a0d]/80"
                                       >
                                         {/* Mini corner brackets on message cards */}
                                         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
@@ -3393,7 +3393,7 @@ export default function TrackersPage() {
                                           e.target.value,
                                         )
                                       }
-                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
+                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus: focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -3440,7 +3440,7 @@ export default function TrackersPage() {
                                                 href={`https://t.me/${username}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="min-w-0 truncate text-[#a1a1aa] transition-colors hover:text-[#f4f4f5] hover:underline"
+                                                className="min-w-0 truncate text-[#a1a1aa] hover:text-[#f4f4f5] hover:underline"
                                               >
                                                 @{username}
                                               </a>
@@ -3464,7 +3464,7 @@ export default function TrackersPage() {
                                                 }
                                               }}
                                               disabled={isTracked || isAdding}
-                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] transition-all duration-200 hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#080a0d]/60 disabled:hover:text-[#71717a]"
+                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#08090c] text-[#71717a] hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#08090c] disabled:hover:text-[#71717a]"
                                               title={
                                                 isTracked
                                                   ? "Already tracked"
@@ -3496,7 +3496,7 @@ export default function TrackersPage() {
                                 {TWITTER_TABS.map((tab, i) => (
                                   <button
                                     key={tab}
-                                    className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-3 sm:py-2 sm:text-xs ${
+                                    className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap sm:px-3 sm:py-2 sm:text-xs ${
                                       twitterTab === i
                                         ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
                                         : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
@@ -3505,7 +3505,7 @@ export default function TrackersPage() {
                                   >
                                     <span className="relative z-10">{tab}</span>
                                     {twitterTab === i && (
-                                      <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                                     )}
                                   </button>
                                 ))}
@@ -3513,7 +3513,7 @@ export default function TrackersPage() {
                               {twitterTab === 0 && (
                                 <button
                                   type="button"
-                                  className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-xs"
+                                  className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-xs"
                                   onClick={() => setShowAddTwitterModal(true)}
                                 >
                                   Add Handle
@@ -3605,7 +3605,7 @@ export default function TrackersPage() {
                                         }
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="relative block rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-3.5 text-left backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-[#080a0d]/80"
+                                        className="relative block rounded-lg border border-white/[0.06] bg-[#08090c] p-3.5 text-left hover:border-white/[0.1] hover:bg-[#080a0d]/80"
                                       >
                                         {/* Mini corner brackets on tweet cards */}
                                         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
@@ -3686,7 +3686,7 @@ export default function TrackersPage() {
                                       onChange={(e) =>
                                         setApprovedHandlesSearch(e.target.value)
                                       }
-                                      className="w-full flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
+                                      className="w-full flex-1 rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus: focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -3735,7 +3735,7 @@ export default function TrackersPage() {
                                                 href={`https://x.com/${handle}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="min-w-0 truncate text-[#a1a1aa] transition-colors hover:text-[#f4f4f5] hover:underline"
+                                                className="min-w-0 truncate text-[#a1a1aa] hover:text-[#f4f4f5] hover:underline"
                                               >
                                                 @{handle}
                                               </a>
@@ -3755,7 +3755,7 @@ export default function TrackersPage() {
                                                 }
                                               }}
                                               disabled={isTracked || isAdding}
-                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] transition-all duration-200 hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#080a0d]/60 disabled:hover:text-[#71717a]"
+                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#08090c] text-[#71717a] hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#08090c] disabled:hover:text-[#71717a]"
                                               title={
                                                 isTracked
                                                   ? "Already tracked"
