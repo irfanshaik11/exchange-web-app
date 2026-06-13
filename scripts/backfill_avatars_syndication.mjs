@@ -12,8 +12,9 @@ const DIR = path.join(process.cwd(), "public", "kol-avatars");
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36";
 const DELAY = Number(process.env.DELAY) || 600;
+const LIST = process.env.LIST || "/tmp/missing_handles.txt";
 const handles = fs
-  .readFileSync("/tmp/missing_handles.txt", "utf8")
+  .readFileSync(LIST, "utf8")
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean);
@@ -49,11 +50,20 @@ for (let i = 0; i < handles.length; i++) {
   const out = path.join(DIR, `${h}.jpg`);
   if (fs.existsSync(out)) continue;
   try {
-    const res = await fetch(
-      `https://syndication.twitter.com/srv/timeline-profile/screen-name/${encodeURIComponent(h)}`,
-      { headers: { "user-agent": UA }, signal: AbortSignal.timeout(20000) },
-    );
-    const html = await res.text();
+    // 429-resilient fetch: syndication rate-limits bursts. On 429, wait long
+    // and retry so we eventually clear the window.
+    let html = "";
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const res = await fetch(
+        `https://syndication.twitter.com/srv/timeline-profile/screen-name/${encodeURIComponent(h)}`,
+        { headers: { "user-agent": UA }, signal: AbortSignal.timeout(20000) },
+      );
+      html = await res.text();
+      if (res.status !== 429 && !html.startsWith("Rate limit")) break;
+      const wait = 30000 + attempt * 20000; // 30s,50s,70s,...
+      process.stdout.write(`[${i + 1}/${handles.length}] ${h}: rate-limited, wait ${wait / 1000}s\n`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
     const m = html.match(
       /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/,
     );
