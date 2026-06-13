@@ -103,7 +103,8 @@ import {
   notifyTradePending,
 } from "~/utils/tradeEvents";
 import type { Token } from "~/utils/db";
-import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
+import { FaRunning, FaGasPump, FaCoins, FaBan, FaTelegramPlane } from "react-icons/fa";
+import { getKolSocials } from "~/utils/kolSocials";
 import { HiLightningBolt } from "react-icons/hi";
 import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
@@ -3152,6 +3153,25 @@ export default function TrackersPage() {
                                                     >
                                                       <FaXTwitter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                                     </a>
+                                                    {(() => {
+                                                      const tg = getKolSocials(
+                                                        kol.wallet,
+                                                      )?.telegram;
+                                                      return tg ? (
+                                                        <a
+                                                          href={tg}
+                                                          target="_blank"
+                                                          rel="noopener noreferrer"
+                                                          className={iconBtn}
+                                                          title="Telegram"
+                                                          onClick={(e) =>
+                                                            e.stopPropagation()
+                                                          }
+                                                        >
+                                                          <FaTelegramPlane className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                                        </a>
+                                                      ) : null;
+                                                    })()}
                                                   </div>
                                                 </div>
                                               </li>

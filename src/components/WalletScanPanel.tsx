@@ -2,8 +2,10 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import type { Wallet, TradeRow } from "~/utils/functions";
 import { formatSmartNumber, fetchWalletBalance } from "~/utils/functions";
 import InterstatePopout from "./InterstatePopout";
-import { FaRegCopy, FaCheck } from "react-icons/fa";
+import { FaRegCopy, FaCheck, FaTelegramPlane } from "react-icons/fa";
+import { FaXTwitter } from "react-icons/fa6";
 import { FiExternalLink } from "react-icons/fi";
+import { getKolSocials } from "~/utils/kolSocials";
 import type { Token } from "~/utils/db";
 import { getWalletSolBalance } from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
@@ -972,6 +974,37 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               >
                 <FiExternalLink className="text-xs" />
               </button>
+              {/* KOL socials (scraped from kolscan) — X + Telegram if known */}
+              {(() => {
+                const social = getKolSocials(wallet.address);
+                if (!social) return null;
+                return (
+                  <>
+                    {social.twitter && (
+                      <a
+                        href={social.twitter}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="X (Twitter)"
+                        className="rounded p-1 text-[#52525b] hover:bg-white/[0.06] hover:text-[#f4f4f5]"
+                      >
+                        <FaXTwitter className="text-xs" />
+                      </a>
+                    )}
+                    {social.telegram && (
+                      <a
+                        href={social.telegram}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Telegram"
+                        className="rounded p-1 text-[#52525b] hover:bg-white/[0.06] hover:text-[#3aa0e0]"
+                      >
+                        <FaTelegramPlane className="text-xs" />
+                      </a>
+                    )}
+                  </>
+                );
+              })()}
               {tokenBalanceLoading ||
               tokenLoading ? null : tokenBalanceError ? (
                 <>
