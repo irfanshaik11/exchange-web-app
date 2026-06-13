@@ -334,7 +334,7 @@ const Activity: React.FC<ActivityProps> = ({
       {trades.length > 0 ? (
         <div className="relative flex min-h-0 flex-1 flex-col">
           {/* Header Row - Fixed */}
-          <div className="sticky top-0 z-10 grid gap-4 border-b border-white/[0.06] bg-[#0c0e12] px-6 py-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
+          <div className="sticky top-0 z-10 grid gap-4 border-b border-white/[0.06] bg-[#030304] px-6 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
             <div>Type</div>
             <div>Token</div>
             <div>Amount</div>

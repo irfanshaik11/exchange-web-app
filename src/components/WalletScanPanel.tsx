@@ -1291,7 +1291,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        background: "#0c0e12",
+                        background: "#030304",
                       }}
                     >
                       <tr className="border-b border-white/[0.06]">
@@ -1387,20 +1387,20 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             <td className="px-4 py-2.5 text-right tabular-nums text-[#d4d4d8]">
                               {soldDisplay}
                             </td>
-                            <td
-                              className="px-4 py-2.5 text-right"
-                              style={{
-                                background: pnlHeat(order.pnl / maxAbsClosedPnl).background,
-                              }}
-                            >
-                              <div className="flex flex-col items-end">
-                                <div
-                                  className="font-semibold tabular-nums"
-                                  style={{ color: pnlColor(order.pnl) }}
+                            <td className="px-4 py-2.5 text-right">
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span
+                                  className="inline-flex items-center rounded-md px-2 py-0.5 font-semibold tabular-nums"
+                                  style={{
+                                    color: pnlColor(order.pnl),
+                                    backgroundColor: pnlHeat(
+                                      order.pnl / maxAbsClosedPnl,
+                                    ).background,
+                                  }}
                                 >
                                   {pnlDisplay}
-                                </div>
-                                <div
+                                </span>
+                                <span
                                   className="text-xs tabular-nums"
                                   style={{
                                     color:
@@ -1410,7 +1410,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                   }}
                                 >
                                   {pnlPercentageDisplay}
-                                </div>
+                                </span>
                               </div>
                             </td>
                             {/* <td className="px-4 py-3 text-center">
@@ -1466,7 +1466,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        background: "#0c0e12",
+                        background: "#030304",
                       }}
                     >
                       <tr className="border-b border-white/[0.06]">
@@ -1599,20 +1599,18 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 </span>
                               </div>
                             </td>
-                            <td
-                              className="px-4 py-2.5 text-right"
-                              style={{
-                                background: isAirdrop
-                                  ? undefined
-                                  : pnlHeat(position.pnlPercentage / 200).background,
-                              }}
-                            >
+                            <td className="px-4 py-2.5 text-right">
                               {isAirdrop ? (
                                 <span className="text-sm text-[#52525b]">—</span>
                               ) : (
                                 <span
-                                  className="font-semibold tabular-nums"
-                                  style={{ color: pnlColor(position.pnlPercentage) }}
+                                  className="inline-flex items-center rounded-md px-2 py-0.5 font-semibold tabular-nums"
+                                  style={{
+                                    color: pnlColor(position.pnlPercentage),
+                                    backgroundColor: pnlHeat(
+                                      position.pnlPercentage / 200,
+                                    ).background,
+                                  }}
                                 >
                                   {position.pnlPercentage >= 0 ? "+" : ""}
                                   {position.pnlPercentage.toFixed(1)}%
@@ -1678,7 +1676,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        background: "#0c0e12",
+                        background: "#030304",
                       }}
                     >
                       <tr className="border-b border-white/[0.06]">
@@ -1794,20 +1792,18 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 </div>
                               )}
                             </td>
-                            <td
-                              className="px-4 py-2.5 text-right"
-                              style={{
-                                background: isAirdrop
-                                  ? undefined
-                                  : pnlHeat(position.pnlPercentage / 200).background,
-                              }}
-                            >
+                            <td className="px-4 py-2.5 text-right">
                               {isAirdrop ? (
                                 <span className="text-sm text-[#52525b]">—</span>
                               ) : (
                                 <span
-                                  className="font-semibold tabular-nums"
-                                  style={{ color: pnlColor(position.pnlPercentage) }}
+                                  className="inline-flex items-center rounded-md px-2 py-0.5 font-semibold tabular-nums"
+                                  style={{
+                                    color: pnlColor(position.pnlPercentage),
+                                    backgroundColor: pnlHeat(
+                                      position.pnlPercentage / 200,
+                                    ).background,
+                                  }}
                                 >
                                   {position.pnlPercentage >= 0 ? "+" : ""}
                                   {position.pnlPercentage.toFixed(1)}%
@@ -1903,7 +1899,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        background: "#0c0e12",
+                        background: "#030304",
                       }}
                     >
                       <tr className="border-b border-white/[0.06]">
