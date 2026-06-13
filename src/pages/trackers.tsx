@@ -166,9 +166,8 @@ function KolAvatar({
   handle: string;
   address?: string;
 }) {
-  // Multi-stage src: local kolscan backfill /kol-avatars/{address}.png -> live
-  // kolscan CDN -> old handle-based file -> colored initial. kolscan is keyed
-  // by address (no handle needed) and isn't rate-limited.
+  // LOCAL-ONLY fallback (no network on refresh; kolscan avatars pre-backfilled):
+  // /kol-avatars/{address}.png -> old handle file /kol-avatars/{handle}.jpg -> initial.
   const [stage, setStage] = useState(0);
   const raw = (name.trim().charAt(0) ||
     handle.trim().charAt(0) ||
@@ -178,11 +177,9 @@ function KolAvatar({
   const src =
     stage === 0 && address
       ? `/kol-avatars/${address}.png`
-      : stage <= 1 && address
-        ? `https://cdn.kolscan.io/profiles/${address}.png`
-        : stage <= 2 && handle
-          ? `/kol-avatars/${handle}.jpg`
-          : null;
+      : stage <= 1 && handle
+        ? `/kol-avatars/${handle}.jpg`
+        : null;
 
   if (!src) {
     return (

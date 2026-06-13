@@ -3,12 +3,11 @@ import { KOL_ADDRESS_MAP } from "~/utils/kolLookup";
 
 /**
  * KOL profile-pic circle, keyed by wallet address. Renders nothing for
- * non-KOL wallets. Multi-stage src fallback so it's never a broken image:
+ * non-KOL wallets. LOCAL-ONLY fallback so a refresh never hits the network
+ * (all kolscan avatars are pre-backfilled to local immutable files):
  *   0) local kolscan backfill  /kol-avatars/{address}.png
- *   1) live kolscan CDN         https://cdn.kolscan.io/profiles/{address}.png
- *   2) old handle-based file    /kol-avatars/{handle}.jpg (kol.avatarUrl)
- *   3) colored initial          (label + hexColor from kolLookup)
- * kolscan is keyed by address (no twitter handle needed) and isn't rate-limited.
+ *   1) old handle-based file    /kol-avatars/{handle}.jpg (kol.avatarUrl)
+ *   2) colored initial          (label + hexColor from kolLookup)
  * Shared by WalletRow (Wallet Manager list) and the wallet-scan header.
  */
 export const KolDpCircle: React.FC<{
@@ -23,11 +22,9 @@ export const KolDpCircle: React.FC<{
   const src =
     stage === 0
       ? `/kol-avatars/${address}.png`
-      : stage === 1
-        ? `https://cdn.kolscan.io/profiles/${address}.png`
-        : stage === 2 && kol.avatarUrl
-          ? kol.avatarUrl
-          : null;
+      : stage === 1 && kol.avatarUrl
+        ? kol.avatarUrl
+        : null;
   const dim = { width: size, height: size };
   if (!src) {
     return (
