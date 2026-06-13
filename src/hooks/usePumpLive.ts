@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from "react";
 
 export interface PumpLiveToken {
   mint: string;
@@ -47,7 +47,7 @@ interface UsePumpLiveReturn {
 }
 
 const API_URL = `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pump/live`;
-const CACHE_KEY = 'pump_live_tokens';
+const CACHE_KEY = "pump_live_tokens";
 const CACHE_TTL = 30 * 1000; // 30 seconds
 
 /**
@@ -55,7 +55,7 @@ const CACHE_TTL = 30 * 1000; // 30 seconds
  * Returns tokens sorted by created_timestamp (newest first)
  */
 export function usePumpLive(
-  options: UsePumpLiveOptions = {}
+  options: UsePumpLiveOptions = {},
 ): UsePumpLiveReturn {
   const {
     enabled = true,
@@ -70,6 +70,10 @@ export function usePumpLive(
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Once we have data (from cache or a successful fetch), background polls must
+  // NOT flip `loading` true again — otherwise the grid shows a "Refreshing…"
+  // spinner / skeleton on every 10s poll, which reads as a constant refresh.
+  const hasLoadedRef = useRef(false);
 
   // Load cached tokens on mount
   useEffect(() => {
@@ -78,13 +82,18 @@ export function usePumpLive(
       if (cached) {
         const { tokens: cachedTokens, timestamp } = JSON.parse(cached);
         const age = Date.now() - timestamp;
-        if (age < CACHE_TTL && Array.isArray(cachedTokens) && cachedTokens.length > 0) {
+        if (
+          age < CACHE_TTL &&
+          Array.isArray(cachedTokens) &&
+          cachedTokens.length > 0
+        ) {
           setTokens(cachedTokens);
           setLastUpdated(new Date(timestamp));
+          hasLoadedRef.current = true;
         }
       }
     } catch (err) {
-      console.warn('[usePumpLive] Failed to load cache:', err);
+      console.warn("[usePumpLive] Failed to load cache:", err);
     }
   }, []);
 
@@ -97,14 +106,18 @@ export function usePumpLive(
     }
     abortControllerRef.current = new AbortController();
 
+    // Only surface the loading state on the very first load (no data yet).
+    // Background refreshes update silently so the grid never flashes.
+    const isInitialLoad = !hasLoadedRef.current;
+
     try {
-      setLoading(true);
+      if (isInitialLoad) setLoading(true);
       setError(null);
 
       const response = await fetch(API_URL, {
         signal: abortControllerRef.current.signal,
         headers: {
-          'Accept': 'application/json',
+          Accept: "application/json",
         },
       });
 
@@ -114,32 +127,38 @@ export function usePumpLive(
 
       const data: PumpLiveToken[] = await response.json();
 
-      // Sort by created_timestamp descending (newest first) and limit
-      const sorted = data
+      // Drop malformed entries (no mint): they render as broken "Unknown"
+      // cards and, worse, can collide on the React key. Sort by
+      // created_timestamp descending (newest first) and limit.
+      const sorted = (Array.isArray(data) ? data : [])
+        .filter((t) => t && t.mint)
         .sort((a, b) => (b.created_timestamp || 0) - (a.created_timestamp || 0))
         .slice(0, limit);
 
       setTokens(sorted);
+      hasLoadedRef.current = true;
       setLastUpdated(new Date());
 
       // Cache the tokens
       try {
-        sessionStorage.setItem(CACHE_KEY, JSON.stringify({
-          tokens: sorted,
-          timestamp: Date.now(),
-        }));
+        sessionStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({
+            tokens: sorted,
+            timestamp: Date.now(),
+          }),
+        );
       } catch (cacheErr) {
-        console.warn('[usePumpLive] Failed to cache tokens:', cacheErr);
+        console.warn("[usePumpLive] Failed to cache tokens:", cacheErr);
       }
-
     } catch (err: any) {
-      if (err.name === 'AbortError') {
+      if (err.name === "AbortError") {
         return; // Request was cancelled, not an error
       }
-      console.error('[usePumpLive] Fetch error:', err);
-      setError(err.message || 'Failed to fetch pump live tokens');
+      console.error("[usePumpLive] Fetch error:", err);
+      setError(err.message || "Failed to fetch pump live tokens");
     } finally {
-      setLoading(false);
+      if (isInitialLoad) setLoading(false);
     }
   }, [enabled, limit]);
 
