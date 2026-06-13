@@ -1097,16 +1097,9 @@ function updateTokenInArray(arr, mint, update) {
     bundle_percent: token.bundle_percent,
     bundled_percentage: token.bundled_percentage,
     bundler_held_percentage: token.bundler_held_percentage,
-    // Sniper IS still sourced from price_update: metrics_update does not carry it
-    // (sniper % is a launch-window property), so price/snapshot remain its source.
-    sniper_percent: keepIfPositive(
-      update.sniper_percent ?? update.sniper_held_percentage,
-      token.sniper_percent,
-    ),
-    sniper_held_percentage: keepIfPositive(
-      update.sniper_held_percentage ?? update.sniper_percent,
-      token.sniper_held_percentage,
-    ),
+    // Sniper % now owned by metrics_update (accurate); don't let price clobber it.
+    sniper_percent: token.sniper_percent,
+    sniper_held_percentage: token.sniper_held_percentage,
     total_snipers: keepIfPositive(update.total_snipers, token.total_snipers),
 
     // Bonding curve (NOT sent by price_update, keep existing)
@@ -1188,8 +1181,9 @@ function handleTokenInfoUpdate(update) {
 // keepIfPositive semantics: only overwrite when the incoming value is > 0. This is
 // the same rule handlePriceUpdate already uses for these percentage fields and it
 // prevents an early/partial metrics_update (which can carry 0 before the indexer has
-// finished computing) from blanking a value we already resolved. Sniper % is NOT in
-// the metrics_update payload, so it is intentionally left untouched here.
+// finished computing) from blanking a value we already resolved. Sniper % is now
+// sourced from metrics_update too (backend added the accurate value); price_update
+// no longer writes it.
 function handleMetricsUpdate(update) {
   const mint = update.mint_address || update.mint || update.address;
   if (!mint) return;
@@ -1204,6 +1198,7 @@ function handleMetricsUpdate(update) {
   const dev = num(update.dev_percent ?? update.dev_held_percentage);
   const insider = num(update.insider_percent ?? update.insider_held_percentage);
   const bundle = num(update.bundle_percent ?? update.bundled_percentage);
+  const sniper = num(update.sniper_percent ?? update.sniper_held_percentage);
   const holderCount = num(update.holder_count);
 
   const applyAndSendDelta = (arr) => {
@@ -1227,6 +1222,8 @@ function handleMetricsUpdate(update) {
         bundle,
         token.bundler_held_percentage,
       ),
+      sniper_percent: keepIfPositive(sniper, token.sniper_percent),
+      sniper_held_percentage: keepIfPositive(sniper, token.sniper_held_percentage),
       holder_count: keepIfPositive(holderCount, token.holder_count),
       holders: keepIfPositive(holderCount, token.holders),
     };

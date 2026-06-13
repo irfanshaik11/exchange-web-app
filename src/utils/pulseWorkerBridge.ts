@@ -1212,9 +1212,9 @@ function handlePriceUpdate(updates: any[]) {
           bundle_percent: token.bundle_percent,
           bundled_percentage: token.bundled_percentage,
           bundler_held_percentage: token.bundler_held_percentage,
-          // Sniper IS still sourced from price_update (metrics_update doesn't carry it).
-          sniper_percent: keepIfPositive(update.sniper_percent ?? update.sniper_held_percentage, token.sniper_percent),
-          sniper_held_percentage: keepIfPositive(update.sniper_held_percentage ?? update.sniper_percent, token.sniper_held_percentage),
+          // Sniper % now owned by metrics_update (accurate); don't let price clobber it.
+          sniper_percent: token.sniper_percent,
+          sniper_held_percentage: token.sniper_held_percentage,
           total_snipers: keepIfPositive(update.total_snipers, token.total_snipers),
 
           // Bonding curve (ALL format variants)
@@ -1286,7 +1286,8 @@ function handleTokenInfoUpdate(update: any) {
 // metrics_update (fallback path): authoritative holder-analysis stats
 // (top10/dev/insider/bundle/holder_count) recomputed by the indexer. Mirrors the
 // worker's handleMetricsUpdate. keepIfPositive so an early/partial zero can't blank
-// a resolved value. Sniper is not in this payload (kept on the price path).
+// a resolved value. Sniper is now in this payload too (backend added it); price no
+// longer writes it.
 function handleMetricsUpdate(update: any) {
   const mint = update.mint_address || update.mint || update.address;
   if (!mint) return;
@@ -1301,6 +1302,7 @@ function handleMetricsUpdate(update: any) {
   const dev = num(update.dev_percent ?? update.dev_held_percentage);
   const insider = num(update.insider_percent ?? update.insider_held_percentage);
   const bundle = num(update.bundle_percent ?? update.bundled_percentage);
+  const sniper = num(update.sniper_percent ?? update.sniper_held_percentage);
   const holderCount = num(update.holder_count);
 
   const newData = { ...currentData };
@@ -1322,6 +1324,8 @@ function handleMetricsUpdate(update: any) {
       bundle_percent: keepPos(bundle, token.bundle_percent),
       bundled_percentage: keepPos(bundle, token.bundled_percentage),
       bundler_held_percentage: keepPos(bundle, token.bundler_held_percentage),
+      sniper_percent: keepPos(sniper, token.sniper_percent),
+      sniper_held_percentage: keepPos(sniper, token.sniper_held_percentage),
       holder_count: keepPos(holderCount, token.holder_count),
       holders: keepPos(holderCount, token.holders),
     };
