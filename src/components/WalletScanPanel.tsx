@@ -900,8 +900,37 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       className="h-[calc(100vh-120px)] w-[90%] bg-transparent p-0 shadow-none md:w-[80%]"
     >
       <div className="relative flex h-[calc(100vh-120px)] w-full flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-[#030304]">
+        {/* Atmospheric layer — matches the Trackers page: faint brand-green
+            tech-grid + top-center glow + light-beam. Single static paint,
+            pointer-events-none, no blur/shadow/animation (~0 CPU). */}
+        <div
+          className="pointer-events-none absolute inset-0 z-0 rounded-xl"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(24,196,140,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(24,196,140,0.035) 1px,transparent 1px)",
+            backgroundSize: "34px 34px",
+            maskImage:
+              "radial-gradient(ellipse 80% 50% at 50% 0%, #000 0%, transparent 70%)",
+            WebkitMaskImage:
+              "radial-gradient(ellipse 80% 50% at 50% 0%, #000 0%, transparent 70%)",
+          }}
+        />
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-0 h-44"
+          style={{
+            background:
+              "radial-gradient(ellipse 55% 100% at 50% 0%, rgba(24,196,140,0.10), transparent 72%)",
+          }}
+        />
+        <div
+          className="pointer-events-none absolute top-0 left-1/2 z-0 h-px w-[70%] -translate-x-1/2"
+          style={{
+            background:
+              "linear-gradient(90deg, transparent, rgba(127,255,201,0.55) 50%, transparent)",
+          }}
+        />
         {/* Header — slim identity row + time-range pills + close */}
-        <div className="relative flex flex-shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-3">
+        <div className="relative z-10 flex flex-shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-[#0c0e12] text-sm">
               👛
@@ -945,7 +974,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               tokenLoading ? null : tokenBalanceError ? (
                 <>
                   <span className="text-white/10">|</span>
-                  <span className="text-[#ef4444]">Error</span>
+                  <span className="text-[#F0616D]">Error</span>
                 </>
               ) : tokenBalance !== null && token ? (
                 <>
@@ -985,7 +1014,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         </div>
         {/* Main Content — scrolls as a whole so nothing is clipped on short
             viewports / mobile (cards + tabs + tab content share one scroll). */}
-        <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="relative z-10 flex flex-1 flex-col overflow-y-auto">
           {/* Top: Balance, PNL, Performance — go side-by-side at md so they're a
               compact row on desktop instead of a tall stack that clips. */}
           <div className="grid flex-shrink-0 grid-cols-1 gap-3 px-5 pt-4 pb-3 md:grid-cols-3">
@@ -1057,7 +1086,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     </span>
                   </div>
                 ) : (
-                  <span className="text-xs text-[#ef4444]">No balance</span>
+                  <span className="text-xs text-[#F0616D]">No balance</span>
                 )}
               </div>
             </ScanCard>
@@ -1158,31 +1187,51 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 <WinLossBar winPercentage={performanceMetrics.progressPercentage} />
               </div>
               <div className="mt-3 flex flex-col gap-1.5 border-t border-white/[0.06] pt-3">
-                <DistributionRow
-                  dotColor="#18c48c"
-                  label=">500%"
-                  count={performanceMetrics.categoryCounts.over500}
-                />
-                <DistributionRow
-                  dotColor="#3fcf8e"
-                  label="200% ~ 500%"
-                  count={performanceMetrics.categoryCounts.twoHundredTo500}
-                />
-                <DistributionRow
-                  dotColor="#86efac"
-                  label="0% ~ 200%"
-                  count={performanceMetrics.categoryCounts.zeroTo200}
-                />
-                <DistributionRow
-                  dotColor="#fb7185"
-                  label="0% ~ -50%"
-                  count={performanceMetrics.categoryCounts.zeroToNeg50}
-                />
-                <DistributionRow
-                  dotColor="#ef4444"
-                  label="< -50%"
-                  count={performanceMetrics.categoryCounts.underNeg50}
-                />
+                {(() => {
+                  const c = performanceMetrics.categoryCounts;
+                  const catMax = Math.max(
+                    c.over500,
+                    c.twoHundredTo500,
+                    c.zeroTo200,
+                    c.zeroToNeg50,
+                    c.underNeg50,
+                    1,
+                  );
+                  return (
+                    <>
+                      <DistributionRow
+                        dotColor="#18c48c"
+                        label=">500%"
+                        count={c.over500}
+                        maxCount={catMax}
+                      />
+                      <DistributionRow
+                        dotColor="#3fcf8e"
+                        label="200% ~ 500%"
+                        count={c.twoHundredTo500}
+                        maxCount={catMax}
+                      />
+                      <DistributionRow
+                        dotColor="#86efac"
+                        label="0% ~ 200%"
+                        count={c.zeroTo200}
+                        maxCount={catMax}
+                      />
+                      <DistributionRow
+                        dotColor="#fb7185"
+                        label="0% ~ -50%"
+                        count={c.zeroToNeg50}
+                        maxCount={catMax}
+                      />
+                      <DistributionRow
+                        dotColor="#F0616D"
+                        label="< -50%"
+                        count={c.underNeg50}
+                        maxCount={catMax}
+                      />
+                    </>
+                  );
+                })()}
               </div>
             </ScanCard>
           </div>
@@ -1227,7 +1276,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   </div>
                 ) : goError ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-[#ef4444]">{goError}</div>
+                    <div className="text-[#F0616D]">{goError}</div>
                   </div>
                 ) : closedOrders.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
@@ -1399,7 +1448,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   </div>
                 ) : goError && aggregatedPositions.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="max-w-sm text-center text-xs text-[#ef4444]">
+                    <div className="max-w-sm text-center text-xs text-[#F0616D]">
                       Positions are temporarily unavailable for this wallet —
                       the history is too large for the current query and it
                       timed out. The Activity tab still works; try again in a
@@ -1580,7 +1629,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                     color:
                                       position.totalPnl >= 0
                                         ? "#18c48c"
-                                        : "#ef4444",
+                                        : "#F0616D",
                                   }}
                                 >
                                   {position.totalPnl >= 0 ? "+" : ""}$
@@ -1775,7 +1824,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                     color:
                                       position.totalPnl >= 0
                                         ? "#18c48c"
-                                        : "#ef4444",
+                                        : "#F0616D",
                                   }}
                                 >
                                   {position.totalPnl >= 0 ? "+" : ""}$
@@ -1817,7 +1866,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   </div>
                 ) : goError ? (
                   <div className="flex h-full items-center justify-center">
-                    <div className="text-[#ef4444]">{goError}</div>
+                    <div className="text-[#F0616D]">{goError}</div>
                   </div>
                 ) : activityData.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
@@ -1936,7 +1985,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               {isMigrated ? (
                                 <span className="text-[#18c48c]">✓</span>
                               ) : (
-                                <span className="text-[#ef4444]">
+                                <span className="text-[#F0616D]">
                                   <IoIosCloseCircleOutline size={16} />
                                 </span>
                               )}

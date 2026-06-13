@@ -43,23 +43,40 @@ export const ScanCard: React.FC<{
   </div>
 );
 
-/** A single labelled distribution row with a colored dot and a right count. */
+/**
+ * A single labelled distribution row: colored dot + label + a horizontal
+ * magnitude bar (width ∝ count / maxCount) + the count. The bar makes the
+ * buckets read as a comparison, not a bare list (matches the design comp).
+ */
 export const DistributionRow: React.FC<{
   dotColor: string;
   label: string;
   count: number;
-}> = ({ dotColor, label, count }) => (
-  <div className="flex items-center justify-between text-xs">
-    <div className="flex items-center gap-2">
+  maxCount?: number;
+}> = ({ dotColor, label, count, maxCount }) => {
+  const pct =
+    maxCount && maxCount > 0
+      ? Math.max(count > 0 ? 5 : 0, (count / maxCount) * 100)
+      : 0;
+  return (
+    <div className="flex items-center gap-2.5 text-xs">
       <span
         className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
         style={{ backgroundColor: dotColor }}
       />
-      <span className="text-[#71717a]">{label}</span>
+      <span className="w-[72px] flex-shrink-0 text-[#71717a]">{label}</span>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.05]">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${pct}%`, backgroundColor: dotColor }}
+        />
+      </div>
+      <span className="w-7 flex-shrink-0 text-right tabular-nums text-[#a1a1aa]">
+        {count}
+      </span>
     </div>
-    <span className="tabular-nums text-[#a1a1aa]">{count}</span>
-  </div>
-);
+  );
+};
 
 /**
  * Canonical token avatar for every wallet-scan tab — the portfolio convention

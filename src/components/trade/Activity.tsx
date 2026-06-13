@@ -605,7 +605,7 @@ const Activity: React.FC<ActivityProps> = ({
               return (
                 <div
                   key={trade.id || idx}
-                  className="grid gap-4 px-6 py-3 border-b border-white/[0.06] hover:bg-white/[0.04] transition-colors cursor-pointer"
+                  className="grid gap-4 mb-1.5 rounded-lg border border-white/[0.06] bg-white/[0.015] px-6 py-2.5 hover:border-white/[0.12] hover:bg-white/[0.04] cursor-pointer"
                   style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}
                   onMouseEnter={() => {
                     if (!trade.tokenAddress) return;
@@ -640,12 +640,13 @@ const Activity: React.FC<ActivityProps> = ({
                   onClick={handleRowClick}
                 >
                   <div className="flex items-center">
-                    <span 
-                      className={`px-2 py-1 rounded text-xs font-medium ${
-                        trade.type === 'Buy' 
-                          ? 'bg-emerald-500/20 text-emerald-400' 
-                          : 'bg-red-500/20 text-red-400'
-                      }`}
+                    <span
+                      className="rounded-full border px-2.5 py-0.5 text-xs font-semibold"
+                      style={
+                        trade.type === 'Buy'
+                          ? { color: '#18c48c', borderColor: 'rgba(24,196,140,0.4)', backgroundColor: 'rgba(24,196,140,0.08)' }
+                          : { color: '#F0616D', borderColor: 'rgba(240,97,109,0.4)', backgroundColor: 'rgba(240,97,109,0.08)' }
+                      }
                     >
                       {trade.type}
                     </span>
@@ -732,10 +733,10 @@ const Activity: React.FC<ActivityProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()} // Prevent row click
-                        className="flex items-center gap-1 text-[#70E0B0] hover:text-[#58B890] transition-colors text-xs"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.12] bg-white/[0.03] px-2.5 py-1 text-[11px] text-[#a1a1aa] hover:border-[#18c48c]/40 hover:text-[#18c48c]"
                       >
                         <span>View</span>
-                        <FaExternalLinkAlt className="text-xs" />
+                        <FaExternalLinkAlt className="text-[9px]" />
                       </a>
                     ) : (
                       <span className="text-xs text-neutral-500">N/A</span>
