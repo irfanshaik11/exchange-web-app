@@ -38,7 +38,11 @@ yarn-error.log*
 .env.local
 .env.development
 .env.test
-.env.production
+# .env.production is COMMITTED on purpose: it contains only NEXT_PUBLIC_*
+# values (baked into the public client bundle — not secrets) and is required
+# by Cloudflare Workers Builds at build time. Real secrets stay in worker
+# runtime secrets and are never committed.
+!.env.production
 .env.staging
 .env*.local
 .env*.development
