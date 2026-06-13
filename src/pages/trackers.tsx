@@ -2761,7 +2761,7 @@ export default function TrackersPage() {
                                         <input
                                           type="text"
                                           placeholder="Search by address"
-                                          className="w-full rounded-md border border-white/[0.06] bg-[#08090c] px-4 py-2 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#080a0d]/80 focus: focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                          className="w-full rounded-md border border-white/[0.06] bg-[#08090c] px-4 py-2 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#0c0e12] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                           disabled={false}
                                           value={searchTerm}
                                           onChange={(e) =>
@@ -2798,7 +2798,7 @@ export default function TrackersPage() {
 
                                             {/* Icon buttons - hide some on mobile */}
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-[#08090c] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -2835,13 +2835,13 @@ export default function TrackersPage() {
                                               />
                                             </button>
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-[#08090c] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-[#08090c] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -2859,7 +2859,7 @@ export default function TrackersPage() {
                                     <input
                                       type="text"
                                       placeholder="Search by name, @handle, or wallet"
-                                      className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                      className="w-full rounded-lg border border-white/[0.06] bg-[#08090c] px-4 py-2 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-[#0c0e12] focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                       value={kolSearchTerm}
                                       onChange={(e) =>
                                         setKolSearchTerm(e.target.value)
@@ -3393,7 +3393,7 @@ export default function TrackersPage() {
                                           e.target.value,
                                         )
                                       }
-                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus: focus:outline-none sm:text-xs"
+                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -3686,7 +3686,7 @@ export default function TrackersPage() {
                                       onChange={(e) =>
                                         setApprovedHandlesSearch(e.target.value)
                                       }
-                                      className="w-full flex-1 rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus: focus:outline-none sm:text-xs"
+                                      className="w-full flex-1 rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">

@@ -9,6 +9,8 @@ import { getWalletSolBalance } from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
 import PnlCalendar from "./PnlCalendar";
+import { Sparkline } from "./MicroChart";
+import { pnlColor } from "~/utils/trackersTheme";
 import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
 import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
@@ -978,34 +980,43 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           {/* Top: Balance, PNL, Performance — go side-by-side at md so they're a
               compact row on desktop instead of a tall stack that clips. */}
           <div className="grid flex-shrink-0 grid-cols-1 gap-3 px-5 pt-4 pb-3 md:grid-cols-3">
-            {/* Balance card */}
-            <ScanCard label="Balance">
-              <div className="text-[10px] uppercase tracking-wide text-[#52525b]">
-                Total Value
-              </div>
-              {loading ? (
-                <span className="mt-1 animate-pulse text-sm text-[#52525b]">
-                  Loading…
-                </span>
-              ) : (
-                <div className="mt-0.5 text-2xl font-semibold tabular-nums text-[#f4f4f5]">
-                  ${formatSmartNumber(portfolioMetrics.totalValue)}
+            {/* Balance card — hero total value + cumulative-PnL sparkline */}
+            <ScanCard label="Portfolio">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-[0.08em] text-[#52525b]">
+                    Total Value
+                  </div>
+                  {loading ? (
+                    <span className="mt-1 block text-sm text-[#52525b]">Loading…</span>
+                  ) : (
+                    <div className="mt-1 text-3xl font-bold tracking-tight tabular-nums text-[#f4f4f5]">
+                      ${formatSmartNumber(portfolioMetrics.totalValue)}
+                    </div>
+                  )}
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wide text-[#52525b]">
+                      Unrealized
+                    </span>
+                    <span
+                      className="text-[13px] font-semibold tabular-nums"
+                      style={{ color: pnlColor(portfolioMetrics.unrealizedPnl) }}
+                    >
+                      {portfolioMetrics.unrealizedPnl >= 0 ? "+" : "-"}$
+                      {formatSmartNumber(Math.abs(portfolioMetrics.unrealizedPnl))}
+                    </span>
+                  </div>
                 </div>
-              )}
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-[10px] uppercase tracking-wide text-[#52525b]">
-                  Unrealized PnL
-                </span>
-                <span
-                  className="text-sm font-semibold tabular-nums"
-                  style={{
-                    color:
-                      portfolioMetrics.unrealizedPnl >= 0 ? "#18c48c" : "#ef4444",
-                  }}
-                >
-                  {portfolioMetrics.unrealizedPnl >= 0 ? "+" : "-"}$
-                  {formatSmartNumber(Math.abs(portfolioMetrics.unrealizedPnl))}
-                </span>
+                {pnlChartData.length > 1 && (
+                  <div className="flex-shrink-0 pt-3">
+                    <Sparkline
+                      values={pnlChartData.map((p) => p.cumulativePnl)}
+                      width={88}
+                      height={38}
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                )}
               </div>
               <div className="my-3 h-px w-full bg-white/[0.06]" />
               <div className="flex items-center justify-between">
@@ -1055,25 +1066,29 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 </>
               }
             >
-              <div
-                className="text-2xl font-semibold tabular-nums"
-                style={{
-                  color:
-                    performanceMetrics.totalPnl >= 0 ? "#18c48c" : "#ef4444",
-                }}
-              >
-                {performanceMetrics.totalPnl >= 0 ? "+" : "-"}$
-                {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
-              </div>
-              <div
-                className="text-xs font-medium tabular-nums"
-                style={{
-                  color:
-                    realizedPnlPercentage >= 0 ? "#18c48c" : "#ef4444",
-                }}
-              >
-                {realizedPnlPercentage >= 0 ? "+" : ""}
-                {realizedPnlPercentage.toFixed(2)}%
+              <div className="flex items-baseline gap-2">
+                {performanceMetrics.totalPnl >= 0 ? (
+                  <span
+                    className="bg-clip-text text-3xl font-bold tracking-tight tabular-nums text-transparent"
+                    style={{ backgroundImage: "linear-gradient(90deg,#7FFFC9,#18c48c)" }}
+                  >
+                    +${formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
+                  </span>
+                ) : (
+                  <span
+                    className="text-3xl font-bold tracking-tight tabular-nums"
+                    style={{ color: "#F0616D" }}
+                  >
+                    -${formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
+                  </span>
+                )}
+                <span
+                  className="text-[13px] font-semibold tabular-nums"
+                  style={{ color: pnlColor(realizedPnlPercentage) }}
+                >
+                  {realizedPnlPercentage >= 0 ? "+" : ""}
+                  {realizedPnlPercentage.toFixed(2)}%
+                </span>
               </div>
               <div className="mt-2 h-[100px] w-full sm:h-[150px]">
                 {positionsLoading ? (
@@ -1105,29 +1120,33 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             >
               <div className="flex items-end justify-between">
                 <div className="flex flex-col">
-                  <span className="text-[10px] uppercase tracking-wide text-[#52525b]">
-                    {selectedRange === "Max" ? "Total PNL" : `${selectedRange} PNL`}
+                  <span className="text-[10px] uppercase tracking-[0.08em] text-[#52525b]">
+                    Win Rate
                   </span>
                   <span
-                    className="text-xl font-semibold tabular-nums"
+                    className="text-3xl font-bold tracking-tight tabular-nums"
                     style={{
                       color:
-                        performanceMetrics.totalPnl >= 0 ? "#18c48c" : "#ef4444",
+                        performanceMetrics.progressPercentage >= 50
+                          ? "#18c48c"
+                          : "#a1a1aa",
                     }}
                   >
-                    {performanceMetrics.totalPnl >= 0 ? "+" : "-"}$
-                    {formatSmartNumber(Math.abs(performanceMetrics.totalPnl))}
+                    {performanceMetrics.progressPercentage.toFixed(0)}%
                   </span>
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] uppercase tracking-wide text-[#52525b]">
+                  <span className="text-[10px] uppercase tracking-[0.08em] text-[#52525b]">
                     {selectedRange === "Max" ? "Total TXNS" : `${selectedRange} TXNS`}
                   </span>
-                  <span className="text-sm font-semibold tabular-nums text-[#f4f4f5]">
+                  <span className="text-[13px] font-semibold tabular-nums text-[#f4f4f5]">
                     {performanceMetrics.completedTransactions} /{" "}
                     {performanceMetrics.totalTransactions}
                   </span>
                 </div>
+              </div>
+              <div className="mt-3">
+                <WinLossBar winPercentage={performanceMetrics.progressPercentage} />
               </div>
               <div className="mt-3 flex flex-col gap-1.5 border-t border-white/[0.06] pt-3">
                 <DistributionRow
@@ -1154,11 +1173,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   dotColor="#ef4444"
                   label="< -50%"
                   count={performanceMetrics.categoryCounts.underNeg50}
-                />
-              </div>
-              <div className="mt-3">
-                <WinLossBar
-                  winPercentage={performanceMetrics.progressPercentage}
                 />
               </div>
             </ScanCard>
