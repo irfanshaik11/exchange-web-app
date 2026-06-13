@@ -496,7 +496,7 @@ export default function MonitorPanel({
           return (
             <div
               key={token.mint}
-              className="@container flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] hover:border-white/[0.1]"
+              className="@container relative flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] pb-12 hover:border-white/[0.1]"
             >
               {/* HEADER ROW */}
               <div className="flex items-start gap-3 px-3.5 py-3.5">
@@ -624,19 +624,6 @@ export default function MonitorPanel({
                       rounded={1}
                     />
                   )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onQuickBuy(token.lastTrade);
-                    }}
-                    className="flex cursor-pointer items-center gap-1 rounded-full border border-[#18c48c]/20 bg-[#18c48c]/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-[#18c48c] hover:bg-[#18c48c]/20"
-                    title={`Quick buy ${quickBuyAmount} SOL`}
-                  >
-                    <HiLightningBolt className="h-3 w-3" />
-                    <span>{quickBuyAmount}</span>
-                  </button>
                 </div>
               </div>
 
@@ -808,6 +795,33 @@ export default function MonitorPanel({
                   </tbody>
                 </table>
               </div>
+
+              {/* Quick buy — square button pinned to the card's bottom-right.
+                  Same color/style as the Trending (Pulse) page buy button:
+                  dark #1a1b1f surface, #86efac green, inverts on hover. The
+                  card's pb-12 reserves space so this never overlaps the table. */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onQuickBuy(token.lastTrade);
+                }}
+                className="absolute right-2.5 bottom-2.5 z-10 flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold tabular-nums"
+                style={{ backgroundColor: "#1a1b1f", color: "#86efac" }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#86efac";
+                  e.currentTarget.style.color = "#000000";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "#1a1b1f";
+                  e.currentTarget.style.color = "#86efac";
+                }}
+                title={`Quick buy ${quickBuyAmount} SOL`}
+              >
+                <HiLightningBolt className="h-3.5 w-3.5" style={{ color: "inherit" }} />
+                <span>{quickBuyAmount}</span>
+              </button>
             </div>
           );
         })}
