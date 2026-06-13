@@ -853,11 +853,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         zIndex={99999}
         className="h-auto w-[90%] bg-transparent p-0 shadow-none md:w-[480px]"
       >
-        <div className="relative flex w-full flex-col items-center gap-3 rounded-xl border border-white/[0.06] bg-[#030304] px-6 py-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
+        <div className="relative flex w-full flex-col items-center gap-3 rounded-xl border border-white/[0.06] bg-[#030304] px-6 py-8 text-center">
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 rounded p-1 text-[#71717a] transition-colors hover:bg-white/[0.06] hover:text-[#a1a1aa]"
+            className="absolute top-3 right-3 rounded p-1 text-[#71717a] hover:bg-white/[0.06] hover:text-[#a1a1aa]"
             aria-label="Close"
           >
             <IoIosCloseCircleOutline className="h-5 w-5" />
@@ -888,7 +888,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       zIndex={99999}
       className="h-[calc(100vh-120px)] w-[90%] bg-transparent p-0 shadow-none md:w-[80%]"
     >
-      <div className="relative flex h-[calc(100vh-120px)] w-full flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-[#030304] shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
+      <div className="relative flex h-[calc(100vh-120px)] w-full flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-[#030304]">
         {/* Header — slim identity row + time-range pills + close */}
         <div className="relative flex flex-shrink-0 items-center justify-between gap-4 border-b border-white/[0.06] px-5 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -905,7 +905,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
                 : wallet.address || "—"}
               <button
-                className="rounded p-1 text-[#52525b] transition-colors hover:bg-white/[0.06] hover:text-[#a1a1aa]"
+                className="rounded p-1 text-[#52525b] hover:bg-white/[0.06] hover:text-[#a1a1aa]"
                 onClick={handleCopy}
                 title="Copy address"
                 type="button"
@@ -917,7 +917,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 )}
               </button>
               <button
-                className="rounded p-1 text-[#52525b] transition-colors hover:bg-white/[0.06] hover:text-[#a1a1aa]"
+                className="rounded p-1 text-[#52525b] hover:bg-white/[0.06] hover:text-[#a1a1aa]"
                 title="Open in Solscan"
                 type="button"
                 onClick={() => {
@@ -947,11 +947,11 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             </span>
           </div>
           <div className="flex flex-shrink-0 items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-md border border-white/[0.06] bg-[#0c0e12]/60 p-0.5">
+            <div className="flex items-center gap-0.5 rounded-md border border-white/[0.06] bg-[#0c0e12] p-0.5">
               {timeRanges.map((label) => (
                 <button
                   key={label}
-                  className={`rounded px-2.5 py-1 text-[11px] font-medium transition-all duration-200 ${
+                  className={`rounded px-2.5 py-1 text-[11px] font-medium ${
                     selectedRange === label
                       ? "bg-white/[0.08] text-[#f4f4f5]"
                       : "text-[#71717a] hover:text-[#a1a1aa]"
@@ -964,7 +964,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="rounded-md p-1 text-[#71717a] transition-colors hover:bg-white/[0.06] hover:text-[#f4f4f5]"
+              className="rounded-md p-1 text-[#71717a] hover:bg-white/[0.06] hover:text-[#f4f4f5]"
               aria-label="Close"
               type="button"
             >
@@ -1173,7 +1173,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                 return (
                   <button
                     key={t}
-                    className={`relative -mb-px border-b-2 py-2.5 text-xs font-medium transition-colors duration-200 ${
+                    className={`relative -mb-px border-b-2 py-2.5 text-xs font-medium ${
                       tab === t
                         ? "border-[#18c48c] text-[#f4f4f5]"
                         : "border-transparent text-[#71717a] hover:text-[#a1a1aa]"
@@ -1219,7 +1219,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        backdropFilter: "blur(16px)",
                         WebkitBackdropFilter: "blur(16px)",
                         background: "rgba(3,3,4,0.85)",
                       }}
@@ -1268,7 +1267,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         return (
                           <tr
                             key={order.mint || idx}
-                            className="border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
+                            className="border-b border-white/[0.06] hover:bg-white/[0.04]"
                           >
                             <td className="px-4 py-2.5 text-[#a1a1aa]">
                               <div className="font-mono text-xs">{timeAgo}</div>
@@ -1346,7 +1345,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                   href={`https://solscan.io/tx/${order.sellTrade.tx}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-blue-400 transition-colors hover:text-blue-300"
+                                  className="text-blue-400 hover:text-blue-300"
                                   title="View on Solscan"
                                 >
                                   <FiExternalLink className="inline text-sm" />
@@ -1394,7 +1393,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        backdropFilter: "blur(16px)",
                         WebkitBackdropFilter: "blur(16px)",
                         background: "rgba(3,3,4,0.85)",
                       }}
@@ -1439,7 +1437,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         return (
                           <tr
                             key={position.mint || idx}
-                            className="border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
+                            className="border-b border-white/[0.06] hover:bg-white/[0.04]"
                           >
                             <td
                               className="cursor-pointer px-4 py-2.5"
@@ -1460,7 +1458,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 />
                                 <div className="flex min-w-0 flex-col">
                                   <span
-                                    className="truncate text-sm font-semibold text-neutral-100 transition-colors hover:text-[#18c48c]"
+                                    className="truncate text-sm font-semibold text-neutral-100 hover:text-[#18c48c]"
                                     title={position.mint || undefined}
                                   >
                                     {truncateTokenName(
@@ -1569,7 +1567,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             </td>
                             <td className="px-4 py-2.5 text-right">
                               <button
-                                className="text-[#52525b] transition-colors hover:text-[#f4f4f5]"
+                                className="text-[#52525b] hover:text-[#f4f4f5]"
                                 onClick={() => {
                                   const addr = position.mint;
                                   if (addr) {
@@ -1606,7 +1604,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        backdropFilter: "blur(16px)",
                         WebkitBackdropFilter: "blur(16px)",
                         background: "rgba(3,3,4,0.85)",
                       }}
@@ -1645,7 +1642,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         return (
                           <tr
                             key={position.mint || idx}
-                            className="border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
+                            className="border-b border-white/[0.06] hover:bg-white/[0.04]"
                           >
                             <td
                               className="cursor-pointer px-4 py-2.5"
@@ -1666,7 +1663,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 />
                                 <div className="flex min-w-0 flex-col">
                                   <span
-                                    className="truncate text-sm font-semibold text-neutral-100 transition-colors hover:text-[#18c48c]"
+                                    className="truncate text-sm font-semibold text-neutral-100 hover:text-[#18c48c]"
                                     title={position.mint || undefined}
                                   >
                                     {truncateTokenName(
@@ -1764,7 +1761,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             </td>
                             <td className="px-4 py-2.5 text-right">
                               <button
-                                className="text-[#52525b] transition-colors hover:text-[#f4f4f5]"
+                                className="text-[#52525b] hover:text-[#f4f4f5]"
                                 onClick={() => {
                                   const addr = position.mint;
                                   if (addr) {
@@ -1831,7 +1828,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                     <thead
                       className="sticky top-0 z-20"
                       style={{
-                        backdropFilter: "blur(16px)",
                         WebkitBackdropFilter: "blur(16px)",
                         background: "rgba(3,3,4,0.85)",
                       }}
@@ -1877,7 +1873,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         return (
                           <tr
                             key={dt.token.address}
-                            className="cursor-pointer border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
+                            className="cursor-pointer border-b border-white/[0.06] hover:bg-white/[0.04]"
                             onClick={() =>
                               window.open(
                                 `/trade/${dt.token.address}`,
@@ -1938,7 +1934,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         </div>
       </div>
       {toast && (
-        <div className="animate-fade-in fixed top-12 left-1/2 z-50 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#0c0e12]/95 px-4 py-2 text-sm font-semibold text-[#f4f4f5] shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+        <div className="animate-fade-in fixed top-12 left-1/2 z-50 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#0c0e12] px-4 py-2 text-sm font-semibold text-[#f4f4f5]">
           {toast}
         </div>
       )}

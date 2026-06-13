@@ -67,7 +67,7 @@ function Tooltip({
         {children}
       </span>
       {show && (
-        <span className="pointer-events-none fixed z-[99999] translate-x-[-50%] translate-y-[-100%] rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] font-normal whitespace-nowrap text-white shadow-xl">
+        <span className="pointer-events-none fixed z-[99999] translate-x-[-50%] translate-y-[-100%] rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] font-normal whitespace-nowrap text-white">
           {label}
           {/* Small arrow pointing down */}
           <span className="absolute top-full left-1/2 -mt-px -translate-x-1/2 border-4 border-transparent border-t-neutral-700"></span>
@@ -416,7 +416,7 @@ export default function WalletRow({
   return (
     <tr
       key={wallet.address}
-      className="group cursor-pointer border-b border-white/[0.06] transition-colors duration-150 hover:bg-white/[0.04] active:bg-white/[0.06]"
+      className="group cursor-pointer border-b border-white/[0.06] hover:bg-white/[0.04] active:bg-white/[0.06]"
       onClick={handleRowClick}
       // Hover = intent: background-warm the scan-panel data (summary/positions/
       // trades) so opening the panel paints from cache instantly. Deduped and
@@ -427,7 +427,7 @@ export default function WalletRow({
         <div className="flex w-full items-center gap-2 sm:gap-4">
           <button
             type="button"
-            className="flex w-16 justify-center text-[9px] tabular-nums text-neutral-500 transition-colors hover:text-neutral-200 sm:w-28 sm:text-xs"
+            className="flex w-16 justify-center text-[9px] tabular-nums text-neutral-500 hover:text-neutral-200 sm:w-28 sm:text-xs"
             onClick={(e) => {
               e.stopPropagation();
               if (wallet.address) {
@@ -451,7 +451,7 @@ export default function WalletRow({
               </span>
               <Tooltip label={copied ? "Copied!" : "Click to copy"}>
                 <button
-                  className="mt-0.5 flex w-fit cursor-pointer items-center gap-1 font-mono text-[9px] text-neutral-500 transition-colors hover:text-neutral-300 focus-visible:outline-none sm:text-[10px]"
+                  className="mt-0.5 flex w-fit cursor-pointer items-center gap-1 font-mono text-[9px] text-neutral-500 hover:text-neutral-300 focus-visible:outline-none sm:text-[10px]"
                   onClick={handleCopyAddress}
                   title="Copy wallet address"
                 >
@@ -493,12 +493,12 @@ export default function WalletRow({
               }
             >
               <button
-                className={`rounded-md p-1.5 transition-colors duration-150 sm:p-2 ${isTogglingNotification ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/[0.06]"}`}
+                className={`rounded-md p-1.5 sm:p-2 ${isTogglingNotification ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/[0.06]"}`}
                 onClick={handleToggleNotifications}
                 disabled={isTogglingNotification}
               >
                 <FiBell
-                  className={`text-sm transition-colors sm:text-base ${notificationsEnabled ? "text-pink-500" : "text-neutral-500"}`}
+                  className={`text-sm sm:text-base ${notificationsEnabled ? "text-pink-500" : "text-neutral-500"}`}
                 />
               </button>
             </Tooltip>
@@ -508,7 +508,7 @@ export default function WalletRow({
               label={analyticsEnabled ? "Analytics ON" : "Analytics OFF"}
             >
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
+                className="cursor-pointer rounded-md p-1 hover:bg-white/[0.05] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   setAnalyticsEnabled(!analyticsEnabled);
@@ -524,7 +524,7 @@ export default function WalletRow({
             {/* RSS Icon - Feed Toggle (commented out until backend feed feature is built)
             <Tooltip label={feedEnabled ? "Feed ON" : "Feed OFF"}>
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
+                className="cursor-pointer rounded-md p-1 hover:bg-white/[0.05] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   setFeedEnabled(!feedEnabled);
@@ -540,13 +540,13 @@ export default function WalletRow({
             {/* Chart - Scan Address */}
             <Tooltip label="Scan Wallet">
               <button
-                className="group/icon cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-white/[0.06] sm:p-2"
+                className="group/icon cursor-pointer rounded-md p-1.5 hover:bg-white/[0.06] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClick && onClick(wallet);
                 }}
               >
-                <FiBarChart2 className="text-sm text-neutral-500 transition-colors group-hover/icon:text-pink-500 sm:text-base" />
+                <FiBarChart2 className="text-sm text-neutral-500 group-hover/icon:text-pink-500 sm:text-base" />
               </button>
             </Tooltip>
 
@@ -554,13 +554,13 @@ export default function WalletRow({
             {showDeleteConfirm ? (
               <div className="flex gap-0.5 sm:gap-1">
                 <button
-                  className="cursor-pointer rounded-md bg-pink-500 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-pink-600 sm:px-2 sm:py-1 sm:text-xs"
+                  className="cursor-pointer rounded-md bg-pink-500 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-pink-600 sm:px-2 sm:py-1 sm:text-xs"
                   onClick={handleConfirmDelete}
                 >
                   ✓
                 </button>
                 <button
-                  className="cursor-pointer rounded-md bg-neutral-800 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-neutral-700 sm:px-2 sm:py-1 sm:text-xs"
+                  className="cursor-pointer rounded-md bg-neutral-800 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-neutral-700 sm:px-2 sm:py-1 sm:text-xs"
                   onClick={handleCancelDelete}
                 >
                   ✕
@@ -569,10 +569,10 @@ export default function WalletRow({
             ) : (
               <Tooltip label="Delete Wallet">
                 <button
-                  className="group/trash cursor-pointer rounded-md p-1.5 transition-colors duration-150 hover:bg-[#ef4444]/10 sm:p-2"
+                  className="group/trash cursor-pointer rounded-md p-1.5 hover:bg-[#ef4444]/10 sm:p-2"
                   onClick={handleDeleteClick}
                 >
-                  <FiTrash2 className="text-sm text-neutral-500 transition-colors group-hover/trash:text-[#ef4444] sm:text-base" />
+                  <FiTrash2 className="text-sm text-neutral-500 group-hover/trash:text-[#ef4444] sm:text-base" />
                 </button>
               </Tooltip>
             )}

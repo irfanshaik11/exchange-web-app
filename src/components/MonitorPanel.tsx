@@ -480,7 +480,7 @@ export default function MonitorPanel({
           return (
             <div
               key={token.mint}
-              className="@container flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-colors hover:border-white/[0.1]"
+              className="@container flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] hover:border-white/[0.1]"
             >
               {/* HEADER ROW */}
               <div className="flex items-start gap-3 px-3.5 py-3.5">
@@ -564,7 +564,7 @@ export default function MonitorPanel({
                       type="button"
                       onClick={() => copyMint(token.mint)}
                       title="Copy mint address"
-                      className="flex-shrink-0 cursor-pointer text-neutral-500 transition-colors hover:text-neutral-200"
+                      className="flex-shrink-0 cursor-pointer text-neutral-500 hover:text-neutral-200"
                     >
                       <FiCopy className="h-3 w-3" />
                     </button>
@@ -576,7 +576,7 @@ export default function MonitorPanel({
                     <button
                       type="button"
                       title="Star"
-                      className="flex-shrink-0 cursor-pointer text-neutral-500 transition-colors hover:text-yellow-300"
+                      className="flex-shrink-0 cursor-pointer text-neutral-500 hover:text-yellow-300"
                     >
                       <FiStar className="h-3 w-3" />
                     </button>
@@ -606,7 +606,7 @@ export default function MonitorPanel({
                       e.stopPropagation();
                       onQuickBuy(token.lastTrade);
                     }}
-                    className="flex cursor-pointer items-center gap-1 rounded-full border border-[#18c48c]/20 bg-[#18c48c]/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-[#18c48c] transition-colors hover:bg-[#18c48c]/20"
+                    className="flex cursor-pointer items-center gap-1 rounded-full border border-[#18c48c]/20 bg-[#18c48c]/10 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-[#18c48c] hover:bg-[#18c48c]/20"
                     title={`Quick buy ${quickBuyAmount} SOL`}
                   >
                     <HiLightningBolt className="h-3 w-3" />
@@ -659,12 +659,12 @@ export default function MonitorPanel({
                 ))}
                 <div className="ml-auto flex h-1.5 w-[64px] flex-shrink-0 overflow-hidden rounded-full bg-[#080a0d]">
                   <div
-                    className="h-full bg-[#18c48c] transition-all duration-300"
+                    className="h-full bg-[#18c48c]"
                     style={{
                       width: `${Math.max(2, Math.min(98, buyShare * 100))}%`,
                     }}
                   />
-                  <div className="h-full flex-1 bg-[#ef4444] transition-all duration-300" />
+                  <div className="h-full flex-1 bg-[#ef4444]" />
                 </div>
               </div>
 
@@ -715,7 +715,7 @@ export default function MonitorPanel({
                       return (
                         <tr
                           key={w.wallet}
-                          className="border-b border-white/[0.04] transition-colors last:border-b-0 hover:bg-white/[0.04]"
+                          className="border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.04]"
                         >
                           <td className="px-3.5 py-2.5">
                             <span

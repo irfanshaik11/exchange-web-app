@@ -8,7 +8,7 @@ import { getProtocolBranding } from "~/utils/protocolBranding";
  * Presentational-only building blocks for WalletScanPanel's GMGN-style header
  * cards. No data fetching, no hooks beyond render — every value is passed in by
  * the parent. Mirrors the portfolio page's card visual language:
- * rounded-lg / border-white/[0.06] / bg-[#0c0e12]/80 / backdrop-blur-xl with
+ * rounded-lg / border-white/[0.06] / bg-[#0c0e12] / with
  * mini corner brackets, #18c48c (gain) / #ef4444 (loss) accents.
  */
 
@@ -23,7 +23,7 @@ export const ScanCard: React.FC<{
   children: React.ReactNode;
 }> = ({ label, right, className, children }) => (
   <div
-    className={`relative flex flex-col rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-4 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] ${
+    className={`relative flex flex-col rounded-lg border border-white/[0.06] bg-[#0c0e12] p-4 ${
       className ?? ""
     }`}
   >
@@ -85,7 +85,7 @@ export const TokenAvatar: React.FC<{
   return (
     <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
       <div
-        className="relative rounded-lg transition-all duration-300 ease-out"
+        className="relative rounded-lg ease-out"
         style={{
           border: protocolSource
             ? `1px solid ${protocolColor}`
@@ -145,11 +145,11 @@ export const WinLossBar: React.FC<{ winPercentage: number }> = ({
   return (
     <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-[#080a0d]">
       <div
-        className="h-full bg-[#18c48c] transition-all duration-300"
+        className="h-full bg-[#18c48c]"
         style={{ width: `${pct}%` }}
       />
       <div
-        className="h-full bg-[#ef4444] transition-all duration-300"
+        className="h-full bg-[#ef4444]"
         style={{ width: `${100 - pct}%` }}
       />
     </div>

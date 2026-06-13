@@ -229,13 +229,13 @@ export default function PnlCalendar({
           <span className="text-sm font-semibold text-[#f4f4f5]">PnL Calendar</span>
           <button
             onClick={() => setCurrency((c) => (c === "USD" ? "SOL" : "USD"))}
-            className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] transition-colors hover:border-white/20 hover:text-[#f4f4f5]"
+            className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/20 hover:text-[#f4f4f5]"
           >
             {currency === "USD" ? "$ USD" : "◎ SOL"}
           </button>
           <button
             onClick={() => setShareOpen(true)}
-            className="flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] transition-colors hover:border-[#2bd4a0]/40 hover:text-[#2bd4a0]"
+            className="flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] hover:border-[#2bd4a0]/40 hover:text-[#2bd4a0]"
             title="Share this month's PnL"
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -249,7 +249,7 @@ export default function PnlCalendar({
         <div className="flex items-center gap-1">
           <button
             onClick={() => shiftMonth(-1)}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-[#a1a1aa] transition-colors hover:bg-white/[0.06] hover:text-[#f4f4f5]"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[#a1a1aa] hover:bg-white/[0.06] hover:text-[#f4f4f5]"
             aria-label="Previous month"
           >‹</button>
           <span className="min-w-[112px] text-center text-xs font-medium text-[#d4d4d8]">
@@ -258,7 +258,7 @@ export default function PnlCalendar({
           <button
             onClick={() => shiftMonth(1)}
             disabled={atCurrentMonth}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-[#a1a1aa] transition-colors enabled:hover:bg-white/[0.06] enabled:hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-25"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[#a1a1aa] enabled:hover:bg-white/[0.06] enabled:hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-25"
             aria-label="Next month"
           >›</button>
         </div>
@@ -278,7 +278,7 @@ export default function PnlCalendar({
           )}
         </div>
         <div className="mt-2 flex h-1 w-full overflow-hidden rounded-full bg-[#fb4b69]/25">
-          <div className="h-full rounded-full transition-all" style={{ width: `${winPct}%`, background: GREEN }} />
+          <div className="h-full rounded-full" style={{ width: `${winPct}%`, background: GREEN }} />
         </div>
         <div className="mt-1 flex items-center justify-between text-[11px] font-medium tabular-nums">
           <span style={{ color: GREEN }}>{stats.winDays} / {fmtMoney(stats.winSum, currency)}</span>
@@ -326,7 +326,7 @@ export default function PnlCalendar({
                   <div
                     key={key}
                     onMouseEnter={d ? (e) => onCellEnter(e, d) : undefined}
-                    className="relative flex min-h-[40px] flex-col rounded-md border p-1 transition-colors sm:min-h-[58px] sm:rounded-lg sm:p-1.5"
+                    className="relative flex min-h-[40px] flex-col rounded-md border p-1 sm:min-h-[58px] sm:rounded-lg sm:p-1.5"
                     style={{
                       background: bg,
                       borderColor: isTop ? "rgba(248,190,110,0.45)" : "rgba(255,255,255,0.04)",
@@ -365,7 +365,7 @@ export default function PnlCalendar({
       {/* Hover tooltip (fixed-position, GMGN-style breakdown) */}
       {hover && (
         <div
-          className="pointer-events-none fixed z-50 w-[260px] -translate-x-1/2 -translate-y-full rounded-lg border border-white/10 bg-[#0c0e12]/95 p-3 shadow-[0_12px_40px_rgba(0,0,0,0.6)] backdrop-blur-sm"
+          className="pointer-events-none fixed z-50 w-[260px] -translate-x-1/2 -translate-y-full rounded-lg border border-white/10 bg-[#0c0e12] p-3"
           style={{ left: hover.x, top: hover.y - 8 }}
         >
           <div className="pb-2 text-xs font-semibold text-[#f4f4f5]">{hover.dateLabel}</div>
@@ -424,7 +424,7 @@ export default function PnlCalendar({
       {/* Share modal — branded, exportable card */}
       {shareOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
           onClick={() => setShareOpen(false)}
         >
           <div
@@ -506,14 +506,14 @@ export default function PnlCalendar({
             <div className="mt-3 flex items-center justify-end gap-2">
               <button
                 onClick={() => setShareOpen(false)}
-                className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-[#a1a1aa] transition-colors hover:text-[#f4f4f5]"
+                className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-[#a1a1aa] hover:text-[#f4f4f5]"
               >
                 Close
               </button>
               <button
                 onClick={copyCard}
                 disabled={busy !== null}
-                className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d4d4d8] transition-colors hover:text-[#f4f4f5] disabled:opacity-50"
+                className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d4d4d8] hover:text-[#f4f4f5] disabled:opacity-50"
               >
                 {busy === "copy" ? "Copying…" : "Copy"}
               </button>

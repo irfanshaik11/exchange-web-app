@@ -288,7 +288,6 @@ export default function LiveTradesPanel({
         <thead
           className="sticky top-0 z-10"
           style={{
-            backdropFilter: "blur(16px)",
             WebkitBackdropFilter: "blur(16px)",
             background: "rgba(3,3,4,0.85)",
           }}
@@ -356,7 +355,7 @@ export default function LiveTradesPanel({
             return (
               <tr
                 key={`${trade.tx}-${idx}`}
-                className="group relative border-b border-white/[0.04] transition-colors duration-200 hover:bg-white/[0.04]"
+                className="group relative border-b border-white/[0.04] hover:bg-white/[0.04]"
                 style={{
                   backgroundColor:
                     trade.side === "buy"
@@ -429,7 +428,7 @@ export default function LiveTradesPanel({
                       queryParams.set('chain', 'sol');
                       router.push(`/trade/${tokenAddress}`);
                     }}
-                    className="flex cursor-pointer items-center gap-1 font-mono text-[9px] text-emerald-300 transition-colors hover:text-emerald-200 sm:gap-2 sm:text-xs"
+                    className="flex cursor-pointer items-center gap-1 font-mono text-[9px] text-emerald-300 hover:text-emerald-200 sm:gap-2 sm:text-xs"
                     title={displayName || undefined}
                   >
                     {/* Token icon with protocol badge */}
@@ -563,7 +562,7 @@ export default function LiveTradesPanel({
                         e.stopPropagation();
                         onQuickBuy(trade);
                       }}
-                      className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1 rounded-full border border-[#18c48c]/20 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap tabular-nums transition-all duration-150 ease-out"
+                      className="quick-buy-btn z-10 flex cursor-pointer items-center gap-1 rounded-full border border-[#18c48c]/20 px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap tabular-nums ease-out"
                       style={{
                         backgroundColor: "rgba(24, 196, 140, 0.06)",
                         color: "#18c48c",
