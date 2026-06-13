@@ -12,48 +12,7 @@ import PnlCalendar from "./PnlCalendar";
 import { Sparkline } from "./MicroChart";
 import { SolanaIcon } from "./Footer";
 import { pnlColor, pnlHeat } from "~/utils/trackersTheme";
-import { KOL_ADDRESS_MAP } from "~/utils/kolLookup";
-
-/**
- * KOL profile-pic circle for the wallet-scan header. Shows the KOL's X avatar
- * (/kol-avatars/{handle}.jpg, backfilled from unavatar.io) next to the wallet
- * emoji; falls back to a colored initial on a missing image — never a broken img.
- */
-const KolPicCircle: React.FC<{ address?: string }> = ({ address }) => {
-  const kol = address ? KOL_ADDRESS_MAP.get(address.toLowerCase()) : undefined;
-  // 3-stage src fallback: local backfilled file -> live unavatar (per-user IP,
-  // no central rate limit) -> colored initial. Never a broken image.
-  const [stage, setStage] = useState(0);
-  if (!kol) return null;
-  const handle = kol.twitterUsername;
-  const src =
-    stage === 0 && kol.avatarUrl
-      ? kol.avatarUrl
-      : stage <= 1 && handle
-        ? `https://unavatar.io/x/${encodeURIComponent(handle)}?fallback=false`
-        : null;
-  if (!src) {
-    return (
-      <span
-        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-        style={{ backgroundColor: kol.hexColor }}
-        title={handle ? `@${handle}` : kol.name}
-      >
-        {kol.label}
-      </span>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt={kol.name}
-      title={`@${handle}`}
-      className="h-7 w-7 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10"
-      onError={() => setStage((s) => s + 1)}
-    />
-  );
-};
+import { KolDpCircle } from "./KolDpCircle";
 import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
 import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
@@ -977,7 +936,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-[#0c0e12] text-sm">
               👛
             </span>
-            <KolPicCircle address={wallet.address} />
+            <KolDpCircle address={wallet.address} size={28} />
             {wallet.name ? (
               <span className="truncate text-sm font-semibold text-[#f4f4f5]">
                 {wallet.name}

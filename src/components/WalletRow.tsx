@@ -6,6 +6,7 @@ import type { WatchWallet, WalletEvent } from "~/utils/walletTracking";
 import { toggleWalletNotifications } from "~/utils/walletTracking";
 import { SolanaIcon } from "./Footer";
 import { Sparkline } from "./MicroChart";
+import { KolDpCircle } from "./KolDpCircle";
 import { useUser } from "./UserContext";
 import { FiBell, FiBarChart2, FiTrash2 } from "react-icons/fi";
 // import { TbChartBubble } from "react-icons/tb";  // TODO: Re-enable when analytics feature is built
@@ -464,6 +465,8 @@ export default function WalletRow({
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#0c0e12] text-sm sm:h-8 sm:w-8 sm:text-base">
               {wallet.emoji || "💼"}
             </span>
+            {/* KOL profile pic (between emoji and name) — null for non-KOLs */}
+            <KolDpCircle address={wallet.address} size={28} />
             <div className="flex min-w-0 flex-col leading-tight">
               <span className="truncate text-[11px] font-semibold text-neutral-100 sm:text-sm">
                 {wallet.name || "N/A"}
