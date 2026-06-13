@@ -3,7 +3,7 @@ import { useResolvedTokenImages } from "~/hooks/useResolvedTokenImages";
 import { useRouter } from "next/router";
 import FastImage from "~/components/FastImage";
 import { HiLightningBolt } from "react-icons/hi";
-import { HeatStrip } from "./MicroChart";
+import { VolumeBars } from "./MicroChart";
 import { FiCopy, FiStar } from "react-icons/fi";
 import { formatMarketCap } from "~/utils/db";
 import { extractTokenImage, resolveTokenImage } from "~/utils/images";
@@ -431,7 +431,7 @@ export default function MonitorPanel({
 
   return (
     <div className="scrollbar-hide -mx-3 flex-1 overflow-auto sm:-mx-5">
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3 px-3 py-3 sm:px-5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] items-start gap-3 px-3 py-3 sm:px-5">
         {tokenAggs.map((token) => {
           const meta = metadata.get(token.mint);
           const displaySymbol =
@@ -616,9 +616,9 @@ export default function MonitorPanel({
                     </span>
                   </div>
                   {token.series && token.series.length > 1 && (
-                    <HeatStrip
+                    <VolumeBars
                       values={token.series}
-                      height={24}
+                      height={26}
                       cellWidth={3}
                       gap={1}
                       rounded={1}
@@ -694,7 +694,7 @@ export default function MonitorPanel({
               </div>
 
               {/* WALLETS TABLE — "Held For" + txn sublines hide on narrow cards */}
-              <div className="mt-auto border-t border-white/[0.06] bg-[#08090c]">
+              <div className="border-t border-white/[0.06] bg-[#08090c]">
                 <table className="w-full table-fixed text-[11px]">
                   <colgroup>
                     <col className="w-[34%] @[22rem]:w-[28%]" />

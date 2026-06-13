@@ -91,6 +91,62 @@ export const HeatStrip = React.memo(function HeatStrip({
 });
 
 /**
+ * VolumeBars — a real volume histogram: each bar is baseline-anchored with
+ * height ∝ |value| (normalized to the max in the set), colored by sign
+ * (buy=gain, sell=loss). Reads as a proper buy/sell pressure chart instead of
+ * a uniform "barcode". Static SVG, painted once — no animation.
+ */
+export const VolumeBars = React.memo(function VolumeBars({
+  values,
+  height = 26,
+  cellWidth = 3,
+  gap = 1,
+  minBar = 0.22,
+  rounded = 1,
+}: {
+  values: number[];
+  height?: number;
+  cellWidth?: number;
+  gap?: number;
+  minBar?: number;
+  rounded?: number;
+}) {
+  if (!values || values.length === 0) return null;
+  let max = 0;
+  for (const v of values) {
+    const a = Math.abs(v);
+    if (a > max) max = a;
+  }
+  if (max <= 0) max = 1;
+  const w = values.length * cellWidth + (values.length - 1) * gap;
+  return (
+    <svg
+      width={w}
+      height={height}
+      viewBox={`0 0 ${w} ${height}`}
+      preserveAspectRatio="none"
+    >
+      {values.map((v, i) => {
+        const mag = Math.abs(v) / max; // 0..1
+        const h = Math.max(height * minBar, mag * height);
+        return (
+          <rect
+            key={i}
+            x={i * (cellWidth + gap)}
+            y={height - h}
+            width={cellWidth}
+            height={h}
+            rx={rounded}
+            fill={v >= 0 ? TK.gain : TK.loss}
+            opacity={0.9}
+          />
+        );
+      })}
+    </svg>
+  );
+});
+
+/**
  * PosBar — a two-segment proportion bar (e.g. bought vs sold, or net-flow). `pos`
  * and `neg` are magnitudes; renders a flat track with gain/neutral segments.
  */
