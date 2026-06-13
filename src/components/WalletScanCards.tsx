@@ -28,7 +28,7 @@ export const ScanCard: React.FC<{
   children: React.ReactNode;
 }> = ({ label, right, className, children }) => (
   <div
-    className={`relative flex flex-col rounded-lg border border-white/[0.08] bg-[#0e1116] p-4 ${
+    className={`relative flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] p-4 ${
       className ?? ""
     }`}
   >
