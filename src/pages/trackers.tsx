@@ -2502,6 +2502,22 @@ export default function TrackersPage() {
                       "radial-gradient(ellipse 80% 50% at 50% 0%, #000 0%, transparent 70%)",
                   }}
                 />
+                {/* Top-center atmospheric glow + light-beam (static gradients,
+                    GPU-composited — no particles/animation, ~0 CPU). */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-0 h-44"
+                  style={{
+                    background:
+                      "radial-gradient(ellipse 55% 100% at 50% 0%, rgba(24,196,140,0.10), transparent 72%)",
+                  }}
+                />
+                <div
+                  className="pointer-events-none absolute top-0 left-1/2 h-px w-[70%] -translate-x-1/2"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, transparent, rgba(127,255,201,0.55) 50%, transparent)",
+                  }}
+                />
 
                 <div className="relative z-10 mt-5 mb-3 flex flex-col gap-4 px-5 sm:my-7 sm:mb-5 sm:px-7 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:px-10">
                   {/* Header Section - JTX premium style */}
