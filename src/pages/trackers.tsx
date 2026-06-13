@@ -186,7 +186,7 @@ function KolAvatar({
   if (!src) {
     return (
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white sm:h-10 sm:w-10 sm:text-sm"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white sm:h-10 sm:w-10 sm:text-sm"
         style={{ backgroundColor: hslAvatarBg(handle || name) }}
       >
         {initial}
@@ -199,7 +199,7 @@ function KolAvatar({
     <img
       src={src}
       alt=""
-      className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10"
+      className="h-9 w-9 shrink-0 rounded-lg object-cover sm:h-10 sm:w-10"
       onError={() => setStage((s) => s + 1)}
     />
   );

@@ -436,7 +436,7 @@ export default function WalletRow({
                 </span>
                 {wallet.address &&
                   KOL_ADDRESS_MAP.has(wallet.address.toLowerCase()) && (
-                    <span className="flex-shrink-0 rounded border border-[#7FFFC9]/30 bg-[#7FFFC9]/10 px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-[#7FFFC9] uppercase sm:text-[9px]">
+                    <span className="flex-shrink-0 rounded-[4px] bg-[#7FFFC9]/[0.12] px-1.5 py-[1px] text-[8px] font-semibold tracking-[0.08em] text-[#7FFFC9] uppercase sm:text-[9px]">
                       KOL
                     </span>
                   )}

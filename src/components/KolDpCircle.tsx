@@ -32,7 +32,7 @@ export const KolDpCircle: React.FC<{
   if (!src) {
     return (
       <span
-        className={`flex flex-shrink-0 items-center justify-center rounded-full font-bold text-white ${className ?? ""}`}
+        className={`flex flex-shrink-0 items-center justify-center rounded-md font-bold text-white ${className ?? ""}`}
         style={{ ...dim, backgroundColor: kol.hexColor, fontSize: size * 0.4 }}
         title={handle ? `@${handle}` : kol.name}
       >
@@ -46,7 +46,7 @@ export const KolDpCircle: React.FC<{
       src={src}
       alt={kol.name}
       title={`@${handle}`}
-      className={`flex-shrink-0 rounded-full object-cover ring-1 ring-white/10 ${className ?? ""}`}
+      className={`flex-shrink-0 rounded-md object-cover ring-1 ring-white/10 ${className ?? ""}`}
       style={dim}
       onError={() => setStage((s) => s + 1)}
     />
