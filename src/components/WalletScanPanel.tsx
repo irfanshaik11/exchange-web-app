@@ -12,6 +12,39 @@ import PnlCalendar from "./PnlCalendar";
 import { Sparkline } from "./MicroChart";
 import { SolanaIcon } from "./Footer";
 import { pnlColor, pnlHeat } from "~/utils/trackersTheme";
+import { KOL_ADDRESS_MAP } from "~/utils/kolLookup";
+
+/**
+ * KOL profile-pic circle for the wallet-scan header. Shows the KOL's X avatar
+ * (/kol-avatars/{handle}.jpg, backfilled from unavatar.io) next to the wallet
+ * emoji; falls back to a colored initial on a missing image — never a broken img.
+ */
+const KolPicCircle: React.FC<{ address?: string }> = ({ address }) => {
+  const kol = address ? KOL_ADDRESS_MAP.get(address.toLowerCase()) : undefined;
+  const [failed, setFailed] = useState(false);
+  if (!kol) return null;
+  if (failed || !kol.avatarUrl) {
+    return (
+      <span
+        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+        style={{ backgroundColor: kol.hexColor }}
+        title={`@${kol.twitterUsername}`}
+      >
+        {kol.label}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={kol.avatarUrl}
+      alt={kol.name}
+      title={`@${kol.twitterUsername}`}
+      className="h-7 w-7 flex-shrink-0 rounded-full object-cover ring-1 ring-white/10"
+      onError={() => setFailed(true)}
+    />
+  );
+};
 import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
 import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
@@ -935,6 +968,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-[#0c0e12] text-sm">
               👛
             </span>
+            <KolPicCircle address={wallet.address} />
             {wallet.name ? (
               <span className="truncate text-sm font-semibold text-[#f4f4f5]">
                 {wallet.name}
