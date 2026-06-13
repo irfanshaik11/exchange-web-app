@@ -496,7 +496,7 @@ export default function MonitorPanel({
           return (
             <div
               key={token.mint}
-              className="@container relative flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] pb-12 hover:border-white/[0.1]"
+              className="@container relative flex flex-col overflow-hidden rounded-xl border border-transparent bg-[#1E1F26] pb-12 hover:border-[#2A2B33]"
             >
               {/* HEADER ROW */}
               <div className="flex items-start gap-3 px-3.5 py-3.5">
@@ -684,11 +684,11 @@ export default function MonitorPanel({
               <div className="border-t border-white/[0.06]">
                 <table className="w-full table-fixed text-[11px]">
                   <colgroup>
-                    <col className="w-[34%] @[22rem]:w-[28%]" />
-                    <col className="hidden @[22rem]:table-column @[22rem]:w-[14%]" />
+                    <col className="w-[30%] @[22rem]:w-[24%]" />
+                    <col className="hidden @[22rem]:table-column @[22rem]:w-[12%]" />
                     <col className="w-[22%] @[22rem]:w-[20%]" />
                     <col className="w-[22%] @[22rem]:w-[20%]" />
-                    <col className="w-[22%] @[22rem]:w-[18%]" />
+                    <col className="w-[26%] @[22rem]:w-[24%]" />
                   </colgroup>
                   <thead>
                     <tr className="border-b border-white/[0.06]">
@@ -704,7 +704,7 @@ export default function MonitorPanel({
                       <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         Sold
                       </th>
-                      <th className="px-3.5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
+                      <th className="py-2 pr-3 pl-1 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         PNL
                       </th>
                     </tr>
@@ -775,9 +775,9 @@ export default function MonitorPanel({
                               </span>
                             </div>
                           </td>
-                          <td className="px-3.5 py-2.5 text-right">
+                          <td className="py-2.5 pr-3 pl-1 text-right">
                             <span
-                              className="inline-block rounded-md px-1.5 py-0.5 font-semibold tabular-nums"
+                              className="inline-block rounded-md px-1.5 py-0.5 font-semibold whitespace-nowrap tabular-nums"
                               style={{
                                 color: pnlPositive ? "#18c48c" : "#F0616D",
                                 backgroundColor: pnlPositive
