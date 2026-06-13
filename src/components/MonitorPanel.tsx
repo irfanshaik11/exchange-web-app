@@ -3,6 +3,7 @@ import { useResolvedTokenImages } from "~/hooks/useResolvedTokenImages";
 import { useRouter } from "next/router";
 import FastImage from "~/components/FastImage";
 import { HiLightningBolt } from "react-icons/hi";
+import { HeatStrip } from "./MicroChart";
 import { FiCopy, FiStar } from "react-icons/fi";
 import { formatMarketCap } from "~/utils/db";
 import { extractTokenImage, resolveTokenImage } from "~/utils/images";
@@ -126,6 +127,10 @@ interface TokenAgg {
   lastPriceUsd: number | null;
   walletsByAddr: Map<string, WalletAgg>;
   lastTrade: TradeEvent;
+  // Per-trade signed USD (buy=+, sell=-) collected during aggregation, used to
+  // render a real buy/sell pressure histogram. Sorted+capped once at return.
+  seriesPts: { at: number; v: number }[];
+  series?: number[];
 }
 
 function aggregateTrades(
@@ -157,6 +162,7 @@ function aggregateTrades(
         lastPriceUsd: t.price_usd ?? null,
         walletsByAddr: new Map(),
         lastTrade: t,
+        seriesPts: [],
       };
       byMint.set(t.mint, agg);
     }
@@ -165,6 +171,7 @@ function aggregateTrades(
     if (t.name && !agg.name) agg.name = t.name;
 
     const usd = tradeUsd(t, solPrice);
+    agg.seriesPts.push({ at: t.at, v: t.side === "buy" ? usd : -usd });
     if (t.side === "buy") {
       agg.buyCount += 1;
       agg.buyUsd += usd;
@@ -216,8 +223,17 @@ function aggregateTrades(
     if (t.at < wa.firstAt) wa.firstAt = t.at;
   }
 
-  // Most recent activity first.
-  return Array.from(byMint.values()).sort((a, b) => b.lastAt - a.lastAt);
+  // Most recent activity first. Compute the capped, time-ordered buy/sell
+  // pressure series ONCE here (not per render) to keep the card cheap.
+  return Array.from(byMint.values())
+    .map((agg) => {
+      agg.series = agg.seriesPts
+        .sort((a, b) => a.at - b.at)
+        .slice(-24)
+        .map((p) => p.v);
+      return agg;
+    })
+    .sort((a, b) => b.lastAt - a.lastAt);
 }
 
 // ── Token metadata fetching ─────────────────────────────────────────────
@@ -599,6 +615,15 @@ export default function MonitorPanel({
                       </span>
                     </span>
                   </div>
+                  {token.series && token.series.length > 1 && (
+                    <HeatStrip
+                      values={token.series}
+                      height={24}
+                      cellWidth={3}
+                      gap={1}
+                      rounded={1}
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={(e) => {
