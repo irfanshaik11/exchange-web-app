@@ -2485,51 +2485,38 @@ export default function TrackersPage() {
           <DockedPanelMarginWrapper>
             <div className="p-1 sm:p-1.5">
               {/* Rounded container with JTX-style design */}
-              <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-xl border border-white/[0.06] bg-[#030304]/95">
-                {/* JTX-style corner brackets */}
-                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-                  {/* Top-left bracket */}
-                  <div className="absolute top-2 left-2 h-6 w-6 border-t border-l border-white/[0.12]" />
-                  {/* Top-right bracket */}
-                  <div className="absolute top-2 right-2 h-6 w-6 border-t border-r border-white/[0.12]" />
-                  {/* Bottom-left bracket */}
-                  <div className="absolute bottom-2 left-2 h-6 w-6 border-b border-l border-white/[0.12]" />
-                  {/* Bottom-right bracket */}
-                  <div className="absolute right-2 bottom-2 h-6 w-6 border-r border-b border-white/[0.12]" />
-                </div>
-
-                {/* Subtle ambient glow effect */}
-                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-                  <div
-                    className="absolute -top-[40%] left-1/2 h-[60vh] w-[120%] -translate-x-1/2"
-                    style={{
-                      background:
-                        "radial-gradient(ellipse at center, rgba(24, 196, 140, 0.03) 0%, transparent 70%)",
-                    }}
-                  />
-                  {/* Subtle side vignette */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
-                  {/* Subtle top-to-bottom gradient */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
-                </div>
+              <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-lg border border-white/[0.06] bg-[#030304]">
+                {/* Faint brand-green tech-grid — futuristic depth, single static
+                    paint, masked to fade toward the bottom. No blur/shadow/anim. */}
+                <div
+                  className="pointer-events-none absolute inset-0 rounded-lg"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(rgba(24,196,140,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(24,196,140,0.035) 1px,transparent 1px)",
+                    backgroundSize: "34px 34px",
+                    maskImage:
+                      "radial-gradient(ellipse 80% 50% at 50% 0%, #000 0%, transparent 70%)",
+                    WebkitMaskImage:
+                      "radial-gradient(ellipse 80% 50% at 50% 0%, #000 0%, transparent 70%)",
+                  }}
+                />
 
                 <div className="relative z-10 mt-5 mb-3 flex flex-col gap-4 px-5 sm:my-7 sm:mb-5 sm:px-7 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:px-10">
                   {/* Header Section - JTX premium style */}
                   <div className="scrollbar-hide -mx-5 flex items-center gap-4 overflow-x-auto px-5 pb-2 sm:-mx-7 sm:gap-5 sm:px-7 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
-                    <h1 className="text-xl font-semibold tracking-tight text-[#f4f4f5] sm:text-2xl">
+                    <h1
+                      className="bg-clip-text text-xl font-black uppercase tracking-wider text-transparent sm:text-2xl"
+                      style={{ backgroundImage: "linear-gradient(90deg,#7FFFC9,#18c48c)" }}
+                    >
                       Trackers
                     </h1>
-                    {/* Connection status indicator */}
-                    <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-3 py-1.5 backdrop-blur-xl">
-                      <span className="relative flex h-2 w-2">
-                        <span
-                          className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${wsConnected ? "bg-[#18c48c]" : "bg-[#ef4444]"}`}
-                        />
-                        <span
-                          className={`relative inline-flex h-2 w-2 rounded-full ${wsConnected ? "bg-[#18c48c]" : "bg-[#ef4444]"}`}
-                        />
-                      </span>
-                      <span className="text-xs font-medium text-[#71717a]">
+                    {/* Connection status — flat, static dot (no ping/blur) */}
+                    <div className="flex items-center gap-2 rounded-md border border-white/[0.06] bg-[#08090C] px-2.5 py-1">
+                      <span
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ background: wsConnected ? "#18C48C" : "#F0616D" }}
+                      />
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-[#71717a]">
                         {wsConnected ? "Live" : "Offline"}
                       </span>
                     </div>
