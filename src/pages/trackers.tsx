@@ -156,9 +156,18 @@ function hslAvatarBg(seed: string): string {
   return `hsl(${h}, 42%, 32%)`;
 }
 
-function KolAvatar({ name, handle }: { name: string; handle: string }) {
-  // 3-stage src fallback: local backfilled file -> live unavatar (per-user IP,
-  // sidesteps the central backfill rate limit) -> colored initial.
+function KolAvatar({
+  name,
+  handle,
+  address,
+}: {
+  name: string;
+  handle: string;
+  address?: string;
+}) {
+  // Multi-stage src: local kolscan backfill /kol-avatars/{address}.png -> live
+  // kolscan CDN -> old handle-based file -> colored initial. kolscan is keyed
+  // by address (no handle needed) and isn't rate-limited.
   const [stage, setStage] = useState(0);
   const raw = (name.trim().charAt(0) ||
     handle.trim().charAt(0) ||
@@ -166,11 +175,13 @@ function KolAvatar({ name, handle }: { name: string; handle: string }) {
   const initial = raw.toUpperCase();
 
   const src =
-    stage === 0 && handle
-      ? `/kol-avatars/${handle}.jpg`
-      : stage <= 1 && handle
-        ? `https://unavatar.io/x/${encodeURIComponent(handle)}?fallback=false`
-        : null;
+    stage === 0 && address
+      ? `/kol-avatars/${address}.png`
+      : stage <= 1 && address
+        ? `https://cdn.kolscan.io/profiles/${address}.png`
+        : stage <= 2 && handle
+          ? `/kol-avatars/${handle}.jpg`
+          : null;
 
   if (!src) {
     return (
@@ -3070,6 +3081,7 @@ export default function TrackersPage() {
                                                   <KolAvatar
                                                     name={kol.name}
                                                     handle={kol.handle}
+                                                    address={kol.wallet}
                                                   />
                                                   <div className="min-w-0 flex-1">
                                                     <div className="truncate text-xs font-semibold text-white sm:text-sm">
