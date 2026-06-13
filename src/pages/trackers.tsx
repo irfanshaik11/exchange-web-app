@@ -194,6 +194,8 @@ type DefaultWalletEntry = {
 };
 
 const TABS = ["Wallet Manager", "Live Trades", "Monitor", "KOLs"];
+// Per-tab signature colors for the glowing pill tabs (matches the design comp).
+const TAB_COLORS = ["#18c48c", "#F0616D", "#f5b14c", "#5B8CFF"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const TELEGRAM_TABS = ["Channels", "Messages", "Add Channels"];
 /** Default Telegram channels to track for all users when they have none. */
@@ -2614,22 +2616,30 @@ export default function TrackersPage() {
                             <div className="flex justify-between gap-3 border-b border-white/[0.06] py-3.5 sm:items-center sm:gap-4 sm:py-4">
                               {/* Left: tabs + wallet count */}
                               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                                {TABS.map((tab, i) => (
-                                  <button
-                                    key={tab}
-                                    className={`group relative cursor-pointer rounded-md px-3 py-1.5 text-[10px] whitespace-nowrap sm:px-4 sm:py-2 sm:text-xs ${
-                                      activeTab === i
-                                        ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
-                                        : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
-                                    }`}
-                                    onClick={() => setActiveTab(i)}
-                                  >
-                                    <span className="relative z-10">{tab}</span>
-                                    {activeTab === i && (
-                                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
-                                    )}
-                                  </button>
-                                ))}
+                                {TABS.map((tab, i) => {
+                                  // Per-tab signature color (comp): WM green, Live
+                                  // Trades rose, Monitor amber, KOLs blue. Active =
+                                  // filled + glow; inactive = faint colored outline.
+                                  const c = TAB_COLORS[i] ?? "#18c48c";
+                                  const active = activeTab === i;
+                                  return (
+                                    <button
+                                      key={tab}
+                                      onClick={() => setActiveTab(i)}
+                                      className="cursor-pointer rounded-md border px-3 py-1.5 text-[10px] font-semibold whitespace-nowrap sm:px-4 sm:py-2 sm:text-xs"
+                                      style={{
+                                        borderColor: active ? c : `${c}30`,
+                                        background: active ? `${c}1f` : "transparent",
+                                        color: active ? c : `${c}b0`,
+                                        boxShadow: active
+                                          ? `0 0 14px ${c}40, inset 0 0 12px ${c}14`
+                                          : "none",
+                                      }}
+                                    >
+                                      {tab}
+                                    </button>
+                                  );
+                                })}
                                 <div className="ml-2 flex items-center rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-[11px]">
                                   {activeTab === 3 ? (
                                     <>
