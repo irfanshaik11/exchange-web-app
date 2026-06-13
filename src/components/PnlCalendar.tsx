@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
+import { SolanaIcon } from "./Footer";
 
 /**
  * PnL Calendar — GMGN-style month grid of per-day realized PnL for a wallet.
@@ -25,16 +26,44 @@ function pad2(n: number) {
 }
 
 /** Compact money: +$11.4K / -$1.2M / +$320 */
+function fmtBody(n: number, currency: "USD" | "SOL"): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${(abs / 1_000).toFixed(abs >= 100_000 ? 0 : 1)}K`;
+  if (abs >= 1) return abs.toFixed(currency === "SOL" ? 2 : 0);
+  return abs.toFixed(currency === "SOL" ? 3 : 2);
+}
+
+// String formatter — used only in USD-only contexts (hover tooltip) where a
+// plain "$" is correct. SOL displays use the <Money> component (real logo).
 function fmtMoney(n: number, currency: "USD" | "SOL", signed = true): string {
   const sign = n > 0 ? (signed ? "+" : "") : n < 0 ? "-" : "";
-  const abs = Math.abs(n);
   const sym = currency === "USD" ? "$" : "◎";
-  let body: string;
-  if (abs >= 1_000_000) body = `${(abs / 1_000_000).toFixed(2)}M`;
-  else if (abs >= 1_000) body = `${(abs / 1_000).toFixed(abs >= 100_000 ? 0 : 1)}K`;
-  else if (abs >= 1) body = abs.toFixed(currency === "SOL" ? 2 : 0);
-  else body = abs.toFixed(currency === "SOL" ? 3 : 2);
-  return `${sign}${sym}${body}`;
+  return `${sign}${sym}${fmtBody(n, currency)}`;
+}
+
+/** Money with the right symbol: "$" for USD, the real Solana logo for SOL. */
+function Money({
+  n,
+  currency,
+  signed = true,
+  iconSize = 11,
+}: {
+  n: number;
+  currency: "USD" | "SOL";
+  signed?: boolean;
+  iconSize?: number;
+}) {
+  const sign = n > 0 ? (signed ? "+" : "") : n < 0 ? "-" : "";
+  const body = fmtBody(n, currency);
+  if (currency === "USD") return <>{`${sign}$${body}`}</>;
+  return (
+    <span className="inline-flex items-center gap-[1.5px]">
+      {sign}
+      <SolanaIcon size={iconSize} />
+      {body}
+    </span>
+  );
 }
 
 type HoverState = {
@@ -231,7 +260,13 @@ export default function PnlCalendar({
             onClick={() => setCurrency((c) => (c === "USD" ? "SOL" : "USD"))}
             className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/20 hover:text-[#f4f4f5]"
           >
-            {currency === "USD" ? "$ USD" : "◎ SOL"}
+            {currency === "USD" ? (
+              "$ USD"
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <SolanaIcon size={10} /> SOL
+              </span>
+            )}
           </button>
           <button
             onClick={() => setShareOpen(true)}
@@ -271,7 +306,7 @@ export default function PnlCalendar({
             className="text-[26px] font-bold leading-none tabular-nums"
             style={{ color: stats.total >= 0 ? GREEN : RED }}
           >
-            {fmtMoney(stats.total, currency)}
+            <Money n={stats.total} currency={currency} iconSize={20} />
           </span>
           {loading && (
             <span className="text-[10px] text-[#52525b]">updating…</span>
@@ -281,8 +316,8 @@ export default function PnlCalendar({
           <div className="h-full rounded-full" style={{ width: `${winPct}%`, background: GREEN }} />
         </div>
         <div className="mt-1 flex items-center justify-between text-[11px] font-medium tabular-nums">
-          <span style={{ color: GREEN }}>{stats.winDays} / {fmtMoney(stats.winSum, currency)}</span>
-          <span style={{ color: RED }}>{stats.lossDays} / {fmtMoney(stats.lossSum, currency)}</span>
+          <span className="inline-flex items-center gap-0.5" style={{ color: GREEN }}>{stats.winDays} / <Money n={stats.winSum} currency={currency} iconSize={10} /></span>
+          <span className="inline-flex items-center gap-0.5" style={{ color: RED }}>{stats.lossDays} / <Money n={stats.lossSum} currency={currency} iconSize={10} /></span>
         </div>
       </div>
 
@@ -337,7 +372,7 @@ export default function PnlCalendar({
                       className="flex flex-1 items-center justify-center text-[10px] font-bold leading-none tabular-nums sm:text-[13px]"
                       style={{ color }}
                     >
-                      {v === 0 ? "$0" : fmtMoney(v, currency)}
+                      {v === 0 ? (currency === "USD" ? "$0" : <Money n={0} currency={currency} signed={false} iconSize={9} />) : <Money n={v} currency={currency} iconSize={9} />}
                     </span>
                   </div>
                 );
@@ -473,7 +508,7 @@ export default function PnlCalendar({
                   letterSpacing: "-0.02em",
                 }}
               >
-                {fmtMoney(stats.total, currency)}
+                <Money n={stats.total} currency={currency} iconSize={34} />
               </div>
 
               <div style={{ display: "flex", gap: 28, marginTop: 18 }}>
