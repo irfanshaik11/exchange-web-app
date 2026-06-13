@@ -395,6 +395,17 @@ function handleMessage(channel, data) {
         handleTokenInfoUpdate(data.data || data);
         break;
 
+      // metrics_update: authoritative holder-analysis stats recomputed by the
+      // indexer (top10 %, dev %, insider %, bundle %, holder_count) and rebroadcast
+      // by token-service (metrics.update Redis channel -> pulse WS). The initial
+      // lifecycle event carries zeros because these are computed seconds after a
+      // token appears; this is the message that fills the badges in. Without this
+      // case the real values were silently dropped, so badges stayed at 0.00%.
+      case "metrics_update":
+      case "metricsUpdate":
+        handleMetricsUpdate(data.data || data);
+        break;
+
       case "pong":
         // Heartbeat pong received — clear the timeout to prevent reconnect
         if (heartbeatTimeouts[channel]) {
@@ -913,11 +924,6 @@ function updateTokenInArray(arr, mint, update) {
     getNum(update.bonding_pct) ?? getNum(update.bonding_curve_progress),
     token.bonding_pct,
   );
-  const holderValue = keepIfPositive(
-    update.holders ?? update.holder_count ?? update.total_holders,
-    token.holders,
-  );
-
   // Price changes - not sent by price_update, keep existing
   const priceChange5mValue =
     getNum(update.price_percent_change_5m) ??
@@ -967,10 +973,13 @@ function updateTokenInArray(arr, mint, update) {
     liquidityUSD: String(liquidityValue),
     total_liquidity_usd: liquidityValue,
 
-    // Holders (ALL format variants)
-    holders: holderValue,
-    holder_count: holderValue,
-    total_holders: holderValue,
+    // Holders: do NOT take from price_update — its holder_count is stale/wrong
+    // (observed stuck at ~20-30 on prod while the real count is in the thousands).
+    // The authoritative live count arrives via holder_count_update + metrics_update,
+    // so preserve whatever those set rather than letting price_update clobber it.
+    holders: token.holders,
+    holder_count: token.holder_count,
+    total_holders: token.total_holders,
 
     // Unique wallets (price_update sends 5m)
     unique_wallets_5m: keepIfPositive(
@@ -1075,15 +1084,21 @@ function updateTokenInArray(arr, mint, update) {
       token.total_sell_volume_24h,
     ),
 
-    // Percentages (NOT sent by price_update, keep existing)
-    dev_percent: keepIfPositive(
-      update.dev_percent ?? update.dev_held_percentage,
-      token.dev_percent,
-    ),
-    dev_held_percentage: keepIfPositive(
-      update.dev_held_percentage ?? update.dev_percent,
-      token.dev_held_percentage,
-    ),
+    // Holder-analysis percentages: price_update carries these but with WRONG
+    // values (e.g. dev/insider/bundle that disagree with the authoritative feed
+    // for ~90% of tokens on prod). The correct values come from metrics_update
+    // (handleMetricsUpdate), so DO NOT let price_update touch dev/insider/bundle —
+    // preserve whatever metrics_update / snapshot set. keepIfPositive at price's
+    // ~170/sec would otherwise constantly clobber the correct metrics values.
+    dev_percent: token.dev_percent,
+    dev_held_percentage: token.dev_held_percentage,
+    insider_percent: token.insider_percent,
+    insider_held_percentage: token.insider_held_percentage,
+    bundle_percent: token.bundle_percent,
+    bundled_percentage: token.bundled_percentage,
+    bundler_held_percentage: token.bundler_held_percentage,
+    // Sniper IS still sourced from price_update: metrics_update does not carry it
+    // (sniper % is a launch-window property), so price/snapshot remain its source.
     sniper_percent: keepIfPositive(
       update.sniper_percent ?? update.sniper_held_percentage,
       token.sniper_percent,
@@ -1093,26 +1108,6 @@ function updateTokenInArray(arr, mint, update) {
       token.sniper_held_percentage,
     ),
     total_snipers: keepIfPositive(update.total_snipers, token.total_snipers),
-    insider_percent: keepIfPositive(
-      update.insider_percent ?? update.insider_held_percentage,
-      token.insider_percent,
-    ),
-    insider_held_percentage: keepIfPositive(
-      update.insider_held_percentage ?? update.insider_percent,
-      token.insider_held_percentage,
-    ),
-    bundle_percent: keepIfPositive(
-      update.bundle_percent ?? update.bundled_percentage,
-      token.bundle_percent,
-    ),
-    bundled_percentage: keepIfPositive(
-      update.bundled_percentage ?? update.bundle_percent,
-      token.bundled_percentage,
-    ),
-    bundler_held_percentage: keepIfPositive(
-      update.bundler_held_percentage,
-      token.bundler_held_percentage,
-    ),
 
     // Bonding curve (NOT sent by price_update, keep existing)
     bondingCurveProgress: bondingValue,
@@ -1182,6 +1177,78 @@ function handleTokenInfoUpdate(update) {
   applyAndSendDelta(newTokens);
   applyAndSendDelta(finalStretchTokens);
   applyAndSendDelta(migratedTokens);
+}
+
+// handleMetricsUpdate: merge authoritative holder-analysis stats (top10 %, dev %,
+// insider %, bundle %, holder_count) onto the matching token in each board.
+//
+// Field aliases mirror normalizeToken() so the card components (BottomCardInfoHolder)
+// pick the value up regardless of which alias they read.
+//
+// keepIfPositive semantics: only overwrite when the incoming value is > 0. This is
+// the same rule handlePriceUpdate already uses for these percentage fields and it
+// prevents an early/partial metrics_update (which can carry 0 before the indexer has
+// finished computing) from blanking a value we already resolved. Sniper % is NOT in
+// the metrics_update payload, so it is intentionally left untouched here.
+function handleMetricsUpdate(update) {
+  const mint = update.mint_address || update.mint || update.address;
+  if (!mint) return;
+
+  const num = (val) => {
+    const n = Number(val);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const keepIfPositive = (newVal, existing) => (newVal > 0 ? newVal : existing);
+
+  const top10 = num(update.top10_holders_pct ?? update.top_10_holders_percent);
+  const dev = num(update.dev_percent ?? update.dev_held_percentage);
+  const insider = num(update.insider_percent ?? update.insider_held_percentage);
+  const bundle = num(update.bundle_percent ?? update.bundled_percentage);
+  const holderCount = num(update.holder_count);
+
+  const applyAndSendDelta = (arr) => {
+    const idx = arr.findIndex((t) => t.mint === mint);
+    if (idx === -1) return false;
+
+    const token = arr[idx];
+    const updatedToken = {
+      ...token,
+      top10_holders_pct: keepIfPositive(top10, token.top10_holders_pct),
+      dev_percent: keepIfPositive(dev, token.dev_percent),
+      dev_held_percentage: keepIfPositive(dev, token.dev_held_percentage),
+      insider_percent: keepIfPositive(insider, token.insider_percent),
+      insider_held_percentage: keepIfPositive(
+        insider,
+        token.insider_held_percentage,
+      ),
+      bundle_percent: keepIfPositive(bundle, token.bundle_percent),
+      bundled_percentage: keepIfPositive(bundle, token.bundled_percentage),
+      bundler_held_percentage: keepIfPositive(
+        bundle,
+        token.bundler_held_percentage,
+      ),
+      holder_count: keepIfPositive(holderCount, token.holder_count),
+      holders: keepIfPositive(holderCount, token.holders),
+    };
+    arr[idx] = updatedToken;
+
+    // Reuse the token_info delta path - the bridge merges these fields onto the row.
+    sendTokenDelta("token_info", updatedToken);
+    return true;
+  };
+
+  // Update each board independently: a token usually lives in one board, but
+  // isolating the calls keeps an unexpected failure on one (e.g. a postMessage
+  // clone error) from leaving the others partially-merged on this hot feed.
+  for (const board of [newTokens, finalStretchTokens, migratedTokens]) {
+    try {
+      applyAndSendDelta(board);
+    } catch (err) {
+      if (DEBUG_MODE) {
+        console.warn("[PulseWorker] metrics_update merge failed for", mint, err);
+      }
+    }
+  }
 }
 
 console.log("[PulseWorker] Worker initialized");
