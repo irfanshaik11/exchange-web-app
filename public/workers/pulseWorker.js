@@ -1253,9 +1253,18 @@ function handleMetricsUpdate(update) {
     return true;
   };
 
-  applyAndSendDelta(newTokens);
-  applyAndSendDelta(finalStretchTokens);
-  applyAndSendDelta(migratedTokens);
+  // Update each board independently: a token usually lives in one board, but
+  // isolating the calls keeps an unexpected failure on one (e.g. a postMessage
+  // clone error) from leaving the others partially-merged on this hot feed.
+  for (const board of [newTokens, finalStretchTokens, migratedTokens]) {
+    try {
+      applyAndSendDelta(board);
+    } catch (err) {
+      if (DEBUG_MODE) {
+        console.warn("[PulseWorker] metrics_update merge failed for", mint, err);
+      }
+    }
+  }
 }
 
 console.log("[PulseWorker] Worker initialized");
