@@ -10,7 +10,7 @@ import {
   ReferenceLine,
   Bar,
   Cell,
-  Line,
+  Area,
 } from "recharts";
 
 export interface PnlChartDataPoint {
@@ -22,6 +22,11 @@ export interface PnlChartDataPoint {
   tokenName: string;
   index: number;
 }
+
+// Brand palette — matches trackersTheme (gain #18c48c, loss #F0616D, mint hi #7FFFC9)
+const GAIN = "#18c48c";
+const LOSS = "#F0616D";
+const LINE = "#7FFFC9";
 
 export default function RealizedPnlChart({ data }: { data: PnlChartDataPoint[] }) {
   const cumulativeValues = data.map((d) => d.cumulativePnl);
@@ -42,14 +47,14 @@ export default function RealizedPnlChart({ data }: { data: PnlChartDataPoint[] }
       const d = payload[0].payload as PnlChartDataPoint;
       if (d.index === 0) return null;
       return (
-        <div className="bg-black/90 backdrop-blur-xl border border-white/[0.06] rounded-lg p-3 shadow-lg z-50 pointer-events-none">
-          <p className="text-[#6B7280] text-xs mb-2 font-medium">{d.date}</p>
+        <div className="pointer-events-none z-50 rounded-lg border border-white/[0.08] bg-[#0c0e12] p-3">
+          <p className="mb-2 text-xs font-medium text-[#71717a]">{d.date}</p>
           <div className="space-y-1">
-            <p className="text-white text-xs font-medium">{d.tokenSymbol || d.tokenName}</p>
-            <p className="text-xs" style={{ color: d.tradePnl >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+            <p className="text-xs font-medium text-white">{d.tokenSymbol || d.tokenName}</p>
+            <p className="text-xs" style={{ color: d.tradePnl >= 0 ? GAIN : LOSS }}>
               This trade: {d.tradePnl >= 0 ? "+" : "-"}${formatSmallPrice(Math.abs(d.tradePnl))}
             </p>
-            <p className="text-sm font-medium" style={{ color: d.cumulativePnl >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+            <p className="text-sm font-medium" style={{ color: d.cumulativePnl >= 0 ? GAIN : LOSS }}>
               Total: {d.cumulativePnl >= 0 ? "+" : "-"}${formatSmallPrice(Math.abs(d.cumulativePnl))}
             </p>
           </div>
@@ -60,9 +65,15 @@ export default function RealizedPnlChart({ data }: { data: PnlChartDataPoint[] }
   };
 
   return (
-    <div className="w-full h-full min-h-[160px] sm:min-h-[192px]">
+    <div className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="pnlAreaFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={LINE} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={LINE} stopOpacity={0} />
+            </linearGradient>
+          </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" opacity={0.5} />
           <XAxis
             dataKey="time"
@@ -95,24 +106,25 @@ export default function RealizedPnlChart({ data }: { data: PnlChartDataPoint[] }
           />
           <ReferenceLine yAxisId="bar" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" />
           <ReferenceLine yAxisId="line" y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="2 4" />
-          <Bar yAxisId="bar" dataKey="tradePnl" animationDuration={300} radius={[2, 2, 0, 0]}>
+          <Bar yAxisId="bar" dataKey="tradePnl" isAnimationActive={false} radius={[2, 2, 0, 0]}>
             {data.map((entry, idx) => (
               <Cell
                 key={`cell-${idx}`}
-                fill={entry.index === 0 ? "transparent" : entry.tradePnl >= 0 ? "#70E0B0" : "#FF4D7F"}
-                fillOpacity={entry.index === 0 ? 0 : 0.85}
+                fill={entry.index === 0 ? "transparent" : entry.tradePnl >= 0 ? GAIN : LOSS}
+                fillOpacity={entry.index === 0 ? 0 : 0.8}
               />
             ))}
           </Bar>
-          <Line
+          <Area
             yAxisId="line"
             type="monotone"
             dataKey="cumulativePnl"
-            stroke="#A0AEC0"
-            strokeWidth={1.5}
+            stroke={LINE}
+            strokeWidth={1.75}
+            fill="url(#pnlAreaFill)"
             dot={false}
-            activeDot={{ r: 4, fill: "#A0AEC0", stroke: "rgba(0,0,0,0.8)", strokeWidth: 2 }}
-            animationDuration={300}
+            activeDot={{ r: 4, fill: LINE, stroke: "rgba(0,0,0,0.8)", strokeWidth: 2 }}
+            isAnimationActive={false}
           />
         </ComposedChart>
       </ResponsiveContainer>

@@ -1099,7 +1099,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   {realizedPnlPercentage.toFixed(2)}%
                 </span>
               </div>
-              <div className="mt-2 h-[100px] w-full sm:h-[150px]">
+              <div className="mt-2 h-[150px] w-full sm:h-[180px]">
                 {positionsLoading ? (
                   <div className="flex h-full items-center justify-center text-xs text-[#52525b]">
                     Loading chart…
