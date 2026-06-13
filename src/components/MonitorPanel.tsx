@@ -694,7 +694,7 @@ export default function MonitorPanel({
               </div>
 
               {/* WALLETS TABLE — "Held For" + txn sublines hide on narrow cards */}
-              <div className="border-t border-white/[0.06] bg-[#08090c]">
+              <div className="border-t border-white/[0.06]">
                 <table className="w-full table-fixed text-[11px]">
                   <colgroup>
                     <col className="w-[34%] @[22rem]:w-[28%]" />
