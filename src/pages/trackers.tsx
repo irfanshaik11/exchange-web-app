@@ -188,7 +188,6 @@ function KolAvatar({ name, handle }: { name: string; handle: string }) {
     <img
       src={src}
       alt=""
-      loading="lazy"
       className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10"
       onError={() => setStage((s) => s + 1)}
     />

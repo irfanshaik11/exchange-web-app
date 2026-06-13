@@ -42,7 +42,6 @@ export const KolDpCircle: React.FC<{
       src={src}
       alt={kol.name}
       title={`@${handle}`}
-      loading="lazy"
       className={`flex-shrink-0 rounded-full object-cover ring-1 ring-white/10 ${className ?? ""}`}
       style={dim}
       onError={() => setStage((s) => s + 1)}
