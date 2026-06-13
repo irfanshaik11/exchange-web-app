@@ -2630,7 +2630,7 @@ export default function TrackersPage() {
                                     )}
                                   </button>
                                 ))}
-                                <div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-[11px]">
+                                <div className="ml-2 flex items-center rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-[11px]">
                                   {activeTab === 3 ? (
                                     <>
                                       <span className="text-neutral-500">
@@ -2662,7 +2662,7 @@ export default function TrackersPage() {
                                 {/* Quick-buy amount editor — sets the SOL used by
                                     every Quick Buy button in Live Trades / Monitor. */}
                                 {(activeTab === 1 || activeTab === 2) && (
-                                  <div className="flex items-center gap-1 rounded-md border border-white/[0.06] bg-[#08090c] px-2 py-1 sm:gap-1.5 sm:px-2.5 sm:py-1.5">
+                                  <div className="flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-1 sm:gap-1.5 sm:px-2.5 sm:py-1.5">
                                     <HiLightningBolt className="h-3 w-3 text-[#18c48c] sm:h-3.5 sm:w-3.5" />
                                     <input
                                       type="text"
@@ -2705,7 +2705,7 @@ export default function TrackersPage() {
                                   <>
                                     {selectedChain === "sol" && (
                                       <button
-                                        className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
+                                        className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
                                         onClick={handleAddDefault150Wallets}
                                         disabled={
                                           isAtWalletLimit ||
@@ -2761,7 +2761,7 @@ export default function TrackersPage() {
                                         <input
                                           type="text"
                                           placeholder="Search by address"
-                                          className="w-full rounded-md border border-white/[0.06] bg-[#08090c] px-4 py-2 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#0c0e12] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                          className="w-full rounded-md border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#0c0e12] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                           disabled={false}
                                           value={searchTerm}
                                           onChange={(e) =>
@@ -2775,7 +2775,7 @@ export default function TrackersPage() {
                                         {activeTab === 0 && (
                                           <>
                                             <button
-                                              className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+                                              className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
                                               onClick={() =>
                                                 setShowImportModal(true)
                                               }
@@ -2789,7 +2789,7 @@ export default function TrackersPage() {
                                                 </div>
                                               )}
                                               <button
-                                                className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+                                                className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
                                                 onClick={handleExportAddresses}
                                               >
                                                 Export
@@ -2798,7 +2798,7 @@ export default function TrackersPage() {
 
                                             {/* Icon buttons - hide some on mobile */}
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-[#08090c] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -2806,10 +2806,10 @@ export default function TrackersPage() {
                                             <button
                                               className={`flex h-8 w-8 items-center justify-center rounded-md border sm:h-9 sm:w-9 ${
                                                 isTogglingAllNotifications
-                                                  ? "cursor-not-allowed border-white/[0.06] bg-[#08090c] opacity-40"
+                                                  ? "cursor-not-allowed border-white/[0.06] bg-white/[0.04] opacity-40"
                                                   : allNotificationsEnabled
                                                     ? "cursor-pointer border-[#ef4444]/40 bg-[#ef4444]/15 text-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.2)] hover:bg-[#ef4444]/25"
-                                                    : "cursor-pointer border-white/[0.06] bg-[#08090c] text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#a1a1aa]"
+                                                    : "cursor-pointer border-white/[0.06] bg-white/[0.04] text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#a1a1aa]"
                                               }`}
                                               type="button"
                                               onClick={
@@ -2835,13 +2835,13 @@ export default function TrackersPage() {
                                               />
                                             </button>
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-[#08090c] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-[#08090c] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -2859,7 +2859,7 @@ export default function TrackersPage() {
                                     <input
                                       type="text"
                                       placeholder="Search by name, @handle, or wallet"
-                                      className="w-full rounded-lg border border-white/[0.06] bg-[#08090c] px-4 py-2 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-[#0c0e12] focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-[#0c0e12] focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                       value={kolSearchTerm}
                                       onChange={(e) =>
                                         setKolSearchTerm(e.target.value)
@@ -3235,7 +3235,7 @@ export default function TrackersPage() {
                                   type="button"
                                   onClick={handleRestoreTelegramDefaults}
                                   disabled={restoringTelegramDefaults}
-                                  className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] disabled:opacity-40 sm:px-3 sm:py-2 sm:text-xs"
+                                  className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5] disabled:opacity-40 sm:px-3 sm:py-2 sm:text-xs"
                                 >
                                   {restoringTelegramDefaults
                                     ? "Adding…"
@@ -3333,7 +3333,7 @@ export default function TrackersPage() {
                                     </span>
                                     <button
                                       type="button"
-                                      className="mt-5 rounded-md border border-white/[0.06] bg-[#08090c] px-4 py-2 text-xs font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5]"
+                                      className="mt-5 rounded-md border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-xs font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5]"
                                       onClick={() => loadTelegramFeed(true)}
                                     >
                                       Retry
@@ -3393,7 +3393,7 @@ export default function TrackersPage() {
                                           e.target.value,
                                         )
                                       }
-                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:outline-none sm:text-xs"
+                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -3464,7 +3464,7 @@ export default function TrackersPage() {
                                                 }
                                               }}
                                               disabled={isTracked || isAdding}
-                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#08090c] text-[#71717a] hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#08090c] disabled:hover:text-[#71717a]"
+                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] text-[#71717a] hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#08090c] disabled:hover:text-[#71717a]"
                                               title={
                                                 isTracked
                                                   ? "Already tracked"
@@ -3513,7 +3513,7 @@ export default function TrackersPage() {
                               {twitterTab === 0 && (
                                 <button
                                   type="button"
-                                  className="cursor-pointer rounded-md border border-white/[0.06] bg-[#08090c] px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-xs"
+                                  className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-xs"
                                   onClick={() => setShowAddTwitterModal(true)}
                                 >
                                   Add Handle
@@ -3686,7 +3686,7 @@ export default function TrackersPage() {
                                       onChange={(e) =>
                                         setApprovedHandlesSearch(e.target.value)
                                       }
-                                      className="w-full flex-1 rounded-md border border-white/[0.06] bg-[#08090c] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:outline-none sm:text-xs"
+                                      className="w-full flex-1 rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -3755,7 +3755,7 @@ export default function TrackersPage() {
                                                 }
                                               }}
                                               disabled={isTracked || isAdding}
-                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#08090c] text-[#71717a] hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#08090c] disabled:hover:text-[#71717a]"
+                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] text-[#71717a] hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#08090c] disabled:hover:text-[#71717a]"
                                               title={
                                                 isTracked
                                                   ? "Already tracked"

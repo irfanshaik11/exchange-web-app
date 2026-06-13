@@ -10,7 +10,7 @@ import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
 import PnlCalendar from "./PnlCalendar";
 import { Sparkline } from "./MicroChart";
-import { pnlColor } from "~/utils/trackersTheme";
+import { pnlColor, pnlHeat } from "~/utils/trackersTheme";
 import { getWalletDailyPnl, type WalletDailyPnlDay } from "~/utils/api";
 import { useSolPrice } from "./SolPriceContext";
 import RealizedPnlChart, {
@@ -331,6 +331,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       .sort((a, b) => b.closedAt - a.closedAt)
       .slice(0, MAX_HISTORY_ROWS);
   }, [enrichedPositions, currentSolPrice]);
+
+  // Max |pnl| in the history set — normalizes the pnlHeat() cell tints so the
+  // History table reads as a color-graded ledger (strongest mover = deepest tint).
+  const maxAbsClosedPnl = useMemo(
+    () =>
+      closedOrders.reduce((m, o) => Math.max(m, Math.abs(o.pnl || 0)), 0) || 1,
+    [closedOrders],
+  );
 
   // Calculate performance metrics from closed orders
   // Authoritative realized PnL for the selected range, in USD. Comes from the
@@ -1330,14 +1338,16 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                             <td className="px-4 py-2.5 text-right tabular-nums text-[#d4d4d8]">
                               {soldDisplay}
                             </td>
-                            <td className="px-4 py-2.5 text-right">
+                            <td
+                              className="px-4 py-2.5 text-right"
+                              style={{
+                                background: pnlHeat(order.pnl / maxAbsClosedPnl).background,
+                              }}
+                            >
                               <div className="flex flex-col items-end">
                                 <div
                                   className="font-semibold tabular-nums"
-                                  style={{
-                                    color:
-                                      order.pnl >= 0 ? "#18c48c" : "#ef4444",
-                                  }}
+                                  style={{ color: pnlColor(order.pnl) }}
                                 >
                                   {pnlDisplay}
                                 </div>
@@ -1347,7 +1357,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                     color:
                                       order.pnlPercentage >= 0
                                         ? "rgba(24,196,140,0.7)"
-                                        : "rgba(239,68,68,0.7)",
+                                        : "rgba(240,97,109,0.7)",
                                   }}
                                 >
                                   {pnlPercentageDisplay}
@@ -1541,18 +1551,20 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 </span>
                               </div>
                             </td>
-                            <td className="px-4 py-2.5 text-right">
+                            <td
+                              className="px-4 py-2.5 text-right"
+                              style={{
+                                background: isAirdrop
+                                  ? undefined
+                                  : pnlHeat(position.pnlPercentage / 200).background,
+                              }}
+                            >
                               {isAirdrop ? (
                                 <span className="text-sm text-[#52525b]">—</span>
                               ) : (
                                 <span
                                   className="font-semibold tabular-nums"
-                                  style={{
-                                    color:
-                                      position.pnlPercentage >= 0
-                                        ? "#18c48c"
-                                        : "#ef4444",
-                                  }}
+                                  style={{ color: pnlColor(position.pnlPercentage) }}
                                 >
                                   {position.pnlPercentage >= 0 ? "+" : ""}
                                   {position.pnlPercentage.toFixed(1)}%
@@ -1735,18 +1747,20 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 </div>
                               )}
                             </td>
-                            <td className="px-4 py-2.5 text-right">
+                            <td
+                              className="px-4 py-2.5 text-right"
+                              style={{
+                                background: isAirdrop
+                                  ? undefined
+                                  : pnlHeat(position.pnlPercentage / 200).background,
+                              }}
+                            >
                               {isAirdrop ? (
                                 <span className="text-sm text-[#52525b]">—</span>
                               ) : (
                                 <span
                                   className="font-semibold tabular-nums"
-                                  style={{
-                                    color:
-                                      position.pnlPercentage >= 0
-                                        ? "#18c48c"
-                                        : "#ef4444",
-                                  }}
+                                  style={{ color: pnlColor(position.pnlPercentage) }}
                                 >
                                   {position.pnlPercentage >= 0 ? "+" : ""}
                                   {position.pnlPercentage.toFixed(1)}%

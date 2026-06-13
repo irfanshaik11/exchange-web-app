@@ -468,10 +468,7 @@ export default function WalletRow({
           <span className="w-20 text-[9px] text-neutral-300 sm:w-36 sm:text-xs">
             {balance !== undefined ? (
               <span
-                className="flex items-center gap-1 font-mono font-semibold tabular-nums"
-                style={{
-                  color: watchedWallet?.chain === "monad" ? "#7FFFC9" : "#18c48c",
-                }}
+                className="flex items-center gap-1 font-mono font-semibold tabular-nums text-[#e4e4e7]"
               >
                 <ChainIcon chain={watchedWallet?.chain} size={11} />
                 <span className="text-[9px] tabular-nums sm:text-xs">
