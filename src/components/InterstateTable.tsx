@@ -45,6 +45,13 @@ import {
   isMetadataUrl,
 } from "~/utils/images";
 import { computeHashImageUrl } from "~/utils/imageHash";
+import { getRetainedImage } from "~/utils/imagePreloader";
+import {
+  TIMEFRAME_CONFIG,
+  sparklineCache,
+  SPARKLINE_CACHE_TTL_MS,
+  deriveTrendingAvatarUrl,
+} from "~/utils/trendingPreload";
 import AvatarImage from "~/components/AvatarImage";
 import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
@@ -774,19 +781,41 @@ const TokenAvatar: React.FC<{
   const cachedAvatarMint = (token.mint ||
     (token as any).mint_address ||
     "") as string;
-  // If this mint's image already loaded earlier, hydrate visibleSrc synchronously
-  // so the FIRST render shows the cached URL with no preload and no fade.
-  const [visibleSrc, setVisibleSrc] = useState<string>(() =>
-    cachedAvatarMint ? loadedAvatarCache.get(cachedAvatarMint) || "" : "",
-  );
-  // Capture at mount time: was this mint's image already in the cache BEFORE we
-  // mounted? If yes, render without the fade for the entire lifetime of this
-  // mount (instant). If no, render with fade until unmount  the fade plays
-  // exactly once when the <img> first appears, and never re-plays on subsequent
-  // re-renders of the same mount because className stays stable.
-  const skipFadeRef = useRef<boolean>(
-    cachedAvatarMint ? loadedAvatarCache.has(cachedAvatarMint) : false,
-  );
+  // Seed visibleSrc synchronously at mount so the FIRST paint shows the image
+  // with no preload round-trip and no fade. Two warm sources, in order:
+  //   1. loadedAvatarCache — this mint's image loaded earlier this session.
+  //   2. The app-root background prewarm (TrendingBackgroundLoader →
+  //      preloadTrendingImages): if the EXACT proxy URL this row will render
+  //      is already a decoded bitmap in the module-level retained-image LRU,
+  //      use it. deriveTrendingAvatarUrl reproduces TokenAvatar's cold-mount
+  //      imgSrc derivation byte-for-byte, so the lookup hits the same key the
+  //      preloader warmed. Doing this in the useState initializer (runs once
+  //      at mount) instead of during render avoids the double-render a
+  //      render-phase setState would cause.
+  const [visibleSrc, setVisibleSrc] = useState<string>(() => {
+    if (cachedAvatarMint) {
+      const cached = loadedAvatarCache.get(cachedAvatarMint);
+      if (cached) return cached;
+    }
+    const warm = deriveTrendingAvatarUrl(token as any);
+    if (warm) {
+      const retained = getRetainedImage(warm);
+      if (retained && retained.complete && retained.naturalHeight > 0) {
+        // Promote into the per-mint cache so the load effect short-circuits
+        // (same as a loadedAvatarCache hit) instead of firing a redundant
+        // Image() probe for an already-decoded bitmap.
+        if (cachedAvatarMint) loadedAvatarCache.set(cachedAvatarMint, warm);
+        return warm;
+      }
+    }
+    return "";
+  });
+  // Whether to skip the fade-in for this mount. If visibleSrc was seeded above
+  // (cache hit or retained bitmap), the image is already known-good → render
+  // it instantly with no fade. Otherwise the fade plays exactly once when the
+  // <img> first appears, and never re-plays on subsequent re-renders of the
+  // same mount because className stays stable.
+  const skipFadeRef = useRef<boolean>(!!visibleSrc);
 
   // Get protocol color - matches PulseTable/SearchModal for consistency
   const getProtocolColor = (token: Token): string => {
@@ -917,6 +946,10 @@ const TokenAvatar: React.FC<{
     if (mintKey) resolvedImageCache[mintKey] = proxyUrl;
     return proxyUrl;
   }, [meta, imageUrl, token.logo, mintKey, rawUri]);
+
+  // Note: the background-prewarm fast-path (retained-bitmap → instant first
+  // paint) is seeded in the visibleSrc useState initializer above, not here —
+  // doing it during render would force a second render pass per cold mount.
 
   // Preload the new image off-screen with `new Image()`. Only when its bytes
   // are fully decoded by the browser do we promote `imgSrc` into `visibleSrc`,
@@ -2241,23 +2274,11 @@ const TxnsCell: React.FC<{
 // points). At 1m candles a short window only has a handful of points and the
 // polyline renders as 1–2 line segments — looks like a flat diagonal even on
 // tokens that actually moved during the window.
-const TIMEFRAME_CONFIG: Record<
-  string,
-  { windowSec: number; interval: string; label: string }
-> = {
-  "1m": { windowSec: 60, interval: "1s", label: "1M" }, // ~60 candles
-  "5m": { windowSec: 5 * 60, interval: "1s", label: "5M" }, // ~300 candles
-  "30m": { windowSec: 1800, interval: "1m", label: "30M" }, // ~30 candles
-  "1h": { windowSec: 60 * 60, interval: "1m", label: "1H" }, // ~60 candles
-};
-
-// Cache keyed by mint+timeframe so switching timeframes doesn't reuse stale
-// data, and going back doesn't re-hit the API for ~5 min.
-const sparklineCache = new Map<
-  string,
-  { data: number[]; priceChange: number; ts: number }
->();
-const SPARKLINE_CACHE_TTL_MS = 5 * 60 * 1000;
+//
+// TIMEFRAME_CONFIG / sparklineCache / SPARKLINE_CACHE_TTL_MS now live in
+// ~/utils/trendingPreload so the app-root background prefetch
+// (TrendingBackgroundLoader) fills the same cache this component reads —
+// on a warm session the first mount is a cache hit and no fetch fires.
 
 // When OHLCV data is missing for a token (common for newly-trending pump.fun
 // mints not yet indexed by token-service), synthesize a 5-point trajectory
@@ -3241,8 +3262,10 @@ export default function InterstateTable({
         // as unranked instead of slipping past both branches below.
         const aRaw = a.token.rank;
         const bRaw = b.token.rank;
-        const aRank = typeof aRaw === "number" && Number.isFinite(aRaw) ? aRaw : 0;
-        const bRank = typeof bRaw === "number" && Number.isFinite(bRaw) ? bRaw : 0;
+        const aRank =
+          typeof aRaw === "number" && Number.isFinite(aRaw) ? aRaw : 0;
+        const bRank =
+          typeof bRaw === "number" && Number.isFinite(bRaw) ? bRaw : 0;
         if (aRank > 0 && bRank > 0 && aRank !== bRank) {
           return sortDirection === "asc" ? aRank - bRank : bRank - aRank;
         }

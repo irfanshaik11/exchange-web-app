@@ -64,11 +64,11 @@ import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 
 import {
-  extractTokenImage,
   getResolvedTokenImage,
   resolveTokenImage,
   isMetadataUrl,
 } from "~/utils/images";
+import { preloadTrendingImages } from "~/utils/trendingPreload";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import {
   broadcastTradeCompleted,
@@ -95,7 +95,6 @@ import {
 import { usePulseFromQueryCache } from "~/hooks/usePulseFromQueryCache";
 import { useDiscoverFilters } from "~/hooks/useDiscoverFilters";
 import DiscoverFilterModal from "~/components/DiscoverFilterModal";
-import { useImagePreloader } from "~/hooks/useImagePreloader";
 import {
   applyDiscoverFilters,
   mapProtocolToBackend,
@@ -4752,8 +4751,13 @@ export function DiscoverPageContent({
     [processedXStocks],
   );
 
-  // Preload images for all tab data eagerly
-  const { preloadImages } = useImagePreloader();
+  // Preload images for all tab data eagerly. Uses the retaining preloader
+  // (same one Pulse + TrendingBackgroundLoader use): it derives the exact
+  // proxy URL TokenAvatar renders and keeps the decoded bitmap in the
+  // module-level LRU, so switching tabs paints avatars on the first frame.
+  // (The previous useImagePreloader hook warmed the HTTP cache only — its
+  // loaded Image objects weren't retained, so TokenAvatar still had to do a
+  // per-row round-trip before showing anything.)
   useEffect(() => {
     const allTabTokens = [
       ...((allTokens as any[]) || []),
@@ -4763,19 +4767,20 @@ export function DiscoverPageContent({
       ...((pumpPortalTokens as any[]) || []),
     ];
     if (allTabTokens.length === 0) return;
-    const imageSources = allTabTokens
-      .map((token: any) => extractTokenImage(token))
-      .filter(Boolean);
-    if (imageSources.length > 0) {
-      preloadImages(imageSources, { priority: true, timeout: 2000 });
-    }
+    // Above-the-fold slice gets fetchPriority=high (<link rel=preload>) so a
+    // cold direct landing on /discover paints the visible board first; the
+    // long tail warms at normal priority.
+    preloadTrendingImages(allTabTokens, { limit: 30, priority: "high" });
+    preloadTrendingImages(allTabTokens.slice(30), {
+      limit: 170,
+      maxConcurrent: 10,
+    });
   }, [
     allTokens,
     dexScreenerTokens,
     processedNewPairs,
     processedXStocks,
     pumpPortalTokens,
-    preloadImages,
   ]);
 
   const renderPrimaryTable = () => {
