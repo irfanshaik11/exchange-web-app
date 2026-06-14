@@ -504,6 +504,11 @@ export function useWalletScan(
 
   const inflightRef = useRef<AbortController | null>(null);
   const refetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Follow-up refetch to absorb indexer lag: the trade hits the token-service's
+  // DB a few seconds after it lands on chain, so a single ~2s refetch can miss
+  // the brand-new position. A second pass ~8s later catches it without a manual
+  // refresh.
+  const lagRefetchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Whale-wallet refetch coalescing: while a (potentially 15-60s) fetch is in
   // flight, refetch signals queue a single trailing run instead of aborting it.
   const fetchInFlightRef = useRef(false);
@@ -840,6 +845,13 @@ export function useWalletScan(
       // wallet's positions instead of returning the ≤150s-stale warmer cache.
       void fetchAll(true);
     }, 2000);
+    // Second pass to catch the new position after the indexer has ingested the
+    // trade (it lags chain by a few seconds), so it appears without a refresh.
+    if (lagRefetchRef.current) clearTimeout(lagRefetchRef.current);
+    lagRefetchRef.current = setTimeout(() => {
+      lagRefetchRef.current = null;
+      void fetchAll(true);
+    }, 8000);
   }, [opts?.refetchSignal, address, fetchAll]);
 
   // Cleanup on unmount.
@@ -848,6 +860,9 @@ export function useWalletScan(
       inflightRef.current?.abort();
       if (refetchDebounceRef.current) {
         clearTimeout(refetchDebounceRef.current);
+      }
+      if (lagRefetchRef.current) {
+        clearTimeout(lagRefetchRef.current);
       }
     };
   }, []);
