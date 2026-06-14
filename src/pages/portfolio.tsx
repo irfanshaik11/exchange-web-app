@@ -4015,9 +4015,10 @@ export default function PortfolioPage() {
                   </div>
                 </div>
 
-                {/* Table Content — display toggling keeps components mounted to avoid re-fetch on tab switch */}
-                <div className="min-h-[200px]">
-                  <div style={{ display: activeSpotTab === 0 ? 'block' : 'none' }}>
+                {/* Table Content — display toggling keeps components mounted to avoid re-fetch on tab switch.
+                    Fixed height so each tab scrolls INTERNALLY (header stays pinned) instead of with the page. */}
+                <div className="h-[calc(100vh-320px)] min-h-[400px]">
+                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === 0 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your positions.
@@ -4071,7 +4072,7 @@ export default function PortfolioPage() {
                         onTokenNamesChange={setTokenNames}
                       />
                     ))} */}
-                  <div style={{ display: activeSpotTab === 1 ? 'block' : 'none' }}>
+                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === 1 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your positions.
@@ -4110,7 +4111,7 @@ export default function PortfolioPage() {
                       />
                     )}
                   </div>
-                  <div style={{ display: activeSpotTab === 2 ? 'block' : 'none' }}>
+                  <div className="h-full" style={{ display: activeSpotTab === 2 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your activity.
@@ -4118,7 +4119,7 @@ export default function PortfolioPage() {
                     ) : !user?.id ? (
                       <div />
                     ) : (
-                      <div className="w-full">
+                      <div className="h-full w-full">
                         {/* Banner: chain-derived trade history is unavailable while the
                             wallet trader index builds (~few hours). Falls back to on-platform
                             trades filtered by primary wallet in the meantime. */}
@@ -4134,6 +4135,7 @@ export default function PortfolioPage() {
                           tokenMetadataCache={tokenMetadataCache}
                           onUpdateCache={updateTokenMetadataCache}
                           isCacheValid={isCacheValid}
+                          headerBgClass="bg-[#0c0e12]"
                         />
                       </div>
                     )}

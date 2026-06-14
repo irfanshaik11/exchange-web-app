@@ -1518,8 +1518,8 @@ const Positions: React.FC<PositionsProps> = ({
   return (
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
       <table className="w-full text-xs">
-        <thead className="sticky top-0 z-20" style={{ backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
-          <tr className="border-b border-white/[0.06]" style={{ background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%)', boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.02)' }}>
+        <thead className="sticky top-0 z-20 bg-[#0c0e12]">
+          <tr className="border-b border-white/[0.06]">
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '20%' }}>Token</th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '18%' }}>Bought</th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '12%' }}>Sold</th>
