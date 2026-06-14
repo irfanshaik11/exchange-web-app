@@ -21,9 +21,12 @@ const MAX_CACHE_SIZE = 500; // Max images to cache (covers all 450 possible toke
 function isImageRequest(request) {
   const url = new URL(request.url);
 
-  // Skip hash-based image proxy — browser HTTP cache handles these with immutable headers
+  // Hash-based image proxy: cache it in the SW too. HTTP immutable cache covers
+  // normal refresh/navigation, but a HARD refresh bypasses HTTP cache — the SW
+  // Cache Storage survives even that, so token images don't reload. Content is
+  // immutable (hash+width keyed), so cache-first is always safe.
   if (url.pathname.startsWith('/api/img/')) {
-    return false;
+    return true;
   }
 
   // 1. Check if it's the legacy image proxy endpoint

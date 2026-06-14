@@ -857,15 +857,34 @@ export default function PortfolioPage() {
     }
   }, [currentChain, showExportModal, user?.id, wallets]);
 
-  // Save cache to localStorage when it changes (debounced)
+  // Save cache to localStorage when it changes (debounced). The cache is
+  // capped before saving so it can't grow past the ~5MB localStorage quota
+  // (which previously threw QuotaExceededError and stopped persisting).
   useEffect(() => {
-    if (Object.keys(tokenMetadataCache).length === 0) return;
+    const entries = Object.entries(tokenMetadataCache);
+    if (entries.length === 0) return;
 
     const timeoutId = setTimeout(() => {
+      const CAP = 400; // keep the most-recently-added N (objects preserve insertion order)
+      const save = (obj: unknown) =>
+        localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify(tokenMetadataCache));
-      } catch (error) {
-        console.error("Error saving token cache:", error);
+        save(
+          entries.length > CAP
+            ? Object.fromEntries(entries.slice(-CAP))
+            : tokenMetadataCache,
+        );
+      } catch {
+        // Quota exceeded — prune hard and retry; if still failing, clear it.
+        try {
+          save(Object.fromEntries(entries.slice(-100)));
+        } catch {
+          try {
+            localStorage.removeItem(CACHE_KEY);
+          } catch {
+            /* ignore */
+          }
+        }
       }
     }, 1000); // Debounce saves by 1 second
 
