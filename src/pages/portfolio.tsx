@@ -37,7 +37,10 @@ import PnlShareCard from "~/components/PnlShareCard";
 
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { useImagePreloader } from "~/hooks/useImagePreloader";
-import { extractTokenImage, resolveTokenImageByMint } from "~/utils/images";
+import { extractTokenImage } from "~/utils/images";
+import { useHyperliquidPositions } from "~/hooks/useHyperliquidPositions";
+import { fetchTradeHistory as fetchHlTradeHistory } from "~/utils/hyperliquidApi";
+import type { HyperliquidFill, HyperliquidAssetPosition } from "~/utils/hyperliquidTypes";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
@@ -345,6 +348,60 @@ export default function PortfolioPage() {
   const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
   const { solPrice: contextSolPrice, monPrice } = useSolPrice();
   const router = useRouter();
+
+  // ---- Hyperliquid perps (portfolio tab) ----
+  // Only polls while the Perpetuals tab is active to avoid background load on the
+  // (default) Spot view. Reuses the same hook the /perpetuals page uses.
+  const hlPerpsActive = activeSection === "perpetuals";
+  const {
+    positions: hlPositions,
+    rawPositions: hlRawPositions,
+    marginSummary: hlMarginSummary,
+    loading: hlPositionsLoading,
+  } = useHyperliquidPositions({ token: user?.bearerToken, enabled: hlPerpsActive });
+  const [hlFills, setHlFills] = useState<HyperliquidFill[]>([]);
+  const [hlFillsLoading, setHlFillsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!hlPerpsActive || !user?.bearerToken) return;
+    let cancelled = false;
+    setHlFillsLoading(true);
+    fetchHlTradeHistory(user.bearerToken)
+      .then((data: any) => {
+        if (cancelled) return;
+        const fills: HyperliquidFill[] = Array.isArray(data) ? data : (data?.fills || []);
+        setHlFills(fills);
+      })
+      .catch(() => { if (!cancelled) setHlFills([]); })
+      .finally(() => { if (!cancelled) setHlFillsLoading(false); });
+    return () => { cancelled = true; };
+  }, [hlPerpsActive, user?.bearerToken]);
+
+  // Aggregate lifetime metrics from fills. Volume = Σ(px·sz); PNL = Σ(closedPnl).
+  const hlMetrics = useMemo(() => {
+    let volume = 0;
+    let pnl = 0;
+    for (const f of hlFills) {
+      const px = parseFloat(f.px) || 0;
+      const sz = parseFloat(f.sz) || 0;
+      volume += px * sz;
+      pnl += parseFloat(f.closedPnl) || 0;
+    }
+    const accountValue = hlMarginSummary ? parseFloat(hlMarginSummary.accountValue) || 0 : 0;
+    return { volume, pnl, trades: hlFills.length, accountValue };
+  }, [hlFills, hlMarginSummary]);
+
+  // Mark price isn't on the parsed row (needs mid prices); derive it from the raw
+  // position's notional: markPx = positionValue / |szi|. Keyed by coin for lookup.
+  const hlMarkByCoin = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const ap of (hlRawPositions as HyperliquidAssetPosition[])) {
+      const szi = Math.abs(parseFloat(ap.position.szi) || 0);
+      const notional = parseFloat(ap.position.positionValue) || 0;
+      if (szi > 0) m[ap.position.coin] = notional / szi;
+    }
+    return m;
+  }, [hlRawPositions]);
   // Get chain from URL first, then localStorage, then default to solana
   const currentChain = (() => {
     if (router.query.chain) {
@@ -750,14 +807,21 @@ export default function PortfolioPage() {
       const savedCache = localStorage.getItem(CACHE_KEY);
       if (savedCache) {
         const parsed: Record<string, TokenMetadataCache> = JSON.parse(savedCache);
-        // Filter out expired entries
+        // Filter out expired entries, then cap to the most-recent N (a bloated
+        // cache from before the quota fix self-heals here — faster parse + it
+        // re-fetches/persists cleanly within quota).
         const now = Date.now();
-        const validCache: Record<string, TokenMetadataCache> = {};
-        Object.entries(parsed).forEach(([key, value]) => {
-          if (now - value.timestamp < CACHE_TTL) {
-            validCache[key] = value;
-          }
-        });
+        const LOAD_CAP = 400;
+        let kept = Object.entries(parsed).filter(
+          ([, value]) => now - value.timestamp < CACHE_TTL,
+        );
+        if (kept.length > LOAD_CAP) {
+          kept = kept
+            .sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0))
+            .slice(0, LOAD_CAP);
+        }
+        const validCache: Record<string, TokenMetadataCache> =
+          Object.fromEntries(kept);
         if (Object.keys(validCache).length > 0) {
           setTokenMetadataCache(validCache);
           tokenMetadataCacheRef.current = validCache;
@@ -801,15 +865,34 @@ export default function PortfolioPage() {
     }
   }, [currentChain, showExportModal, user?.id, wallets]);
 
-  // Save cache to localStorage when it changes (debounced)
+  // Save cache to localStorage when it changes (debounced). The cache is
+  // capped before saving so it can't grow past the ~5MB localStorage quota
+  // (which previously threw QuotaExceededError and stopped persisting).
   useEffect(() => {
-    if (Object.keys(tokenMetadataCache).length === 0) return;
+    const entries = Object.entries(tokenMetadataCache);
+    if (entries.length === 0) return;
 
     const timeoutId = setTimeout(() => {
+      const CAP = 400; // keep the most-recently-added N (objects preserve insertion order)
+      const save = (obj: unknown) =>
+        localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify(tokenMetadataCache));
-      } catch (error) {
-        console.error("Error saving token cache:", error);
+        save(
+          entries.length > CAP
+            ? Object.fromEntries(entries.slice(-CAP))
+            : tokenMetadataCache,
+        );
+      } catch {
+        // Quota exceeded — prune hard and retry; if still failing, clear it.
+        try {
+          save(Object.fromEntries(entries.slice(-100)));
+        } catch {
+          try {
+            localStorage.removeItem(CACHE_KEY);
+          } catch {
+            /* ignore */
+          }
+        }
       }
     }, 1000); // Debounce saves by 1 second
 
@@ -1117,48 +1200,15 @@ export default function PortfolioPage() {
     return () => clearInterval(activityPollId);
   }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter, wsConnected]);
 
-  // Preload token images from activity rows as soon as data arrives.
+  // Preload token images from activity rows as soon as data arrives
   const { preloadImages } = useImagePreloader();
-  // `preloadImages` is a fresh reference each render (not memoized in the hook),
-  // so this effect's deps change every render. Gate the body on the actual
-  // tradeActivity reference so the warm/preload only runs when the data really
-  // changes, not on every price/balance re-render of this hot page.
-  const lastWarmedActivityRef = useRef<unknown>(null);
   useEffect(() => {
     if (!tradeActivity || tradeActivity.length === 0) return;
-    if (lastWarmedActivityRef.current === tradeActivity) return;
-    lastWarmedActivityRef.current = tradeActivity;
-
-    // 1) Trades that already carry a direct image → preload the bytes.
     const imageSources = tradeActivity
       .map((trade: any) => extractTokenImage(trade))
       .filter(Boolean);
     if (imageSources.length > 0) {
       preloadImages(imageSources, { priority: true, timeout: 2000 });
-    }
-
-    // 2) Trades WITHOUT an image (the common case — wallet trades carry none)
-    //    need a /v1/search resolve per mint before the Activity rows can show
-    //    an avatar. Warm that shared (cached + deduped) resolution NOW, while
-    //    the user is still looking at positions, so by the time they open the
-    //    Activity tab the images are already resolved instead of firing dozens
-    //    of search round-trips on tab open. Capped to bound the request burst.
-    const WARM_LIMIT = 60;
-    const seen = new Set<string>();
-    for (const trade of tradeActivity as any[]) {
-      if (seen.size >= WARM_LIMIT) break;
-      const mint = trade?.tokenAddress;
-      if (
-        !mint ||
-        typeof mint !== "string" ||
-        mint.toLowerCase().startsWith("0x") || // skip EVM/Monad mints (no /v1/search)
-        seen.has(mint) ||
-        extractTokenImage(trade) // already has a direct image
-      ) {
-        continue;
-      }
-      seen.add(mint);
-      resolveTokenImageByMint(mint).catch(() => {});
     }
   }, [tradeActivity, preloadImages]);
 
@@ -3442,16 +3492,16 @@ export default function PortfolioPage() {
               >
                 Wallets
               </button>
-              {/* <button
-                className={`text-base sm:text-lg font-light transition cursor-pointer ${
+              <button
+                className={`px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer rounded-md ${
                   activeSection === "perpetuals"
-                    ? "text-[#f0f5f5]"
-                    : "text-[#6B7280] hover:text-[#f0f5f5]"
+                    ? "text-[#f4f4f5] bg-white/[0.08] border border-white/[0.08]"
+                    : "text-[#71717a] hover:text-[#a1a1aa] border border-transparent"
                 }`}
                 onClick={() => setActiveSection("perpetuals")}
               >
                 Perpetuals
-              </button> */}
+              </button>
             </div>
 
             {/* Right side controls for Spot section - JTX style */}
@@ -4096,9 +4146,10 @@ export default function PortfolioPage() {
                   </div>
                 </div>
 
-                {/* Table Content — display toggling keeps components mounted to avoid re-fetch on tab switch */}
-                <div className="min-h-[200px]">
-                  <div style={{ display: activeSpotTab === 0 ? 'block' : 'none' }}>
+                {/* Table Content — display toggling keeps components mounted to avoid re-fetch on tab switch.
+                    Fixed height so each tab scrolls INTERNALLY (header stays pinned) instead of with the page. */}
+                <div className="h-[calc(100vh-320px)] min-h-[400px]">
+                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === 0 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your positions.
@@ -4152,7 +4203,7 @@ export default function PortfolioPage() {
                         onTokenNamesChange={setTokenNames}
                       />
                     ))} */}
-                  <div style={{ display: activeSpotTab === 1 ? 'block' : 'none' }}>
+                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === 1 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your positions.
@@ -4191,7 +4242,7 @@ export default function PortfolioPage() {
                       />
                     )}
                   </div>
-                  <div style={{ display: activeSpotTab === 2 ? 'block' : 'none' }}>
+                  <div className="h-full" style={{ display: activeSpotTab === 2 ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your activity.
@@ -4199,7 +4250,7 @@ export default function PortfolioPage() {
                     ) : !user?.id ? (
                       <div />
                     ) : (
-                      <div className="w-full">
+                      <div className="h-full w-full">
                         {/* Banner: chain-derived trade history is unavailable while the
                             wallet trader index builds (~few hours). Falls back to on-platform
                             trades filtered by primary wallet in the meantime. */}
@@ -4215,6 +4266,7 @@ export default function PortfolioPage() {
                           tokenMetadataCache={tokenMetadataCache}
                           onUpdateCache={updateTokenMetadataCache}
                           isCacheValid={isCacheValid}
+                          headerBgClass="bg-[#0c0e12]"
                         />
                       </div>
                     )}
@@ -4846,22 +4898,37 @@ export default function PortfolioPage() {
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         All Time Volume
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">
+                        ${formatSmartNumber(hlMetrics.volume)}
+                      </div>
                     </div>
                     <div>
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         All Time PNL
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                      <div
+                        className={`text-2xl font-light ${
+                          hlMetrics.pnl > 0
+                            ? "text-[#70E0B0]"
+                            : hlMetrics.pnl < 0
+                            ? "text-[#FF4D7F]"
+                            : "text-[#f0f5f5]"
+                        }`}
+                      >
+                        {hlMetrics.pnl < 0 ? "-$" : "$"}
+                        {formatSmartNumber(Math.abs(hlMetrics.pnl))}
+                      </div>
                       <div className="text-xs text-[#9CA3AF] mt-1">
-                        Number of Trades: 0
+                        Number of Trades: {hlMetrics.trades}
                       </div>
                     </div>
                     <div className="col-span-2">
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         Account Value
                       </div>
-                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">
+                        ${formatSmartNumber(hlMetrics.accountValue)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4926,25 +4993,110 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Content based on active tab */}
-                {activePerpetualsTab === 0 && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-center">
-                      <div className="text-[#9CA3AF] text-sm">
-                        No open positions
+                {activePerpetualsTab === 0 &&
+                  (hlPositionsLoading && hlPositions.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-[#9CA3AF] text-sm">Loading positions…</div>
+                    </div>
+                  ) : hlPositions.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <div className="text-[#9CA3AF] text-sm">
+                          No open positions
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div>
+                      {hlPositions.map((p) => {
+                        const mark = hlMarkByCoin[p.coin] || 0;
+                        const notional = p.size * (mark || p.entryPrice);
+                        return (
+                          <div
+                            key={p.coin}
+                            className="grid grid-cols-9 gap-4 px-6 py-3 text-sm text-[#f0f5f5] border-b border-white/[0.04] items-center"
+                          >
+                            <div className="font-medium">{p.coin}</div>
+                            <div className={p.side === "LONG" ? "text-[#70E0B0]" : "text-[#FF4D7F]"}>
+                              {p.side} {formatSmartNumber(p.size)}
+                            </div>
+                            <div>${formatSmartNumber(notional)}</div>
+                            <div>${formatSmartNumber(p.entryPrice)}</div>
+                            <div>{mark ? `$${formatSmartNumber(mark)}` : "—"}</div>
+                            <div>
+                              {p.liquidationPrice
+                                ? `$${formatSmartNumber(p.liquidationPrice)}`
+                                : "—"}
+                            </div>
+                            <div>
+                              ${formatSmartNumber(p.marginUsed)}{" "}
+                              <span className={p.unrealizedPnl >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]"}>
+                                ({p.unrealizedPnl >= 0 ? "+" : "-"}$
+                                {formatSmartNumber(Math.abs(p.unrealizedPnl))})
+                              </span>
+                            </div>
+                            <div className="text-[#9CA3AF]">—</div>
+                            <div>
+                              <button
+                                onClick={() => router.push(`/perpetuals/${p.coin}`)}
+                                className="px-2.5 py-1 text-xs rounded-md bg-white/[0.06] hover:bg-white/[0.1] text-[#f0f5f5] transition-colors cursor-pointer"
+                              >
+                                Manage
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
 
-                {activePerpetualsTab === 1 && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-center">
-                      <div className="text-[#9CA3AF] text-sm">
-                        No trade history
+                {activePerpetualsTab === 1 &&
+                  (hlFillsLoading && hlFills.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-[#9CA3AF] text-sm">Loading trade history…</div>
+                    </div>
+                  ) : hlFills.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center">
+                        <div className="text-[#9CA3AF] text-sm">
+                          No trade history
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div className="max-h-[480px] overflow-y-auto">
+                      {hlFills.slice(0, 100).map((f, i) => {
+                        const px = parseFloat(f.px) || 0;
+                        const sz = parseFloat(f.sz) || 0;
+                        const pnl = parseFloat(f.closedPnl) || 0;
+                        const isBuy = f.side === "B";
+                        return (
+                          <div
+                            key={`${f.tid}-${i}`}
+                            className="grid grid-cols-9 gap-4 px-6 py-3 text-sm text-[#f0f5f5] border-b border-white/[0.04] items-center"
+                          >
+                            <div className="font-medium">{f.coin}</div>
+                            <div className={isBuy ? "text-[#70E0B0]" : "text-[#FF4D7F]"}>
+                              {f.dir || (isBuy ? "Buy" : "Sell")}
+                            </div>
+                            <div>${formatSmartNumber(px * sz)}</div>
+                            <div>${formatSmartNumber(px)}</div>
+                            <div>{formatSmartNumber(sz)}</div>
+                            <div className="text-[#9CA3AF]">—</div>
+                            <div className={pnl >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]"}>
+                              {pnl >= 0 ? "+" : "-"}${formatSmartNumber(Math.abs(pnl))}
+                            </div>
+                            <div className="text-[#9CA3AF]">
+                              ${formatSmartNumber(parseFloat(f.fee) || 0)}
+                            </div>
+                            <div className="text-[#9CA3AF] text-xs">
+                              {new Date(f.time).toLocaleDateString()}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
               </div>
             </div>
           )}

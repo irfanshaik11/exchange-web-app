@@ -1,15 +1,19 @@
 const isDev = process.env.NODE_ENV !== 'production';
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import type { Wallet } from "~/utils/functions";
 import type { WatchWallet, WalletEvent } from "~/utils/walletTracking";
 import { toggleWalletNotifications } from "~/utils/walletTracking";
 import { SolanaIcon } from "./Footer";
+import { Sparkline } from "./MicroChart";
+import { KolDpCircle } from "./KolDpCircle";
+import { KOL_ADDRESS_MAP } from "~/utils/kolLookup";
 import { useUser } from "./UserContext";
 import { FiBell, FiBarChart2, FiTrash2 } from "react-icons/fi";
 // import { TbChartBubble } from "react-icons/tb";  // TODO: Re-enable when analytics feature is built
 // import { IoLogoRss } from "react-icons/io5";      // TODO: Re-enable when feed feature is built
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import { prefetchWalletScan } from "~/hooks/useWalletScan";
 
 // Chain-aware icon component
 const ChainIcon = ({
@@ -66,7 +70,7 @@ function Tooltip({
         {children}
       </span>
       {show && (
-        <span className="pointer-events-none fixed z-[99999] translate-x-[-50%] translate-y-[-100%] rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] font-normal whitespace-nowrap text-white shadow-xl">
+        <span className="pointer-events-none fixed z-[99999] translate-x-[-50%] translate-y-[-100%] rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] font-normal whitespace-nowrap text-white">
           {label}
           {/* Small arrow pointing down */}
           <span className="absolute top-full left-1/2 -mt-px -translate-x-1/2 border-4 border-transparent border-t-neutral-700"></span>
@@ -87,6 +91,24 @@ export default function WalletRow({
   onNotificationToggle,
 }: WalletRowProps) {
   const { user } = useUser();
+
+  // Real recent-activity sparkline: cumulative net-SOL flow across this
+  // wallet's tracked events (oldest→newest). Sells add SOL, buys spend it.
+  // Derived entirely from `events` — no synthetic data. Empty when the wallet
+  // has <2 events (the "No activity yet" rows render nothing, not a fake line).
+  const activitySeries = useMemo(() => {
+    if (!events || events.length < 2) return [];
+    const sorted = [...events].sort(
+      (a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime(),
+    );
+    let cum = 0;
+    return sorted.map((e) => {
+      const v = Math.abs(parseFloat(e.solSpent || "0") || 0);
+      cum += e.side === "sell" ? v : -v;
+      return cum;
+    });
+  }, [events]);
+
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   // const [analyticsEnabled, setAnalyticsEnabled] = React.useState(false);  // TODO: Re-enable when analytics feature is built
@@ -344,29 +366,6 @@ export default function WalletRow({
     }
   };
 
-  // Helper to format date or relative time
-  const formatCreated = (timestamp: number) => {
-    const today = new Date().toLocaleDateString();
-    if (!timestamp || isNaN(timestamp)) return today;
-    const now = Date.now();
-    const diff = now - timestamp;
-    const min = 60 * 1000;
-    const hour = 60 * min;
-    const day = 24 * hour;
-    if (diff < day) {
-      if (diff < hour) {
-        const mins = Math.max(1, Math.floor(diff / min));
-        return `${mins} min`;
-      } else {
-        const hours = Math.floor(diff / hour);
-        return `${hours}h`;
-      }
-    } else {
-      const date = new Date(timestamp);
-      return isNaN(date.getTime()) ? today : date.toLocaleDateString();
-    }
-  };
-
   const formatLastActive = (timestamp: number | null | undefined) => {
     if (timestamp === undefined) {
       return "—";
@@ -415,42 +414,45 @@ export default function WalletRow({
   return (
     <tr
       key={wallet.address}
-      className="group border-b border-white/[0.03] transition-colors duration-150 hover:border-white/[0.06] hover:bg-white/[0.03] active:bg-white/[0.05]"
+      className="group cursor-pointer border-b border-white/[0.06] hover:bg-white/[0.04] active:bg-white/[0.06]"
       onClick={handleRowClick}
+      // Hover = intent: background-warm the scan-panel data (summary/positions/
+      // trades) so opening the panel paints from cache instantly. Deduped and
+      // cache-aware inside prefetchWalletScan — repeated hovers are free.
+      onMouseEnter={() => void prefetchWalletScan(wallet.address)}
     >
-      <td className="px-1 py-2.5 sm:px-2 sm:py-3">
+      <td className="px-1 py-3 sm:px-3">
         <div className="flex w-full items-center gap-2 sm:gap-4">
-          <button
-            type="button"
-            className="flex w-16 justify-center text-[9px] text-neutral-400 transition-colors hover:text-white sm:w-28 sm:text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (wallet.address) {
-                window.open(
-                  `https://solscan.io/account/${wallet.address}`,
-                  "_blank",
-                );
-              }
-            }}
-            title="View wallet on Solscan"
-          >
-            {formatCreated(wallet.createdAt)}
-          </button>
-          <div className="flex min-w-0 flex-1 items-start gap-1.5 sm:gap-2">
-            <span className="text-base sm:text-lg">{wallet.emoji || "💼"}</span>
-            <div className="flex min-w-0 flex-col">
-              <span className="truncate text-[10px] font-medium text-neutral-100 sm:text-xs">
-                {wallet.name || "N/A"}
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+            {/* KOL profile pic first, then the wallet emoji — null for non-KOLs */}
+            <KolDpCircle address={wallet.address} size={28} />
+            <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#0c0e12] text-sm sm:h-8 sm:w-8 sm:text-base">
+              {wallet.emoji || "💼"}
+            </span>
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-[11px] font-semibold text-neutral-100 sm:text-sm">
+                  {wallet.name || "N/A"}
+                </span>
+                {wallet.address &&
+                  KOL_ADDRESS_MAP.has(wallet.address.toLowerCase()) && (
+                    <span className="flex-shrink-0 rounded-[4px] bg-[#7FFFC9]/[0.12] px-1.5 py-[1px] text-[8px] font-semibold tracking-[0.08em] text-[#7FFFC9] uppercase sm:text-[9px]">
+                      KOL
+                    </span>
+                  )}
               </span>
               <Tooltip label={copied ? "Copied!" : "Click to copy"}>
                 <button
-                  className="mt-0.5 w-fit cursor-pointer font-mono text-[9px] text-neutral-400 underline-offset-2 transition-colors hover:text-neutral-200 focus-visible:outline-none sm:text-[10px]"
+                  className="mt-0.5 flex w-fit cursor-pointer items-center gap-1 font-mono text-[9px] text-neutral-500 hover:text-neutral-300 focus-visible:outline-none sm:text-[10px]"
                   onClick={handleCopyAddress}
                   title="Copy wallet address"
                 >
                   {wallet.address
                     ? `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`
                     : ""}
+                  {copied && (
+                    <span className="text-[#18c48c]">✓</span>
+                  )}
                 </button>
               </Tooltip>
             </div>
@@ -458,21 +460,26 @@ export default function WalletRow({
           <span className="w-20 text-[9px] text-neutral-300 sm:w-36 sm:text-xs">
             {balance !== undefined ? (
               <span
-                className={`flex items-center gap-0.5 font-mono font-semibold sm:gap-1 ${watchedWallet?.chain === "monad" ? "text-[#7FFFC9]" : "text-green-400"}`}
+                className="flex items-center gap-1 font-mono font-semibold tabular-nums text-[#e4e4e7]"
               >
-                <ChainIcon chain={watchedWallet?.chain} size={10} />
-                <span className="text-[9px] sm:text-xs">
+                <ChainIcon chain={watchedWallet?.chain} size={11} />
+                <span className="text-[9px] tabular-nums sm:text-xs">
                   {balance.toFixed(4)}
                 </span>
               </span>
             ) : (
-              <span className="text-[9px] text-neutral-500 sm:text-xs">—</span>
+              <span className="text-[9px] text-neutral-600 sm:text-xs">—</span>
             )}
           </span>
-          <span className="hidden w-28 text-[9px] text-neutral-300 sm:inline sm:text-xs">
+          <span className="hidden w-14 flex-shrink-0 items-center justify-center sm:flex">
+            {activitySeries.length > 1 ? (
+              <Sparkline values={activitySeries} width={56} height={20} strokeWidth={1.25} />
+            ) : null}
+          </span>
+          <span className="hidden w-28 text-[9px] tabular-nums text-neutral-500 sm:inline sm:text-xs">
             {formatLastActive(lastActive)}
           </span>
-          <div className="flex flex-1 items-center justify-end gap-0.5 sm:gap-1.5">
+          <div className="flex flex-1 items-center justify-end gap-0.5 sm:gap-1">
             {/* Bell - Notification Toggle */}
             <Tooltip
               label={
@@ -480,7 +487,7 @@ export default function WalletRow({
               }
             >
               <button
-                className={`rounded-md p-1 transition-all duration-200 sm:p-2 ${isTogglingNotification ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/[0.05]"}`}
+                className={`rounded-md p-1.5 sm:p-2 ${isTogglingNotification ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/[0.06]"}`}
                 onClick={handleToggleNotifications}
                 disabled={isTogglingNotification}
               >
@@ -495,7 +502,7 @@ export default function WalletRow({
               label={analyticsEnabled ? "Analytics ON" : "Analytics OFF"}
             >
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
+                className="cursor-pointer rounded-md p-1 hover:bg-white/[0.05] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   setAnalyticsEnabled(!analyticsEnabled);
@@ -511,7 +518,7 @@ export default function WalletRow({
             {/* RSS Icon - Feed Toggle (commented out until backend feed feature is built)
             <Tooltip label={feedEnabled ? "Feed ON" : "Feed OFF"}>
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
+                className="cursor-pointer rounded-md p-1 hover:bg-white/[0.05] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   setFeedEnabled(!feedEnabled);
@@ -527,13 +534,13 @@ export default function WalletRow({
             {/* Chart - Scan Address */}
             <Tooltip label="Scan Wallet">
               <button
-                className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
+                className="group/icon cursor-pointer rounded-md p-1.5 hover:bg-white/[0.06] sm:p-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClick && onClick(wallet);
                 }}
               >
-                <FiBarChart2 className="text-sm text-neutral-500 transition-colors hover:text-pink-500 sm:text-base" />
+                <FiBarChart2 className="text-sm text-neutral-500 group-hover/icon:text-pink-500 sm:text-base" />
               </button>
             </Tooltip>
 
@@ -541,13 +548,13 @@ export default function WalletRow({
             {showDeleteConfirm ? (
               <div className="flex gap-0.5 sm:gap-1">
                 <button
-                  className="cursor-pointer rounded-md bg-pink-500 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-pink-600 sm:px-2 sm:py-1 sm:text-xs"
+                  className="cursor-pointer rounded-md bg-pink-500 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-pink-600 sm:px-2 sm:py-1 sm:text-xs"
                   onClick={handleConfirmDelete}
                 >
                   ✓
                 </button>
                 <button
-                  className="cursor-pointer rounded-md bg-neutral-800 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-neutral-700 sm:px-2 sm:py-1 sm:text-xs"
+                  className="cursor-pointer rounded-md bg-neutral-800 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-neutral-700 sm:px-2 sm:py-1 sm:text-xs"
                   onClick={handleCancelDelete}
                 >
                   ✕
@@ -556,10 +563,10 @@ export default function WalletRow({
             ) : (
               <Tooltip label="Delete Wallet">
                 <button
-                  className="cursor-pointer rounded-md p-1 transition-all duration-200 hover:bg-white/[0.05] sm:p-2"
+                  className="group/trash cursor-pointer rounded-md p-1.5 hover:bg-[#F0616D]/10 sm:p-2"
                   onClick={handleDeleteClick}
                 >
-                  <FiTrash2 className="text-sm text-neutral-500 transition-colors hover:text-pink-500 sm:text-base" />
+                  <FiTrash2 className="text-sm text-neutral-500 group-hover/trash:text-[#F0616D] sm:text-base" />
                 </button>
               </Tooltip>
             )}

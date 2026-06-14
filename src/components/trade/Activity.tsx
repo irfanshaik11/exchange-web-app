@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useResolvedTokenImages } from '~/hooks/useResolvedTokenImages';
 import type { Dispatch, SetStateAction } from 'react';
 import { formatSmartNumber, formatMarketCap, formatSmallPrice } from '~/utils/db';
 import type { TradeRow } from '~/utils/functions';
@@ -26,6 +27,9 @@ interface ActivityProps {
   onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
   isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
   maxTokenNameLength?: number; // Optional: truncate displayed token name to N characters
+  /** Sticky-header background — context-specific (wallet-scan modal #030304 vs
+   *  portfolio section #0c0e12). Defaults to the wallet-scan value. */
+  headerBgClass?: string;
 }
 
 function shortAddr(addr: string) {
@@ -123,7 +127,8 @@ const Activity: React.FC<ActivityProps> = ({
   tokenMetadataCache,
   onUpdateCache,
   isCacheValid,
-  maxTokenNameLength
+  maxTokenNameLength,
+  headerBgClass = 'bg-[#030304]',
 }) => {
   const truncateName = (name: string) =>
     maxTokenNameLength && name.length > maxTokenNameLength
@@ -140,7 +145,24 @@ const Activity: React.FC<ActivityProps> = ({
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
   const { solPrice } = useSolPrice();
-  
+
+  // Resolve token avatars through the canonical pipeline (discards the dead
+  // speculative cdn.interstate.so URL, resolves the metadata URI to the real
+  // image, falls back to pump.fun/DexScreener, caches forever). Fixes the
+  // "letter tiles / no images" on the portfolio + wallet-scan activity feed.
+  const imageItems = useMemo(
+    () =>
+      (trades || [])
+        .filter((t) => t.tokenAddress)
+        .map((t) => ({
+          mint: t.tokenAddress as string,
+          raw: t.imageUrl || tokenMetadata[t.tokenAddress]?.imageUrl || null,
+          uri: tokenMetadata[t.tokenAddress]?.uri || null,
+        })),
+    [trades, tokenMetadata],
+  );
+  const resolvedImages = useResolvedTokenImages(imageItems);
+
   // Update current time every second to keep age labels fresh
   useEffect(() => {
     const interval = setInterval(() => {
@@ -382,11 +404,11 @@ const Activity: React.FC<ActivityProps> = ({
   }, [trades, tokenMetadata, pumpfunImages]);
 
   return (
-    <div className="w-full">
+    <div className="flex h-full w-full flex-col">
       {trades.length > 0 ? (
-        <div className="relative">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           {/* Header Row - Fixed */}
-          <div className="grid gap-4 px-6 py-3 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr', background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%)', boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.02)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+          <div className={`sticky top-0 z-10 grid gap-4 border-b border-white/[0.06] ${headerBgClass} px-6 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30`} style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
             <div>Type</div>
             <div>Token</div>
             <div>Amount</div>
@@ -395,11 +417,11 @@ const Activity: React.FC<ActivityProps> = ({
             <div>Explorer</div>
           </div>
           
-          {/* Scrollable Data Rows */}
-          <div 
-            className="overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
-            style={{ 
-              maxHeight: '500px',
+          {/* Scrollable Data Rows — fill the remaining modal height (was a
+              hardcoded 500px cap that left a large empty gap on tall screens). */}
+          <div
+            className="min-h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+            style={{
               scrollBehavior: 'smooth',
               WebkitOverflowScrolling: 'touch'
             } as React.CSSProperties}
@@ -657,7 +679,7 @@ const Activity: React.FC<ActivityProps> = ({
               return (
                 <div
                   key={trade.id || idx}
-                  className="grid gap-4 px-6 py-3 border-b border-white/[0.06] hover:bg-white/[0.04] transition-colors cursor-pointer"
+                  className="grid gap-4 mb-1.5 rounded-lg border border-white/[0.06] bg-white/[0.015] px-6 py-2.5 hover:border-white/[0.12] hover:bg-white/[0.04] cursor-pointer"
                   style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}
                   onMouseEnter={() => {
                     if (!trade.tokenAddress) return;
@@ -692,12 +714,13 @@ const Activity: React.FC<ActivityProps> = ({
                   onClick={handleRowClick}
                 >
                   <div className="flex items-center">
-                    <span 
-                      className={`px-2 py-1 rounded text-xs font-medium ${
-                        trade.type === 'Buy' 
-                          ? 'bg-emerald-500/20 text-emerald-400' 
-                          : 'bg-red-500/20 text-red-400'
-                      }`}
+                    <span
+                      className="rounded-full border px-2.5 py-0.5 text-xs font-semibold"
+                      style={
+                        trade.type === 'Buy'
+                          ? { color: '#18c48c', borderColor: 'rgba(24,196,140,0.4)', backgroundColor: 'rgba(24,196,140,0.08)' }
+                          : { color: '#F0616D', borderColor: 'rgba(240,97,109,0.4)', backgroundColor: 'rgba(240,97,109,0.08)' }
+                      }
                     >
                       {trade.type}
                     </span>
@@ -723,7 +746,7 @@ const Activity: React.FC<ActivityProps> = ({
                           >
                             <div className="relative rounded-lg overflow-hidden w-10 h-10">
                               <FastImage
-                                src={metadata?.imageUrl || trade.imageUrl || pumpfunImages[trade.tokenAddress] || searchImages[trade.tokenAddress] || ''}
+                                src={resolvedImages[trade.tokenAddress] || (metadata?.imageUrl && !metadata.imageUrl.includes('cdn.interstate.so') ? metadata.imageUrl : '') || (trade.imageUrl && !trade.imageUrl.includes('cdn.interstate.so') ? trade.imageUrl : '') || pumpfunImages[trade.tokenAddress] || searchImages[trade.tokenAddress] || ''}
                                 alt={metadata?.name || metadata?.symbol || "Token"}
                                 symbol={metadata?.symbol}
                                 name={metadata?.name}
@@ -784,10 +807,10 @@ const Activity: React.FC<ActivityProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()} // Prevent row click
-                        className="flex items-center gap-1 text-[#70E0B0] hover:text-[#58B890] transition-colors text-xs"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.12] bg-white/[0.03] px-2.5 py-1 text-[11px] text-[#a1a1aa] hover:border-[#18c48c]/40 hover:text-[#18c48c]"
                       >
                         <span>View</span>
-                        <FaExternalLinkAlt className="text-xs" />
+                        <FaExternalLinkAlt className="text-[9px]" />
                       </a>
                     ) : (
                       <span className="text-xs text-neutral-500">N/A</span>

@@ -152,6 +152,14 @@ const config = {
           { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
       },
+      {
+        // KOL profile pics — a wallet's X avatar effectively never changes;
+        // cache forever so the FE loads each once and never refetches.
+        source: '/kol-avatars/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
     ];
   },
 

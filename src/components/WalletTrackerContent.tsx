@@ -2,8 +2,9 @@
 
 const isDev = process.env.NODE_ENV !== "production";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/router";
+import { useResolvedTokenImages } from "~/hooks/useResolvedTokenImages";
 import { useUser } from "./UserContext";
 import { useWalletTracker } from "./WalletTrackerContext";
 import { useQuickBuy } from "./QuickBuyContext";
@@ -19,6 +20,7 @@ import {
   type TradeEvent,
 } from "~/utils/walletTracking";
 import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
+import { HiLightningBolt } from "react-icons/hi";
 import LiveTradesPanel from "./LiveTradesPanel";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
@@ -526,6 +528,26 @@ export default function WalletTrackerContent() {
     watchedWalletAddresses.has(trade.wallet),
   );
 
+  // Background image preload for BOTH tabs at the always-mounted parent level.
+  // Monitor and Live Trades are conditionally rendered (only the active tab is
+  // mounted), so each tab's own image-resolver runs only while you're looking
+  // at it. Resolving + preloading every trade-feed mint's avatar here — keyed
+  // on the full latestTrades set, regardless of activeTab — means images load
+  // and stay cached in the background, ready the instant you switch tabs or a
+  // token scrolls into view (not lazily on first sight).
+  const trackerImageItems = useMemo(() => {
+    const seen = new Set<string>();
+    const items: { mint: string }[] = [];
+    for (const t of latestTrades) {
+      if (t.mint && !seen.has(t.mint)) {
+        seen.add(t.mint);
+        items.push({ mint: t.mint });
+      }
+    }
+    return items;
+  }, [latestTrades]);
+  useResolvedTokenImages(trackerImageItems);
+
   // Quick buy handler (metadata is managed inside LiveTradesPanel)
   const handleQuickBuy = async (trade: TradeEvent) => {
     if (!user?.bearerToken || !user?.id) {
@@ -671,6 +693,48 @@ export default function WalletTrackerContent() {
 
         {/* Right: actions */}
         <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+          {/* Quick-buy amount editor — controls the SOL used by every Quick Buy
+              button in Live Trades / Monitor. Editable inline from the header. */}
+          {activeTab !== 0 && (
+            <div className="flex items-center gap-1 rounded-full border border-neutral-800 bg-[#111111] px-2 py-1 sm:gap-1.5 sm:px-3">
+              <HiLightningBolt className="h-3 w-3 text-[#70E0B0] sm:h-3.5 sm:w-3.5" />
+              <input
+                type="text"
+                inputMode="decimal"
+                aria-label="Quick buy amount (SOL)"
+                value={quickBuyAmount}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // Allow only a non-negative decimal while typing.
+                  if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                    setQuickBuyAmount(v);
+                    try {
+                      if (v !== "" && !isNaN(parseFloat(v))) {
+                        localStorage.setItem("quickBuyAmount", v);
+                      }
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                }}
+                onBlur={() => {
+                  // Normalize an empty/invalid value back to a sane default.
+                  if (quickBuyAmount === "" || isNaN(parseFloat(quickBuyAmount))) {
+                    setQuickBuyAmount("0.0001");
+                    try {
+                      localStorage.setItem("quickBuyAmount", "0.0001");
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                }}
+                className="w-12 bg-transparent text-[10px] font-semibold text-white outline-none sm:w-16 sm:text-xs"
+              />
+              <span className="text-[10px] font-medium text-neutral-400 sm:text-xs">
+                SOL
+              </span>
+            </div>
+          )}
           {activeTab === 0 && (
             <>
               <button

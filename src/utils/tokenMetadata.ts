@@ -5,6 +5,14 @@ export interface UnifiedTokenMetadata {
   protocol?: string;
   launchpad?: string | null;
   imageUrl?: string;
+  /**
+   * Raw on-chain metadata URI (ipfs://… / arweave). Kept separate from
+   * imageUrl because the token service emits a SPECULATIVE
+   * cdn.interstate.so/{mint}.webp as image_url, which 403s for any token the
+   * CDN hasn't warmed — consumers need the uri to resolve the real image
+   * (same special-case as pulseWorkerBridge.prewarmTokenImage).
+   */
+  uri?: string;
   createdAt?: string | number;
   priceUsd?: number;
   marketCapUsd?: number;
@@ -372,12 +380,25 @@ async function fetchSolanaMetadata(
           symbol: token.symbol || undefined,
           protocol: token.launchpad_protocol || token.protocol || undefined,
           launchpad: token.launchpad_protocol || token.protocol || undefined,
-          // Prefer image_url/logo (the original IPFS image). `image` is the CDN-cached
-          // copy (cdn.interstate.so) which currently 403s — keep it last.
+          // This function calls /v1/search (see URL above). On that endpoint
+          // `image` = cdn.interstate.so/{mint}.webp which 403s (no CDN exists),
+          // while `image_url`/`logo` carry the real (IPFS/github) image and
+          // `uri` is the on-chain metadata JSON. Verified live 2026-06-13:
+          // token.image → 403, token.image_url → 200. Prefer the working image;
+          // keep the cdn `image` last. resolveScanImage also discards any
+          // leftover cdn.interstate.so value and falls back to the uri.
           imageUrl: token.image_url || token.logo || token.uri || token.image || undefined,
-          createdAt: token.created_at || token.created_timestamp,
+          uri: token.uri || undefined,
+          createdAt: token.created_timestamp || token.created_at,
           priceUsd: toOptionalNumber(token.usd_price ?? token.price_usd),
           marketCapUsd: toOptionalNumber(token.market_cap_usd ?? token.market_cap),
+          // Preserve the literal `migrated_pool_address` field. Do NOT fall back
+          // to `pair_address` here — those are semantically distinct: migrated
+          // is the live AMM after bonding-curve migration, pair_address is the
+          // bonding curve. Conflating them tricks downstream consumers into
+          // thinking a non-migrated token is migrated and routes trades to the
+          // wrong pool. Trade-execution paths derive the effective pool via
+          // `migrated_pool_address || pair_address` themselves.
           migrated_pool_address: token.migrated_pool_address || undefined,
         };
       }

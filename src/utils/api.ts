@@ -1812,6 +1812,9 @@ export interface WalletPortfolioPosition {
   token_name?: string | null;
   token_symbol?: string | null;
   image_url?: string | null;
+  /** Raw on-chain metadata URI (tokens.uri) — resolve the real image from it
+   * when image_url is NULL. mint→image is immutable, so cache the result. */
+  uri?: string | null;
   launchpad_protocol?: string | null;
   bought_tokens: number;
   sold_tokens: number;
@@ -1877,6 +1880,32 @@ export interface WalletPortfolioSummary {
   unique_tokens_traded: number;
   first_activity_at?: string | null;
   last_activity_at?: string | null;
+  /**
+   * Windowed realized PnL (SOL), computed server-side from raw solana_trades
+   * (on-chain swap truth) — NOT from the double-counted wallet_holder_positions
+   * aggregate. Use these for the 1d/7d/30d/Max ranges instead of summing the
+   * client-side closed-position slice (which is capped at ~500 and wildly
+   * understates whale windows). realized_pnl_max_sol is the chain-accurate
+   * lifetime figure and may differ from total_realized_pnl_sol (whp-sourced).
+   */
+  realized_pnl_1d_sol?: number;
+  realized_pnl_7d_sol?: number;
+  realized_pnl_30d_sol?: number;
+  realized_pnl_max_sol?: number;
+  /**
+   * Time-accurate USD (per-trade price_usd, NOT current-price conversion).
+   * Prefer these for the PnL card — converting the SOL figure by the live SOL
+   * price drifts, because realized PnL was earned at historical prices.
+   */
+  realized_pnl_1d_usd?: number;
+  realized_pnl_7d_usd?: number;
+  realized_pnl_30d_usd?: number;
+  realized_pnl_max_usd?: number;
+  /** Net-of-cost USD (gross − network fee − router/platform/tip). GMGN-comparable. */
+  realized_pnl_1d_net_usd?: number;
+  realized_pnl_7d_net_usd?: number;
+  realized_pnl_30d_net_usd?: number;
+  realized_pnl_max_net_usd?: number;
 }
 
 export interface WalletPortfolioTopToken {
@@ -1907,12 +1936,51 @@ export interface WalletPortfolioTrade {
   pool_address?: string | null;
   fee_lamports?: number | null;
   quote_mint?: string | null;
+  // Enriched server-side from the tokens table (solana_trades carries only the
+  // mint). Without these the Activity tab showed a truncated mint.
+  name?: string | null;
+  symbol?: string | null;
+  image_url?: string | null;
 }
 
 async function tokenServiceJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!TOKEN_SERVICE_URL) throw new Error("NEXT_PUBLIC_GO_SERVICE_URL not configured");
-  const res = await fetch(`${TOKEN_SERVICE_URL}${path}`, { signal });
-  if (!res.ok) {
+
+  // Transient backend blips — an instance restarting (deploy/autoscale) makes
+  // the LB return 502/503/504 or reset the connection (fetch rejects). These
+  // are momentary, but a single failure surfaced as "Failed to fetch" on the
+  // wallet-scan tabs. Retry the idempotent GET a few times with backoff so a
+  // blip is invisible. Never retry an aborted request (panel closed / new
+  // wallet) or a 4xx (real client error).
+  const MAX_ATTEMPTS = 3;
+  const backoff = (a: number) =>
+    new Promise((r) => setTimeout(r, 400 * (a + 1)));
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${TOKEN_SERVICE_URL}${path}`, { signal });
+    } catch (err) {
+      // Deliberate abort (panel closed / wallet switched) — never retry.
+      if ((err as { name?: string })?.name === "AbortError") throw err;
+      // Network-level failure (connection reset before headers) → retry.
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await backoff(attempt);
+        continue;
+      }
+      throw err;
+    }
+
+    if (res.ok) return res.json() as Promise<T>;
+
+    // Retry only transient gateway/server statuses; surface everything else.
+    if (
+      (res.status === 502 || res.status === 503 || res.status === 504) &&
+      attempt < MAX_ATTEMPTS - 1
+    ) {
+      await backoff(attempt);
+      continue;
+    }
     let detail = "";
     try {
       const body = await res.json();
@@ -1920,7 +1988,8 @@ async function tokenServiceJson<T>(path: string, signal?: AbortSignal): Promise<
     } catch {}
     throw new Error(detail || `HTTP ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  // Unreachable (loop either returns or throws), but satisfies the type checker.
+  throw new Error("request failed");
 }
 
 export const getWalletPortfolioSummary = (
@@ -1929,11 +1998,63 @@ export const getWalletPortfolioSummary = (
 ): Promise<WalletPortfolioSummary> =>
   tokenServiceJson<WalletPortfolioSummary>(`/v1/wallet/${encodeURIComponent(address)}`, signal);
 
+export interface WalletDailyPnlDay {
+  /** UTC calendar day, YYYY-MM-DD */
+  date: string;
+  /** Realized PnL in SOL (gross avg-cost, chain-grounded) for that day */
+  realized_pnl_sol: number;
+  /** GROSS realized PnL in USD, time-accurate (per-trade price_usd) */
+  realized_pnl_usd: number;
+  /** All-in trading cost that day (network fee + router/platform/tip), USD */
+  cost_usd: number;
+  /** Net = gross − cost (the GMGN-comparable number; FE headline) */
+  net_pnl_usd: number;
+  /** Gross winning-token contribution that day (profit_usd + loss_usd == realized_pnl_usd) */
+  profit_usd: number;
+  /** Gross losing-token contribution that day (≤ 0) */
+  loss_usd: number;
+  buy_volume_usd: number;
+  sell_volume_usd: number;
+  sell_volume_sol: number;
+  trade_count: number;
+  buy_count: number;
+  sell_count: number;
+}
+
+/**
+ * Per-UTC-day realized PnL for one calendar month — backs the PnL calendar.
+ * Only days with activity are returned; the UI fills the rest of the grid as $0.
+ * `month` is "YYYY-MM"; omit to get the current UTC month.
+ */
+export const getWalletDailyPnl = (
+  address: string,
+  opts?: { month?: string; signal?: AbortSignal },
+): Promise<{ month: string; days: WalletDailyPnlDay[] }> => {
+  const qs = opts?.month ? `?month=${encodeURIComponent(opts.month)}` : "";
+  return tokenServiceJson(
+    `/v1/wallet/${encodeURIComponent(address)}/daily-pnl${qs}`,
+    opts?.signal,
+  );
+};
+
 export const getWalletPortfolioPositions = (
   address: string,
-  opts?: { includeClosed?: boolean; signal?: AbortSignal },
-): Promise<{ wallet_address: string; count: number; positions: WalletPortfolioPosition[] }> => {
-  const qs = opts?.includeClosed ? "?include_closed=1" : "";
+  opts?: { includeClosed?: boolean; fresh?: boolean; signal?: AbortSignal },
+): Promise<{
+  wallet_address: string;
+  count: number;
+  positions: WalletPortfolioPosition[];
+  /** True when the trade aggregation timed out (heavy wallet) and the server
+   * fell back to chain-holdings only — no closed rows / PnL in this response. */
+  degraded?: boolean;
+}> => {
+  const params: string[] = [];
+  if (opts?.includeClosed) params.push("include_closed=1");
+  // fresh=1 bypasses the server's stale-while-revalidate cache. Sent on the
+  // WS-trade-triggered refetch so a wallet's positions recompute the moment it
+  // trades (never on a normal load — keeps idle views on the fast cache path).
+  if (opts?.fresh) params.push("fresh=1");
+  const qs = params.length ? `?${params.join("&")}` : "";
   return tokenServiceJson(`/v1/wallet/${encodeURIComponent(address)}/positions${qs}`, opts?.signal);
 };
 

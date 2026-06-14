@@ -439,6 +439,12 @@ export function formatSmartNumber(num: number): string {
       }
     }
   }
+  // Sub-$1 values: toFixed(1) was the bug — 0.024 → "0.0" → "$0". Use enough
+  // precision that values in [0.01, 1) survive (e.g. a just-bought position's
+  // cost basis), trimming trailing zeros: 0.024→"0.024", 0.05→"0.05", 0.5→"0.5".
+  if (abs > 0 && abs < 1) {
+    return String(parseFloat(num.toFixed(abs < 0.1 ? 4 : 2)));
+  }
   if (abs < 1000) {
     return parseFloat(num.toFixed(1)).toLocaleString();
   } else if (abs < 1000000) {

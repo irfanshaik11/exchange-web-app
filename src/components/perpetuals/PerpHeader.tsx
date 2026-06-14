@@ -4,20 +4,10 @@
 
 import React, { useState, useEffect } from "react";
 import type { HyperliquidMarketRow } from "../../utils/hyperliquidTypes";
-import CoinIcon from "./CoinIcon";
+import PerpMarketSwitcher from "./PerpMarketSwitcher";
 
 /* ---------- AX palette (matches TradeHeader) ---------- */
-const AX = {
-  bg: "#111214",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
-  green: "#86d99f",
-  red: "#f26682",
-  mint: "#70E0B0",
-};
+import { AX } from "./perpTheme";
 
 interface PerpHeaderProps {
   market: HyperliquidMarketRow | undefined;
@@ -130,15 +120,9 @@ export default function PerpHeader({ market, markPrice }: PerpHeaderProps) {
         borderBottom: `1px solid ${AX.border}`,
       }}
     >
-      {/* Symbol + Image + Price */}
+      {/* Symbol switcher (icon + name + chevron → searchable market table) + Price */}
       <div className="flex items-center gap-3 min-w-fit">
-        <CoinIcon coin={market.name} size={28} />
-        <span
-          className="text-[14px] font-bold sm:text-[16px]"
-          style={{ color: AX.text }}
-        >
-          {market.name}-PERP
-        </span>
+        <PerpMarketSwitcher market={market} />
         <span
           className="text-[14px] sm:text-[16px] tabular-nums"
           style={{

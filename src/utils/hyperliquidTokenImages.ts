@@ -86,7 +86,12 @@ const STATIC_MAP: Record<string, string> = {
 
 // ============ Backend image cache ============
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+// Canonical backend var is NEXT_PUBLIC_BACKEND_URL (NEXT_PUBLIC_API_URL was never set)
+const API_URL = (
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  ""
+).replace(/\/$/, "");
 
 // Merged map: static + backend-resolved images
 let backendImages: Record<string, string> = {};
@@ -150,16 +155,22 @@ const AVATAR_COLORS = [
  */
 export function getHyperliquidTokenImage(coin: string): string | null {
   const key = coin.toUpperCase();
+  // HIP-3 assets are "{dex}:{coin}" — the bare symbol drives static-map hits
+  // (e.g. hyna:BTC → BTC) while backend keys are the full uppercased name.
+  const bare = key.includes(":") ? key.split(":")[1] : key;
 
   // 1. Static map (instant, CoinGecko PNGs)
-  if (STATIC_MAP[key]) return STATIC_MAP[key];
+  if (STATIC_MAP[bare]) return STATIC_MAP[bare];
 
-  // 2. Backend-resolved images (Redis-cached DexScreener/HL CDN URLs)
+  // 2. Backend-resolved images (Redis-cached, uppercase keys) — full name
+  //    first ("KM:USOIL"), then bare ("BTC" for hyna:BTC-style reuse)
   if (backendImages[key]) return backendImages[key];
+  if (backendImages[bare]) return backendImages[bare];
 
-  // 3. Hyperliquid CDN fallback — covers ~96% of perps as SVG
-  // This URL may 404 for some tokens, but CoinIcon has onError → letter avatar
-  const hlCdnUrl = `https://app.hyperliquid.xyz/coins/${key}.svg`;
+  // 3. Hyperliquid CDN fallback. HIP-3 icons live under the FULL prefixed
+  //    name in its canonical case ("km:USOIL.svg") — do NOT uppercase the URL.
+  //    May 404 for some tokens; CoinIcon's onError falls back to letter avatar.
+  const hlCdnUrl = `https://app.hyperliquid.xyz/coins/${coin.includes(":") ? coin : key}.svg`;
 
   // Trigger lazy backend fetch if stale (will eventually populate backendImages)
   ensureBackendImages();
@@ -172,16 +183,17 @@ export function getHyperliquidTokenImage(coin: string): string | null {
  */
 export async function resolveHyperliquidTokenImage(coin: string): Promise<string | null> {
   const key = coin.toUpperCase();
+  const bare = key.includes(":") ? key.split(":")[1] : key;
 
   // Static map first
-  if (STATIC_MAP[key]) return STATIC_MAP[key];
+  if (STATIC_MAP[bare]) return STATIC_MAP[bare];
 
   // Ensure backend images are loaded
   if (Date.now() - backendFetchedAt >= BACKEND_FETCH_INTERVAL_MS) {
     await fetchBackendImages();
   }
 
-  return backendImages[key] || null;
+  return backendImages[key] || backendImages[bare] || null;
 }
 
 /**

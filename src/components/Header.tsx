@@ -174,15 +174,20 @@ const PLATFORM_UPDATES = [
   },
 ];
 
+// Default-on feature flag (matches repo convention, e.g. NEXT_PUBLIC_ARENA_WSS_ENABLED):
+// perps nav is visible unless explicitly disabled via env. Lets us kill the surface
+// without a redeploy if a mainnet issue surfaces.
+const PERPS_ENABLED = process.env.NEXT_PUBLIC_PERPS_ENABLED !== "false";
+
 const navLinks = [
   { name: "Trenches", href: "/pulse" },
   { name: "Trending", href: "/discover" },
   { name: "Trackers", href: "/trackers" },
   { name: "Predictions", href: "/predictions" },
   { name: "Airdrop", href: "/airdrop-genesis" },
+  // ...(PERPS_ENABLED ? [{ name: "Perpetuals", href: "/perpetuals" }] : []),
   { name: "Portfolio", href: "/portfolio" },
   { name: "Agent", href: "/agent" },
-  // { name: "Perpetuals", href: "/perpetuals" },
   // { name: "Yield", href: "/construction" },
 ];
 
@@ -882,10 +887,17 @@ export default function Header({
   }, [isPredictionsPage, user?.bearerToken]);
 
   const chainAwareHref = useCallback(
-    (href: string) => ({
-      pathname: href,
-      query: { chain: currentChain },
-    }),
+    (href: string) => {
+      // Perpetuals run on Hyperliquid — chain-agnostic, so a ?chain=sol
+      // param there is meaningless and confusing. Don't propagate it.
+      if (href.startsWith("/perpetuals")) {
+        return { pathname: href };
+      }
+      return {
+        pathname: href,
+        query: { chain: currentChain },
+      };
+    },
     [currentChain],
   );
   const formatBalance = (value: number, digits = 3) => {

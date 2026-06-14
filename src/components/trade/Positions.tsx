@@ -13,6 +13,7 @@ import Image from 'next/image';
 import SellPopup from '../SellPopup';
 import { fetchChainTokenMetadata, fetchPumpfunImage, isPumpfunToken, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
+import { useResolvedTokenImages } from '~/hooks/useResolvedTokenImages';
 
 import PositionDetailModal from './PositionDetailModal';
 import toast from 'react-hot-toast';
@@ -162,6 +163,22 @@ const Positions: React.FC<PositionsProps> = ({
   });
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [pumpfunImages, setPumpfunImages] = useState<Record<string, string>>({}); // Fallback images from Pump.fun API
+
+  // Resolve token avatars via the canonical pipeline (discards the dead
+  // cdn.interstate.so speculative URL, resolves the metadata URI to the real
+  // image, registry fallback, caches forever) — fixes letter-tile positions.
+  const positionImageItems = useMemo(
+    () =>
+      (positions || [])
+        .filter((p) => p.tokenAddress)
+        .map((p) => ({
+          mint: p.tokenAddress,
+          raw: p.imageUrl || tokenMetadata[p.tokenAddress]?.imageUrl || null,
+          uri: tokenMetadata[p.tokenAddress]?.uri || null,
+        })),
+    [positions, tokenMetadata],
+  );
+  const resolvedImages = useResolvedTokenImages(positionImageItems);
 
   // Helper to get cached positions (used for ref initialization)
   const getCachedPositions = (): PositionRow[] => {
@@ -1501,8 +1518,8 @@ const Positions: React.FC<PositionsProps> = ({
   return (
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
       <table className="w-full text-xs">
-        <thead className="sticky top-0 z-20" style={{ backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
-          <tr className="border-b border-white/[0.06]" style={{ background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%)', boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(255, 255, 255, 0.02)' }}>
+        <thead className="sticky top-0 z-20 bg-[#0c0e12]">
+          <tr className="border-b border-white/[0.06]">
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '20%' }}>Token</th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '18%' }}>Bought</th>
             <th className="px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-white/30" style={{ width: '12%' }}>Sold</th>
@@ -1663,7 +1680,7 @@ const Positions: React.FC<PositionsProps> = ({
               const isHidden = hiddenTokens.has(pos.tokenAddress);
               
               // Use position.imageUrl as fallback, then Pump.fun API fallback for pump tokens
-              const finalImageUrl = metadata?.imageUrl || sourcePosition.imageUrl || pumpfunImages[pos.tokenAddress] || '';
+              const finalImageUrl = resolvedImages[pos.tokenAddress] || (metadata?.imageUrl && !metadata.imageUrl.includes('cdn.interstate.so') ? metadata.imageUrl : '') || (sourcePosition.imageUrl && !sourcePosition.imageUrl.includes('cdn.interstate.so') ? sourcePosition.imageUrl : '') || pumpfunImages[pos.tokenAddress] || '';
               const tokenKey = getPositionKey(sourcePosition);
               const quickSellValue = quickSellInputs[tokenKey] ?? '100';
               const isSelling = sellingTokens.has(tokenKey);

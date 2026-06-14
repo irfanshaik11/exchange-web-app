@@ -30,6 +30,14 @@ import {
   extractTokenImage,
   resolveTokenImage,
 } from "~/utils/images";
+import {
+  getCachedScanImage,
+  resolveScanImage,
+} from "~/utils/scanImageResolver";
+import {
+  playNotificationSound,
+  getSelectedNotificationSound,
+} from "~/utils/notificationSounds";
 import FastImage from "~/components/FastImage";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { FiBell } from "react-icons/fi";
@@ -128,6 +136,57 @@ const pruneTrades = (trades: TradeEvent[]) => {
   return Array.from(tradeByTx.values())
     .sort((a, b) => b.at - a.at)
     .slice(0, LIVE_TRADES_CACHE_MAX_ITEMS);
+};
+
+// Slim projection persisted to localStorage — only the fields needed to restore
+// the feed on reload, stripping any runtime-added bloat that inflates the cache.
+const slimTradeForStorage = (t: TradeEvent): TradeEvent => ({
+  type: "trade",
+  wallet: t.wallet,
+  mint: t.mint,
+  pair_address: t.pair_address,
+  symbol: t.symbol ?? null,
+  name: t.name ?? null,
+  side: t.side,
+  amount: t.amount,
+  sol_spent: t.sol_spent ?? null,
+  price_usd: t.price_usd ?? null,
+  market_cap_usd: t.market_cap_usd ?? null,
+  venue: t.venue ?? null,
+  tx: t.tx,
+  at: t.at,
+});
+
+// Write the trades cache without ever throwing on QuotaExceededError. The
+// in-memory feed is the source of truth; the cache is a reload convenience, so
+// when storage is full (other caches — images/OHLCV/pulse — fill the ~5MB
+// budget) we shrink our own payload and retry, then give up and free our key.
+const persistTradesQuotaSafe = (key: string, slim: TradeEvent[]) => {
+  if (typeof window === "undefined") return;
+  let items = slim;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(items));
+      return;
+    } catch (err) {
+      const quota =
+        err instanceof DOMException &&
+        (err.name === "QuotaExceededError" ||
+          err.name === "NS_ERROR_DOM_QUOTA_REACHED");
+      if (!quota || items.length <= 10) {
+        // Non-quota error, or already tiny and still failing → free our key
+        // so we never hold space we can't write, and stop.
+        try {
+          window.localStorage.removeItem(key);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      // Halve and retry — keep the newest trades.
+      items = items.slice(0, Math.floor(items.length / 2));
+    }
+  }
 };
 
 const mergeTrades = (existing: TradeEvent[], additions: TradeEvent[]) => {
@@ -297,6 +356,10 @@ export function WalletTrackerProvider({
   const hydrationRef = useRef(false);
   const initialHistoryFetchedRef = useRef(false);
   const shownToastTxsRef = useRef<Set<string>>(new Set());
+  // Source-level idempotency: tx signatures whose trade event has already been
+  // fully processed (table + toast), so duplicate WS deliveries are no-ops.
+  const PROCESSED_TX_MAX = 4000;
+  const processedTxRef = useRef<Set<string>>(new Set());
   const activeTradeToastIdsRef = useRef<string[]>([]);
 
   // Keep ref in sync with state
@@ -375,16 +438,25 @@ export function WalletTrackerProvider({
     initialHistoryFetchedRef.current = false;
   }, [user?.id]);
 
-  // Save notifications to localStorage whenever latestTrades changes
+  // Save notifications to localStorage whenever latestTrades changes.
+  // Quota-safe: persist the SLIM projection and shrink-and-retry on a full disk
+  // (same as the live-trades cache) so this never throws QuotaExceededError —
+  // the in-memory feed is the source of truth; the cache is reload convenience.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      // Prune old trades before saving
-      const pruned = pruneTrades(latestTrades);
-      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(pruned));
-    } catch (error) {
-      console.error("Failed to save notifications to localStorage:", error);
+    const pruned = pruneTrades(latestTrades);
+    if (pruned.length === 0) {
+      try {
+        window.localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return;
     }
+    persistTradesQuotaSafe(
+      NOTIFICATIONS_STORAGE_KEY,
+      pruned.map(slimTradeForStorage),
+    );
   }, [latestTrades]);
 
   // Adaptive initial history fetch: 1h window first, expand to 24h if sparse
@@ -451,6 +523,23 @@ export function WalletTrackerProvider({
 
     const handleTradeEvent = async (event: TradeEvent) => {
       const normalizedEvent = normalizeTradeForState(event);
+
+      // Idempotency guard at the SOURCE: the same trade can be delivered more
+      // than once (a leaked/duplicate WS connection, server re-delivery). Skip
+      // the WHOLE handler — table append AND toast — for a tx we've already
+      // processed, so one trade never produces multiple rows or multiple toasts.
+      // Guard before any async work so concurrent duplicate deliveries can't
+      // race past the check. Empty-tx events (rare) fall through unguarded.
+      if (normalizedEvent.tx) {
+        if (processedTxRef.current.has(normalizedEvent.tx)) return;
+        processedTxRef.current.add(normalizedEvent.tx);
+        if (processedTxRef.current.size > PROCESSED_TX_MAX) {
+          const keep = Array.from(processedTxRef.current).slice(
+            -Math.floor(PROCESSED_TX_MAX / 2),
+          );
+          processedTxRef.current = new Set(keep);
+        }
+      }
 
       // Get token name/symbol FIRST and enrich the event before showing
       let tokenName = normalizedEvent.symbol || normalizedEvent.name;
@@ -654,6 +743,22 @@ export function WalletTrackerProvider({
       // Add to latest trades list (keep last hour, max 50)
       setLatestTrades((prev) => mergeTrades(prev, [normalizedEvent]));
 
+      // A live trade means this wallet is active RIGHT NOW and its SOL balance
+      // just changed — but Last Active and Balance were only fetched on add, so
+      // they'd show stale values (e.g. "1 day" / old balance) despite the trade
+      // we just saw. Update Last Active immediately and refresh the balance
+      // (debounced per wallet so a burst of trades doesn't spam RPC).
+      {
+        const tradeAt =
+          typeof normalizedEvent.at === "number" ? normalizedEvent.at : Date.now();
+        setLastActiveMap((prev) => {
+          const cur = prev[normalizedEvent.wallet];
+          if (typeof cur === "number" && cur >= tradeAt) return prev;
+          return { ...prev, [normalizedEvent.wallet]: tradeAt };
+        });
+        scheduleBalanceRefresh(normalizedEvent.wallet);
+      }
+
       // Deduplicate toasts — skip if we already showed a toast for this tx
       if (shownToastTxsRef.current.has(normalizedEvent.tx)) return;
       shownToastTxsRef.current.add(normalizedEvent.tx);
@@ -730,40 +835,32 @@ export function WalletTrackerProvider({
         }
       })();
 
-      // Play notification sound if enabled — soft gentle ping
+      // Play the user's chosen notification sound if enabled.
       if (transactionSoundsEnabled && typeof window !== "undefined") {
-        try {
-          const ac = new (window.AudioContext ||
-            (window as any).webkitAudioContext)();
-          const osc = ac.createOscillator();
-          const gain = ac.createGain();
-          osc.type = "sine";
-          osc.frequency.value = 880; // A5 — clean, gentle tone
-          osc.connect(gain);
-          gain.connect(ac.destination);
-
-          const t = ac.currentTime;
-          gain.gain.setValueAtTime(0, t);
-          gain.gain.linearRampToValueAtTime(0.08, t + 0.01); // Soft peak
-          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3); // Gentle fade
-
-          osc.start(t);
-          osc.stop(t + 0.3);
-        } catch (error) {
-          // Silent fail if audio context fails (e.g., user hasn't interacted with page)
-        }
+        playNotificationSound(getSelectedNotificationSound());
       }
 
       // Show toast notification using enhanced toast only if enabled
       if (displayNotificationsEnabled) {
-        // Get token image from metadata using extractTokenImage (handles all field names + normalization)
+        // Toast avatar: use the SYNC cached image only — never await image
+        // resolution here, or the toast lags behind the trade already showing in
+        // the table. The parent WalletTrackerContent preloads every trade-feed
+        // image, so getCachedScanImage is usually a hit; on a miss we fall back
+        // to the metadata image and kick off a non-blocking resolve to warm the
+        // cache for next time. FastImage letter-tiles gracefully in the gap.
+        const cachedMeta0 = tokenMetadata.get(normalizedEvent.mint);
+        const cascadeImage = getCachedScanImage(normalizedEvent.mint) ?? null;
+        if (!cascadeImage) {
+          void resolveScanImage(
+            normalizedEvent.mint,
+            resolvedImage ?? cachedMeta0?.image_url ?? cachedMeta0?.image ?? null,
+            cachedMeta0?.uri ?? null,
+          );
+        }
         const tokenImage =
+          cascadeImage ||
           resolvedImage ||
-          (() => {
-            const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
-            if (!cachedMetadata) return null;
-            return extractTokenImage(cachedMetadata);
-          })();
+          (cachedMeta0 ? extractTokenImage(cachedMeta0) : null);
 
         const isBuy = normalizedEvent.side === "buy";
         const sideColor = isBuy ? "#70E0B0" : "#ff6b6b";
@@ -974,6 +1071,17 @@ export function WalletTrackerProvider({
 
     const initializeWebSocket = () => {
       try {
+        // Close any existing connection FIRST. Reconnect called this without
+        // closing the old socket, so stale connections leaked and each kept
+        // delivering trades — causing the same trade to fire multiple toasts.
+        if (connection) {
+          try {
+            connection.close();
+          } catch {
+            /* ignore */
+          }
+          connection = null;
+        }
         connection = createWalletTrackerWebSocket(
           handleTradeEvent,
           handleConnect,
@@ -1073,17 +1181,49 @@ export function WalletTrackerProvider({
   // Batch fetch wallet balances — runs on mount AND when new wallets are added
   // Tracks which addresses have been fetched to avoid redundant RPC calls
   const fetchedAddressesRef = useRef<Set<string>>(new Set());
+  const balanceInFlightRef = useRef<Set<string>>(new Set());
+  const [balanceRetryTick, setBalanceRetryTick] = useState(0);
+
+  // Debounced per-wallet balance refresh, triggered when a live trade for that
+  // wallet arrives (the trade changed its SOL balance). Coalesces a burst of
+  // trades into one refetch per wallet every ~8s.
+  const balanceRefreshTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  const scheduleBalanceRefresh = useCallback((address: string) => {
+    const timers = balanceRefreshTimersRef.current;
+    if (timers.has(address)) return; // already pending
+    const wallet = watchedWalletsRef.current.find((w) => w.address === address);
+    const chain = wallet?.chain === "monad" ? "monad" : "sol";
+    const t = setTimeout(async () => {
+      timers.delete(address);
+      try {
+        const res = await fetchBatchBalances([address], chain);
+        if (res && typeof res[address] === "number") {
+          setWalletBalances((prev) => ({ ...prev, [address]: res[address] }));
+        }
+      } catch {
+        /* transient — next trade re-triggers */
+      }
+    }, 8000);
+    timers.set(address, t);
+  }, []);
   useEffect(() => {
     if (!user?.id || watchedWallets.length === 0) return;
 
-    // Find wallets whose balance we haven't fetched yet
+    // Find wallets whose balance we haven't fetched yet (and aren't mid-fetch).
     const unfetched = watchedWallets.filter(
-      (w) => !fetchedAddressesRef.current.has(w.address),
+      (w) =>
+        !fetchedAddressesRef.current.has(w.address) &&
+        !balanceInFlightRef.current.has(w.address),
     );
     if (unfetched.length === 0) return;
 
-    // Mark as fetched immediately to prevent duplicate calls on re-render
-    unfetched.forEach((w) => fetchedAddressesRef.current.add(w.address));
+    // Mark in-flight (not fetched) so a re-render doesn't double-fetch, but a
+    // FAILED fetch can still retry. The bug this fixes: marking as fetched
+    // up-front meant a transient batch failure (fetchBatchBalances returns {}
+    // on any error) left a just-added wallet's Balance stuck on "—" forever.
+    unfetched.forEach((w) => balanceInFlightRef.current.add(w.address));
 
     const doFetch = async () => {
       const solWallets = unfetched
@@ -1094,23 +1234,39 @@ export function WalletTrackerProvider({
         .map((w) => w.address);
 
       const results: Record<string, number> = {};
-
-      if (solWallets.length > 0) {
-        const solBalances = await fetchBatchBalances(solWallets, "sol");
-        Object.assign(results, solBalances);
-      }
-      if (monadWallets.length > 0) {
-        const monadBalances = await fetchBatchBalances(monadWallets, "monad");
-        Object.assign(results, monadBalances);
+      try {
+        if (solWallets.length > 0) {
+          Object.assign(results, await fetchBatchBalances(solWallets, "sol"));
+        }
+        if (monadWallets.length > 0) {
+          Object.assign(
+            results,
+            await fetchBatchBalances(monadWallets, "monad"),
+          );
+        }
+      } finally {
+        unfetched.forEach((w) => balanceInFlightRef.current.delete(w.address));
       }
 
       if (Object.keys(results).length > 0) {
+        // Mark ONLY the addresses we actually got a balance for; the rest stay
+        // unfetched so the next render/poll retries them.
+        Object.keys(results).forEach((a) => fetchedAddressesRef.current.add(a));
         setWalletBalances((prev) => ({ ...prev, ...results }));
+      }
+
+      // Any wallet still missing a balance (transient failure / omitted by the
+      // endpoint) → retry once shortly so a new wallet doesn't sit on "—".
+      const stillMissing = unfetched.filter(
+        (w) => !fetchedAddressesRef.current.has(w.address),
+      );
+      if (stillMissing.length > 0) {
+        setTimeout(() => setBalanceRetryTick((t) => t + 1), 4000);
       }
     };
 
     doFetch();
-  }, [user?.id, watchedWallets]);
+  }, [user?.id, watchedWallets, balanceRetryTick]);
 
   // Reset fetched addresses and cached balances when user changes
   useEffect(() => {
@@ -1211,14 +1367,20 @@ export function WalletTrackerProvider({
         return;
       }
 
-      const payload = JSON.stringify(pruned);
-
-      window.localStorage.setItem(getCacheKey(), payload);
-      if (user?.id) {
-        window.localStorage.setItem(getCacheKey(user.id), payload);
-      }
+      // Persist a SLIM projection (only fields needed to restore the feed) — the
+      // full enriched TradeEvent can be large, and 100 of them blew the ~5MB
+      // localStorage quota. Write once to the most-specific key (user when
+      // logged in, else global) instead of duplicating the payload to both.
+      const slim = pruned.map(slimTradeForStorage);
+      const key = user?.id ? getCacheKey(user.id) : getCacheKey();
+      // Keep the non-active key from going stale/duplicating quota.
+      const otherKey = user?.id ? getCacheKey() : null;
+      if (otherKey) window.localStorage.removeItem(otherKey);
+      persistTradesQuotaSafe(key, slim);
     } catch (error) {
-      console.error("Failed to persist live trades cache:", error);
+      // Never let a storage failure surface — the in-memory feed is the source
+      // of truth; the cache is only a reload convenience.
+      console.warn("Live trades cache persist skipped:", error);
     }
   }, [latestTrades, user?.id]);
 

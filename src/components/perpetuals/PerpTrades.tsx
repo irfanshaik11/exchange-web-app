@@ -47,7 +47,7 @@ export default function PerpTrades({ trades }: PerpTradesProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center px-2 py-1.5 border-b border-[#2A2B33] text-[10px] uppercase tracking-wide text-[#9CA3AF]">
+      <div className="flex items-center px-2 py-1.5 border-b border-[#1f2127] text-[10px] uppercase tracking-wide text-[#a1a1aa]">
         <span className="w-[40%]">Price</span>
         <span className="w-[35%] text-right">Size (USD)</span>
         <span className="w-[25%] text-right">Time</span>
@@ -56,7 +56,7 @@ export default function PerpTrades({ trades }: PerpTradesProps) {
       {/* Trade list */}
       <div className="flex-1 overflow-y-auto">
         {trades.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-[#9CA3AF] text-sm">
+          <div className="flex items-center justify-center h-full text-[#a1a1aa] text-sm">
             Waiting for trades...
           </div>
         ) : (
@@ -66,8 +66,8 @@ export default function PerpTrades({ trades }: PerpTradesProps) {
             // sqrt scale so small trades are still visible when a whale trade exists
             const heatPct = Math.sqrt(usdValue / maxUsdValue) * 100;
             const barColor = isBuy
-              ? "linear-gradient(to right, rgba(134, 217, 159, 0.35), rgba(134, 217, 159, 0))"
-              : "linear-gradient(to right, rgba(242, 102, 130, 0.35), rgba(242, 102, 130, 0))";
+              ? "linear-gradient(to right, rgba(24, 196, 140, 0.35), rgba(24, 196, 140, 0))"
+              : "linear-gradient(to right, rgba(239, 68, 68, 0.35), rgba(239, 68, 68, 0))";
             // Bar spans full row width, capped at 85%
             const barWidthPct = Math.min(heatPct, 100) * 0.85;
 
@@ -84,14 +84,14 @@ export default function PerpTrades({ trades }: PerpTradesProps) {
                 />
 
                 <span
-                  className={`relative z-10 w-[40%] ${isBuy ? "text-[#86d99f]" : "text-[#f26682]"}`}
+                  className={`relative z-10 w-[40%] ${isBuy ? "text-[#18c48c]" : "text-[#ef4444]"}`}
                 >
                   {formatPrice(trade.px)}
                 </span>
-                <span className="relative z-10 w-[35%] text-right text-[#f0f5f5]">
+                <span className="relative z-10 w-[35%] text-right text-[#f4f4f5]">
                   {formatUsdCompact(usdValue)}
                 </span>
-                <span className="relative z-10 w-[25%] text-right text-[#9CA3AF]">
+                <span className="relative z-10 w-[25%] text-right text-[#a1a1aa]">
                   {formatTime(trade.time)}
                 </span>
               </div>

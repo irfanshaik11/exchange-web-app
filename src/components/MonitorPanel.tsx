@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useResolvedTokenImages } from "~/hooks/useResolvedTokenImages";
 import { useRouter } from "next/router";
 import FastImage from "~/components/FastImage";
 import { HiLightningBolt } from "react-icons/hi";
+import { VolumeBars } from "./MicroChart";
 import { FiCopy, FiStar } from "react-icons/fi";
 import { formatMarketCap } from "~/utils/db";
 import { extractTokenImage, resolveTokenImage } from "~/utils/images";
@@ -75,6 +77,23 @@ function formatUsdShort(n: number): string {
   return `$${n.toFixed(4)}`;
 }
 
+/**
+ * Compact "held for" duration label derived from a wallet's first→last
+ * (or first→now) timestamps. Pure presentational formatter — no data fetch.
+ */
+function formatHeldFor(fromMs: number, toMs: number): string {
+  const ms = toMs - fromMs;
+  if (!ms || ms <= 0) return "0s";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
+}
+
 // ── Aggregation ─────────────────────────────────────────────────────────
 
 interface WalletAgg {
@@ -108,6 +127,10 @@ interface TokenAgg {
   lastPriceUsd: number | null;
   walletsByAddr: Map<string, WalletAgg>;
   lastTrade: TradeEvent;
+  // Per-trade signed USD (buy=+, sell=-) collected during aggregation, used to
+  // render a real buy/sell pressure histogram. Sorted+capped once at return.
+  seriesPts: { at: number; v: number }[];
+  series?: number[];
 }
 
 function aggregateTrades(
@@ -139,6 +162,7 @@ function aggregateTrades(
         lastPriceUsd: t.price_usd ?? null,
         walletsByAddr: new Map(),
         lastTrade: t,
+        seriesPts: [],
       };
       byMint.set(t.mint, agg);
     }
@@ -147,6 +171,7 @@ function aggregateTrades(
     if (t.name && !agg.name) agg.name = t.name;
 
     const usd = tradeUsd(t, solPrice);
+    agg.seriesPts.push({ at: t.at, v: t.side === "buy" ? usd : -usd });
     if (t.side === "buy") {
       agg.buyCount += 1;
       agg.buyUsd += usd;
@@ -198,8 +223,17 @@ function aggregateTrades(
     if (t.at < wa.firstAt) wa.firstAt = t.at;
   }
 
-  // Most recent activity first.
-  return Array.from(byMint.values()).sort((a, b) => b.lastAt - a.lastAt);
+  // Most recent activity first. Compute the capped, time-ordered buy/sell
+  // pressure series ONCE here (not per render) to keep the card cheap.
+  return Array.from(byMint.values())
+    .map((agg) => {
+      agg.series = agg.seriesPts
+        .sort((a, b) => a.at - b.at)
+        .slice(-24)
+        .map((p) => p.v);
+      return agg;
+    })
+    .sort((a, b) => b.lastAt - a.lastAt);
 }
 
 // ── Token metadata fetching ─────────────────────────────────────────────
@@ -213,6 +247,8 @@ function useTokenMetadata(mints: string[]) {
       (m) => m && !metadata.has(m) && !fetchedRef.current.has(m),
     );
     if (todo.length === 0) return;
+    // Mark in-flight to dedupe; a FAILED fetch is un-marked below so it retries
+    // on the next data tick instead of being permanently stuck on "-" / no image.
     todo.forEach((m) => fetchedRef.current.add(m));
 
     Promise.allSettled(
@@ -220,21 +256,53 @@ function useTokenMetadata(mints: string[]) {
         try {
           const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
           if (!goUrl) return;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
           // Use /v1/search, NOT /v1/token: /v1/token's image_url is
           // cdn.interstate.so/{mint}.webp which 403s; search returns the working
           // (IPFS) image plus name/symbol/market data (flat on the token).
-          const resp = await fetch(
-            `${goUrl}/v1/search?phrase=${encodeURIComponent(mint)}&limit=1`,
-            { signal: controller.signal },
-          );
-          clearTimeout(timeoutId);
-          if (!resp.ok) return;
-          const data = await resp.json();
-          const results = data?.tokens || data?.results || data?.filterTokens?.results || [];
-          const token = results[0]?.token || results[0];
-          if (!token) return;
+          // Retry transient 502/503/504 (deploy/restart churn) — a single blip
+          // used to leave MC as "-" for the whole session because the mint was
+          // pre-marked fetched and never retried.
+          // `data` is hoisted so the metadata builder below can still read
+          // data?.marketData?.* after the loop exits.
+          let data: any = null;
+          let token: any = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 5000);
+              const resp = await fetch(
+                `${goUrl}/v1/search?phrase=${encodeURIComponent(mint)}&limit=1`,
+                { signal: controller.signal },
+              );
+              clearTimeout(timeoutId);
+              if (resp.ok) {
+                data = await resp.json();
+                const results =
+                  data?.tokens || data?.results || data?.filterTokens?.results || [];
+                token = results[0]?.token || results[0] || null;
+                break;
+              }
+              if (
+                (resp.status === 502 ||
+                  resp.status === 503 ||
+                  resp.status === 504) &&
+                attempt < 2
+              ) {
+                await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+                continue;
+              }
+              break; // non-retryable status
+            } catch {
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+                continue;
+              }
+            }
+          }
+          if (!token) {
+            fetchedRef.current.delete(mint); // allow a later retry
+            return;
+          }
           const md: TokenMeta = {
             symbol: token.symbol ?? null,
             name: token.name ?? null,
@@ -312,6 +380,23 @@ export default function MonitorPanel({
   const mints = useMemo(() => tokenAggs.map((t) => t.mint), [tokenAggs]);
   const metadata = useTokenMetadata(mints);
 
+  // Resolve token avatars through the shared cascade (proxy + cache + server
+  // DAS heal) — the raw image_url from /v1/token frequently 403s or is an
+  // unresolved IPFS/metadata link.
+  const imageItems = useMemo(
+    () =>
+      tokenAggs.map((t) => {
+        const meta = metadata.get(t.mint);
+        return {
+          mint: t.mint,
+          raw: meta?.image_url ?? meta?.image ?? null,
+          uri: meta?.uri ?? null,
+        };
+      }),
+    [tokenAggs, metadata],
+  );
+  const resolvedImages = useResolvedTokenImages(imageItems);
+
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const copyMint = (mint: string) => {
     if (!navigator?.clipboard) return;
@@ -355,7 +440,7 @@ export default function MonitorPanel({
 
   return (
     <div className="scrollbar-hide -mx-3 flex-1 overflow-auto sm:-mx-5">
-      <div className="flex flex-col gap-2 px-3 py-2 sm:px-5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3 px-3 py-3 sm:px-5">
         {tokenAggs.map((token) => {
           const meta = metadata.get(token.mint);
           const displaySymbol =
@@ -363,7 +448,11 @@ export default function MonitorPanel({
             meta?.symbol ||
             (token.mint ? token.mint.slice(0, 6) + "…" : "Unknown");
           const displayName = token.name || meta?.name || displaySymbol;
-          const tokenImageUrl = meta ? extractTokenImage(meta) : null;
+          const tokenImageUrl =
+            resolvedImages[token.mint] ||
+            // Server-healed tokens.image shows instantly vs the async hook.
+            meta?.image ||
+            (meta ? extractTokenImage(meta) : null);
           const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol || "T")}&background=0f1012&color=E6E7EA&size=40`;
           const launchpadProtocol = (
             meta?.launchpad_protocol || ""
@@ -380,7 +469,6 @@ export default function MonitorPanel({
           const ageMs = meta?.createdAt
             ? now - new Date(meta.createdAt as any).getTime()
             : now - token.firstAt;
-          const lastTxMs = now - token.lastAt;
 
           const marketCap = meta?.market_cap_usd ?? token.marketCapUsd ?? null;
           const liquidity = meta?.liquidity_usd ?? null;
@@ -417,16 +505,16 @@ export default function MonitorPanel({
           return (
             <div
               key={token.mint}
-              className="overflow-hidden rounded-md border border-white/[0.05] bg-[#0a0b0e]/60"
+              className="@container relative flex flex-col overflow-hidden rounded-xl border border-transparent bg-[#1E1F26] pb-12 hover:border-[#2A2B33]"
             >
               {/* HEADER ROW */}
-              <div className="flex items-start gap-3 px-3 py-2.5 sm:px-4 sm:py-3">
+              <div className="flex items-start gap-3 px-3.5 py-3.5">
                 {/* Icon */}
                 <button
                   type="button"
                   onClick={goToTrade}
                   onMouseEnter={preload}
-                  className="relative flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center sm:h-11 sm:w-11"
+                  className="relative flex h-9 w-9 flex-shrink-0 cursor-pointer items-center justify-center"
                   aria-label={`Open ${displaySymbol}`}
                 >
                   <div
@@ -437,7 +525,7 @@ export default function MonitorPanel({
                       backgroundColor: "#06070b",
                     }}
                   >
-                    <div className="relative h-7 w-7 overflow-hidden rounded-md sm:h-9 sm:w-9">
+                    <div className="relative h-8 w-8 overflow-hidden rounded-md">
                       <FastImage
                         src={tokenImageUrl}
                         fallbackSrc={fallbackAvatar}
@@ -468,140 +556,165 @@ export default function MonitorPanel({
                   </div>
                 </button>
 
-                {/* Name + ticker + stats */}
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <div className="flex items-center gap-2">
+                {/* Name + ticker + mint line */}
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <div className="flex min-w-0 items-baseline gap-1.5">
                     <button
                       type="button"
                       onClick={goToTrade}
                       onMouseEnter={preload}
-                      className="cursor-pointer truncate text-left text-sm font-semibold text-white hover:text-emerald-300 sm:text-[15px]"
+                      className="max-w-full cursor-pointer truncate text-left text-[15px] font-semibold leading-tight text-white hover:text-emerald-300"
                       title={displayName ?? undefined}
                     >
                       {displaySymbol}
                     </button>
-                    <span
-                      className="max-w-[140px] truncate text-xs text-neutral-500 sm:max-w-[220px]"
-                      title={displayName ?? undefined}
-                    >
-                      {displayName !== displaySymbol ? displayName : ""}
+                    {displayName !== displaySymbol && (
+                      <span
+                        className="min-w-0 truncate text-xs text-neutral-500"
+                        title={displayName ?? undefined}
+                      >
+                        {displayName}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-white/40">
+                    <span className="tabular-nums text-[#18c48c]">
+                      {formatAge(ageMs)}
+                    </span>
+                    <span className="text-white/20">·</span>
+                    <span className="truncate font-mono text-white/35">
+                      {token.mint.slice(0, 4)}…{token.mint.slice(-4)}
                     </span>
                     <button
                       type="button"
                       onClick={() => copyMint(token.mint)}
                       title="Copy mint address"
-                      className="cursor-pointer text-neutral-500 hover:text-neutral-200"
+                      className="flex-shrink-0 cursor-pointer text-neutral-500 hover:text-neutral-200"
                     >
                       <FiCopy className="h-3 w-3" />
                     </button>
                     {copiedMint === token.mint && (
-                      <span className="text-[10px] text-emerald-400">
+                      <span className="flex-shrink-0 text-[10px] text-emerald-400">
                         Copied
                       </span>
                     )}
                     <button
                       type="button"
                       title="Star"
-                      className="cursor-pointer text-neutral-500 hover:text-yellow-300"
+                      className="flex-shrink-0 cursor-pointer text-neutral-500 hover:text-yellow-300"
                     >
                       <FiStar className="h-3 w-3" />
                     </button>
                   </div>
-                  <div className="mt-0.5 text-[11px] text-emerald-400">
-                    {formatAge(ageMs)}
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-neutral-400">
-                    <span>
-                      H{" "}
-                      <span className="font-semibold text-white">
-                        {holders}
-                      </span>
-                    </span>
-                    <span>
-                      MC{" "}
-                      <span className="font-semibold text-emerald-400">
-                        {marketCap ? `$${formatMarketCap(marketCap)}` : "-"}
-                      </span>
-                    </span>
-                    <span>
-                      L{" "}
-                      <span className="font-semibold text-white">
-                        {liquidity ? `$${formatMarketCap(liquidity)}` : "-"}
-                      </span>
-                    </span>
-                    <span>
-                      TX <span className="font-semibold text-white">{totalTx}</span>
-                    </span>
-                    <span>
-                      Last TX{" "}
-                      <span className="font-semibold text-white">
-                        {formatAge(lastTxMs)}
-                      </span>
-                    </span>
-                  </div>
                 </div>
 
                 {/* Buy/sell summary + quick buy */}
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-2 text-[11px] sm:text-xs">
-                    <span className="font-semibold text-emerald-400 tabular-nums">
-                      {token.buyCount}
-                      <span className="text-neutral-500"> /</span>
-                      {formatUsdShort(token.buyUsd)}
+                <div className="flex flex-shrink-0 flex-col items-end gap-2">
+                  <div className="flex flex-col items-end leading-tight">
+                    <span className="hidden text-[9px] uppercase tracking-wider text-white/30 @[20rem]:block">
+                      Buys / Sells
                     </span>
-                    <span className="text-neutral-600">·</span>
-                    <span className="font-semibold text-red-400 tabular-nums">
-                      {token.sellCount}
-                      <span className="text-neutral-500"> /</span>
-                      {formatUsdShort(token.sellUsd)}
+                    <span className="text-xs tabular-nums">
+                      <span className="font-semibold text-[#18c48c]">
+                        {token.buyCount}
+                      </span>
+                      <span className="text-neutral-600"> / </span>
+                      <span className="font-semibold text-[#F0616D]">
+                        {token.sellCount}
+                      </span>
                     </span>
                   </div>
-                  <div className="flex h-1 w-[120px] overflow-hidden rounded-full bg-neutral-800">
-                    <div
-                      className="h-full bg-emerald-500"
-                      style={{
-                        width: `${Math.max(2, Math.min(98, buyShare * 100))}%`,
-                      }}
+                  {token.series && token.series.length > 1 && (
+                    <VolumeBars
+                      values={token.series}
+                      height={26}
+                      cellWidth={3}
+                      gap={1}
+                      rounded={1}
                     />
-                    <div className="h-full flex-1 bg-red-500" />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onQuickBuy(token.lastTrade);
-                    }}
-                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-blue-500/15 text-blue-400 transition-colors hover:bg-blue-500/25 hover:text-blue-300"
-                    title={`Quick buy ${quickBuyAmount} SOL`}
-                  >
-                    <HiLightningBolt className="h-3.5 w-3.5" />
-                  </button>
+                  )}
                 </div>
               </div>
 
-              {/* WALLETS TABLE */}
-              <div className="border-t border-white/[0.04] bg-black/40">
-                <table className="w-full min-w-[640px] text-[11px] sm:text-xs">
+              {/* SECONDARY STAT STRIP — progressive disclosure by card width.
+                  MC + TX always show; Holders/Vol/Liq reveal on wider cards. */}
+              <div className="flex items-center gap-x-4 gap-y-1.5 border-t border-white/[0.06] px-3.5 py-2.5">
+                {[
+                  {
+                    label: "MC",
+                    value: marketCap ? `$${formatMarketCap(marketCap)}` : "-",
+                    show: "", // always
+                  },
+                  {
+                    label: "TX",
+                    value: String(totalTx),
+                    show: "", // always
+                  },
+                  {
+                    label: "Vol",
+                    value: formatUsdShort(token.buyUsd + token.sellUsd),
+                    show: "hidden @[19rem]:flex",
+                  },
+                  {
+                    label: "Holders",
+                    value: String(holders),
+                    show: "hidden @[24rem]:flex",
+                  },
+                  {
+                    label: "Liq",
+                    value: liquidity ? `$${formatMarketCap(liquidity)}` : "-",
+                    show: "hidden @[28rem]:flex",
+                  },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    className={`min-w-0 flex-col leading-tight ${stat.show || "flex"}`}
+                  >
+                    <span className="text-[9px] uppercase tracking-wider text-white/30">
+                      {stat.label}
+                    </span>
+                    <span className="truncate text-[11px] font-semibold tabular-nums text-white/80">
+                      {stat.value}
+                    </span>
+                  </div>
+                ))}
+                <div className="ml-auto flex h-1.5 w-[64px] flex-shrink-0 overflow-hidden rounded-full bg-[#080a0d]">
+                  <div
+                    className="h-full bg-[#18c48c]"
+                    style={{
+                      width: `${Math.max(2, Math.min(98, buyShare * 100))}%`,
+                    }}
+                  />
+                  <div className="h-full flex-1 bg-[#F0616D]" />
+                </div>
+              </div>
+
+              {/* WALLETS TABLE — "Held For" + txn sublines hide on narrow cards */}
+              <div className="border-t border-white/[0.06]">
+                <table className="w-full table-fixed text-[11px]">
+                  <colgroup>
+                    <col className="w-[30%] @[22rem]:w-[24%]" />
+                    <col className="hidden @[22rem]:table-column @[22rem]:w-[12%]" />
+                    <col className="w-[22%] @[22rem]:w-[20%]" />
+                    <col className="w-[22%] @[22rem]:w-[20%]" />
+                    <col className="w-[26%] @[22rem]:w-[24%]" />
+                  </colgroup>
                   <thead>
-                    <tr className="text-neutral-500">
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                    <tr className="border-b border-white/[0.06]">
+                      <th className="px-3.5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         Wallet
                       </th>
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
-                        Time in Trade
+                      <th className="hidden px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-white/30 @[22rem]:table-cell">
+                        Held For
                       </th>
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         Bought
                       </th>
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         Sold
                       </th>
-                      <th className="px-3 py-2 text-left font-normal sm:px-4">
+                      <th className="py-2 pr-3 pl-1 text-right text-[10px] font-semibold uppercase tracking-wide text-white/30">
                         PNL
-                      </th>
-                      <th className="px-3 py-2 text-right font-normal sm:px-4">
-                        Remaining
                       </th>
                     </tr>
                   </thead>
@@ -617,62 +730,73 @@ export default function MonitorPanel({
                       // Total PnL = (sold value + current value of remaining) - bought value.
                       const pnl =
                         w.soldUsd + remainingUsd - w.boughtUsd;
-                      const timeInTradeMs = now - w.firstAt;
+                      const stillHolding = remainingTokens > 0.001;
+                      const heldTo = stillHolding ? now : w.lastAt;
                       const pnlPositive = pnl >= 0;
                       return (
                         <tr
                           key={w.wallet}
-                          className="border-t border-white/[0.03] hover:bg-white/[0.02]"
+                          className="border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.04]"
                         >
-                          <td className="px-3 py-2 sm:px-4">
+                          <td className="px-3.5 py-2.5">
                             <span
-                              className="inline-flex items-center gap-1.5 text-neutral-200"
+                              className="flex min-w-0 items-center gap-1.5 text-neutral-200"
                               title={w.wallet}
                             >
-                              <FiStar className="h-3 w-3 text-yellow-400" />
-                              <span className="truncate">{w.walletName}</span>
+                              <span className="flex-shrink-0 text-sm leading-none">
+                                {w.walletEmoji}
+                              </span>
+                              <span className="min-w-0 truncate font-medium">
+                                {w.walletName}
+                              </span>
+                              {/* Holding dot shows here when "Held For" column is collapsed */}
+                              {stillHolding && (
+                                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#18c48c] @[22rem]:hidden" />
+                              )}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-neutral-300 sm:px-4">
-                            {formatAge(timeInTradeMs)}
+                          <td className="hidden px-2 py-2.5 @[22rem]:table-cell">
+                            <span className="inline-flex items-center gap-1 tabular-nums text-neutral-400">
+                              {stillHolding && (
+                                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#18c48c]" />
+                              )}
+                              {formatHeldFor(w.firstAt, heldTo)}
+                            </span>
                           </td>
-                          <td className="px-3 py-2 sm:px-4">
-                            <div className="flex flex-col">
-                              <span className="font-semibold text-emerald-400 tabular-nums">
+                          <td className="px-2 py-2.5 text-right">
+                            <div className="flex flex-col items-end leading-tight">
+                              <span className="font-semibold tabular-nums text-[#18c48c]">
                                 {formatUsdShort(w.boughtUsd)}
                               </span>
-                              <span className="text-[10px] text-neutral-500">
+                              <span className="hidden text-[10px] tabular-nums text-neutral-500 @[24rem]:block">
                                 {w.buyCount} txn{w.buyCount === 1 ? "" : "s"}
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2 sm:px-4">
-                            <div className="flex flex-col">
-                              <span className="font-semibold text-red-400 tabular-nums">
+                          <td className="px-2 py-2.5 text-right">
+                            <div className="flex flex-col items-end leading-tight">
+                              <span className="font-semibold tabular-nums text-[#F0616D]">
                                 {formatUsdShort(w.soldUsd)}
                               </span>
-                              <span className="text-[10px] text-neutral-500">
+                              <span className="hidden text-[10px] tabular-nums text-neutral-500 @[24rem]:block">
                                 {w.sellCount} txn
                                 {w.sellCount === 1 ? "" : "s"}
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2 sm:px-4">
+                          <td className="py-2.5 pr-3 pl-1 text-right">
                             <span
-                              className={`font-semibold tabular-nums ${
-                                pnlPositive
-                                  ? "text-emerald-400"
-                                  : "text-red-400"
-                              }`}
+                              className="inline-block rounded-md px-1.5 py-0.5 font-semibold whitespace-nowrap tabular-nums"
+                              style={{
+                                color: pnlPositive ? "#18c48c" : "#F0616D",
+                                backgroundColor: pnlPositive
+                                  ? "rgba(24,196,140,0.08)"
+                                  : "rgba(240,97,109,0.08)",
+                              }}
                             >
                               {pnlPositive ? "+" : "-"}
                               {formatUsdShort(Math.abs(pnl))}
                             </span>
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-neutral-200 sm:px-4">
-                            {remainingUsd > 0
-                              ? formatUsdShort(remainingUsd)
-                              : "-"}
                           </td>
                         </tr>
                       );
@@ -680,6 +804,33 @@ export default function MonitorPanel({
                   </tbody>
                 </table>
               </div>
+
+              {/* Quick buy — square button pinned to the card's bottom-right.
+                  Same color/style as the Trending (Pulse) page buy button:
+                  dark #1a1b1f surface, #86efac green, inverts on hover. The
+                  card's pb-12 reserves space so this never overlaps the table. */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onQuickBuy(token.lastTrade);
+                }}
+                className="absolute right-2.5 bottom-2.5 z-10 flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold tabular-nums"
+                style={{ backgroundColor: "#1a1b1f", color: "#86efac" }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#86efac";
+                  e.currentTarget.style.color = "#000000";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "#1a1b1f";
+                  e.currentTarget.style.color = "#86efac";
+                }}
+                title={`Quick buy ${quickBuyAmount} SOL`}
+              >
+                <HiLightningBolt className="h-3.5 w-3.5" style={{ color: "inherit" }} />
+                <span>{quickBuyAmount}</span>
+              </button>
             </div>
           );
         })}

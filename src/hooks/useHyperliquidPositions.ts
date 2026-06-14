@@ -1,9 +1,14 @@
 // src/hooks/useHyperliquidPositions.ts
-// User positions via Interstate backend (auth required).
-// Polls positions periodically for real-time PnL updates.
+// User positions — WS push first, REST polling as fallback.
+//
+// When HyperliquidUserStreamProvider (mounted in _app) has a live webData2
+// stream, this hook returns stream data and pauses its polling entirely.
+// If the socket drops (or the provider isn't mounted), it transparently
+// resumes 5s REST polling. Consumers don't change either way.
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { fetchPositions } from "../utils/hyperliquidApi";
+import { useHyperliquidUserStream } from "../contexts/HyperliquidUserStreamContext";
 import type { HyperliquidAssetPosition, HyperliquidMarginSummary, HyperliquidPositionRow } from "../utils/hyperliquidTypes";
 
 interface UseHyperliquidPositionsOptions {
@@ -52,6 +57,10 @@ export function useHyperliquidPositions({
   });
   const mountedRef = useRef(true);
 
+  // Live push from the app-scoped user-stream provider (inert defaults if unmounted)
+  const stream = useHyperliquidUserStream();
+  const streamActive = enabled && !!token && stream.wsLive && stream.rawPositions !== null;
+
   const fetchData = useCallback(async () => {
     if (!token || !enabled) return;
 
@@ -80,7 +89,9 @@ export function useHyperliquidPositions({
 
   useEffect(() => {
     mountedRef.current = true;
-    if (!token || !enabled) return;
+    // While the WS stream is live, polling is pure waste — pause it. The effect
+    // re-runs when streamActive flips, so a dropped socket resumes polling.
+    if (!token || !enabled || streamActive) return;
 
     setState((prev) => ({ ...prev, loading: true }));
     fetchData();
@@ -90,7 +101,25 @@ export function useHyperliquidPositions({
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, [token, enabled, pollInterval, fetchData]);
+  }, [token, enabled, pollInterval, fetchData, streamActive]);
+
+  const streamPositions = useMemo(() => {
+    if (!streamActive) return [];
+    return (stream.rawPositions || [])
+      .filter((ap) => parseFloat(ap.position.szi) !== 0)
+      .map(parsePosition);
+  }, [streamActive, stream.rawPositions]);
+
+  if (streamActive) {
+    return {
+      positions: streamPositions,
+      rawPositions: stream.rawPositions || [],
+      marginSummary: stream.marginSummary,
+      loading: false,
+      error: null,
+      refresh: fetchData,
+    };
+  }
 
   return { ...state, refresh: fetchData };
 }

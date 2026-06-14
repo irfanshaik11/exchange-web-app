@@ -1,4 +1,16 @@
 import kolWallets from "../data/kolWallets.json";
+import kolWalletTracker from "../data/kol-wallet-tracker.json";
+
+// kolWallets.json has 133 entries with an empty twitterUsername (no DP).
+// kol-wallet-tracker.json carries handles for some of them — overlay those so
+// more KOLs resolve a profile pic. Keyed by lowercase address; tracker handle
+// only fills a gap, never overrides an existing kolWallets handle.
+const TRACKER_HANDLE_BY_ADDR = new Map<string, string>();
+for (const t of kolWalletTracker as Array<{ wallet?: string; handle?: string }>) {
+  if (t.wallet && t.handle) {
+    TRACKER_HANDLE_BY_ADDR.set(t.wallet.toLowerCase(), t.handle);
+  }
+}
 
 export interface KolInfo {
   name: string;
@@ -61,15 +73,34 @@ kolWallets.forEach(
     if (KOL_ADDRESS_MAP.has(key)) return; // deduplicate (first wins)
 
     const color = COLOR_PALETTE[index % COLOR_PALETTE.length];
+    // Fill a missing handle from the tracker file when available.
+    const handle = entry.twitterUsername || TRACKER_HANDLE_BY_ADDR.get(key) || "";
     KOL_ADDRESS_MAP.set(key, {
       name: entry.name,
-      twitterUsername: entry.twitterUsername,
-      label: makeLabel(entry.name, entry.twitterUsername),
+      twitterUsername: handle,
+      label: makeLabel(entry.name, handle),
       namedColor: color.named,
       hexColor: color.hex,
-      avatarUrl: entry.twitterUsername
-        ? `/kol-avatars/${entry.twitterUsername}.jpg`
-        : undefined,
+      avatarUrl: handle ? `/kol-avatars/${handle}.jpg` : undefined,
+    });
+  },
+);
+
+// Add tracker-only wallets (have a handle but aren't in kolWallets.json) so
+// they also resolve a name + DP in the wallet list / scan / KOL tab.
+(kolWalletTracker as Array<{ wallet?: string; name?: string; handle?: string }>).forEach(
+  (t, index) => {
+    if (!t.wallet || !t.handle) return;
+    const key = t.wallet.toLowerCase();
+    if (KOL_ADDRESS_MAP.has(key)) return;
+    const color = COLOR_PALETTE[index % COLOR_PALETTE.length];
+    KOL_ADDRESS_MAP.set(key, {
+      name: t.name || t.handle,
+      twitterUsername: t.handle,
+      label: makeLabel(t.name || t.handle, t.handle),
+      namedColor: color.named,
+      hexColor: color.hex,
+      avatarUrl: `/kol-avatars/${t.handle}.jpg`,
     });
   },
 );

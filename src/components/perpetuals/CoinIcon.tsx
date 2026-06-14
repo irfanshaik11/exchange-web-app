@@ -15,6 +15,9 @@ interface CoinIconProps {
 export default function CoinIcon({ coin, size = 24, className = "" }: CoinIconProps) {
   const imageUrl = useHyperliquidTokenImage(coin);
   const [imgError, setImgError] = useState(false);
+  // HIP-3 assets are "{dex}:{coin}" — the avatar letter should come from the
+  // traded symbol ("U" for km:USOIL), not the dex prefix.
+  const bare = coin.includes(":") ? coin.split(":")[1] || coin : coin;
 
   if (imageUrl && !imgError) {
     return (
@@ -45,7 +48,7 @@ export default function CoinIcon({ coin, size = 24, className = "" }: CoinIconPr
         fontSize: size * 0.4,
       }}
     >
-      {coin.charAt(0)}
+      {bare.charAt(0).toUpperCase()}
     </div>
   );
 }

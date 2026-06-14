@@ -19,7 +19,7 @@ function formatPrice(value: number): string {
 export default function PerpPositions({ positions, onClose, onSelect }: PerpPositionsProps) {
   if (positions.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-[#9CA3AF] text-sm">
+      <div className="flex items-center justify-center h-32 text-[#a1a1aa] text-sm">
         No open positions
       </div>
     );
@@ -29,7 +29,7 @@ export default function PerpPositions({ positions, onClose, onSelect }: PerpPosi
     <div className="overflow-x-auto">
       <table className="min-w-full text-[11px]">
         <thead>
-          <tr className="text-[10px] uppercase tracking-wide text-[#9CA3AF] border-b border-[#2A2B33]">
+          <tr className="text-[10px] uppercase tracking-wide text-[#a1a1aa] border-b border-[#1f2127]">
             <th className="text-left px-2 py-2 font-semibold">Symbol</th>
             <th className="text-right px-2 py-2 font-semibold">Size</th>
             <th className="text-right px-2 py-2 font-semibold">Entry</th>
@@ -43,30 +43,30 @@ export default function PerpPositions({ positions, onClose, onSelect }: PerpPosi
         </thead>
         <tbody>
           {positions.map((pos) => {
-            const pnlColor = pos.unrealizedPnl >= 0 ? "text-[#86d99f]" : "text-[#f26682]";
-            const sideColor = pos.side === "LONG" ? "text-[#86d99f]" : "text-[#f26682]";
+            const pnlColor = pos.unrealizedPnl >= 0 ? "text-[#18c48c]" : "text-[#ef4444]";
+            const sideColor = pos.side === "LONG" ? "text-[#18c48c]" : "text-[#ef4444]";
 
             return (
               <tr
                 key={pos.coin}
-                className="border-b border-[#1E1F26] hover:bg-white/[0.04] cursor-pointer"
+                className="border-b border-[#141619] hover:bg-white/[0.04] cursor-pointer"
                 onClick={() => onSelect?.(pos.coin)}
               >
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-1">
-                    <span className="text-[#f0f5f5] font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>{pos.coin}</span>
+                    <span className="text-[#f4f4f5] font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>{pos.coin}</span>
                     <span className={`text-[10px] font-bold ${sideColor}`}>
                       {pos.side}
                     </span>
                   </div>
                 </td>
-                <td className="px-2 py-2 text-right text-[#f0f5f5]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <td className="px-2 py-2 text-right text-[#f4f4f5]" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {pos.size.toFixed(4)}
                 </td>
-                <td className="px-2 py-2 text-right text-[#9CA3AF]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <td className="px-2 py-2 text-right text-[#a1a1aa]" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {formatPrice(pos.entryPrice)}
                 </td>
-                <td className="px-2 py-2 text-right text-[#9CA3AF]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <td className="px-2 py-2 text-right text-[#a1a1aa]" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {pos.liquidationPrice ? formatPrice(pos.liquidationPrice) : "—"}
                 </td>
                 <td className={`px-2 py-2 text-right font-medium ${pnlColor}`} style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -77,15 +77,15 @@ export default function PerpPositions({ positions, onClose, onSelect }: PerpPosi
                   {pos.returnOnEquity >= 0 ? "+" : ""}
                   {(pos.returnOnEquity * 100).toFixed(2)}%
                 </td>
-                <td className="px-2 py-2 text-right text-[#9CA3AF]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <td className="px-2 py-2 text-right text-[#a1a1aa]" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {pos.leverage}x
                 </td>
-                <td className="px-2 py-2 text-right text-[#9CA3AF]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <td className="px-2 py-2 text-right text-[#a1a1aa]" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   ${pos.marginUsed.toFixed(2)}
                 </td>
                 <td className="px-2 py-2 text-center">
                   <button
-                    className="text-[10px] px-2 py-0.5 rounded bg-[#f26682]/20 text-[#f26682] hover:bg-[#f26682]/40 transition-colors"
+                    className="text-[10px] px-2 py-0.5 rounded bg-[#ef4444]/20 text-[#ef4444] hover:bg-[#ef4444]/40 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
                       onClose?.(pos.coin, 100);

@@ -80,10 +80,31 @@ import {
   showTradeValidationError,
 } from "~/utils/preTradeValidation";
 import { checkAtaExists } from "~/utils/ataCheck";
-import { buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
-import { getResolvedTokenImage } from "~/utils/images";
+import {
+  buildSolanaWalletAllocations,
+  executeSolanaMultiBuy,
+} from "~/utils/solanaWalletAllocation";
+import { getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
+import hotToast from "react-hot-toast";
+import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
+import { SOL_MINT_ADDRESS } from "~/utils/api";
+import {
+  listenForTradeEvents,
+  transformToastToError,
+} from "~/utils/createSolanaToastHandler";
+import {
+  confirmOptimisticMarker,
+  insertOptimisticMarker,
+  rollbackOptimisticMarker,
+} from "~/utils/pendingTradeMarkers";
+import {
+  broadcastTradeCompleted,
+  notifyTradePending,
+} from "~/utils/tradeEvents";
 import type { Token } from "~/utils/db";
-import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
+import { FaRunning, FaGasPump, FaCoins, FaBan, FaTelegramPlane } from "react-icons/fa";
+import { getKolSocials } from "~/utils/kolSocials";
 import { HiLightningBolt } from "react-icons/hi";
 import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
@@ -92,6 +113,8 @@ import MonitorPanel from "../components/MonitorPanel";
 import KolScanTrackerContent from "../components/KolScanTrackerContent";
 import kolWalletTrackerData from "../data/kol-wallet-tracker.json";
 import { useSolPrice } from "../components/SolPriceContext";
+import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
+import { prefetchWalletScan } from "../hooks/useWalletScan";
 import {
   getWalletPortfolioSummary,
   type WalletPortfolioSummary,
@@ -134,17 +157,34 @@ function hslAvatarBg(seed: string): string {
   return `hsl(${h}, 42%, 32%)`;
 }
 
-function KolAvatar({ name, handle }: { name: string; handle: string }) {
-  const [failed, setFailed] = useState(false);
+function KolAvatar({
+  name,
+  handle,
+  address,
+}: {
+  name: string;
+  handle: string;
+  address?: string;
+}) {
+  // LOCAL-ONLY fallback (no network on refresh; kolscan avatars pre-backfilled):
+  // /kol-avatars/{address}.png -> old handle file /kol-avatars/{handle}.jpg -> initial.
+  const [stage, setStage] = useState(0);
   const raw = (name.trim().charAt(0) ||
     handle.trim().charAt(0) ||
     "?") as string;
   const initial = raw.toUpperCase();
 
-  if (failed) {
+  const src =
+    stage === 0 && address
+      ? `/kol-avatars/${address}.png`
+      : stage <= 1 && handle
+        ? `/kol-avatars/${handle}.jpg`
+        : null;
+
+  if (!src) {
     return (
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white sm:h-10 sm:w-10 sm:text-sm"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white sm:h-10 sm:w-10 sm:text-sm"
         style={{ backgroundColor: hslAvatarBg(handle || name) }}
       >
         {initial}
@@ -155,10 +195,10 @@ function KolAvatar({ name, handle }: { name: string; handle: string }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/kol-avatars/${handle}.jpg`}
+      src={src}
       alt=""
-      className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10"
-      onError={() => setFailed(true)}
+      className="h-9 w-9 shrink-0 rounded-lg object-cover sm:h-10 sm:w-10"
+      onError={() => setStage((s) => s + 1)}
     />
   );
 }
@@ -172,6 +212,8 @@ type DefaultWalletEntry = {
 };
 
 const TABS = ["Wallet Manager", "Live Trades", "Monitor", "KOLs"];
+// Per-tab signature colors for the glowing pill tabs (matches the design comp).
+const TAB_COLORS = ["#18c48c", "#F0616D", "#f5b14c", "#5B8CFF"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed", "Add X Accounts"];
 const TELEGRAM_TABS = ["Channels", "Messages", "Add Channels"];
 /** Default Telegram channels to track for all users when they have none. */
@@ -316,8 +358,14 @@ const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 
 export default function TrackersPage() {
   const router = useRouter();
-  const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
-    useUser();
+  const {
+    user,
+    solBalance,
+    walletList,
+    walletBalances,
+    selectedWalletIds,
+    refreshBalance,
+  } = useUser();
   const {
     wsConnected,
     latestTrades,
@@ -1560,7 +1608,7 @@ export default function TrackersPage() {
     const settings = preset.quickBuySettings;
 
     // Pre-validate balance before showing animated toast
-    const { allocations } = buildSolanaWalletAllocations({
+    const { allocations, total } = buildSolanaWalletAllocations({
       amount: buyAmount,
       walletList: walletList || [],
       walletBalances: walletBalances || {},
@@ -1568,6 +1616,8 @@ export default function TrackersPage() {
       priorityFee: settings.priority || 0.0001,
       bribe: settings.bribe || 0,
     });
+    const walletsWithBalance = allocations.length;
+    const isMultiWallet = walletsWithBalance > 1;
     const ataExists = await checkAtaExists(trade.mint, user?.publicKey).catch(
       () => null,
     );
@@ -1594,43 +1644,300 @@ export default function TrackersPage() {
     // Get token metadata from the tokenMetadata map
     const metadata = tokenMetadata.get(trade.mint);
 
+    // Resolve the VERIFIED pair/pool address before trading — the same step the
+    // canonical surfaces (SearchModal, PulseTable, Watchlist, Discover) run.
+    // A TradeEvent's pair_address can be stale or absent (then it fell back to
+    // the mint), which misroutes the swap — especially for migrated tokens.
+    // fetchVerifiedPairAddress returns the live pool so the trade hits the right
+    // market. Falls back to the local value on lookup failure.
+    let poolAddress =
+      (metadata as any)?.migrated_pool_address ||
+      trade.pair_address ||
+      trade.mint;
+    try {
+      const verified = await fetchVerifiedPairAddress(trade.mint);
+      if (verified) poolAddress = verified;
+    } catch {
+      /* keep local poolAddress */
+    }
+
+    // Token price for pre-trade validation (executeEnhancedTrade →
+    // preTransactionValidation reads usd_price/price_usd to size expected output
+    // for pump.fun tokens). The live-feed TradeEvent often has price_usd=null
+    // and the cached metadata only keeps market_cap — so without a price the
+    // trade was rejected with "Token Price Unknown". Fetch it fresh from
+    // /v1/token (marketData.price_usd) when missing, like the other surfaces have.
+    let tokenPriceUsd: number | null =
+      trade.price_usd ??
+      (metadata as any)?.price_usd ??
+      (metadata as any)?.usd_price ??
+      null;
+    if (!tokenPriceUsd || tokenPriceUsd <= 0) {
+      try {
+        const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+        const r = await fetch(`${goUrl}/v1/token/${trade.mint}`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          tokenPriceUsd =
+            d?.marketData?.price_usd ??
+            d?.token?.price_usd ??
+            d?.token?.usd_price ??
+            null;
+        }
+      } catch {
+        /* leave null — validation will surface the price-unknown message */
+      }
+    }
+
     // Construct a Token object from the TradeEvent
     const token = {
       mint: trade.mint,
-      pair_address: trade.pair_address || trade.mint,
+      pair_address: poolAddress,
+      migrated_pool_address: (metadata as any)?.migrated_pool_address || null,
       symbol: trade.symbol || metadata?.symbol || "UNKNOWN",
       name: trade.name || metadata?.name || "Unknown Token",
       image: metadata?.image || null,
       launchpad_protocol: metadata?.launchpad_protocol || null,
       market_cap_usd: metadata?.market_cap_usd || null,
+      usd_price: tokenPriceUsd,
+      price_usd: tokenPriceUsd,
       // Add other required Token fields with sensible defaults
     } as unknown as Token;
 
-    // Execute enhanced trade with all features
-    const result = await executeEnhancedTrade({
-      token,
-      amount: buyAmount,
-      side: "buy",
-      settings,
-      user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance || 0),
-      solPriceUsd: 150, // TODO: Get real SOL price
-      walletContext: {
-        selectedWalletIds: selectedWalletIds?.sol || [],
+    // Execute via executeSolanaMultiBuy with the animated timer toast +
+    // optimistic markers — the EXACT procedure the Discover/Pulse/Search/
+    // Watchlist surfaces use (was executeEnhancedTrade, which produced the
+    // outdated "Using wallet 1 of 1" toast and a different code path).
+    const poolType = getPoolTypeFromToken(token);
+
+    const timerCap = 0.3 + Math.random() * 0.2;
+    const uniqueToastId = `livetrades-quickbuy-${Date.now()}-${Math.random()}`;
+    const startTime = Date.now();
+    let timerFinished = false;
+    let tradeErrored = false;
+
+    const tokenImage = getResolvedTokenImage(token as any);
+    const tokenName = token.symbol || token.name || "Token";
+
+    // Build the Solscan link via DOM APIs (never innerHTML) so the tx signature
+    // can't be parsed as HTML — XSS-safe even though txHash is a trusted base58
+    // signature. Replaces the canonical surfaces' innerHTML pattern.
+    const setSolscanLink = (linkEl: HTMLElement, txHash: string) => {
+      const a = document.createElement("a");
+      a.href = `https://solscan.io/tx/${encodeURIComponent(txHash)}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.className = "hover:opacity-80 transition-opacity";
+      const img = document.createElement("img");
+      img.src = "https://avatars.githubusercontent.com/u/92743431?s=200&v=4";
+      img.alt = "Solana";
+      img.className = "w-4 h-4 rounded-full";
+      img.style.cursor = "pointer";
+      a.appendChild(img);
+      linkEl.replaceChildren(a);
+      linkEl.className = "";
+    };
+
+    hotToast(
+      () => (
+        <div className="flex items-center gap-3">
+          {tokenImage && (
+            <img
+              src={tokenImage}
+              alt={tokenName}
+              className="h-6 w-6 flex-shrink-0 rounded-full"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="truncate text-sm text-neutral-200">
+              Buying {tokenName}
+            </span>
+            <span
+              id={`timer-${uniqueToastId}`}
+              className="flex-shrink-0 text-xs text-neutral-400"
+            >
+              (0.00s)
+            </span>
+            <span
+              id={`check-${uniqueToastId}`}
+              className="flex-shrink-0 text-green-400"
+              style={{
+                display: timerFinished && !tradeErrored ? "inline" : "none",
+              }}
+            >
+              ✓
+            </span>
+            <span
+              id={`link-${uniqueToastId}`}
+              className="flex-shrink-0"
+              style={{ display: "inline-flex" }}
+            >
+              <img
+                src="https://avatars.githubusercontent.com/u/92743431?s=200&v=4"
+                alt="Solana"
+                className="h-4 w-4 rounded-full opacity-70"
+                style={{ cursor: "default" }}
+              />
+            </span>
+          </div>
+        </div>
+      ),
+      {
+        id: uniqueToastId,
+        duration: Infinity,
+        style: {
+          background: "#1a1a1a",
+          border: "1px solid #333",
+          borderRadius: "8px",
+          padding: "12px",
+        },
+      },
+    );
+
+    let timerHandle: number | null = null;
+    const tick = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+      if (timerEl) timerEl.textContent = `(${displayTime}s)`;
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        if (!tradeErrored) {
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) checkEl.style.display = "block";
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl && isMultiWallet) {
+            linkEl.textContent = `${walletsWithBalance}/${total}`;
+            linkEl.className = "text-xs text-blue-400 font-medium flex-shrink-0";
+          }
+        }
+        timerHandle = null;
+        return;
+      }
+      timerHandle = requestAnimationFrame(tick);
+    };
+    timerHandle = requestAnimationFrame(tick);
+
+    const cleanupSolanaTradeListener = listenForTradeEvents(
+      trade.mint || "",
+      uniqueToastId,
+      (v) => {
+        tradeErrored = v;
+      },
+      "solana",
+    );
+
+    let __markId = "";
+    try {
+      const baseMint = trade.mint || "";
+      const quoteMint = SOL_MINT_ADDRESS;
+
+      __markId = insertOptimisticMarker({
+        mint: baseMint,
+        walletAddress:
+          walletList?.find((w) => w.isPrimary)?.solanaAddress ??
+          walletList?.[0]?.solanaAddress,
+        side: "buy",
+        amountSol: buyAmount,
+        priceUsd: tokenPriceUsd ?? undefined,
+      }).id;
+
+      notifyTradePending({
+        tokenAddress: baseMint,
+        tradeType: "buy",
+        chain: "sol",
+      });
+
+      const multiResult = await executeSolanaMultiBuy({
+        poolAddress,
+        baseMint,
+        quoteMint,
+        amountSOL: buyAmount,
+        poolType,
+        originalPairAddress: token.pair_address,
+        slippage: settings.maxSlippage,
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+        maxFee: settings.maxFee,
+        rpc: settings.rpc,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        imageUrl: (await resolveTokenImage(token as any)) || undefined,
+        authToken: user.bearerToken,
         walletList: walletList || [],
         walletBalances: walletBalances || {},
-        chain: selectedChain === "monad" ? "monad" : "sol",
-      },
-      onSuccess: (txHash, stats) => {},
-      onError: (error) => {
-        console.error("❌ Quick Buy failed:", error);
-      },
-      onWarning: (warnings) => {
-        console.warn("⚠️ Pre-transaction warnings:", warnings);
-      },
-    });
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        onTxHash: ({ txHash }) => {
+          if (txHash) {
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) setSolscanLink(linkEl, txHash);
+            broadcastTradeCompleted({
+              tokenAddress: baseMint,
+              tradeType: "buy",
+              chain: "sol",
+              txHash,
+              tokenName: token.name,
+              tokenSymbol: token.symbol,
+              imageUrl: tokenImage,
+              solAmountSpent: buyAmount,
+            });
+          }
+        },
+      });
 
-    return result;
+      const firstTxHash =
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.hash ||
+        multiResult?.results?.find(
+          (r: any) => (r.result as any)?.hash || (r.result as any)?.txid,
+        )?.result?.txid;
+
+      confirmOptimisticMarker(__markId, firstTxHash);
+
+      if (firstTxHash && !isMultiWallet) {
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) setSolscanLink(linkEl, firstTxHash);
+        if (timerHandle) cancelAnimationFrame(timerHandle);
+        setTimeout(() => hotToast.dismiss(uniqueToastId), 10000);
+      }
+
+      broadcastTradeCompleted({
+        tokenAddress: baseMint,
+        tradeType: "buy",
+        chain: "sol",
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+        imageUrl: tokenImage,
+        solAmountSpent: buyAmount,
+      });
+
+      setTimeout(() => {
+        refreshBalance({ chain: "sol", force: true }).catch(() => {});
+      }, 1000);
+
+      return { success: true };
+    } catch (error: any) {
+      rollbackOptimisticMarker(__markId);
+      tradeErrored = true;
+      cleanupSolanaTradeListener();
+      if (timerHandle) cancelAnimationFrame(timerHandle);
+      console.error("❌ Live Trades Quick Buy failed:", error);
+      transformToastToError(
+        uniqueToastId,
+        mapTradeErrorMessage(error),
+        tokenImage,
+        tokenName,
+      );
+      return { success: false, error };
+    }
   };
 
   // Helper to format date
@@ -2198,51 +2505,54 @@ export default function TrackersPage() {
           <DockedPanelMarginWrapper>
             <div className="p-1 sm:p-1.5">
               {/* Rounded container with JTX-style design */}
-              <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-xl border border-white/[0.06] bg-[#030304]/95">
-                {/* JTX-style corner brackets */}
-                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-                  {/* Top-left bracket */}
-                  <div className="absolute top-2 left-2 h-6 w-6 border-t border-l border-white/[0.12]" />
-                  {/* Top-right bracket */}
-                  <div className="absolute top-2 right-2 h-6 w-6 border-t border-r border-white/[0.12]" />
-                  {/* Bottom-left bracket */}
-                  <div className="absolute bottom-2 left-2 h-6 w-6 border-b border-l border-white/[0.12]" />
-                  {/* Bottom-right bracket */}
-                  <div className="absolute right-2 bottom-2 h-6 w-6 border-r border-b border-white/[0.12]" />
-                </div>
-
-                {/* Subtle ambient glow effect */}
-                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-                  <div
-                    className="absolute -top-[40%] left-1/2 h-[60vh] w-[120%] -translate-x-1/2"
-                    style={{
-                      background:
-                        "radial-gradient(ellipse at center, rgba(24, 196, 140, 0.03) 0%, transparent 70%)",
-                    }}
-                  />
-                  {/* Subtle side vignette */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
-                  {/* Subtle top-to-bottom gradient */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
-                </div>
+              <div className="relative min-h-[calc(100vh-80px)] overflow-hidden rounded-lg border border-white/[0.06] bg-[#030304]">
+                {/* Faint brand-green tech-grid — futuristic depth, single static
+                    paint, masked to fade toward the bottom. No blur/shadow/anim. */}
+                <div
+                  className="pointer-events-none absolute inset-0 rounded-lg"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(rgba(24,196,140,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(24,196,140,0.035) 1px,transparent 1px)",
+                    backgroundSize: "34px 34px",
+                    maskImage:
+                      "radial-gradient(ellipse 80% 50% at 50% 0%, #000 0%, transparent 70%)",
+                    WebkitMaskImage:
+                      "radial-gradient(ellipse 80% 50% at 50% 0%, #000 0%, transparent 70%)",
+                  }}
+                />
+                {/* Top-center atmospheric glow + light-beam (static gradients,
+                    GPU-composited — no particles/animation, ~0 CPU). */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-0 h-44"
+                  style={{
+                    background:
+                      "radial-gradient(ellipse 55% 100% at 50% 0%, rgba(24,196,140,0.10), transparent 72%)",
+                  }}
+                />
+                <div
+                  className="pointer-events-none absolute top-0 left-1/2 h-px w-[70%] -translate-x-1/2"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, transparent, rgba(127,255,201,0.55) 50%, transparent)",
+                  }}
+                />
 
                 <div className="relative z-10 mt-5 mb-3 flex flex-col gap-4 px-5 sm:my-7 sm:mb-5 sm:px-7 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:px-10">
                   {/* Header Section - JTX premium style */}
                   <div className="scrollbar-hide -mx-5 flex items-center gap-4 overflow-x-auto px-5 pb-2 sm:-mx-7 sm:gap-5 sm:px-7 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
-                    <h1 className="text-xl font-semibold tracking-tight text-[#f4f4f5] sm:text-2xl">
+                    <h1
+                      className="bg-clip-text text-xl font-black uppercase tracking-wider text-transparent sm:text-2xl"
+                      style={{ backgroundImage: "linear-gradient(90deg,#7FFFC9,#18c48c)" }}
+                    >
                       Trackers
                     </h1>
-                    {/* Connection status indicator */}
-                    <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-3 py-1.5 backdrop-blur-xl">
-                      <span className="relative flex h-2 w-2">
-                        <span
-                          className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${wsConnected ? "bg-[#18c48c]" : "bg-[#ef4444]"}`}
-                        />
-                        <span
-                          className={`relative inline-flex h-2 w-2 rounded-full ${wsConnected ? "bg-[#18c48c]" : "bg-[#ef4444]"}`}
-                        />
-                      </span>
-                      <span className="text-xs font-medium text-[#71717a]">
+                    {/* Connection status — flat, static dot (no ping/blur) */}
+                    <div className="flex items-center gap-2 rounded-md border border-white/[0.06] bg-[#08090C] px-2.5 py-1">
+                      <span
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ background: wsConnected ? "#18C48C" : "#F0616D" }}
+                      />
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-[#71717a]">
                         {wsConnected ? "Live" : "Offline"}
                       </span>
                     </div>
@@ -2254,31 +2564,31 @@ export default function TrackersPage() {
                     className={`flex min-h-0 flex-1 flex-col gap-2 ${!isMobile ? "flex-row" : ""}`}
                   >
                     {isMobile && (
-                      <div className="flex w-full rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 p-1 text-[10px] font-medium text-[#52525b] backdrop-blur-xl sm:p-1.5 sm:text-xs">
+                      <div className="flex w-full rounded-lg border border-white/[0.06] bg-[#0c0e12] p-1 text-[10px] font-medium text-[#52525b] sm:p-1.5 sm:text-xs">
                         <button
-                          className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                          className={`relative flex-1 rounded-md px-3 py-2 sm:px-4 sm:py-2.5 ${
                             mobileMainTab === "wallets"
-                              ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
+                              ? "bg-[#18c48c]/15 font-semibold text-[#18c48c]"
                               : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                           }`}
                           onClick={() => setMobileMainTab("wallets")}
                         >
                           Wallet Tracker
                           {mobileMainTab === "wallets" && (
-                            <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                           )}
                         </button>
                         <button
-                          className={`relative flex-1 rounded-md px-3 py-2 transition-all duration-300 sm:px-4 sm:py-2.5 ${
+                          className={`relative flex-1 rounded-md px-3 py-2 sm:px-4 sm:py-2.5 ${
                             mobileMainTab === "social"
-                              ? "bg-[#18c48c]/15 font-semibold text-[#18c48c] shadow-[0_0_12px_rgba(24,196,140,0.2)]"
+                              ? "bg-[#18c48c]/15 font-semibold text-[#18c48c]"
                               : "text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
                           }`}
                           onClick={() => setMobileMainTab("social")}
                         >
                           Social
                           {mobileMainTab === "social" && (
-                            <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                           )}
                         </button>
                       </div>
@@ -2287,7 +2597,7 @@ export default function TrackersPage() {
                     {/* LEFT: WALLET SECTION - JTX premium card style */}
                     {showWalletSection && (
                       <div
-                        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 pb-4 backdrop-blur-xl sm:px-5"
+                        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] px-4 pb-4 sm:px-5"
                         style={{
                           boxShadow:
                             "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1)",
@@ -2306,7 +2616,7 @@ export default function TrackersPage() {
                         {/* If user is not logged in, show JTX-style empty state */}
                         {!user ? (
                           <div className="flex flex-1 items-center justify-center">
-                            <div className="relative flex flex-col items-center rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-8 text-center backdrop-blur-sm">
+                            <div className="relative flex flex-col items-center rounded-lg border border-white/[0.06] bg-[#08090c] p-8 text-center">
                               {/* Mini corner brackets */}
                               <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
                                 <div className="absolute top-1.5 left-1.5 h-2.5 w-2.5 border-t border-l border-white/[0.1]" />
@@ -2322,7 +2632,7 @@ export default function TrackersPage() {
                                 Monitor wallets and catch trades in real-time
                               </p>
                               <button
-                                className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#18c48c] px-6 py-2.5 text-xs font-semibold text-[#030304] shadow-[0_0_16px_rgba(24,196,140,0.3)] transition-all duration-200 hover:brightness-110"
+                                className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#18c48c] px-6 py-2.5 text-xs font-semibold text-[#030304] hover:brightness-110"
                                 onClick={() => {
                                   const event = new CustomEvent(
                                     "open-login-modal",
@@ -2340,23 +2650,31 @@ export default function TrackersPage() {
                             <div className="flex justify-between gap-3 border-b border-white/[0.06] py-3.5 sm:items-center sm:gap-4 sm:py-4">
                               {/* Left: tabs + wallet count */}
                               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                                {TABS.map((tab, i) => (
-                                  <button
-                                    key={tab}
-                                    className={`group relative cursor-pointer rounded-md px-3 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-4 sm:py-2 sm:text-xs ${
-                                      activeTab === i
-                                        ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
-                                        : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
-                                    }`}
-                                    onClick={() => setActiveTab(i)}
-                                  >
-                                    <span className="relative z-10">{tab}</span>
-                                    {activeTab === i && (
-                                      <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
-                                    )}
-                                  </button>
-                                ))}
-                                <div className="ml-2 flex items-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1 text-[10px] backdrop-blur-sm sm:px-3 sm:py-1.5 sm:text-[11px]">
+                                {/* Segmented control — one container, no per-tab
+                                    borders. Active tab shows its signature color
+                                    as a soft tinted fill + colored text; inactive
+                                    tabs are neutral grey. Clean, no rainbow of
+                                    outlines. */}
+                                <div className="inline-flex items-center gap-0.5 rounded-lg border border-white/[0.06] bg-[#08090c] p-0.5 sm:gap-1 sm:p-1">
+                                  {TABS.map((tab, i) => {
+                                    const c = TAB_COLORS[i] ?? "#18c48c";
+                                    const active = activeTab === i;
+                                    return (
+                                      <button
+                                        key={tab}
+                                        onClick={() => setActiveTab(i)}
+                                        className="cursor-pointer rounded-md px-3 py-1.5 text-[10px] font-semibold whitespace-nowrap sm:px-4 sm:py-1.5 sm:text-xs"
+                                        style={{
+                                          background: active ? `${c}24` : "transparent",
+                                          color: active ? c : "#8b8b94",
+                                        }}
+                                      >
+                                        {tab}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <div className="ml-2 flex items-center rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] sm:px-3 sm:py-1.5 sm:text-[11px]">
                                   {activeTab === 3 ? (
                                     <>
                                       <span className="text-neutral-500">
@@ -2385,11 +2703,53 @@ export default function TrackersPage() {
 
                               {/* Right: action buttons - JTX style */}
                               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+                                {/* Quick-buy amount editor — sets the SOL used by
+                                    every Quick Buy button in Live Trades / Monitor. */}
+                                {(activeTab === 1 || activeTab === 2) && (
+                                  <div className="flex items-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-1 sm:gap-1.5 sm:px-2.5 sm:py-1.5">
+                                    <HiLightningBolt className="h-3 w-3 text-[#18c48c] sm:h-3.5 sm:w-3.5" />
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      aria-label="Quick buy amount (SOL)"
+                                      value={quickBuyAmount}
+                                      onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                                          setQuickBuyAmount(v);
+                                          try {
+                                            if (v !== "" && !isNaN(parseFloat(v)))
+                                              localStorage.setItem("quickBuyAmount", v);
+                                          } catch {
+                                            /* ignore */
+                                          }
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        if (
+                                          quickBuyAmount === "" ||
+                                          isNaN(parseFloat(quickBuyAmount))
+                                        ) {
+                                          setQuickBuyAmount("0.0001");
+                                          try {
+                                            localStorage.setItem("quickBuyAmount", "0.0001");
+                                          } catch {
+                                            /* ignore */
+                                          }
+                                        }
+                                      }}
+                                      className="w-12 bg-transparent text-[10px] font-semibold text-white outline-none sm:w-16 sm:text-xs"
+                                    />
+                                    <span className="text-[10px] font-medium text-[#52525b] sm:text-xs">
+                                      SOL
+                                    </span>
+                                  </div>
+                                )}
                                 {activeTab === 0 && user && (
                                   <>
                                     {selectedChain === "sol" && (
                                       <button
-                                        className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
+                                        className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.06] hover:text-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2 sm:text-xs"
                                         onClick={handleAddDefault150Wallets}
                                         disabled={
                                           isAtWalletLimit ||
@@ -2403,7 +2763,7 @@ export default function TrackersPage() {
                                       </button>
                                     )}
                                     <button
-                                      className="cursor-pointer rounded-md bg-[#18c48c] px-4 py-1.5 text-[9px] font-semibold whitespace-nowrap text-[#030304] shadow-[0_0_12px_rgba(24,196,140,0.25)] transition-all duration-200 hover:brightness-110 sm:px-5 sm:py-2 sm:text-xs"
+                                      className="cursor-pointer rounded-md bg-[#18c48c] px-4 py-1.5 text-[9px] font-semibold whitespace-nowrap text-[#030304] hover:brightness-110 sm:px-5 sm:py-2 sm:text-xs"
                                       onClick={handleOpenAddWalletModal}
                                     >
                                       Add Wallet
@@ -2423,7 +2783,7 @@ export default function TrackersPage() {
                                   Monitor wallets and catch trades in real-time
                                 </p>
                                 <button
-                                  className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 transition-all duration-200 hover:brightness-90"
+                                  className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#7FFFC9] px-6 py-2 text-xs font-semibold text-neutral-900 hover:brightness-90"
                                   type="button"
                                   onClick={() => {
                                     window.dispatchEvent(
@@ -2445,7 +2805,7 @@ export default function TrackersPage() {
                                         <input
                                           type="text"
                                           placeholder="Search by address"
-                                          className="w-full rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#080a0d]/80 focus:shadow-[0_0_12px_rgba(24,196,140,0.1)] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                          className="w-full rounded-md border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:bg-[#0c0e12] focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                           disabled={false}
                                           value={searchTerm}
                                           onChange={(e) =>
@@ -2459,7 +2819,7 @@ export default function TrackersPage() {
                                         {activeTab === 0 && (
                                           <>
                                             <button
-                                              className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+                                              className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
                                               onClick={() =>
                                                 setShowImportModal(true)
                                               }
@@ -2473,7 +2833,7 @@ export default function TrackersPage() {
                                                 </div>
                                               )}
                                               <button
-                                                className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
+                                                className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-2 text-[9px] font-medium whitespace-nowrap text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-[10px]"
                                                 onClick={handleExportAddresses}
                                               >
                                                 Export
@@ -2482,18 +2842,18 @@ export default function TrackersPage() {
 
                                             {/* Icon buttons - hide some on mobile */}
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
                                             <button
-                                              className={`flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-200 sm:h-9 sm:w-9 ${
+                                              className={`flex h-8 w-8 items-center justify-center rounded-md border sm:h-9 sm:w-9 ${
                                                 isTogglingAllNotifications
-                                                  ? "cursor-not-allowed border-white/[0.06] bg-[#080a0d]/60 opacity-40"
+                                                  ? "cursor-not-allowed border-white/[0.06] bg-white/[0.04] opacity-40"
                                                   : allNotificationsEnabled
                                                     ? "cursor-pointer border-[#ef4444]/40 bg-[#ef4444]/15 text-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.2)] hover:bg-[#ef4444]/25"
-                                                    : "cursor-pointer border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#a1a1aa]"
+                                                    : "cursor-pointer border-white/[0.06] bg-white/[0.04] text-[#71717a] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#a1a1aa]"
                                               }`}
                                               type="button"
                                               onClick={
@@ -2519,13 +2879,13 @@ export default function TrackersPage() {
                                               />
                                             </button>
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                       </button> */}
                                             {/* <button
-                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm text-neutral-400 transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.07] hover:text-white sm:h-9 sm:w-9"
+                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-sm text-neutral-400 hover:border-white/[0.1] hover:bg-[#0c0e12] hover:text-white sm:h-9 sm:w-9"
                                         type="button"
                                       >
                                         <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -2543,7 +2903,7 @@ export default function TrackersPage() {
                                     <input
                                       type="text"
                                       placeholder="Search by name, @handle, or wallet"
-                                      className="w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-2 text-[10px] text-neutral-200 transition-all duration-300 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-neutral-900/60 focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
+                                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[10px] text-neutral-200 placeholder:text-neutral-600 focus:border-[#7FFFC9]/60 focus:bg-[#0c0e12] focus:ring-2 focus:ring-[#7FFFC9]/20 focus:outline-none sm:px-5 sm:py-2.5 sm:text-xs"
                                       value={kolSearchTerm}
                                       onChange={(e) =>
                                         setKolSearchTerm(e.target.value)
@@ -2558,9 +2918,6 @@ export default function TrackersPage() {
                                     <>
                                       <div className="flex items-center border-b border-white/[0.04] p-1.5 sm:p-2">
                                         <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-500 sm:gap-4 sm:text-xs">
-                                          <span className="flex w-16 justify-center sm:w-28">
-                                            Created
-                                          </span>
                                           <span className="min-w-0 flex-1">
                                             Name
                                           </span>
@@ -2572,7 +2929,7 @@ export default function TrackersPage() {
                                           </span>
                                           <div className="flex flex-1 items-center justify-end">
                                             <button
-                                              className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
+                                              className="text-[10px] font-semibold whitespace-nowrap text-red-400 hover:text-red-300 sm:text-xs"
                                               onClick={() =>
                                                 handleRemoveWallet("all")
                                               }
@@ -2628,6 +2985,18 @@ export default function TrackersPage() {
                                                       handleRemoveWallet
                                                     }
                                                     onClick={(wallet) => {
+                                                      // Kick off all scan
+                                                      // fetches (summary +
+                                                      // positions + trades) in
+                                                      // parallel BEFORE the
+                                                      // panel mounts, so the
+                                                      // slow positions request
+                                                      // starts ~100-300ms
+                                                      // earlier. useWalletScan
+                                                      // dedupes against this.
+                                                      void prefetchWalletScan(
+                                                        wallet.address,
+                                                      );
                                                       setScannedWallet(wallet);
                                                     }}
                                                     onNotificationToggle={async (
@@ -2682,12 +3051,12 @@ export default function TrackersPage() {
                                               kol.wallet,
                                             );
                                             const iconBtn =
-                                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-300 sm:h-8 sm:w-8";
+                                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-white/[0.06] hover:text-neutral-300 sm:h-8 sm:w-8";
                                             return (
                                               <li
                                                 key={kol.wallet}
                                                 role="presentation"
-                                                className={`flex cursor-pointer items-center gap-2 border-b border-white/[0.06] px-2 py-2.5 transition-colors hover:bg-white/[0.03] sm:gap-3 sm:py-3 ${
+                                                className={`flex cursor-pointer items-center gap-2 border-b border-white/[0.06] px-2 py-2.5 hover:bg-white/[0.03] sm:gap-3 sm:py-3 ${
                                                   muted ? "opacity-40" : ""
                                                 }`}
                                                 onClick={(e) => {
@@ -2707,6 +3076,7 @@ export default function TrackersPage() {
                                                   <KolAvatar
                                                     name={kol.name}
                                                     handle={kol.handle}
+                                                    address={kol.wallet}
                                                   />
                                                   <div className="min-w-0 flex-1">
                                                     <div className="truncate text-xs font-semibold text-white sm:text-sm">
@@ -2780,6 +3150,25 @@ export default function TrackersPage() {
                                                     >
                                                       <FaXTwitter className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                                     </a>
+                                                    {(() => {
+                                                      const tg = getKolSocials(
+                                                        kol.wallet,
+                                                      )?.telegram;
+                                                      return tg ? (
+                                                        <a
+                                                          href={tg}
+                                                          target="_blank"
+                                                          rel="noopener noreferrer"
+                                                          className={iconBtn}
+                                                          title="Telegram"
+                                                          onClick={(e) =>
+                                                            e.stopPropagation()
+                                                          }
+                                                        >
+                                                          <FaTelegramPlane className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                                        </a>
+                                                      ) : null;
+                                                    })()}
                                                   </div>
                                                 </div>
                                               </li>
@@ -2800,17 +3189,17 @@ export default function TrackersPage() {
                     {/* RESIZE HANDLE — JTX style */}
                     {showSocialSection && !isMobile && (
                       <div
-                        className="group relative hidden h-full min-h-[530px] w-1.5 cursor-ew-resize items-center justify-center transition-colors hover:bg-[#18c48c]/5 lg:flex"
+                        className="group relative hidden h-full min-h-[530px] w-1.5 cursor-ew-resize items-center justify-center hover:bg-[#18c48c]/5 lg:flex"
                         onMouseDown={() => setIsResizing(true)}
                       >
-                        <div className="absolute h-20 w-0.5 rounded-full bg-[#52525b] transition-colors group-hover:bg-[#18c48c] group-hover:shadow-[0_0_6px_rgba(24,196,140,0.4)]" />
+                        <div className="absolute h-20 w-0.5 rounded-full bg-[#52525b] group-hover:bg-[#18c48c] group-hover:shadow-[0_0_6px_rgba(24,196,140,0.4)]" />
                       </div>
                     )}
 
                     {/* RIGHT: SOCIAL TRACKERS (X + TG) - JTX premium card */}
                     {showSocialSection && (
                       <div
-                        className="relative flex min-h-0 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12]/80 px-4 backdrop-blur-xl sm:px-5"
+                        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#0c0e12] px-4 sm:px-5"
                         aria-label="Social Tracker"
                         style={
                           isMobile
@@ -2821,7 +3210,7 @@ export default function TrackersPage() {
                               }
                             : {
                                 width: `${sidebarWidth}px`,
-                                minWidth: "480px",
+                                minWidth: "340px",
                                 maxWidth: "600px",
                                 maxHeight: "calc(100vh - 240px)",
                                 boxShadow:
@@ -2842,7 +3231,7 @@ export default function TrackersPage() {
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("twitter")}
-                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              className={`cursor-pointer text-sm font-semibold tracking-tight sm:text-base ${
                                 socialPanelTab === "twitter"
                                   ? "text-[#f4f4f5]"
                                   : "text-[#52525b] hover:text-[#a1a1aa]"
@@ -2853,7 +3242,7 @@ export default function TrackersPage() {
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("telegram")}
-                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              className={`cursor-pointer text-sm font-semibold tracking-tight sm:text-base ${
                                 socialPanelTab === "telegram"
                                   ? "text-[#f4f4f5]"
                                   : "text-[#52525b] hover:text-[#a1a1aa]"
@@ -2864,7 +3253,7 @@ export default function TrackersPage() {
                             <button
                               type="button"
                               onClick={() => setSocialPanelTab("kolscan")}
-                              className={`cursor-pointer text-sm font-semibold tracking-tight transition-colors sm:text-base ${
+                              className={`cursor-pointer text-sm font-semibold tracking-tight sm:text-base ${
                                 socialPanelTab === "kolscan"
                                   ? "text-[#f4f4f5]"
                                   : "text-[#52525b] hover:text-[#a1a1aa]"
@@ -2884,7 +3273,7 @@ export default function TrackersPage() {
                                 {TELEGRAM_TABS.map((label, i) => (
                                   <button
                                     key={label}
-                                    className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-3 sm:py-2 sm:text-xs ${
+                                    className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap sm:px-3 sm:py-2 sm:text-xs ${
                                       telegramTab === i
                                         ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
                                         : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
@@ -2897,7 +3286,7 @@ export default function TrackersPage() {
                                       {label}
                                     </span>
                                     {telegramTab === i && (
-                                      <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                                     )}
                                   </button>
                                 ))}
@@ -2907,7 +3296,7 @@ export default function TrackersPage() {
                                   type="button"
                                   onClick={handleRestoreTelegramDefaults}
                                   disabled={restoringTelegramDefaults}
-                                  className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] disabled:opacity-40 sm:px-3 sm:py-2 sm:text-xs"
+                                  className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5] disabled:opacity-40 sm:px-3 sm:py-2 sm:text-xs"
                                 >
                                   {restoringTelegramDefaults
                                     ? "Adding…"
@@ -3005,7 +3394,7 @@ export default function TrackersPage() {
                                     </span>
                                     <button
                                       type="button"
-                                      className="mt-5 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-4 py-2 text-xs font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5]"
+                                      className="mt-5 rounded-md border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-xs font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5]"
                                       onClick={() => loadTelegramFeed(true)}
                                     >
                                       Retry
@@ -3019,7 +3408,7 @@ export default function TrackersPage() {
                                         href={`https://t.me/${msg.channelUsername}/${msg.id}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="relative block rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-3.5 text-left backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-[#080a0d]/80"
+                                        className="relative block rounded-lg border border-white/[0.06] bg-[#08090c] p-3.5 text-left hover:border-white/[0.1] hover:bg-[#080a0d]/80"
                                       >
                                         {/* Mini corner brackets on message cards */}
                                         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
@@ -3065,7 +3454,7 @@ export default function TrackersPage() {
                                           e.target.value,
                                         )
                                       }
-                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
+                                      className="max-w-[200px] flex-1 rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -3112,7 +3501,7 @@ export default function TrackersPage() {
                                                 href={`https://t.me/${username}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="min-w-0 truncate text-[#a1a1aa] transition-colors hover:text-[#f4f4f5] hover:underline"
+                                                className="min-w-0 truncate text-[#a1a1aa] hover:text-[#f4f4f5] hover:underline"
                                               >
                                                 @{username}
                                               </a>
@@ -3136,7 +3525,7 @@ export default function TrackersPage() {
                                                 }
                                               }}
                                               disabled={isTracked || isAdding}
-                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] transition-all duration-200 hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#080a0d]/60 disabled:hover:text-[#71717a]"
+                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] text-[#71717a] hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#08090c] disabled:hover:text-[#71717a]"
                                               title={
                                                 isTracked
                                                   ? "Already tracked"
@@ -3168,7 +3557,7 @@ export default function TrackersPage() {
                                 {TWITTER_TABS.map((tab, i) => (
                                   <button
                                     key={tab}
-                                    className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap transition-all duration-200 sm:px-3 sm:py-2 sm:text-xs ${
+                                    className={`group relative cursor-pointer rounded-md px-2.5 py-1.5 text-[10px] whitespace-nowrap sm:px-3 sm:py-2 sm:text-xs ${
                                       twitterTab === i
                                         ? "bg-[#18c48c]/10 font-semibold text-[#18c48c]"
                                         : "font-medium text-[#71717a] hover:bg-white/[0.04] hover:text-[#a1a1aa]"
@@ -3177,7 +3566,7 @@ export default function TrackersPage() {
                                   >
                                     <span className="relative z-10">{tab}</span>
                                     {twitterTab === i && (
-                                      <span className="absolute bottom-0 left-1/2 h-[2px] w-3/4 -translate-x-1/2 bg-gradient-to-r from-transparent via-[#18c48c] to-transparent" />
+                                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#18c48c]" />
                                     )}
                                   </button>
                                 ))}
@@ -3185,7 +3574,7 @@ export default function TrackersPage() {
                               {twitterTab === 0 && (
                                 <button
                                   type="button"
-                                  className="cursor-pointer rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-xs"
+                                  className="cursor-pointer rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-medium text-[#a1a1aa] hover:border-white/[0.1] hover:bg-white/[0.08] hover:text-[#f4f4f5] sm:px-3 sm:py-2 sm:text-xs"
                                   onClick={() => setShowAddTwitterModal(true)}
                                 >
                                   Add Handle
@@ -3277,7 +3666,7 @@ export default function TrackersPage() {
                                         }
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="relative block rounded-lg border border-white/[0.06] bg-[#080a0d]/60 p-3.5 text-left backdrop-blur-sm transition-all duration-200 hover:border-white/[0.1] hover:bg-[#080a0d]/80"
+                                        className="relative block rounded-lg border border-white/[0.06] bg-[#08090c] p-3.5 text-left hover:border-white/[0.1] hover:bg-[#080a0d]/80"
                                       >
                                         {/* Mini corner brackets on tweet cards */}
                                         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
@@ -3358,7 +3747,7 @@ export default function TrackersPage() {
                                       onChange={(e) =>
                                         setApprovedHandlesSearch(e.target.value)
                                       }
-                                      className="w-full flex-1 rounded-md border border-white/[0.06] bg-[#080a0d]/60 px-3 py-1.5 text-[10px] text-[#f4f4f5] backdrop-blur-sm transition-all duration-200 placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:shadow-[0_0_8px_rgba(24,196,140,0.1)] focus:outline-none sm:text-xs"
+                                      className="w-full flex-1 rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[10px] text-[#f4f4f5] placeholder:text-[#52525b] focus:border-[#18c48c]/40 focus:outline-none sm:text-xs"
                                     />
                                   </div>
                                   <div className="scrollbar-hide flex-1 overflow-y-auto">
@@ -3407,7 +3796,7 @@ export default function TrackersPage() {
                                                 href={`https://x.com/${handle}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="min-w-0 truncate text-[#a1a1aa] transition-colors hover:text-[#f4f4f5] hover:underline"
+                                                className="min-w-0 truncate text-[#a1a1aa] hover:text-[#f4f4f5] hover:underline"
                                               >
                                                 @{handle}
                                               </a>
@@ -3427,7 +3816,7 @@ export default function TrackersPage() {
                                                 }
                                               }}
                                               disabled={isTracked || isAdding}
-                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.06] bg-[#080a0d]/60 text-[#71717a] transition-all duration-200 hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#080a0d]/60 disabled:hover:text-[#71717a]"
+                                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] text-[#71717a] hover:border-[#18c48c]/40 hover:bg-[#18c48c]/10 hover:text-[#18c48c] disabled:opacity-40 disabled:hover:border-white/[0.06] disabled:hover:bg-[#08090c] disabled:hover:text-[#71717a]"
                                               title={
                                                 isTracked
                                                   ? "Already tracked"

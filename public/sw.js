@@ -9,7 +9,7 @@
  */
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = 'pulse-image-cache-v1';
+const CACHE_NAME = 'pulse-image-cache-v2';
 const MAX_CACHE_SIZE = 500; // Max images to cache (covers all 450 possible tokens)
 
 /**
@@ -21,7 +21,11 @@ const MAX_CACHE_SIZE = 500; // Max images to cache (covers all 450 possible toke
 function isImageRequest(request) {
   const url = new URL(request.url);
 
-  // Skip hash-based image proxy — browser HTTP cache handles these with immutable headers
+  // Hash-based image proxy: DON'T intercept in the SW. The proxy already serves
+  // immutable Cache-Control, so the browser HTTP cache handles refresh +
+  // navigation. SW-caching these caused images to flicker and disappear (the
+  // cached proxy response replayed badly on re-render), so we let them pass
+  // through to the browser's native HTTP cache instead.
   if (url.pathname.startsWith('/api/img/')) {
     return false;
   }

@@ -49,6 +49,7 @@ import { ArenaWebSocketProvider } from '../contexts/ArenaWebSocketContext';
 import { listenForConfirmationUpdates } from '../utils/tradeToast';
 import { DockedPanelProvider } from '../contexts/DockedPanelContext';
 import { HyperliquidProvider } from '../contexts/HyperliquidContext';
+import { HyperliquidUserStreamProvider } from '../contexts/HyperliquidUserStreamContext';
 import { PortfolioDataProvider } from '../contexts/PortfolioDataContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 
@@ -925,12 +926,14 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                                   <ReferralAccessGate>
                                     <DockedPanelProvider>
                                       <HyperliquidProvider>
-                                        <PagePreloader />
-                                        <PulseBackgroundLoader />
-                                        <TrendingBackgroundLoader />
-                                        <ErrorBoundary>
-                                          <Component {...pageProps} />
-                                        </ErrorBoundary>
+                                        <HyperliquidUserStreamProvider>
+                                          <PagePreloader />
+                                          <PulseBackgroundLoader />
+                                          <TrendingBackgroundLoader />
+                                          <ErrorBoundary>
+                                            <Component {...pageProps} />
+                                          </ErrorBoundary>
+                                        </HyperliquidUserStreamProvider>
                                       </HyperliquidProvider>
                                     </DockedPanelProvider>
                                   </ReferralAccessGate>

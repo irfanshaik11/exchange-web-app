@@ -7,6 +7,8 @@ export interface DevTokenByWallet {
     address: string;
     name: string;
     symbol: string;
+    image?: string | null;
+    launchpad_protocol?: string | null;
     createdAt: number;
     creatorAddress: string;
     migrated_pool_address?: string | null;

@@ -1,0 +1,44 @@
+/* TradingView chart chrome theme — PERPS ONLY (PerpChart.tsx)
+ *
+ * Themes the widget CHROME (toolbars, menus, popups, scales area) via
+ * TradingView's documented CSS custom properties (custom_css_url).
+ * Canvas elements (candles, panes, volume) are themed separately through
+ * `settings_overrides` / `studies_overrides` in the widget constructor.
+ *
+ * Deliberately a SEPARATE file from themed.css: the Solana chart
+ * (AdvancedOHLCChart) keeps its own original chrome — do not merge.
+ * Values match the app design system (src/components/perpetuals/perpTheme.ts):
+ * page/void #0c0d10, surface #101114, border #1f2127, accent #18c48c.
+ */
+
+.theme-dark:root {
+	/* Toolbar + area around the chart — matches the perps page background so
+	   the widget blends seamlessly instead of sitting on its own black */
+	--tv-color-platform-background: #0c0d10;
+	--tv-color-pane-background: #0c0d10;
+
+	/* Toolbar buttons */
+	--tv-color-toolbar-button-background-hover: rgba(255, 255, 255, 0.06);
+	--tv-color-toolbar-button-background-expanded: #101114;
+	--tv-color-toolbar-button-background-active: rgba(24, 196, 140, 0.12);
+	--tv-color-toolbar-button-background-active-hover: rgba(24, 196, 140, 0.18);
+	--tv-color-toolbar-button-text: #a1a1aa;
+	--tv-color-toolbar-button-text-hover: #f4f4f5;
+	--tv-color-toolbar-button-text-active: #18c48c;
+	--tv-color-toolbar-button-text-active-hover: #22d99a;
+	--tv-color-item-active-text: #18c48c;
+	--tv-color-toolbar-toggle-button-background-active: rgba(24, 196, 140, 0.16);
+	--tv-color-toolbar-toggle-button-background-active-hover: rgba(24, 196, 140, 0.22);
+	--tv-color-toolbar-divider-background: #1f2127;
+
+	/* In-chart popups / dropdown menus */
+	--tv-color-popup-background: #101114;
+	--tv-color-popup-element-background-hover: rgba(255, 255, 255, 0.06);
+	--tv-color-popup-element-divider-background: #1f2127;
+	--tv-color-popup-element-text: #f4f4f5;
+	--tv-color-popup-element-text-hover: #ffffff;
+	--tv-color-popup-element-secondary-text: #a1a1aa;
+	--tv-color-popup-element-hint-text: #71717a;
+	--tv-color-popup-element-text-active: #18c48c;
+	--tv-color-popup-element-background-active: rgba(24, 196, 140, 0.12);
+}

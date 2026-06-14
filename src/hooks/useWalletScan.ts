@@ -92,17 +92,32 @@ export function toAggregatedPosition(
   p: WalletPortfolioPosition,
   solPrice: number,
 ): AggregatedPosition {
+  // Cost-basis priority chain — same as the portfolio page enrichment
+  // (portfolio.tsx ~line 653). The chain endpoint returns *_usd_value as 0,
+  // so the SOL-based fallbacks are the real path:
+  //   1. bought_usd_value (backend-stamped USD; rarely populated today)
+  //   2. cost_basis_sol — outflow minus recoverable ATA rent (migration-024,
+  //      matches Axiom/GMGN economics). Prefer when > 0.
+  //   3. total_outflow_sol — raw outflow incl. rent (migration-023).
+  //   4. bought_sol — swap-only; understates real cost on small trades.
+  const costBasisSol = p.cost_basis_sol ?? 0;
+  const totalOutflowSol = p.total_outflow_sol ?? 0;
   const boughtUsd =
-    p.bought_usd_value > 0 ? p.bought_usd_value : p.bought_sol * solPrice;
+    p.bought_usd_value > 0
+      ? p.bought_usd_value
+      : costBasisSol > 0
+        ? costBasisSol * solPrice
+        : totalOutflowSol > 0
+          ? totalOutflowSol * solPrice
+          : p.bought_sol * solPrice;
   const soldUsd =
     p.sold_usd_value > 0 ? p.sold_usd_value : p.sold_sol * solPrice;
-  // The Go service typed `realized_pnl_usd: number` (never null) but
-  // currently always returns 0 — see wallet-scan-pnl-backend-gap. A
-  // `!= null` check would always be truthy, silently zeroing every
-  // per-position PnL row. Use `!== 0` to fall back to the SOL value
-  // (the only field the backend actually populates).
+  // NB: the Go service serializes realized_pnl_usd as 0 (never null) — its USD
+  // stamping isn't implemented. A `!= null` check here made every History row
+  // show +$0; treat 0 as "missing" and derive from the SOL figure, same as the
+  // portfolio page's enrichment does.
   const realizedPnl =
-    p.realized_pnl_usd !== 0
+    p.realized_pnl_usd != null && p.realized_pnl_usd !== 0
       ? p.realized_pnl_usd
       : p.realized_pnl_sol * solPrice;
 
@@ -236,6 +251,62 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
+// ─── localStorage persistence (stale-while-revalidate across reloads) ────────
+// Whale wallets take 15-60s server-side on first load; once paid, that result
+// should survive a page reload. Stale entries paint instantly while the
+// background refresh runs. Rows are capped per wallet to respect the ~5MB
+// localStorage quota; freshest wallets win.
+const PERSIST_KEY = "__wscan_cache_v1";
+const PERSIST_TTL_MS = 24 * 60 * 60 * 1000;
+const PERSIST_MAX_WALLETS = 10;
+const PERSIST_MAX_POSITIONS = 200;
+const PERSIST_MAX_TRADES = 100;
+
+if (typeof window !== "undefined") {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY);
+    if (raw) {
+      const now = Date.now();
+      const entries: [string, CacheEntry][] = JSON.parse(raw);
+      for (const [addr, e] of entries) {
+        const newest = Math.max(e.summaryTs, e.positionsTs, e.tradesTs);
+        if (now - newest > PERSIST_TTL_MS) continue;
+        cache.set(addr, e);
+      }
+    }
+  } catch {
+    /* corrupted cache — start clean */
+  }
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePersist() {
+  if (typeof window === "undefined" || persistTimer) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    try {
+      const entries = [...cache.entries()]
+        .sort(
+          (a, b) =>
+            Math.max(b[1].summaryTs, b[1].positionsTs, b[1].tradesTs) -
+            Math.max(a[1].summaryTs, a[1].positionsTs, a[1].tradesTs),
+        )
+        .slice(0, PERSIST_MAX_WALLETS)
+        .map(([addr, e]) => [
+          addr,
+          {
+            ...e,
+            positions: e.positions.slice(0, PERSIST_MAX_POSITIONS),
+            trades: e.trades.slice(0, PERSIST_MAX_TRADES),
+          },
+        ]);
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(entries));
+    } catch {
+      /* quota exceeded — drop persistence silently, in-memory cache still works */
+    }
+  }, 2000);
+}
+
 function getEntry(addr: string): CacheEntry | undefined {
   return cache.get(addr);
 }
@@ -245,18 +316,21 @@ function setSummary(addr: string, s: WalletPortfolioSummary) {
   e.summary = s;
   e.summaryTs = Date.now();
   cache.set(addr, e);
+  schedulePersist();
 }
 function setPositions(addr: string, p: WalletPortfolioPosition[]) {
   const e = cache.get(addr) ?? emptyEntry();
   e.positions = p;
   e.positionsTs = Date.now();
   cache.set(addr, e);
+  schedulePersist();
 }
 function setTrades(addr: string, t: WalletPortfolioTrade[]) {
   const e = cache.get(addr) ?? emptyEntry();
   e.trades = t;
   e.tradesTs = Date.now();
   cache.set(addr, e);
+  schedulePersist();
 }
 function emptyEntry(): CacheEntry {
   return {
@@ -267,6 +341,74 @@ function emptyEntry(): CacheEntry {
     positionsTs: 0,
     tradesTs: 0,
   };
+}
+
+// In-flight prefetch dedupe — at most one background warm per wallet at a time.
+const prefetchInFlight = new Set<string>();
+
+/**
+ * Background-warm the scan cache for a wallet (call on tracker-row hover or
+ * idle). Fetches only stale resources, writes into the module cache (and so
+ * into localStorage), never throws. By the time the user opens the scan panel
+ * the data paints instantly — this is the cheapest "preload everything" lever
+ * because the server result is shared via its own 5s cache too.
+ */
+export async function prefetchWalletScan(address: string): Promise<void> {
+  if (!address || typeof window === "undefined") return;
+  if (isEvmAddress(address)) return;
+  if (prefetchInFlight.has(address)) return;
+
+  const e = getEntry(address);
+  const t = Date.now();
+  const needSummary = !e?.summary || t - e.summaryTs > CACHE_FRESH_MS;
+  const needPositions =
+    !e || e.positionsTs === 0 || t - e.positionsTs > CACHE_FRESH_MS;
+  const needTrades = !e || e.tradesTs === 0 || t - e.tradesTs > CACHE_FRESH_MS;
+  if (!needSummary && !needPositions && !needTrades) return;
+
+  prefetchInFlight.add(address);
+  const jobs: Promise<unknown>[] = [];
+  if (needSummary) {
+    jobs.push(
+      getWalletPortfolioSummary(address)
+        .then((s) => setSummary(address, sanitizeSummary(s)))
+        .catch(() => {}),
+    );
+  }
+  if (needPositions) {
+    jobs.push(
+      getWalletPortfolioPositions(address, { includeClosed: true })
+        .then((p) => {
+          setPositions(address, p.positions);
+          // Warm the avatars for the rows the panel paints first, so by the
+          // time the user clicks, images render instantly from cache.
+          void import("~/utils/scanImageResolver").then(
+            ({ resolveScanImage }) => {
+              for (const pos of p.positions.slice(0, 30)) {
+                void resolveScanImage(
+                  pos.token_mint,
+                  pos.image_url ?? null,
+                  pos.uri ?? null,
+                );
+              }
+            },
+          );
+        })
+        .catch(() => {}),
+    );
+  }
+  if (needTrades) {
+    jobs.push(
+      getWalletPortfolioTrades(address, { limit: TRADES_LIMIT })
+        .then((tr) => setTrades(address, tr.trades))
+        .catch(() => {}),
+    );
+  }
+  try {
+    await Promise.allSettled(jobs);
+  } finally {
+    prefetchInFlight.delete(address);
+  }
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -286,6 +428,9 @@ interface UseWalletScanResult {
   summaryLoading: boolean;
   /** True while the positions endpoint is loading. Drives Active Positions / History / Top 100 tabs. */
   positionsLoading: boolean;
+  /** True when the server timed out the trade aggregation (heavy wallet) and
+   * served chain-holdings only — History/PnL data absent until a full response. */
+  positionsDegraded: boolean;
   /** True while the trades endpoint is loading. Drives the Activity tab. */
   tradesLoading: boolean;
   error: string | null;
@@ -334,34 +479,40 @@ export function useWalletScan(
     initialEntry?.trades ?? [],
   );
 
-  // Per-resource loading flags. If we have a fresh-enough cached value, start
-  // with that resource not-loading so its tab paints immediately.
-  const now = Date.now();
-  const seededSummaryFresh =
-    !!initialEntry?.summary && now - initialEntry.summaryTs < CACHE_FRESH_MS;
-  const seededPositionsFresh =
-    !!initialEntry &&
-    initialEntry.positionsTs > 0 &&
-    now - initialEntry.positionsTs < CACHE_FRESH_MS;
-  const seededTradesFresh =
-    !!initialEntry &&
-    initialEntry.tradesTs > 0 &&
-    now - initialEntry.tradesTs < CACHE_FRESH_MS;
+  // Per-resource loading flags. Stale-while-revalidate: a resource counts as
+  // "loading" ONLY when there is no cached value to show at all. If we have ANY
+  // cached data — even stale — we paint it immediately and refresh in the
+  // background, so the user never stares at a "Loading…" spinner on a wallet
+  // they (or a hover/click prefetch) have opened before.
+  const seededSummaryAny = !!initialEntry?.summary;
+  const seededPositionsAny =
+    !!initialEntry && initialEntry.positionsTs > 0;
+  const seededTradesAny = !!initialEntry && initialEntry.tradesTs > 0;
 
   const [summaryLoading, setSummaryLoading] = useState(
-    !!address && !seededSummaryFresh,
+    !!address && !seededSummaryAny,
   );
   const [positionsLoading, setPositionsLoading] = useState(
-    !!address && !seededPositionsFresh,
+    !!address && !seededPositionsAny,
   );
+  const [positionsDegraded, setPositionsDegraded] = useState(false);
   const [tradesLoading, setTradesLoading] = useState(
-    !!address && !seededTradesFresh,
+    !!address && !seededTradesAny,
   );
 
   const [error, setError] = useState<string | null>(null);
 
   const inflightRef = useRef<AbortController | null>(null);
   const refetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Follow-up refetch to absorb indexer lag: the trade hits the token-service's
+  // DB a few seconds after it lands on chain, so a single ~2s refetch can miss
+  // the brand-new position. A second pass ~8s later catches it without a manual
+  // refresh.
+  const lagRefetchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whale-wallet refetch coalescing: while a (potentially 15-60s) fetch is in
+  // flight, refetch signals queue a single trailing run instead of aborting it.
+  const fetchInFlightRef = useRef(false);
+  const pendingRefetchRef = useRef(false);
 
   // Stale-resurrection guard (REST-only flavour).
   //
@@ -435,65 +586,50 @@ export function useWalletScan(
     [],
   );
 
-  const fetchAll = useCallback(async (): Promise<void> => {
+  const fetchAll = useCallback(async (fresh = false): Promise<void> => {
     if (!address) return;
-    inflightRef.current?.abort();
+    // A positions query for a whale wallet runs 15-60s server-side. Aborting
+    // and restarting it on every refetch signal — and live trades arrive
+    // constantly for exactly those wallets — means it NEVER completes: the
+    // panel sits on "Loading positions..." forever. Coalesce instead: let the
+    // in-flight request finish, then run a single trailing refetch.
+    if (fetchInFlightRef.current) {
+      pendingRefetchRef.current = true;
+      return;
+    }
+    fetchInFlightRef.current = true;
     const ac = new AbortController();
     inflightRef.current = ac;
-
-    // Background-refetch awareness: when we already have data for a resource,
-    // suppress the loading spinner (paint the new data when it arrives) and
-    // swallow transient errors (don't clobber the user's view — the next WS
-    // signal will retry). The "Failed to fetch" wall in the Activity/History
-    // tabs was previously caused by a single flaky refetch overwriting a
-    // perfectly good state.
-    const entry = cache.get(address);
-    const haveSummary = !!entry?.summary;
-    const havePositions = !!entry && entry.positionsTs > 0;
-    const haveTrades = !!entry && entry.tradesTs > 0;
-    const haveAnyData = haveSummary || havePositions || haveTrades;
-
-    if (!haveAnyData) setError(null);
-    if (!haveSummary) setSummaryLoading(true);
-    if (!havePositions) setPositionsLoading(true);
-    if (!haveTrades) setTradesLoading(true);
+    setError(null);
+    setSummaryLoading(true);
+    setPositionsLoading(true);
+    setTradesLoading(true);
 
     const onErr = (e: unknown) => {
       if ((e as { name?: string })?.name === "AbortError") return;
-      // Some browsers surface a fetch abort as TypeError("Failed to fetch")
-      // instead of AbortError. If our controller has been aborted, treat it
-      // the same as AbortError.
-      if (ac.signal.aborted) return;
-      const message =
-        e instanceof Error ? e.message : "Failed to load wallet";
-      if (haveAnyData) {
-        // Background refetch failure — keep the user's view intact.
-        console.warn(
-          "[useWalletScan] background refetch failed, keeping cached data:",
-          message,
-        );
-        return;
-      }
-      setError((prev) => prev ?? message);
+      setError(
+        (prev) =>
+          prev ?? (e instanceof Error ? e.message : "Failed to load wallet"),
+      );
     };
 
     // Fire all three in parallel but resolve each independently so a slow
     // trades request doesn't block the positions/summary tabs.
-    void getWalletPortfolioSummary(address, ac.signal)
+    const summaryP = getWalletPortfolioSummary(address, ac.signal)
       .then((s) => {
         if (ac.signal.aborted) return;
         const safe = sanitizeSummary(s);
         setSummary(address, safe);
         setSummaryState(safe);
-        setError(null);
       })
       .catch(onErr)
       .finally(() => {
         if (!ac.signal.aborted) setSummaryLoading(false);
       });
 
-    void getWalletPortfolioPositions(address, {
+    const positionsP = getWalletPortfolioPositions(address, {
       includeClosed: true,
+      fresh, // revalidate (bypass server cache) only on trade-triggered refetch
       signal: ac.signal,
     })
       .then((p) => {
@@ -501,14 +637,14 @@ export function useWalletScan(
         const guarded = applyResurrectionGuard(p.positions);
         setPositions(address, guarded);
         setPositionsState(guarded);
-        setError(null);
+        setPositionsDegraded(p.degraded === true);
       })
       .catch(onErr)
       .finally(() => {
         if (!ac.signal.aborted) setPositionsLoading(false);
       });
 
-    void getWalletPortfolioTrades(address, {
+    const tradesP = getWalletPortfolioTrades(address, {
       limit: TRADES_LIMIT,
       signal: ac.signal,
     })
@@ -516,12 +652,21 @@ export function useWalletScan(
         if (ac.signal.aborted) return;
         setTrades(address, t.trades);
         setTradesState(t.trades);
-        setError(null);
       })
       .catch(onErr)
       .finally(() => {
         if (!ac.signal.aborted) setTradesLoading(false);
       });
+
+    void Promise.allSettled([summaryP, positionsP, tradesP]).then(() => {
+      fetchInFlightRef.current = false;
+      // Trailing refetch: signals that arrived mid-flight collapsed into one.
+      if (pendingRefetchRef.current && !ac.signal.aborted) {
+        pendingRefetchRef.current = false;
+        // A coalesced refetch was triggered by a trade signal → keep it fresh.
+        void fetchAll(fresh);
+      }
+    });
   }, [address]);
 
   // Reset state + initial fetch on address change.
@@ -577,62 +722,67 @@ export function useWalletScan(
     const tradesFresh =
       !!entry && entry.tradesTs > 0 && t - entry.tradesTs < CACHE_FRESH_MS;
 
-    if (summaryFresh && positionsFresh && tradesFresh) {
-      setSummaryLoading(false);
-      setPositionsLoading(false);
-      setTradesLoading(false);
-      return;
-    }
+    // True stale-while-revalidate: ALWAYS refetch on open, even if the cache is
+    // "fresh" (<30s). A wallet you just traded on changes the instant the trade
+    // lands, so a 30s-cached snapshot can show stale values (e.g. a just-bought
+    // position with $0 cost basis from the pre-aggregation moment). The cache is
+    // still painted instantly below (setXLoading(!hasX) → no spinner when we
+    // have cached data), so there's NO added latency — the refetch runs in the
+    // background and swaps in fresh data when it arrives (~1.5s). summaryFresh/
+    // positionsFresh/tradesFresh are intentionally no longer used to skip the
+    // fetch; kept only for reference.
+    void summaryFresh;
+    void positionsFresh;
+    void tradesFresh;
+    const hasSummary = !!entry?.summary;
+    const hasPositions = !!entry && entry.positionsTs > 0;
+    const hasTrades = !!entry && entry.tradesTs > 0;
 
     const ac = new AbortController();
     inflightRef.current = ac;
-
-    // Mirrors fetchAll: if we've seeded any state from a stale cache entry,
-    // a single endpoint failure shouldn't blow away the user's view.
-    const haveAnyData =
-      !!entry?.summary ||
-      (entry?.positions?.length ?? 0) > 0 ||
-      (entry?.trades?.length ?? 0) > 0;
+    // Mark in-flight so refetch signals coalesce behind this mount fetch too
+    // (see fetchAll). Cleared by the allSettled trailer below.
+    fetchInFlightRef.current = true;
+    pendingRefetchRef.current = false;
+    const mountFetches: Promise<unknown>[] = [];
 
     const onErr = (e: unknown) => {
       if ((e as { name?: string })?.name === "AbortError") return;
-      if (ac.signal.aborted) return;
-      const message =
-        e instanceof Error ? e.message : "Failed to load wallet";
-      if (haveAnyData) {
-        console.warn(
-          "[useWalletScan] stale-cache refresh failed, keeping seeded data:",
-          message,
-        );
-        return;
-      }
-      setError((prev) => prev ?? message);
+      setError(
+        (prev) =>
+          prev ?? (e instanceof Error ? e.message : "Failed to load wallet"),
+      );
     };
 
-    if (!summaryFresh) {
-      // Only show the loading spinner when we have no seeded data to paint.
-      // Stale-seeded data refreshes in the background without disrupting UI.
-      setSummaryLoading(!entry?.summary);
-      void getWalletPortfolioSummary(address, ac.signal)
+    // Always revalidate. setXLoading(!hasX) keeps the spinner OFF when cached
+    // data is already showing → instant paint, background refresh, no latency.
+    setSummaryLoading(!hasSummary);
+    mountFetches.push(
+      getWalletPortfolioSummary(address, ac.signal)
         .then((s) => {
           if (ac.signal.aborted) return;
           const safe = sanitizeSummary(s);
           setSummary(address, safe);
           setSummaryState(safe);
-          setError(null);
         })
         .catch(onErr)
         .finally(() => {
           if (!ac.signal.aborted) setSummaryLoading(false);
-        });
-    } else {
-      setSummaryLoading(false);
-    }
+        }),
+    );
 
-    if (!positionsFresh) {
-      setPositionsLoading(!entry || entry.positions.length === 0);
-      void getWalletPortfolioPositions(address, {
+    setPositionsLoading(!hasPositions);
+    mountFetches.push(
+      getWalletPortfolioPositions(address, {
         includeClosed: true,
+        // fresh=1 so the open-revalidate recomputes server-side instead of
+        // serving a stale cached snapshot. The server caches positions, and a
+        // wallet you just traded on can sit in cache with pre-aggregation values
+        // (e.g. a just-bought position with cost_basis=0 → $0 bought) until the
+        // TTL turns over. fresh bypasses that; it's singleflight-deduped server-
+        // side so concurrent opens still share one recompute. No UI latency —
+        // the cache already painted instantly above.
+        fresh: true,
         signal: ac.signal,
       })
         .then((p) => {
@@ -640,19 +790,17 @@ export function useWalletScan(
           const guarded = applyResurrectionGuard(p.positions);
           setPositions(address, guarded);
           setPositionsState(guarded);
-          setError(null);
+          setPositionsDegraded(p.degraded === true);
         })
         .catch(onErr)
         .finally(() => {
           if (!ac.signal.aborted) setPositionsLoading(false);
-        });
-    } else {
-      setPositionsLoading(false);
-    }
+        }),
+    );
 
-    if (!tradesFresh) {
-      setTradesLoading(!entry || entry.trades.length === 0);
-      void getWalletPortfolioTrades(address, {
+    setTradesLoading(!hasTrades);
+    mountFetches.push(
+      getWalletPortfolioTrades(address, {
         limit: TRADES_LIMIT,
         signal: ac.signal,
       })
@@ -660,15 +808,20 @@ export function useWalletScan(
           if (ac.signal.aborted) return;
           setTrades(address, tr.trades);
           setTradesState(tr.trades);
-          setError(null);
         })
         .catch(onErr)
         .finally(() => {
           if (!ac.signal.aborted) setTradesLoading(false);
-        });
-    } else {
-      setTradesLoading(false);
-    }
+        }),
+    );
+
+    void Promise.allSettled(mountFetches).then(() => {
+      fetchInFlightRef.current = false;
+      if (pendingRefetchRef.current && !ac.signal.aborted) {
+        pendingRefetchRef.current = false;
+        void fetchAll();
+      }
+    });
 
     return () => {
       ac.abort();
@@ -688,8 +841,17 @@ export function useWalletScan(
     }
     refetchDebounceRef.current = setTimeout(() => {
       refetchDebounceRef.current = null;
-      void fetchAll();
+      // Trade-triggered → revalidate with fresh=1 so the server recomputes the
+      // wallet's positions instead of returning the ≤150s-stale warmer cache.
+      void fetchAll(true);
     }, 2000);
+    // Second pass to catch the new position after the indexer has ingested the
+    // trade (it lags chain by a few seconds), so it appears without a refresh.
+    if (lagRefetchRef.current) clearTimeout(lagRefetchRef.current);
+    lagRefetchRef.current = setTimeout(() => {
+      lagRefetchRef.current = null;
+      void fetchAll(true);
+    }, 8000);
   }, [opts?.refetchSignal, address, fetchAll]);
 
   // Cleanup on unmount.
@@ -698,6 +860,9 @@ export function useWalletScan(
       inflightRef.current?.abort();
       if (refetchDebounceRef.current) {
         clearTimeout(refetchDebounceRef.current);
+      }
+      if (lagRefetchRef.current) {
+        clearTimeout(lagRefetchRef.current);
       }
     };
   }, []);
@@ -711,6 +876,7 @@ export function useWalletScan(
     loading,
     summaryLoading,
     positionsLoading,
+    positionsDegraded,
     tradesLoading,
     error,
     isUnsupportedChain: unsupportedChain,
