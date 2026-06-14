@@ -13,6 +13,12 @@ import {
   prefetchFromSessionStorage,
 } from "~/utils/imagePreloader";
 import { computeHashImageUrl } from "~/utils/imageHash";
+import {
+  recordImageFailure,
+  isImageDead,
+  markImageAlive,
+  clearImageDead,
+} from "~/utils/deadImageCache";
 
 /**
  * Global tracker for loaded image URLs with LRU eviction
@@ -361,6 +367,13 @@ function FastImageInner({
   // Used for CSS background fallback and eager loading even when bitmap isn't in decoded cache
   const isKnownUrl = imageUrl ? globalLoadedImages.has(imageUrl) : false;
 
+  // Whether this URL has repeatedly failed this session and is cached "dead"
+  // (see deadImageCache). When dead we skip rendering the <img> entirely so the
+  // doomed request is never issued — this collapses the cold-load re-mount
+  // storm (one dead hash was measured re-fetching up to 346×) that holds the
+  // browser load event (tab spinner) open. Self-heals after a short TTL.
+  const isDead = imageUrl ? isImageDead(imageUrl) : false;
+
   // Update ref and check tracker when URL changes
   useEffect(() => {
     autoRetryCountRef.current = 0;
@@ -433,6 +446,9 @@ function FastImageInner({
         // Image errored while tab was hidden → clear error to retry
         retryCountRef.current++;
         globalLoadedImages.delete(currentUrlRef.current);
+        // Also clear any dead-cache entry so the retry isn't immediately
+        // skipped — the CDN may have recovered while the tab was hidden.
+        clearImageDead(currentUrlRef.current);
         setImageError(false);
         setImageLoaded(false);
         // React re-renders: <img> re-appears with same src → fresh load attempt
@@ -457,6 +473,20 @@ function FastImageInner({
     return () => document.removeEventListener("visibilitychange", handler);
   }, []); // Empty deps: registered once, uses refs for state
 
+  // When the current URL is known-dead, the <img> below is never rendered, so
+  // its onError never fires — but the parent still needs the onLoadFailed
+  // signal to switch to its own fallback (e.g. CDN → token.uri), exactly as it
+  // would on a real first error. Fire it once per URL.
+  useEffect(() => {
+    if (isDead && imageUrl && !onLoadFailedFiredRef.current) {
+      onLoadFailedFiredRef.current = true;
+      onLoadFailed?.();
+    }
+    // onLoadFailed omitted from deps on purpose: the fire-once ref guards
+    // against duplicate calls and avoids re-runs on unstable parent callbacks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDead, imageUrl]);
+
   const handleLoad = () => {
     retryCountRef.current = 0; // Reset retries on success
     autoRetryCountRef.current = 0;
@@ -468,6 +498,9 @@ function FastImageInner({
     // straight from the HTTP cache when it gets painted as the background,
     // instead of treating the cache-busted variant as a separate resource.
     if (currentUrlRef.current) {
+      // A successful load proves the URL is alive: clear any failure/dead
+      // state and protect it from ever being marked dead later this session.
+      markImageAlive(currentUrlRef.current);
       setLastDisplayedUrl(currentUrlRef.current);
       trackLoadedImage(currentUrlRef.current);
       // Retain an Image object so the decoded bitmap survives component unmount
@@ -492,6 +525,11 @@ function FastImageInner({
     if (!onLoadFailedFiredRef.current) {
       onLoadFailedFiredRef.current = true;
       onLoadFailed?.();
+      // Record one failure for this canonical URL (once per occurrence, gated
+      // by the fire-once flag above). After a couple of separate failures the
+      // URL is cached "dead" and future row re-mounts skip the request — this
+      // collapses the cold-load retry storm that holds the tab spinner open.
+      if (currentUrlRef.current) recordImageFailure(currentUrlRef.current);
     }
 
     if (autoRetryCountRef.current < MAX_AUTO_RETRIES) {
@@ -520,7 +558,7 @@ function FastImageInner({
   // pure letter placeholder. If we DO have a previous URL, fall through to the
   // normal render path and use it as the background (avoids letter-flash flicker
   // during failed-image fallback or src clearing).
-  if ((!imageUrl || imageError) && !lastDisplayedUrl) {
+  if ((!imageUrl || imageError || isDead) && !lastDisplayedUrl) {
     return (
       <div
         className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black font-bold text-white shadow-lg`}
@@ -544,7 +582,7 @@ function FastImageInner({
   //      ready)
   //   3. Plain gradient (only when there's nothing to show)
   const showCurrent =
-    (imageLoaded || isKnownUrl) && finalImageUrl && !imageError;
+    (imageLoaded || isKnownUrl) && finalImageUrl && !imageError && !isDead;
   const backgroundUrl = showCurrent ? finalImageUrl : lastDisplayedUrl;
   return (
     <div
@@ -579,7 +617,7 @@ function FastImageInner({
       {/* Image - rendered when we have a current URL and no permanent error.
           Skip rendering during error/no-url so the broken-icon never flashes;
           background still shows lastDisplayedUrl during this window. */}
-      {finalImageUrl && !imageError && (
+      {finalImageUrl && !imageError && !isDead && (
         <img
           ref={imgRef}
           src={finalImageUrl}
