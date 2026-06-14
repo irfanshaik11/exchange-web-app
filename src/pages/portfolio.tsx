@@ -806,14 +806,21 @@ export default function PortfolioPage() {
       const savedCache = localStorage.getItem(CACHE_KEY);
       if (savedCache) {
         const parsed: Record<string, TokenMetadataCache> = JSON.parse(savedCache);
-        // Filter out expired entries
+        // Filter out expired entries, then cap to the most-recent N (a bloated
+        // cache from before the quota fix self-heals here — faster parse + it
+        // re-fetches/persists cleanly within quota).
         const now = Date.now();
-        const validCache: Record<string, TokenMetadataCache> = {};
-        Object.entries(parsed).forEach(([key, value]) => {
-          if (now - value.timestamp < CACHE_TTL) {
-            validCache[key] = value;
-          }
-        });
+        const LOAD_CAP = 400;
+        let kept = Object.entries(parsed).filter(
+          ([, value]) => now - value.timestamp < CACHE_TTL,
+        );
+        if (kept.length > LOAD_CAP) {
+          kept = kept
+            .sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0))
+            .slice(0, LOAD_CAP);
+        }
+        const validCache: Record<string, TokenMetadataCache> =
+          Object.fromEntries(kept);
         if (Object.keys(validCache).length > 0) {
           setTokenMetadataCache(validCache);
           tokenMetadataCacheRef.current = validCache;
