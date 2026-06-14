@@ -9,6 +9,11 @@ import {
   resolveMetadataImage,
 } from "./images";
 import { computeHashImageUrl } from "./imageHash";
+import {
+  isImageDead,
+  recordImageFailure,
+  markImageAlive,
+} from "./deadImageCache";
 
 // Track preloaded images to avoid duplicate requests. Bounded so a long
 // session across churny boards (Pulse + 4 trending timeframes + DexScreener)
@@ -110,6 +115,17 @@ export function preloadImage(src: string): Promise<void> {
       return;
     }
 
+    // Skip URLs already known dead this session. Without this the prewarm path
+    // (pulseWorkerBridge fires preloadImage on every WS board update) re-issues
+    // doomed requests for a dead image on every cycle — measured re-firing one
+    // hash ~95× on a live board — bypassing FastImage's dead-cache and keeping
+    // the load-event tail (tab spinner) busy. Shares the same dead-cache as
+    // FastImage so the two paths agree on what's dead.
+    if (isImageDead(src)) {
+      resolve();
+      return;
+    }
+
     // Check if already loaded/cached by browser
     const img = new Image();
 
@@ -120,12 +136,16 @@ export function preloadImage(src: string): Promise<void> {
         preloadedImages.clear();
       preloadedImages.add(src);
       retainImageObject(src, img);
+      // Proven good: clear any dead/failure state and protect from poisoning.
+      markImageAlive(src);
       resolve();
     };
 
     img.onerror = () => {
-      // Don't reject - just resolve silently (image might fail to load)
-      // DON'T mark as preloaded — allow retry on next preload cycle
+      // Don't reject - just resolve silently (image might fail to load).
+      // Record the failure so a repeatedly-dead URL is cached dead and the
+      // prewarm cycle stops re-issuing it (self-heals after the dead TTL).
+      recordImageFailure(src);
       resolve();
     };
 
@@ -293,9 +313,13 @@ export async function preloadMetadataImages(
         if (!resolved || preloadedImages.has(resolved)) return;
 
         const proxyUrl = computeHashImageUrl(resolved) || resolved;
+        // Don't re-prewarm a URL already known dead this session.
+        if (isImageDead(proxyUrl)) return;
 
         preloadedImages.add(proxyUrl);
         const img = new Image();
+        img.onload = () => markImageAlive(proxyUrl);
+        img.onerror = () => recordImageFailure(proxyUrl);
         img.src = proxyUrl;
         retainImageObject(proxyUrl, img);
       }),
