@@ -183,7 +183,7 @@ const navLinks = [
   { name: "Trackers", href: "/trackers" },
   { name: "Predictions", href: "/predictions" },
   { name: "Airdrop", href: "/airdrop-genesis" },
-  ...(PERPS_ENABLED ? [{ name: "Perpetuals", href: "/perpetuals" }] : []),
+  // ...(PERPS_ENABLED ? [{ name: "Perpetuals", href: "/perpetuals" }] : []),
   { name: "Portfolio", href: "/portfolio" },
   { name: "Agent", href: "/agent" },
   // { name: "Yield", href: "/construction" },
