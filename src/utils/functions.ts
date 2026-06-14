@@ -2,8 +2,20 @@ import { env } from "../env";
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, NATIVE_MINT } from "@solana/spl-token";
 import { ethers } from "ethers";
+import Cookies from "js-cookie";
 
 const isDev = process.env.NODE_ENV !== "production";
+
+/**
+ * Build request headers for authenticated backend reads. The session JWT is the
+ * same token UserContext stores in the `token` cookie. The backend's per-user
+ * trade read endpoints require it (IDOR fix) and return 401/403 without it.
+ * Returns an empty object when no token is present (logged-out / SSR).
+ */
+function authHeaders(): Record<string, string> {
+  const token = typeof window !== "undefined" ? Cookies.get("token") : undefined;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export interface PositionRow {
   tokenAddress: string;
@@ -146,7 +158,7 @@ export async function fetchActivePositions(
       blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
     const res = await fetch(
       `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}${blockchainParam}`,
-      controller ? { signal: controller.signal } : {},
+      { headers: authHeaders(), ...(controller ? { signal: controller.signal } : {}) },
     );
     if (!res.ok) {
       return { ok: false, data: null, error: `http_${res.status}` };
@@ -174,6 +186,11 @@ export async function getActivePositionsByUser(
   return result.data ?? [];
 }
 
+/**
+ * Fetch the CURRENT authenticated user's trades for a given token address.
+ * Requires a session token (sent via authHeaders); the backend scopes results
+ * to the caller's own trades (IDOR fix) and returns 401/403 otherwise.
+ */
 export async function getTradeHistoryByTokenAddress(
   tokenAddress: string,
 ): Promise<TradeRow[]> {
@@ -181,7 +198,9 @@ export async function getTradeHistoryByTokenAddress(
   isDev && console.log(env.NEXT_PUBLIC_BACKEND_URL);
   const res = await fetch(
     `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_tokenaddress?tokenAddress=${tokenAddress}`,
+    { headers: authHeaders() },
   );
+  if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
@@ -202,7 +221,7 @@ export async function getTradeHistoryByUser(
       blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
     const res = await fetch(
       `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}${blockchainParam}`,
-      controller ? { signal: controller.signal } : {},
+      { headers: authHeaders(), ...(controller ? { signal: controller.signal } : {}) },
     );
     if (!res.ok) {
       throw new Error(
@@ -252,7 +271,7 @@ export async function fetchTradeActivity(
       blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
     const res = await fetch(
       `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}${blockchainParam}`,
-      controller ? { signal: controller.signal } : {},
+      { headers: authHeaders(), ...(controller ? { signal: controller.signal } : {}) },
     );
     if (!res.ok) {
       return { ok: false, data: null, error: `http_${res.status}` };

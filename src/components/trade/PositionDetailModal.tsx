@@ -344,7 +344,11 @@ export default function PositionDetailModal({
       const currentChain = chain || 'sol';
       const blockchainParam = currentChain === 'monad' ? '&blockchain=monad' : '&blockchain=solana';
       const res = await fetch(
-        `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}${blockchainParam}`
+        `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}${blockchainParam}`,
+        // IDOR fix: backend now requires the session JWT on this endpoint.
+        user?.bearerToken
+          ? { headers: { Authorization: `Bearer ${user.bearerToken}` } }
+          : undefined
       );
 
       if (res.ok) {
