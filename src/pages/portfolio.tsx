@@ -37,7 +37,7 @@ import PnlShareCard from "~/components/PnlShareCard";
 
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { useImagePreloader } from "~/hooks/useImagePreloader";
-import { extractTokenImage } from "~/utils/images";
+import { extractTokenImage, resolveTokenImageByMint } from "~/utils/images";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 import { acknowledgeWalletExport } from "~/utils/api";
@@ -1117,15 +1117,48 @@ export default function PortfolioPage() {
     return () => clearInterval(activityPollId);
   }, [user?.id, currentChain, isTradeOnCurrentChain, tradeActivityCacheKey, tradeRefreshCounter, wsConnected]);
 
-  // Preload token images from activity rows as soon as data arrives
+  // Preload token images from activity rows as soon as data arrives.
   const { preloadImages } = useImagePreloader();
+  // `preloadImages` is a fresh reference each render (not memoized in the hook),
+  // so this effect's deps change every render. Gate the body on the actual
+  // tradeActivity reference so the warm/preload only runs when the data really
+  // changes, not on every price/balance re-render of this hot page.
+  const lastWarmedActivityRef = useRef<unknown>(null);
   useEffect(() => {
     if (!tradeActivity || tradeActivity.length === 0) return;
+    if (lastWarmedActivityRef.current === tradeActivity) return;
+    lastWarmedActivityRef.current = tradeActivity;
+
+    // 1) Trades that already carry a direct image → preload the bytes.
     const imageSources = tradeActivity
       .map((trade: any) => extractTokenImage(trade))
       .filter(Boolean);
     if (imageSources.length > 0) {
       preloadImages(imageSources, { priority: true, timeout: 2000 });
+    }
+
+    // 2) Trades WITHOUT an image (the common case — wallet trades carry none)
+    //    need a /v1/search resolve per mint before the Activity rows can show
+    //    an avatar. Warm that shared (cached + deduped) resolution NOW, while
+    //    the user is still looking at positions, so by the time they open the
+    //    Activity tab the images are already resolved instead of firing dozens
+    //    of search round-trips on tab open. Capped to bound the request burst.
+    const WARM_LIMIT = 60;
+    const seen = new Set<string>();
+    for (const trade of tradeActivity as any[]) {
+      if (seen.size >= WARM_LIMIT) break;
+      const mint = trade?.tokenAddress;
+      if (
+        !mint ||
+        typeof mint !== "string" ||
+        mint.toLowerCase().startsWith("0x") || // skip EVM/Monad mints (no /v1/search)
+        seen.has(mint) ||
+        extractTokenImage(trade) // already has a direct image
+      ) {
+        continue;
+      }
+      seen.add(mint);
+      resolveTokenImageByMint(mint).catch(() => {});
     }
   }, [tradeActivity, preloadImages]);
 

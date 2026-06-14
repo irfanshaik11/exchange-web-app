@@ -442,6 +442,71 @@ export async function resolveTokenImage(token: any): Promise<string | null> {
   return rawImageUrl;
 }
 
+// ── resolveTokenImageByMint cache ──────────────────────────────────────────
+// Wallet trades/positions carry no image, so each mint needs a /v1/search
+// round-trip to discover one. That made Portfolio → Activity (and the wallet
+// scan/tracker) re-resolve every token on every open — dozens of search calls
+// gating the images. Cache results (Map + localStorage) and dedupe in-flight
+// requests, mirroring metadataImageCache above, so it's a one-time cost per
+// mint: instant on every later open, across components, and across refreshes.
+// SUCCESS-ONLY cache: only resolved image URLs are stored. Misses (no image /
+// not-yet-indexed / transient error) are deliberately NOT cached, so the next
+// open re-resolves and a token that gets indexed later shows up — and so a
+// transient failure can never get "stuck" behind the row components' own
+// per-mount attempted-set guards (Activity's searchAttemptedRef,
+// WalletScanPanel's resolvedImgAttemptedRef). Per-render storms are already
+// prevented by those guards; this cache exists to make repeat *successes* free.
+const mintImageCache = new Map<string, { image: string; timestamp: number }>();
+// Token images are immutable once minted, so a long TTL is safe. Aligned with
+// the persist window so a hydrated entry isn't loaded only to be evicted.
+const MINT_IMG_TTL_MS = 24 * 60 * 60 * 1000;
+const MINT_IMG_PERSIST_KEY = '__mint_img';
+let mintImgPersistTimer: ReturnType<typeof setTimeout> | null = null;
+const mintImagePending = new Map<string, Promise<string | null>>();
+
+if (typeof window !== 'undefined') {
+  try {
+    const raw = localStorage.getItem(MINT_IMG_PERSIST_KEY);
+    if (raw) {
+      const entries: [string, string, number?][] = JSON.parse(raw);
+      const now = Date.now();
+      for (const [mint, imageUrl, ts] of entries) {
+        // Require a real, non-empty image and a real numeric timestamp — never
+        // grant a malformed/legacy entry a fresh lease by defaulting ts to now.
+        if (
+          typeof mint === 'string' &&
+          typeof imageUrl === 'string' &&
+          imageUrl.length > 0 &&
+          typeof ts === 'number' &&
+          now - ts <= MINT_IMG_TTL_MS
+        ) {
+          mintImageCache.set(mint, { image: imageUrl, timestamp: ts });
+        }
+      }
+    }
+  } catch {}
+}
+
+function scheduleMintImagePersist() {
+  if (typeof window === 'undefined' || mintImgPersistTimer) return;
+  mintImgPersistTimer = setTimeout(() => {
+    mintImgPersistTimer = null;
+    try {
+      const entries: [string, string, number][] = [];
+      const now = Date.now();
+      for (const [mint, cached] of mintImageCache) {
+        if (cached.image && now - cached.timestamp < MINT_IMG_TTL_MS) {
+          entries.push([mint, cached.image, cached.timestamp]);
+        }
+      }
+      localStorage.setItem(
+        MINT_IMG_PERSIST_KEY,
+        JSON.stringify(entries.slice(-500)),
+      );
+    } catch {}
+  }, 2000);
+}
+
 /**
  * Resolve a token's image URL from just its mint address, via the token-service
  * search endpoint (/v1/search) + resolveTokenImage.
@@ -450,32 +515,68 @@ export async function resolveTokenImage(token: any): Promise<string | null> {
  * scan Activity, notifications): the wallet positions/trades payloads and
  * /v1/token/{mint} carry no image, but /v1/search does — the same path the token
  * page and clipboard-paste flow use. Returns null if unavailable.
+ *
+ * Successful resolutions are cached (in-memory + localStorage) and in-flight
+ * requests are deduped, so repeat resolutions of the same mint are free. Misses
+ * are not cached (see mintImageCache note above).
  */
 export async function resolveTokenImageByMint(
   mint: string,
   options: { signal?: AbortSignal } = {},
 ): Promise<string | null> {
   if (!mint) return null;
+
+  const cached = mintImageCache.get(mint);
+  if (cached) {
+    if (Date.now() - cached.timestamp < MINT_IMG_TTL_MS) return cached.image;
+    mintImageCache.delete(mint);
+  }
+
+  // Coalesce concurrent callers (many Activity rows + WalletScanPanel can ask
+  // for the same mint at once). The shared fetch is deliberately NOT wired to
+  // any caller's AbortSignal: one caller unmounting must never abort a request
+  // the others are awaiting. (`options.signal` is accepted for API symmetry but
+  // not threaded into the shared request.)
+  const inFlight = mintImagePending.get(mint);
+  if (inFlight) return inFlight;
+
   const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
   if (!goUrl) return null;
+
+  const promise = (async (): Promise<string | null> => {
+    try {
+      const response = await fetch(
+        `${goUrl}/v1/search?phrase=${encodeURIComponent(mint)}&limit=1`,
+      );
+      if (!response.ok) return null;
+      const data = await response.json();
+      const results =
+        data?.tokens || data?.results || data?.filterTokens?.results || [];
+      const token = results[0]?.token || results[0] || null;
+      if (!token) return null;
+      // Use extractTokenImage (raw URL), NOT resolveTokenImage: search results put a
+      // raw IPFS image in image_url, which resolveTokenImage would wrongly try to fetch
+      // as metadata JSON and return null. FastImage handles the raw/IPFS URL fine.
+      return extractTokenImage(token);
+    } catch {
+      return null;
+    }
+  })();
+  mintImagePending.set(mint, promise);
+
+  let image: string | null = null;
   try {
-    const response = await fetch(
-      `${goUrl}/v1/search?phrase=${encodeURIComponent(mint)}&limit=1`,
-      { signal: options.signal },
-    );
-    if (!response.ok) return null;
-    const data = await response.json();
-    const results =
-      data?.tokens || data?.results || data?.filterTokens?.results || [];
-    const token = results[0]?.token || results[0] || null;
-    if (!token) return null;
-    // Use extractTokenImage (raw URL), NOT resolveTokenImage: search results put a
-    // raw IPFS image in image_url, which resolveTokenImage would wrongly try to fetch
-    // as metadata JSON and return null. FastImage handles the raw/IPFS URL fine.
-    return extractTokenImage(token);
-  } catch {
-    return null;
+    image = await promise;
+  } finally {
+    mintImagePending.delete(mint);
   }
+
+  // Cache successes only — a miss is left uncached so the next open re-resolves.
+  if (image) {
+    mintImageCache.set(mint, { image, timestamp: Date.now() });
+    scheduleMintImagePersist();
+  }
+  return image;
 }
 
 /**
