@@ -590,6 +590,11 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
 //   return <>{children}</>;
 // }
 
+// Routes that actually render the heavy self-hosted TradingView "Advanced Charts" library (~2.7MB).
+// Trailing slashes intentionally exclude the chart-free index pages (/perpetuals, /predictions).
+// Matches exactly: /trade/[id], /trade/monad/[contractAddress], /perpetuals/[symbol], /predictions/[ticker].
+const TV_CHART_ROUTE_PREFIXES = ['/trade/', '/perpetuals/', '/predictions/'] as const;
+
 const MyApp: AppType = ({ Component, pageProps }) => {
   const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');
 
@@ -636,6 +641,15 @@ const MyApp: AppType = ({ Component, pageProps }) => {
 
   // Chunk load error recovery for SPA navigation
   const routerForChunkRecovery = useRouter();
+
+  // Only load the heavy TradingView charting library (~2.7MB) on routes that actually render a
+  // chart. Each chart component (AdvancedOHLCChart / PerpChart / TradingViewPredictionChart)
+  // self-loads the library on mount, so gating these global preloads is safe and keeps the payload
+  // off every non-chart page (Pulse, Discover, Trackers, Portfolio, etc.) where it was pure waste.
+  const isTradingViewChartRoute = TV_CHART_ROUTE_PREFIXES.some((prefix) =>
+    routerForChunkRecovery.pathname.startsWith(prefix),
+  );
+
   useEffect(() => {
     const handleRouteError = (err: any, url: string) => {
       if (
@@ -662,9 +676,10 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     };
   }, [routerForChunkRecovery.events]);
 
-  // Preload TradingView library script early for faster chart loading
+  // Preload TradingView library script early for faster chart loading (chart routes only)
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!isTradingViewChartRoute) return;
 
     // Check if already loaded or loading
     if ((window as any).TradingView) return;
@@ -680,17 +695,23 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     script.defer = true;
     // Don't set onload - let AdvancedOHLCChart handle it
     document.head.appendChild(script);
-  }, []);
+  }, [isTradingViewChartRoute]);
 
   // Pre-warm TradingView sub-bundles (library.*.js, chart-widget-gui.*.js)
   // Creating a tiny hidden widget forces V8 to parse+JIT-compile all TradingView code paths once,
   // so subsequent real widget creation is 2-3x faster (code already compiled).
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!isTradingViewChartRoute) return;
     // Skip if already pre-warmed
     if ((window as any).__tvPreWarmed) return;
 
+    // Cancellation guards so the poll/warm chain stops if we leave the chart route mid-flight.
+    let cancelled = false;
+    let warmTimer: ReturnType<typeof setTimeout> | undefined;
+
     const doPreWarm = () => {
+      if (cancelled) return;
       const TradingView = (window as any).TradingView;
       if (!TradingView?.widget) return;
       if ((window as any).__tvPreWarmed) return;
@@ -755,18 +776,23 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     let warmRetries = 0;
     const MAX_WARM_RETRIES = 20; // 20 * 500ms = 10 seconds max wait
     const checkAndWarm = () => {
+      if (cancelled) return;
       if ((window as any).TradingView?.widget) {
         if (typeof requestIdleCallback === 'function') {
           requestIdleCallback(doPreWarm, { timeout: 3000 });
         } else {
-          setTimeout(doPreWarm, 100);
+          warmTimer = setTimeout(doPreWarm, 100);
         }
       } else if (++warmRetries < MAX_WARM_RETRIES) {
-        setTimeout(checkAndWarm, 500);
+        warmTimer = setTimeout(checkAndWarm, 500);
       }
     };
     checkAndWarm();
-  }, []);
+    return () => {
+      cancelled = true;
+      if (warmTimer) clearTimeout(warmTimer);
+    };
+  }, [isTradingViewChartRoute]);
 
   // Register image caching service worker (production only)
   useEffect(() => {
@@ -813,16 +839,20 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         <link rel="preload" href="/ranks/degen-2.png" as="image" />
         <link rel="preload" href="/ranks/degen-3.png" as="image" />
         <link rel="preload" href="/ranks/degen-4.png" as="image" />
-        {/* Preload TradingView library for faster chart loading */}
-        <link
-          rel="preload"
-          href="/charting_library/charting_library/charting_library.standalone.js"
-          as="script"
-          crossOrigin="anonymous"
-        />
-        {/* Preload heavy TradingView bundles (high-priority download before trade page opens) */}
-        <link rel="preload" href="/charting_library/charting_library/bundles/library.15664647653f41254b4d.js" as="script" crossOrigin="anonymous" />
-        <link rel="preload" href="/charting_library/charting_library/bundles/chart-widget-gui.4ec424eb56739ee22285.js" as="script" crossOrigin="anonymous" />
+        {/* Preload TradingView library only on chart routes — kept off Pulse/Discover/Trackers/etc. */}
+        {isTradingViewChartRoute && (
+          <>
+            <link
+              rel="preload"
+              href="/charting_library/charting_library/charting_library.standalone.js"
+              as="script"
+              crossOrigin="anonymous"
+            />
+            {/* Preload heavy TradingView bundles (high-priority download before trade page opens) */}
+            <link rel="preload" href="/charting_library/charting_library/bundles/library.15664647653f41254b4d.js" as="script" crossOrigin="anonymous" />
+            <link rel="preload" href="/charting_library/charting_library/bundles/chart-widget-gui.4ec424eb56739ee22285.js" as="script" crossOrigin="anonymous" />
+          </>
+        )}
         <link rel="icon" type="image/png" sizes="32x32" href="/interstate/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/interstate/favicon-16x16.png" />
         <style jsx global>{`
