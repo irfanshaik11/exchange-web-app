@@ -256,20 +256,30 @@ function useTokenMetadata(mints: string[]) {
         try {
           const goUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
           if (!goUrl) return;
+          // Use /v1/search, NOT /v1/token: /v1/token's image_url is
+          // cdn.interstate.so/{mint}.webp which 403s; search returns the working
+          // (IPFS) image plus name/symbol/market data (flat on the token).
           // Retry transient 502/503/504 (deploy/restart churn) — a single blip
           // used to leave MC as "-" for the whole session because the mint was
           // pre-marked fetched and never retried.
+          // `data` is hoisted so the metadata builder below can still read
+          // data?.marketData?.* after the loop exits.
           let data: any = null;
+          let token: any = null;
           for (let attempt = 0; attempt < 3; attempt++) {
             try {
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 5000);
-              const resp = await fetch(`${goUrl}/v1/token/${mint}`, {
-                signal: controller.signal,
-              });
+              const resp = await fetch(
+                `${goUrl}/v1/search?phrase=${encodeURIComponent(mint)}&limit=1`,
+                { signal: controller.signal },
+              );
               clearTimeout(timeoutId);
               if (resp.ok) {
                 data = await resp.json();
+                const results =
+                  data?.tokens || data?.results || data?.filterTokens?.results || [];
+                token = results[0]?.token || results[0] || null;
                 break;
               }
               if (
@@ -289,7 +299,6 @@ function useTokenMetadata(mints: string[]) {
               }
             }
           }
-          const token = data?.token;
           if (!token) {
             fetchedRef.current.delete(mint); // allow a later retry
             return;

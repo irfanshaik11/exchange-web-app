@@ -3,11 +3,20 @@
  * Preloads images for instant display in tables
  */
 
-import { normalizeImageUrl, isMetadataUrl, resolveMetadataImage } from "./images";
+import {
+  normalizeImageUrl,
+  isMetadataUrl,
+  resolveMetadataImage,
+} from "./images";
 import { computeHashImageUrl } from "./imageHash";
 
-// Track preloaded images to avoid duplicate requests
+// Track preloaded images to avoid duplicate requests. Bounded so a long
+// session across churny boards (Pulse + 4 trending timeframes + DexScreener)
+// can't grow it without limit. This is only a network-dedup hint — clearing
+// it just allows a re-request, which the browser HTTP/disk cache serves; the
+// decoded-bitmap retention lives in imageObjectCache (LRU) below.
 const preloadedImages = new Set<string>();
+const MAX_PRELOADED_TRACKED = 2000;
 
 /**
  * Image Object Retention Cache
@@ -15,7 +24,11 @@ const preloadedImages = new Set<string>();
  * This prevents the browser from GC'ing decoded bitmaps when React unmounts <img> tags.
  * LRU eviction: delete + re-insert moves entry to end; oldest is first key.
  */
-const MAX_RETAINED_IMAGES = 500;
+// Headroom for the combined working set: Pulse rows + the trending family
+// (4 timeframe boards + DexScreener, warmed by TrendingBackgroundLoader). At
+// ~60 tokens/board the trending peak alone approaches the old 500 cap, which
+// would start evicting actively-viewed Pulse bitmaps; 800 keeps both resident.
+const MAX_RETAINED_IMAGES = 800;
 const imageObjectCache = new Map<string, HTMLImageElement>();
 
 export function retainImageObject(url: string, img: HTMLImageElement): void {
@@ -70,7 +83,7 @@ export function prefetchFromSessionStorage(urls: string[]): void {
     }
     offset = end;
     if (offset < urls.length) {
-      if (typeof requestIdleCallback === 'function') {
+      if (typeof requestIdleCallback === "function") {
         requestIdleCallback(processBatch);
       } else {
         requestAnimationFrame(processBatch);
@@ -99,19 +112,23 @@ export function preloadImage(src: string): Promise<void> {
 
     // Check if already loaded/cached by browser
     const img = new Image();
-    
+
     img.onload = () => {
+      // Keep the dedup Set bounded; clearing just re-enables a (cache-served)
+      // re-request, it never drops a decoded bitmap (that's imageObjectCache).
+      if (preloadedImages.size >= MAX_PRELOADED_TRACKED)
+        preloadedImages.clear();
       preloadedImages.add(src);
       retainImageObject(src, img);
       resolve();
     };
-    
+
     img.onerror = () => {
       // Don't reject - just resolve silently (image might fail to load)
       // DON'T mark as preloaded — allow retry on next preload cycle
       resolve();
     };
-    
+
     // Set src to start loading
     img.src = src;
   });
@@ -124,14 +141,14 @@ export async function preloadImages(
   urls: (string | null | undefined)[],
   options: {
     maxConcurrent?: number;
-    priority?: 'high' | 'low' | 'auto';
-  } = {}
+    priority?: "high" | "low" | "auto";
+  } = {},
 ): Promise<void> {
-  const { maxConcurrent = 10, priority = 'auto' } = options;
-  
+  const { maxConcurrent = 10, priority = "auto" } = options;
+
   // Filter out null/undefined/empty URLs
-  const validUrls = urls.filter((url): url is string => 
-    Boolean(url && typeof url === 'string' && url.trim().length > 0)
+  const validUrls = urls.filter((url): url is string =>
+    Boolean(url && typeof url === "string" && url.trim().length > 0),
   );
 
   if (validUrls.length === 0) {
@@ -141,18 +158,18 @@ export async function preloadImages(
   // Process in batches to avoid overwhelming the browser
   for (let i = 0; i < validUrls.length; i += maxConcurrent) {
     const batch = validUrls.slice(i, i + maxConcurrent);
-    
+
     await Promise.allSettled(
-      batch.map(url => {
+      batch.map((url) => {
         // Use link preload for high priority images
-        if (priority === 'high' && typeof document !== 'undefined') {
-          const link = document.createElement('link');
-          link.rel = 'preload';
-          link.as = 'image';
+        if (priority === "high" && typeof document !== "undefined") {
+          const link = document.createElement("link");
+          link.rel = "preload";
+          link.as = "image";
           link.href = url;
-          link.fetchPriority = 'high';
+          link.fetchPriority = "high";
           document.head.appendChild(link);
-          
+
           // Also use Image object for compatibility
           return preloadImage(url).finally(() => {
             // Clean up link after a delay
@@ -163,9 +180,9 @@ export async function preloadImages(
             }, 1000);
           });
         }
-        
+
         return preloadImage(url);
-      })
+      }),
     );
   }
 }
@@ -175,7 +192,7 @@ export async function preloadImages(
  */
 export function extractImageUrls(tokens: any[]): string[] {
   return tokens
-    .map(token => {
+    .map((token) => {
       const raw =
         token?.image ||
         token?.image_url ||
@@ -188,7 +205,7 @@ export function extractImageUrls(tokens: any[]): string[] {
         token?.thumbnail ||
         null;
 
-      if (!raw || typeof raw !== 'string') return null;
+      if (!raw || typeof raw !== "string") return null;
 
       // Skip metadata URLs here; they are resolved elsewhere before rendering
       if (isMetadataUrl(raw)) return null;
@@ -196,11 +213,11 @@ export function extractImageUrls(tokens: any[]): string[] {
       const normalized = normalizeImageUrl(raw) || raw;
       if (!normalized) return null;
 
-      if (normalized.startsWith('/api/')) return normalized;
+      if (normalized.startsWith("/api/")) return normalized;
 
       return computeHashImageUrl(normalized) || normalized;
     })
-    .filter((url): url is string => Boolean(url && typeof url === 'string'));
+    .filter((url): url is string => Boolean(url && typeof url === "string"));
 }
 
 /**
@@ -210,25 +227,25 @@ export async function preloadTokenImages(
   tokens: any[],
   options: {
     maxConcurrent?: number;
-    priority?: 'high' | 'low' | 'auto';
+    priority?: "high" | "low" | "auto";
     limit?: number; // Limit number of images to preload (for above-the-fold)
-  } = {}
+  } = {},
 ): Promise<void> {
   const { limit, ...restOptions } = options;
-  
+
   let tokensToProcess = tokens;
-  
+
   // If limit is specified, prioritize first N tokens (above-the-fold)
   if (limit && limit > 0) {
     tokensToProcess = tokens.slice(0, limit);
   }
-  
+
   const imageUrls = extractImageUrls(tokensToProcess);
-  
+
   if (imageUrls.length === 0) {
     return;
   }
-  
+
   await preloadImages(imageUrls, restOptions);
 }
 
@@ -238,15 +255,21 @@ export async function preloadTokenImages(
  */
 export async function preloadMetadataImages(
   tokens: any[],
-  options: { limit?: number; maxConcurrent?: number } = {}
+  options: { limit?: number; maxConcurrent?: number } = {},
 ): Promise<void> {
   const { limit = 20, maxConcurrent = 5 } = options;
 
   const metadataTokens = tokens
-    .filter(token => {
-      const raw = token?.image || token?.image_url || token?.imageUrl || token?.logo
-        || token?.uri || token?.icon || null;
-      return raw && typeof raw === 'string' && isMetadataUrl(raw);
+    .filter((token) => {
+      const raw =
+        token?.image ||
+        token?.image_url ||
+        token?.imageUrl ||
+        token?.logo ||
+        token?.uri ||
+        token?.icon ||
+        null;
+      return raw && typeof raw === "string" && isMetadataUrl(raw);
     })
     .slice(0, limit);
 
@@ -256,8 +279,14 @@ export async function preloadMetadataImages(
     const batch = metadataTokens.slice(i, i + maxConcurrent);
     await Promise.allSettled(
       batch.map(async (token) => {
-        const raw = token?.image || token?.image_url || token?.imageUrl || token?.logo
-          || token?.uri || token?.icon || null;
+        const raw =
+          token?.image ||
+          token?.image_url ||
+          token?.imageUrl ||
+          token?.logo ||
+          token?.uri ||
+          token?.icon ||
+          null;
         if (!raw) return;
 
         const resolved = await resolveMetadataImage(raw);
@@ -269,7 +298,7 @@ export async function preloadMetadataImages(
         const img = new Image();
         img.src = proxyUrl;
         retainImageObject(proxyUrl, img);
-      })
+      }),
     );
   }
 }

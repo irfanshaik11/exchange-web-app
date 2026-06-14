@@ -42,7 +42,7 @@ const TGLogo = () => (
 const SOCIAL_QUEST_CONFIGS = [
   { questId: 'SOCIAL_CONNECT_X', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Connect', actionUrl: undefined, tooltip: 'Link your X (Twitter) account to Interstate to unlock social quests and earn credits.' },
   { questId: 'SOCIAL_FOLLOW_X', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Follow', actionUrl: 'https://x.com/interstatefdn', tooltip: 'Follow @interstatefdn on X to stay updated and earn credits. Click Follow, then come back and verify.' },
-  { questId: 'SOCIAL_ENGAGE_POST', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Engage', actionUrl: 'https://x.com/interstatefdn/status/2041067022562324801', tooltip: 'Like, comment, AND repost the Interstate post on X. You must do all three to complete this quest.' },
+  { questId: 'SOCIAL_ENGAGE_POST', platform: 'twitter' as const, icon: <XLogo />, actionLabel: 'Engage', actionUrl: 'https://x.com/interstatefdn/status/2064739369697894660', tooltip: 'Like, repost, and comment on the Interstate post on X. You must do all three to complete this quest.' },
   { questId: 'SOCIAL_JOIN_TG', platform: 'telegram' as const, icon: <TGLogo />, actionLabel: 'Join', actionUrl: 'https://t.me/+DDXGrsJoe3szYTAx', tooltip: 'Join the Interstate Telegram community to connect with other traders and earn credits.' },
 ];
 
@@ -277,7 +277,7 @@ export default function SocialQuestsSection({
               }
             `}
           >
-            <div className="relative flex items-center justify-between py-3 px-4">
+            <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 py-3 px-4">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {/* Platform icon — no circle border, just the logo */}
                 <div className="flex-shrink-0 w-5 flex items-center justify-center">
@@ -290,8 +290,8 @@ export default function SocialQuestsSection({
                   )}
                 </div>
 
-                <span className="flex items-center gap-1.5">
-                  <span className={`text-[14px] transition-colors truncate ${isClaimed ? 'text-neutral-600 line-through' : 'text-white'}`}>
+                <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className={`text-[13px] sm:text-[14px] transition-colors break-words sm:truncate min-w-0 ${isClaimed ? 'text-neutral-600 line-through' : 'text-white'}`}>
                     {quest.title}
                   </span>
                   {cfg.tooltip && (
@@ -302,23 +302,23 @@ export default function SocialQuestsSection({
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 flex-shrink-0">
-                {/* Credits — fixed width so numbers align */}
-                <div className="flex items-center gap-1.5 w-[70px] justify-end">
+              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 pl-8 sm:pl-0">
+                {/* Credits — content width on mobile, fixed (aligned) from sm up */}
+                <div className="flex items-center gap-1.5 w-auto sm:w-[70px] justify-end">
                   <CreditsCoin className="w-4 h-4" />
                   <span className={`font-bold text-sm ${isClaimed ? 'text-neutral-600' : isComplete ? 'text-emerald-400' : 'text-amber-400'}`}>
                     {isClaimed ? '\u2713' : `+${quest.goldReward}`}
                   </span>
                 </div>
 
-                {/* Button — fixed width so all buttons align */}
-                <div className="w-[80px] flex justify-end">
+                {/* Button — content width on mobile, fixed (aligned) from sm up */}
+                <div className="w-auto sm:w-[80px] flex justify-end">
                   {btnLabel ? (
                     <button
                       type="button"
                       onClick={btnAction}
                       disabled={btnDisabled}
-                      className={`flex items-center justify-center gap-1 w-full py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${btnStyle}`}
+                      className={`flex items-center justify-center gap-1 w-full px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${btnStyle}`}
                     >
                       {btnLabel}
                     </button>

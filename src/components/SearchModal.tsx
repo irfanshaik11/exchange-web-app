@@ -21,7 +21,7 @@ import { hasActiveFilters as checkPulseActiveFilters } from "~/utils/discoverFil
 import { LuChartNoAxesColumn, LuCopy } from "react-icons/lu";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { fetchBatchSupplies, recomputeMarketCap } from "~/lib/tokenSupply";
-import { extractMetaImage } from "~/utils/images";
+import { extractMetaImage, isMetadataUrl } from "~/utils/images";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import FastImage from "./FastImage";
 import { TokenCountdown24h } from "./TokenCountdown24h";
@@ -69,6 +69,7 @@ import {
 import { checkAtaExists } from "~/utils/ataCheck";
 import { getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
+import useTrendingWebSocket from "~/hooks/useTrendingWebSocket";
 import {
   listenForTradeEvents,
   transformToastToError,
@@ -137,10 +138,50 @@ const sortByOptions = [
   { key: "liquidity" as const, icon: FiDroplet },
 ];
 
+// GMGN-style launchpad filter chips. `match` receives the normalized
+// launchpad_protocol / amm key (lowercased, separators stripped).
+// `match(protocol, mint)` mirrors shouldFillProtocolBadge so a token that
+// renders a launchpad badge also passes its chip (incl. the mint-encoded
+// fallbacks). Both args arrive lowercased.
+const SEARCH_FILTER_CHIPS: {
+  key: string;
+  label: string;
+  color: string;
+  match: (p: string, mint: string) => boolean;
+}[] = [
+  {
+    key: "pump",
+    label: "Pumpfun",
+    color: "#88d693",
+    match: (p) => p.includes("pump"),
+  },
+  {
+    key: "bonk",
+    label: "Bonk",
+    color: "#e78c19",
+    match: (p, m) =>
+      p.includes("bonk") || p.includes("launchlab") || m.endsWith("bonk"),
+  },
+  {
+    key: "bags",
+    label: "Bags",
+    color: "#00d62b",
+    match: (p, m) => p.includes("bags") || m.includes("bags"),
+  },
+];
+
 // Use the same green as PulseTable for consistency
 const DEFAULT_PROTOCOL_COLOR = "#31e3ac";
 // Use the same pump.fun icon as PulseTable for consistency
 const DEFAULT_PROTOCOL_ICON = "https://pump.fun/pump-logomark.svg";
+
+// ─── Trending empty-state (GMGN parity) ───
+// When the search modal is open with no query AND no recent-search history,
+// surface what's hot instead of a static placeholder (mirrors GMGN's search
+// dropdown). Rows reuse the same look as the Recent Searches list below.
+const TRENDING_EMPTY_STATE_LIMIT = 7;
+// Drop dust/dead pairs so the fallback only ever shows tradeable tokens.
+const TRENDING_EMPTY_STATE_MIN_LIQUIDITY_USD = 500;
 
 const rawProtocolColorMap: Record<string, string> = {
   pump: DEFAULT_PROTOCOL_COLOR,
@@ -692,6 +733,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
     return "0.05";
   });
   const [selectedPill, setSelectedPill] = useState("P1");
+  const [activeFilterChips, setActiveFilterChips] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("smart");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -738,6 +780,36 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const [lastFetchTime, setLastFetchTime] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
   const [recentSearches, setRecentSearches] = useState<SearchHistoryItem[]>([]);
+
+  // Live trending feed for the empty-state fallback (GMGN parity). Reuses the
+  // app-wide singleton trending WebSocket — `TrendingBackgroundLoader` already
+  // keeps the 1h window connected, so this opens no new socket and renders
+  // instantly from the shared cache. Subscribe only while the trending list can
+  // actually be shown (modal open, no active search, no history) so the modal
+  // doesn't re-render on every WS tick while the user is typing/viewing results.
+  // The global map stays warm, so re-enabling reads cached data with no gap.
+  const canShowTrending = open && !hasSearched && recentSearches.length === 0;
+  const { tokens: trendingWsTokens } = useTrendingWebSocket({
+    timeframe: "1h",
+    enabled: canShowTrending,
+  });
+  const trendingFallback = useMemo(() => {
+    if (!Array.isArray(trendingWsTokens) || trendingWsTokens.length === 0) {
+      return [];
+    }
+    // Feed is already rank-sorted, age-capped, and blacklist-filtered upstream.
+    // Here we only drop zero-value / dust pairs and cap the row count.
+    return trendingWsTokens
+      .filter(
+        (t) =>
+          t &&
+          t.mint &&
+          (t.fully_diluted_value || t.marketCapUsd || 0) > 0 &&
+          (t.total_liquidity_usd || t.liquidityUsd || 0) >=
+            TRENDING_EMPTY_STATE_MIN_LIQUIDITY_USD,
+      )
+      .slice(0, TRENDING_EMPTY_STATE_LIMIT);
+  }, [trendingWsTokens]);
   const [selectedIndex, setSelectedIndex] = useState(-1); // Keyboard navigation
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -969,7 +1041,14 @@ const SearchModalContent = React.memo(function SearchModalContent({
             mint: tokenAddress,
             name: token.name || "",
             symbol: token.symbol || "",
-            logo: token.uri || token.logo || token.image || token.image_url,
+            // Prefer the backend CDN image (cdn.interstate.so/{mint}.webp — the
+            // same URL the token page renders), then the raw upstream image, then
+            // the metadata `uri` last (a JSON URL, never a renderable image).
+            logo:
+              token.image || token.image_url || token.logo || token.uri,
+            // Raw upstream image, carried separately so the row can fall back to
+            // it if the CDN image 404s (e.g. a brand-new token not yet warmed).
+            image_url: token.image_url || token.logo || undefined,
             fully_diluted_value:
               token.market_cap_usd ||
               token.marketCapUSD ||
@@ -1012,6 +1091,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             is_mayhem_mode?: boolean;
             launch_time?: string;
             usd_price?: number;
+            image_url?: string;
           };
         });
 
@@ -1695,8 +1775,24 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const isSearching = useMemo(() => query.trim().length > 0, [query]);
   const displayTokens = useMemo(() => {
     if (!hasSearched) return [];
-    return sortTokens(searchResults, sortBy, query);
-  }, [hasSearched, searchResults, sortBy, query]);
+    const sorted = sortTokens(searchResults, sortBy, query);
+    if (activeFilterChips.length === 0) return sorted;
+    const active = SEARCH_FILTER_CHIPS.filter((c) =>
+      activeFilterChips.includes(c.key),
+    );
+    return sorted.filter((t) => {
+      const tk = t as any;
+      const p = String(
+        tk.launchpad_protocol ||
+          tk.launchpad_name ||
+          tk.protocol ||
+          tk.amm ||
+          "",
+      ).toLowerCase();
+      const m = String(tk.mint || "").toLowerCase();
+      return active.some((c) => c.match(p, m));
+    });
+  }, [hasSearched, searchResults, sortBy, query, activeFilterChips]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -1787,7 +1883,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         onClose={onClose}
         align="center"
         zIndex={99999}
-        className="relative mx-auto flex h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-xl border border-white bg-[#18181A] shadow-sm transition-all duration-200 sm:w-[600px] md:w-[800px]"
+        className="relative mx-auto flex max-h-[85vh] w-full max-w-[94vw] flex-col overflow-hidden rounded-[14px] border border-[#23252B] bg-[#16171B] tracking-[-0.012em] shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-200 sm:w-[600px] md:w-[800px]"
         disableClickOutside={pulseFilterModalOpen}
       >
         {/* Close Button - Mobile */}
@@ -1796,10 +1892,34 @@ const SearchModalContent = React.memo(function SearchModalContent({
             <BlockchainSwitcher />
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex h-8 flex-shrink-0 items-center gap-1 rounded-md border border-[#FFFFFF14] bg-[#1B1C21] px-2 transition-colors focus-within:border-[#7FFFC94D]">
+              <BsLightningChargeFill className="h-2.5 w-2.5 flex-shrink-0 text-[#7FFFC9]" />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={quickBuyAmount}
+                onChange={(e) => {
+                  const v = e.target.value
+                    .replace(/[^0-9.]/g, "")
+                    .replace(/(\..*)\./g, "$1");
+                  setQuickBuyAmount(v);
+                  try {
+                    const n = parseFloat(v);
+                    if (!isNaN(n) && n > 0)
+                      localStorage.setItem("quickBuyAmount", String(n));
+                  } catch {}
+                }}
+                aria-label="Quick buy amount in SOL"
+                className="w-8 bg-transparent text-xs font-semibold text-white outline-none"
+              />
+              <span className="text-[10px] font-medium text-[#8A9099]">
+                SOL
+              </span>
+            </div>
             <button
               type="button"
               onClick={openPulseFilters}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#1B1C21] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white"
               aria-label="Filters"
               title="Filters"
             >
@@ -1850,8 +1970,62 @@ const SearchModalContent = React.memo(function SearchModalContent({
           })}
         </div> */}
         <div className="flex flex-col items-start justify-between gap-2 px-3 pt-2 pb-2 sm:items-center sm:gap-3 sm:px-4 sm:pt-4 md:flex-row">
-          <div className="hidden w-full items-center sm:w-auto md:flex">
+          <div className="hidden w-full items-center gap-2.5 sm:w-auto md:flex">
             <BlockchainSwitcher />
+            <div className="flex h-8 flex-shrink-0 cursor-text items-center gap-1.5 rounded-lg border border-[#FFFFFF14] bg-[#1B1C21] px-2.5 transition-colors hover:border-[#FFFFFF2E] focus-within:border-[#7FFFC94D]">
+              <BsLightningChargeFill className="h-3 w-3 flex-shrink-0 text-[#7FFFC9]" />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={quickBuyAmount}
+                onChange={(e) => {
+                  const v = e.target.value
+                    .replace(/[^0-9.]/g, "")
+                    .replace(/(\..*)\./g, "$1");
+                  setQuickBuyAmount(v);
+                  try {
+                    const n = parseFloat(v);
+                    if (!isNaN(n) && n > 0)
+                      localStorage.setItem("quickBuyAmount", String(n));
+                  } catch {}
+                }}
+                aria-label="Quick buy amount in SOL"
+                title="Quick buy amount (SOL)"
+                className="w-9 bg-transparent text-sm font-semibold text-white outline-none"
+              />
+              <span className="text-[11px] font-medium text-[#8A9099]">
+                SOL
+              </span>
+            </div>
+            {/* GMGN-style launchpad filter chips */}
+            <div className="flex flex-shrink-0 items-center gap-1.5">
+              {SEARCH_FILTER_CHIPS.map((chip) => {
+                const on = activeFilterChips.includes(chip.key);
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() =>
+                      setActiveFilterChips((prev) =>
+                        prev.includes(chip.key)
+                          ? prev.filter((k) => k !== chip.key)
+                          : [...prev, chip.key],
+                      )
+                    }
+                    className="h-7 flex-shrink-0 rounded-full border px-2.5 text-xs transition-colors"
+                    style={{
+                      borderColor: on ? chip.color : `${chip.color}59`,
+                      color: on ? chip.color : `${chip.color}d9`,
+                      backgroundColor: on ? `${chip.color}26` : "transparent",
+                      fontWeight: on ? 600 : 500,
+                    }}
+                    aria-pressed={on}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
@@ -1859,7 +2033,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
               Sort by:
             </span>
 
-            <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#18181A] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
+            <div className="flex flex-1 items-center gap-1 rounded-lg border border-[#FFFFFF0F] bg-[#1B1C21] p-0.5 sm:flex-initial sm:gap-1.5 sm:p-1">
               {sortByOptions.map((option) => {
                 const IconComponent = option.icon;
                 const isActive = sortBy === option.key;
@@ -1884,8 +2058,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
                       onClick={() => setSortBy(option.key)}
                       className={`flex w-full cursor-pointer items-center justify-center rounded-md px-2 py-1.5 transition-all duration-200 sm:px-3 sm:py-1.5 ${
                         isActive
-                          ? "bg-[#1a1a1a] text-white shadow-sm"
-                          : "text-[#666666] hover:bg-[#141414] hover:text-[#9595B5]"
+                          ? "bg-[#2A2C33] text-white shadow-sm"
+                          : "text-[#8A9099] hover:bg-[#202228] hover:text-white"
                       }`}
                     >
                       <IconComponent className="size-3.5 sm:size-4" />
@@ -1907,7 +2081,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
             <button
               type="button"
               onClick={openPulseFilters}
-              className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#18181A] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
+              className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[#FFFFFF14] bg-[#1B1C21] text-neutral-400 transition-colors hover:border-[#FFFFFF24] hover:text-white sm:flex"
               aria-label="Filters"
               title="Filters"
             >
@@ -1918,7 +2092,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
         {/* Search Input */}
         <div className="relative px-3 py-2 sm:px-4 sm:py-3">
-          <div className="relative flex items-center gap-2 rounded-xl border border-[#FFFFFF0F] bg-[#18181A] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC940] focus-within:bg-[#18181A] sm:gap-3 sm:px-4 sm:py-3">
+          <div className="relative flex items-center gap-2.5 rounded-xl border border-[#FFFFFF0F] bg-[#1B1C21] px-3 py-2.5 transition-all duration-200 focus-within:border-[#7FFFC94D] sm:gap-3 sm:px-4 sm:py-3.5">
             <FaSearch className="flex-shrink-0 text-base text-[#666666] sm:text-lg" />
             <input
               ref={inputRef}
@@ -1926,8 +2100,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Search tokens..."
-              className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#666666] sm:text-base"
+              placeholder="Search by name, ticker or address"
+              className="flex-1 bg-transparent text-sm font-medium text-white outline-none placeholder:font-normal placeholder:text-[#767C86] sm:text-[17px]"
             />
             {query && (
               <button
@@ -1956,10 +2130,10 @@ const SearchModalContent = React.memo(function SearchModalContent({
               </button>
             )}
             <div className="hidden flex-shrink-0 items-center gap-1.5 sm:flex">
-              <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
+              <span className="rounded-md border border-[#25272E] bg-[#202228] px-1.5 py-1 text-[11px] leading-none font-semibold text-[#8A9099]">
                 /
               </span>
-              <span className="rounded bg-[#272727] px-2 py-1 text-xs leading-none font-medium text-[#656565]">
+              <span className="rounded-md border border-[#25272E] bg-[#202228] px-1.5 py-1 text-[11px] leading-none font-semibold text-[#8A9099]">
                 TAB
               </span>
             </div>
@@ -2203,7 +2377,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
                                 {item.symbol}
                               </span>
-                              <span className="min-w-0 truncate text-xs text-neutral-500">
+                              <span className="min-w-0 truncate text-[13px] text-neutral-400">
                                 {item.name}
                               </span>
                             </div>
@@ -2263,7 +2437,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                               } as Token & { launchpad_protocol?: string };
                               handleSelectToken(token);
                             }}
-                            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-1.5 text-xs font-bold text-[#7FFFC9] transition-all hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3 sm:py-2"
+                            className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
                           >
                             <BsLightningChargeFill className="h-3 w-3" />
                             Trade
@@ -2309,77 +2483,302 @@ const SearchModalContent = React.memo(function SearchModalContent({
                     </svg>
                   </div>
                   <div className="space-y-2 text-center">
-                    <h3 className="text-base font-semibold text-white sm:text-lg">
-                      No tokens found
-                    </h3>
-                    <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
-                      We couldn't find any tokens matching "
-                      <span className="font-medium text-[#7FFFC9]">
-                        {query}
-                      </span>
-                      ". Try searching with a different name, symbol, or check
-                      the spelling.
-                    </p>
-                    <div className="px-2 pt-2 text-xs text-neutral-500">
-                      <p>
-                        💡 Tip: Search by token name, ticker symbol, or contract
-                        address
-                      </p>
-                    </div>
+                    {activeFilterChips.length > 0 &&
+                    searchResults.length > 0 ? (
+                      <>
+                        <h3 className="text-base font-semibold text-white sm:text-lg">
+                          No matches for the active filter
+                        </h3>
+                        <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                          {searchResults.length} result
+                          {searchResults.length === 1 ? "" : "s"} for "
+                          <span className="font-medium text-[#7FFFC9]">
+                            {query}
+                          </span>
+                          ", but none match the selected launchpad.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveFilterChips([])}
+                          className="mt-1 rounded-full border border-[#7FFFC94D] bg-[#7FFFC914] px-3 py-1 text-xs font-semibold text-[#7FFFC9] transition-colors hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
+                        >
+                          Clear filters
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="text-base font-semibold text-white sm:text-lg">
+                          No tokens found
+                        </h3>
+                        <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                          We couldn't find any tokens matching "
+                          <span className="font-medium text-[#7FFFC9]">
+                            {query}
+                          </span>
+                          ". Try searching with a different name, symbol, or
+                          check the spelling.
+                        </p>
+                        <div className="px-2 pt-2 text-xs text-neutral-500">
+                          <p>
+                            💡 Tip: Search by token name, ticker symbol, or
+                            contract address
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : !recentSearches.length ? (
-                <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
-                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
-                    <FaSearch className="h-6 w-6 text-[#7FFFC9] sm:h-8 sm:w-8" />
-                  </div>
-                  <div className="space-y-2 text-center">
-                    <h3 className="text-base font-semibold text-white sm:text-lg">
-                      Start searching
-                    </h3>
-                    <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
-                      Type at least 2 characters to search for tokens by name,
-                      symbol, or contract address.
-                    </p>
-                    <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-2 text-xs">
-                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                        pepe
-                      </span>
-                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                        sol
-                      </span>
-                      <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
-                        pump
-                      </span>
-                      <span className="text-neutral-500">
-                        or contract address
+                trendingFallback.length > 0 ? (
+                  /* 24h-style Trending fallback (GMGN parity) — shown when the
+                     user has no search history. Rows mirror the Recent Searches
+                     list above and select via the same handleSelectToken path. */
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-[#9595B5]">
+                        <FaFire className="h-3.5 w-3.5 text-[#FF8A3D]" />
+                        Trending
                       </span>
                     </div>
+                    <ul className="flex flex-col overflow-y-auto">
+                      {trendingFallback.map((item) => {
+                        const mcRaw =
+                          item.fully_diluted_value || item.marketCapUsd || 0;
+                        const mc = formatMarketCap(mcRaw);
+                        const mcColor = getMarketCapColor(mcRaw);
+                        const liq = formatSmartNumber(
+                          item.total_liquidity_usd || item.liquidityUsd || 0,
+                        );
+                        const normalizedLogo = normalizeAssetUrl(
+                          item.image_url ||
+                            item.image ||
+                            item.logo ||
+                            item.uri ||
+                            null,
+                        );
+                        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.symbol || item.name || "T")}&background=0f1012&color=E6E7EA&size=56`;
+
+                        const trendingMeta = {
+                          mint: item.mint,
+                          launchpad_protocol: item.launchpad_protocol,
+                          protocol: item.protocol,
+                        };
+                        const itemProtocolColor = resolveProtocolColor(
+                          trendingMeta,
+                          "sol",
+                        );
+                        const itemProtocolIcon = resolveProtocolIcon(
+                          trendingMeta,
+                          "sol",
+                        );
+                        const itemFillProtocolBadge =
+                          shouldFillProtocolBadge(trendingMeta);
+                        const isMayhem = !!item.is_mayhem_mode;
+
+                        const rowToken = {
+                          id: 0,
+                          mint: item.mint,
+                          name: item.name || "",
+                          symbol: item.symbol || "",
+                          logo: item.logo || null,
+                          fully_diluted_value: mcRaw,
+                          total_liquidity_usd:
+                            item.total_liquidity_usd || item.liquidityUsd || 0,
+                          total_buy_volume_1h: 0,
+                          total_sell_volume_1h: 0,
+                          created_at:
+                            item.created_at != null
+                              ? String(item.created_at)
+                              : "",
+                          bonding_curve_progress: "0%",
+                          amm: "",
+                          uri:
+                            item.uri ||
+                            item.image_url ||
+                            item.image ||
+                            item.logo ||
+                            "",
+                          pair_address: item.pair_address || item.mint,
+                          launchpad_protocol: item.launchpad_protocol,
+                          is_mayhem_mode: isMayhem,
+                        } as Token & { launchpad_protocol?: string };
+
+                        return (
+                          <li
+                            key={item.mint}
+                            onMouseEnter={() => {
+                              if (!item.mint) return;
+                              preloadTradeChart(
+                                {
+                                  mint: item.mint,
+                                  pairAddress: item.pair_address,
+                                  chain: "sol",
+                                  name: item.name || "",
+                                  symbol: item.symbol || "",
+                                  marketCapUsd: mcRaw,
+                                  image:
+                                    item.uri ||
+                                    item.image_url ||
+                                    item.image ||
+                                    item.logo ||
+                                    "",
+                                  launchpadProtocol: item.launchpad_protocol,
+                                },
+                                {
+                                  router,
+                                  tradeUrl: `/trade/${item.mint || item.pair_address}`,
+                                },
+                              );
+                            }}
+                            onClick={() => handleSelectToken(rowToken)}
+                            className="group relative flex cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-[#18181A] px-3 py-2.5 transition-all duration-200 hover:z-30 hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a] sm:px-4 sm:py-3"
+                          >
+                            {/* Token Logo with Protocol Border */}
+                            <div
+                              className="relative flex flex-shrink-0 items-center justify-center"
+                              style={{ overflow: "visible" }}
+                            >
+                              <div
+                                className="relative rounded-lg transition-all duration-200 group-hover:scale-105"
+                                style={{
+                                  border: `2px solid ${isMayhem ? "#c83c51" : itemProtocolColor}`,
+                                  padding: 2,
+                                  backgroundColor: "#06070b",
+                                  boxShadow: `0 0 8px ${isMayhem ? "#c83c5120" : `${itemProtocolColor}20`}`,
+                                }}
+                              >
+                                <div className="relative h-12 w-12 overflow-hidden rounded-md sm:h-14 sm:w-14">
+                                  <FastImage
+                                    src={normalizedLogo ?? undefined}
+                                    fallbackSrc={fallbackAvatar}
+                                    alt={item.name || item.symbol || ""}
+                                    width={56}
+                                    height={56}
+                                    className="h-full w-full object-cover"
+                                    symbol={item.symbol}
+                                    name={item.name}
+                                    showBubble={false}
+                                  />
+                                </div>
+                              </div>
+                              {/* Protocol Pill */}
+                              <div
+                                className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/4 translate-y-1/4 transform items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110"
+                                style={{
+                                  width: 20,
+                                  height: 20,
+                                  backgroundColor: "#000000",
+                                  border: `1px solid ${isMayhem ? "#c83c51" : itemProtocolColor}`,
+                                  boxShadow: `0 0 4px ${isMayhem ? "#c83c5160" : `${itemProtocolColor}60`}`,
+                                }}
+                              >
+                                {isMayhem ? (
+                                  <img
+                                    src="/Mayhem.webp"
+                                    alt="Mayhem Mode"
+                                    className="h-3/4 w-3/4 rounded-full object-contain"
+                                  />
+                                ) : (
+                                  <img
+                                    src={itemProtocolIcon}
+                                    alt="Protocol logo"
+                                    className={`${itemFillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
+                                    style={{
+                                      filter:
+                                        itemProtocolColor === "#eab308"
+                                          ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                                          : "none",
+                                    }}
+                                    onError={(e) => {
+                                      (
+                                        e.target as HTMLImageElement
+                                      ).style.display = "none";
+                                    }}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                            {/* Token Info */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="flex-shrink-0 text-sm font-bold text-white sm:text-base">
+                                  {item.symbol}
+                                </span>
+                                <span className="min-w-0 truncate text-[13px] text-neutral-400">
+                                  {item.name}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-[#9595B5]">
+                                <span>
+                                  MC:{" "}
+                                  <span
+                                    className="font-medium"
+                                    style={{ color: mcColor }}
+                                  >
+                                    ${mc}
+                                  </span>
+                                </span>
+                                <span>
+                                  L:{" "}
+                                  <span className="font-medium text-white">
+                                    ${liq}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+                            {/* Quick Action */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectToken(rowToken);
+                              }}
+                              className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-1.5 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3 sm:py-2"
+                            >
+                              <BsLightningChargeFill className="h-3 w-3" />
+                              Trade
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 sm:py-16">
+                    <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#2a2a2a] bg-[#1a1a1a] sm:h-16 sm:w-16">
+                      <FaSearch className="h-6 w-6 text-[#7FFFC9] sm:h-8 sm:w-8" />
+                    </div>
+                    <div className="space-y-2 text-center">
+                      <h3 className="text-base font-semibold text-white sm:text-lg">
+                        Start searching
+                      </h3>
+                      <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                        Type at least 2 characters to search for tokens by name,
+                        symbol, or contract address.
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-2 text-xs">
+                        <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                          pepe
+                        </span>
+                        <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                          sol
+                        </span>
+                        <span className="rounded-md bg-[#1a1a1a] px-2 py-1 text-neutral-400">
+                          pump
+                        </span>
+                        <span className="text-neutral-500">
+                          or contract address
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )
               ) : null}
             </div>
           ) : (
             <>
-              {/* Column headers (desktop only — mobile rows render with inline labels) */}
-              <div
-                className="hidden w-full items-center justify-between gap-4 px-3 py-2 text-[11px] font-medium tracking-wide text-[#666666] uppercase sm:flex sm:px-4 md:gap-6 md:px-5"
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-              >
-                <div className="w-full max-w-72 min-w-0 flex-1">Token</div>
-                <div className="flex flex-shrink-0 items-center gap-3 sm:text-[11px] md:gap-5">
-                  <span className="w-20 text-center">MCap</span>
-                  <span className="w-20 text-center">Vol 24hr</span>
-                  <span className="w-20 text-center">Liq</span>
-                </div>
-                <span
-                  className="flex-shrink-0 text-center"
-                  style={{ width: "76px" }}
-                >
-                  Quick Buy
-                </span>
-              </div>
-              <ul className="flex h-full list-none flex-col gap-2 overflow-y-auto pb-2">
+              {/* No column header — metric labels render inline per row (GMGN-style) */}
+              <ul className="flex h-full list-none flex-col gap-1 overflow-y-auto pt-1 pb-2">
                 {displayTokens.map((token, index) => {
                   const mcRaw = token.fully_diluted_value || 0;
                   const mc = formatMarketCap(mcRaw);
@@ -2502,9 +2901,28 @@ const TokenListItem = React.memo(
       });
     }
     const tokenIsTrending = isTrendingToken(token);
+    // logoUrl holds ONLY the async metadata-resolved fallback image. The primary
+    // image is the direct CDN URL below; this is used only if that fails to load.
+    // Seed from the per-mint cache so a revisited token paints instantly.
     const [logoUrl, setLogoUrl] = useState<string | null>(
-      // Prioritize uri (metadata JSON with image) over logo (often empty)
-      token.uri || token.logo || null,
+      () => resolvedImageByMint.get(token.mint) ?? null,
+    );
+    // Direct CDN image: token.logo now carries cdn.interstate.so/{mint}.webp from
+    // the backend `image` field (see the search-result mapping) — the same URL the
+    // token page renders. Mirror PulseTable: prefer this direct image and only
+    // fall back to the metadata-resolved image if it fails, so no token regresses.
+    const directImage =
+      token.logo && !isMetadataUrl(token.logo) ? token.logo : null;
+    // Raw upstream image fallback (carried by the search-result mapping). Used
+    // only if the CDN image fails AND no metadata image resolves, so a token
+    // with a working raw image never drops to a letter placeholder.
+    const rawImageUrl = (token as { image_url?: string }).image_url ?? null;
+    const rawImageFallback =
+      rawImageUrl && !isMetadataUrl(rawImageUrl) ? rawImageUrl : null;
+    const [directImageFailed, setDirectImageFailed] = useState(false);
+    const handleDirectImageFailed = useCallback(
+      () => setDirectImageFailed(true),
+      [],
     );
     const [showXPreview, setShowXPreview] = useState(false);
     const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
@@ -2548,18 +2966,23 @@ const TokenListItem = React.memo(
     // Don't reset if we already have a resolved image for this mint
     useEffect(() => {
       if (resolvedForMintRef.current !== token.mint) {
-        // New token - reset and start fresh
-        // Prioritize uri (metadata JSON with image) over logo (often empty)
-        const initialUrl = token.uri || token.logo || null;
-        setLogoUrl(initialUrl);
+        // New token - reset the metadata fallback (seed from cache when known)
+        // and clear the direct-image failure flag.
+        setLogoUrl(resolvedImageByMint.get(token.mint) ?? null);
+        setDirectImageFailed(false);
         resolvedImageRef.current = null;
         resolvedForMintRef.current = token.mint;
       }
-    }, [token.mint, token.uri, token.logo]);
+    }, [token.mint]);
 
     useEffect(() => {
       let cancelled = false;
-      const rawUri = token.uri || token.logo;
+      // Resolve the metadata image as a background fallback for the direct CDN
+      // image. token.logo is now the direct CDN image, so use the metadata `uri`
+      // (or token.logo only when it is itself a metadata JSON URL).
+      const rawUri =
+        token.uri ||
+        (token.logo && isMetadataUrl(token.logo) ? token.logo : null);
 
       // Skip if we already resolved for this token
       if (
@@ -2569,7 +2992,14 @@ const TokenListItem = React.memo(
         return;
       }
 
-      if (rawUri && !resolvedImageRef.current) {
+      // Only pay the metadata fetch when we lack a usable direct CDN image or it
+      // has already failed — the common case (CDN image loads) makes zero extra
+      // network calls, matching the token page.
+      if (
+        rawUri &&
+        !resolvedImageRef.current &&
+        (!directImage || directImageFailed)
+      ) {
         fetchTokenMetadata(rawUri).then((data) => {
           if (cancelled) return;
           const img = extractMetaImage(data);
@@ -2586,7 +3016,7 @@ const TokenListItem = React.memo(
       return () => {
         cancelled = true;
       };
-    }, [token.mint, token.uri, token.logo]);
+    }, [token.mint, token.uri, token.logo, directImage, directImageFailed]);
 
     useEffect(() => {
       return () => {
@@ -2615,9 +3045,17 @@ const TokenListItem = React.memo(
       () => shouldFillProtocolBadge(token),
       [token],
     );
+    // Prefer the direct CDN image (same as the token page); swap to the
+    // metadata-resolved fallback only if it fails. token.uri is a metadata JSON
+    // URL (never an image), so it is intentionally NOT an image source here.
     const normalizedLogo = useMemo(
-      () => normalizeAssetUrl(logoUrl || token.uri || token.logo),
-      [logoUrl, token.uri, token.logo],
+      () =>
+        normalizeAssetUrl(
+          directImageFailed
+            ? logoUrl || rawImageFallback
+            : directImage || logoUrl,
+        ),
+      [directImage, directImageFailed, logoUrl, rawImageFallback],
     );
     const fallbackAvatar = useMemo(
       () =>
@@ -2871,10 +3309,10 @@ const TokenListItem = React.memo(
     return (
       <>
         <li
-          className={`group relative block rounded-lg border bg-[#18181A] px-3 py-3 text-sm transition-all duration-200 hover:z-30 sm:px-4 sm:py-4 sm:text-base md:px-5 ${
+          className={`group relative block rounded-[10px] border bg-transparent px-2.5 py-2.5 text-sm transition-all duration-150 hover:z-30 sm:px-3 sm:py-2.5 sm:text-base md:px-3.5 ${
             isSelected
-              ? "border-[#7FFFC940] bg-[#7FFFC908]"
-              : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1a1a1a]"
+              ? "border-[#7FFFC94D] bg-[#7FFFC90D]"
+              : "border-transparent hover:border-[#FFFFFF0F] hover:bg-[#1B1D22]"
           }`}
           style={{
             animation: `fadeSlideIn 0.3s ease-out ${index * 0.05}s both`,
@@ -2944,6 +3382,7 @@ const TokenListItem = React.memo(
                         <FastImage
                           src={normalizedLogo ?? undefined}
                           fallbackSrc={fallbackAvatar}
+                          onLoadFailed={handleDirectImageFailed}
                           alt={token.name || token.symbol || ""}
                           width={44}
                           height={44}
@@ -2990,10 +3429,10 @@ const TokenListItem = React.memo(
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex items-center gap-1.5">
-                    <span className="flex-shrink-0 text-base font-bold text-white">
+                    <span className="flex-shrink-0 text-[15px] font-semibold text-white">
                       {token.symbol}
                     </span>
-                    <span className="truncate text-xs text-neutral-500">
+                    <span className="truncate text-[13px] text-neutral-400">
                       {token.name}
                     </span>
                     <button
@@ -3022,7 +3461,7 @@ const TokenListItem = React.memo(
                   e.stopPropagation();
                   onQuickBuy ? onQuickBuy(token) : onSelect(token);
                 }}
-                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-4 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f]"
+                className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-4 py-2 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
                 style={{ transformOrigin: "center", pointerEvents: "auto" }}
                 title={onQuickBuy ? "Quick buy token" : "Select token"}
               >
@@ -3199,7 +3638,7 @@ const TokenListItem = React.memo(
           <div className="hidden w-full min-w-0 items-center justify-between gap-4 sm:flex md:gap-6">
             <div className="flex w-full max-w-72 min-w-0 flex-1 items-center gap-4">
               <div
-                className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center"
+                className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center"
                 style={{
                   overflow: "visible",
                 }}
@@ -3217,13 +3656,14 @@ const TokenListItem = React.memo(
                       boxShadow: `0 0 8px ${(token as any).is_mayhem_mode ? "#c83c5120" : `${protocolColor}20`}`,
                     }}
                   >
-                    <div className="relative h-14 w-14 overflow-hidden rounded-md">
+                    <div className="relative h-11 w-11 overflow-hidden rounded-md">
                       <FastImage
                         src={normalizedLogo ?? undefined}
                         fallbackSrc={fallbackAvatar}
+                        onLoadFailed={handleDirectImageFailed}
                         alt={token.name || token.symbol || ""}
-                        width={56}
-                        height={56}
+                        width={44}
+                        height={44}
                         className="h-full w-full object-cover"
                         symbol={token.symbol}
                         name={token.name}
@@ -3267,17 +3707,14 @@ const TokenListItem = React.memo(
               </div>
 
               <div className="max-w-[380px] min-w-0 flex-1">
-                <div className="mb-1.5 flex min-w-0 items-center gap-2">
-                  <span className="flex-shrink-0 text-base font-bold text-white">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex-shrink-0 text-[15px] font-semibold text-white">
                     {token.symbol}
-                  </span>
-                  <span className="min-w-0 truncate text-xs text-neutral-500">
-                    {token.name}
                   </span>
                   <button
                     type="button"
                     onClick={handleCopyAddress}
-                    className="relative z-20 ml-1 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
+                    className="relative z-20 ml-0.5 flex-shrink-0 p-0.5 text-[#7FFFC9] transition-all duration-200 hover:scale-110 hover:text-[#5FE0A0] active:scale-95"
                     style={{ pointerEvents: "auto" }}
                   >
                     <LuCopy size={13} />
@@ -3292,6 +3729,11 @@ const TokenListItem = React.memo(
                     <IoShareSocialOutline size={15} />
                   </button>
                 </div>
+                {token.name && (
+                  <div className="mt-0.5 mb-1 min-w-0 truncate text-[13px] text-neutral-400">
+                    {token.name}
+                  </div>
+                )}
                 <div className="flex items-center gap-3 text-sm">
                   <span className="rounded-md bg-[#1a1a1a] px-2 py-0.5 text-xs font-semibold text-neutral-300">
                     {ageLabel}
@@ -3416,6 +3858,7 @@ const TokenListItem = React.memo(
                               <FastImage
                                 src={normalizedLogo ?? undefined}
                                 fallbackSrc={fallbackAvatar}
+                                onLoadFailed={handleDirectImageFailed}
                                 alt={`${token.name || token.symbol || ""} avatar`}
                                 width={56}
                                 height={56}
@@ -3660,20 +4103,37 @@ const TokenListItem = React.memo(
               </div>
             </div>
 
-            {/* MCap / Vol / Liq values - labels live in the column header above */}
-            <div className="flex h-full flex-shrink-0 items-center gap-3 text-xs whitespace-nowrap text-[#9595B5] sm:text-sm md:gap-5">
-              <span
-                className="w-20 text-center font-bold"
-                style={{ color: mcColor }}
-              >
-                ${mc}
-              </span>
-              <span className="w-20 text-center font-bold text-white">
-                ${vol}
-              </span>
-              <span className="w-20 text-center font-bold text-white">
-                ${liq}
-              </span>
+            {/* MCap / Vol / Liq — GMGN-style inline labels + hover tooltips */}
+            <div className="flex h-full flex-shrink-0 items-center gap-4 text-sm whitespace-nowrap md:gap-5">
+              <div className="group/mc relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  MC
+                </span>
+                <span className="font-semibold" style={{ color: mcColor }}>
+                  ${mc}
+                </span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/mc:opacity-100">
+                  Market Cap
+                </span>
+              </div>
+              <div className="group/vol relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  V
+                </span>
+                <span className="font-semibold text-white">${vol}</span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/vol:opacity-100">
+                  {volIs24h ? "24h Volume" : "1h Volume"}
+                </span>
+              </div>
+              <div className="group/liq relative flex w-[88px] items-center justify-end gap-1.5 tabular-nums">
+                <span className="cursor-default text-xs font-medium text-[#8A9099]">
+                  L
+                </span>
+                <span className="font-semibold text-white">${liq}</span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 -translate-x-1/2 rounded-md border border-[#2A2C33] bg-[#1B1C21] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[#C7CBD1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/liq:opacity-100">
+                  Liquidity
+                </span>
+              </div>
             </div>
 
             <button
@@ -3683,7 +4143,7 @@ const TokenListItem = React.memo(
                 e.stopPropagation();
                 onQuickBuy ? onQuickBuy(token) : onSelect(token);
               }}
-              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC940] bg-gradient-to-r from-[#243E33] to-[#1a2e26] px-2.5 py-2 text-xs font-bold text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC960] hover:from-[#2a4d3d] hover:to-[#1f3a2f] sm:px-3"
+              className="relative z-20 flex flex-shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[#7FFFC94D] bg-[#7FFFC914] px-2.5 py-2 text-xs font-bold whitespace-nowrap text-[#7FFFC9] transition-all duration-300 ease-out hover:border-[#7FFFC980] hover:bg-[#7FFFC924] sm:px-3"
               style={{ transformOrigin: "center", pointerEvents: "auto" }}
               title={onQuickBuy ? "Quick buy token" : "Select token"}
             >

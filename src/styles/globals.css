@@ -987,3 +987,20 @@ input[type="number"] {
   pointer-events: none;
   opacity: 0.5;
 }
+
+@keyframes watchlist-scroll {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+.watchlist-carousel-track {
+  animation: watchlist-scroll 60s linear infinite;
+  will-change: transform;
+}
+.watchlist-carousel-viewport:hover .watchlist-carousel-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .watchlist-carousel-track {
+    animation: none;
+  }
+}

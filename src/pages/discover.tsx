@@ -64,11 +64,11 @@ import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 
 import {
-  extractTokenImage,
   getResolvedTokenImage,
   resolveTokenImage,
   isMetadataUrl,
 } from "~/utils/images";
+import { preloadTrendingImages } from "~/utils/trendingPreload";
 import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import {
   broadcastTradeCompleted,
@@ -95,7 +95,6 @@ import {
 import { usePulseFromQueryCache } from "~/hooks/usePulseFromQueryCache";
 import { useDiscoverFilters } from "~/hooks/useDiscoverFilters";
 import DiscoverFilterModal from "~/components/DiscoverFilterModal";
-import { useImagePreloader } from "~/hooks/useImagePreloader";
 import {
   applyDiscoverFilters,
   mapProtocolToBackend,
@@ -451,7 +450,23 @@ export function DiscoverPageContent({
     }
     return "rank";
   });
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  // Must mirror the sortKey initializer above: every tab's default sort is descending
+  // EXCEPT Trending, whose default key is the backend-assigned rank where rank 1 is the
+  // best token — ascending. A hardcoded "desc" here rendered the Trending board REVERSED
+  // on first page load (backend #98 shown at the top until the user switched tabs, which
+  // restored "asc" via the per-tab snapshot map below).
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedTab = localStorage.getItem("discover_tab_v4");
+        // Anything other than Trending (or first visit, when nothing is saved)
+        // keeps the previous "desc" mount default.
+        if (savedTab && savedTab !== "trending") return "desc";
+      } catch {}
+    }
+    // Trending (the default tab) sorts by rank ascending.
+    return "asc";
+  });
 
   // Per-tab remembered UI state for the trending-data tabs (Trending, Top,
   // Gainers). Each tab opens to its own default and remembers user overrides
@@ -4736,8 +4751,13 @@ export function DiscoverPageContent({
     [processedXStocks],
   );
 
-  // Preload images for all tab data eagerly
-  const { preloadImages } = useImagePreloader();
+  // Preload images for all tab data eagerly. Uses the retaining preloader
+  // (same one Pulse + TrendingBackgroundLoader use): it derives the exact
+  // proxy URL TokenAvatar renders and keeps the decoded bitmap in the
+  // module-level LRU, so switching tabs paints avatars on the first frame.
+  // (The previous useImagePreloader hook warmed the HTTP cache only — its
+  // loaded Image objects weren't retained, so TokenAvatar still had to do a
+  // per-row round-trip before showing anything.)
   useEffect(() => {
     const allTabTokens = [
       ...((allTokens as any[]) || []),
@@ -4747,19 +4767,20 @@ export function DiscoverPageContent({
       ...((pumpPortalTokens as any[]) || []),
     ];
     if (allTabTokens.length === 0) return;
-    const imageSources = allTabTokens
-      .map((token: any) => extractTokenImage(token))
-      .filter(Boolean);
-    if (imageSources.length > 0) {
-      preloadImages(imageSources, { priority: true, timeout: 2000 });
-    }
+    // Above-the-fold slice gets fetchPriority=high (<link rel=preload>) so a
+    // cold direct landing on /discover paints the visible board first; the
+    // long tail warms at normal priority.
+    preloadTrendingImages(allTabTokens, { limit: 30, priority: "high" });
+    preloadTrendingImages(allTabTokens.slice(30), {
+      limit: 170,
+      maxConcurrent: 10,
+    });
   }, [
     allTokens,
     dexScreenerTokens,
     processedNewPairs,
     processedXStocks,
     pumpPortalTokens,
-    preloadImages,
   ]);
 
   const renderPrimaryTable = () => {

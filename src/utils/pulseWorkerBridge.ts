@@ -691,6 +691,13 @@ function handleFallbackMessage(channel: 'new' | 'final_stretch' | 'migrated', da
       handleTokenInfoUpdate(data.data || data);
       break;
 
+    // metrics_update: authoritative holder-analysis stats (mirrors the worker path).
+    // Without this case the fallback dropped these messages and badges stayed wrong.
+    case 'metrics_update':
+    case 'metricsUpdate':
+      handleMetricsUpdate(data.data || data);
+      break;
+
     default:
       // Try to infer from channel if no explicit type
       if (data.mint || data.address || data.mint_address) {
@@ -1123,7 +1130,6 @@ function handlePriceUpdate(updates: any[]) {
         const marketCapValue = keepIfPositive(getNum(update.market_cap_usd ?? update.marketCap ?? update.market_cap ?? update.marketCapUSD ?? update.fully_diluted_value), token.market_cap_usd);
         const liquidityValue = keepIfPositive(getNum(update.liquidity_usd ?? update.liquidity ?? update.liquidityUSD ?? update.total_liquidity_usd), token.liquidity_usd);
         const volumeValue = keepIfPositive(getNum(update.volume_24h ?? update.volume ?? update.volume24h), token.volume_24h);
-        const holderValue = keepIfPositive(getNum(update.holders ?? update.holder_count ?? update.total_holders), token.holders);
         const bondingValue = keepIfPositive(getNum(update.bonding_curve_progress ?? update.bondingCurveProgress ?? update.bonding_pct), token.bonding_curve_progress);
 
         // Create new array to trigger React re-render
@@ -1154,10 +1160,11 @@ function handlePriceUpdate(updates: any[]) {
           liquidity_usd: liquidityValue,
           total_liquidity_usd: liquidityValue, // Token type
 
-          // Holders (ALL format variants)
-          holders: holderValue,
-          holder_count: holderValue,
-          total_holders: holderValue, // Token type
+          // Holders: do NOT take from price_update — its holder_count is stale/wrong
+          // (mirrors the worker fix). Owned by holder_count_update + metrics_update.
+          holders: token.holders,
+          holder_count: token.holder_count,
+          total_holders: token.total_holders, // Token type
 
           // Transaction counts (use getNum to handle strings)
           total_buys_24h: keepIfPositive(getNum(update.total_buys_24h), token.total_buys_24h),
@@ -1196,17 +1203,19 @@ function handlePriceUpdate(updates: any[]) {
           total_buy_volume_24h: keepIfPositive(getNum(update.total_buy_volume_24h), token.total_buy_volume_24h),
           total_sell_volume_24h: keepIfPositive(getNum(update.total_sell_volume_24h), token.total_sell_volume_24h),
 
-          // Percentages
-          dev_percent: keepIfPositive(update.dev_percent ?? update.dev_held_percentage, token.dev_percent),
-          dev_held_percentage: keepIfPositive(update.dev_held_percentage ?? update.dev_percent, token.dev_held_percentage),
-          sniper_percent: keepIfPositive(update.sniper_percent ?? update.sniper_held_percentage, token.sniper_percent),
-          sniper_held_percentage: keepIfPositive(update.sniper_held_percentage ?? update.sniper_percent, token.sniper_held_percentage),
+          // Holder-analysis percentages: price_update carries WRONG values for these
+          // (mirrors the worker fix) — keep existing; metrics_update owns them.
+          dev_percent: token.dev_percent,
+          dev_held_percentage: token.dev_held_percentage,
+          insider_percent: token.insider_percent,
+          insider_held_percentage: token.insider_held_percentage,
+          bundle_percent: token.bundle_percent,
+          bundled_percentage: token.bundled_percentage,
+          bundler_held_percentage: token.bundler_held_percentage,
+          // Sniper % now owned by metrics_update (accurate); don't let price clobber it.
+          sniper_percent: token.sniper_percent,
+          sniper_held_percentage: token.sniper_held_percentage,
           total_snipers: keepIfPositive(update.total_snipers, token.total_snipers),
-          insider_percent: keepIfPositive(update.insider_percent ?? update.insider_held_percentage, token.insider_percent),
-          insider_held_percentage: keepIfPositive(update.insider_held_percentage ?? update.insider_percent, token.insider_held_percentage),
-          bundle_percent: keepIfPositive(update.bundle_percent ?? update.bundled_percentage, token.bundle_percent),
-          bundled_percentage: keepIfPositive(update.bundled_percentage ?? update.bundle_percent, token.bundled_percentage),
-          bundler_held_percentage: keepIfPositive(update.bundler_held_percentage, token.bundler_held_percentage),
 
           // Bonding curve (ALL format variants)
           bondingCurveProgress: bondingValue,
@@ -1267,6 +1276,61 @@ function handleTokenInfoUpdate(update: any) {
       newData[key] = newArr;
       anyUpdated = true;
     }
+  }
+
+  if (anyUpdated) {
+    currentData = newData;
+  }
+}
+
+// metrics_update (fallback path): authoritative holder-analysis stats
+// (top10/dev/insider/bundle/holder_count) recomputed by the indexer. Mirrors the
+// worker's handleMetricsUpdate. keepIfPositive so an early/partial zero can't blank
+// a resolved value. Sniper is now in this payload too (backend added it); price no
+// longer writes it.
+function handleMetricsUpdate(update: any) {
+  const mint = update.mint_address || update.mint || update.address;
+  if (!mint) return;
+
+  const num = (val: any) => {
+    const n = Number(val);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const keepPos = (n: number, existing: any) => (n > 0 ? n : existing);
+
+  const top10 = num(update.top10_holders_pct ?? update.top_10_holders_percent);
+  const dev = num(update.dev_percent ?? update.dev_held_percentage);
+  const insider = num(update.insider_percent ?? update.insider_held_percentage);
+  const bundle = num(update.bundle_percent ?? update.bundled_percentage);
+  const sniper = num(update.sniper_percent ?? update.sniper_held_percentage);
+  const holderCount = num(update.holder_count);
+
+  const newData = { ...currentData };
+  let anyUpdated = false;
+
+  for (const key of ['newTokens', 'finalStretchTokens', 'migratedTokens'] as const) {
+    const arr = newData[key];
+    const idx = arr.findIndex(t => t.mint === mint);
+    if (idx === -1) continue;
+    const token = arr[idx];
+    const newArr = [...arr];
+    newArr[idx] = {
+      ...token,
+      top10_holders_pct: keepPos(top10, token.top10_holders_pct),
+      dev_percent: keepPos(dev, token.dev_percent),
+      dev_held_percentage: keepPos(dev, token.dev_held_percentage),
+      insider_percent: keepPos(insider, token.insider_percent),
+      insider_held_percentage: keepPos(insider, token.insider_held_percentage),
+      bundle_percent: keepPos(bundle, token.bundle_percent),
+      bundled_percentage: keepPos(bundle, token.bundled_percentage),
+      bundler_held_percentage: keepPos(bundle, token.bundler_held_percentage),
+      sniper_percent: keepPos(sniper, token.sniper_percent),
+      sniper_held_percentage: keepPos(sniper, token.sniper_held_percentage),
+      holder_count: keepPos(holderCount, token.holder_count),
+      holders: keepPos(holderCount, token.holders),
+    };
+    newData[key] = newArr;
+    anyUpdated = true;
   }
 
   if (anyUpdated) {

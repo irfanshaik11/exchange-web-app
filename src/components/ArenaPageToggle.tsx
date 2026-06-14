@@ -16,7 +16,7 @@ interface ArenaPageToggleProps {
 
 export default function ArenaPageToggle({ activePage }: ArenaPageToggleProps) {
   const baseBtn =
-    "flex items-center gap-2 px-4 py-2 rounded-full transition-all cursor-pointer";
+    "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-full transition-all cursor-pointer whitespace-nowrap text-sm sm:text-base";
   const activeBtn =
     "bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-semibold";
   const inactiveBtn = "text-gray-400 hover:text-white";
@@ -28,7 +28,7 @@ export default function ArenaPageToggle({ activePage }: ArenaPageToggleProps) {
           <button
             className={`${baseBtn} ${activePage === "arena" ? activeBtn : inactiveBtn}`}
           >
-            <GiTrophy size={16} />
+            <GiTrophy size={16} className="hidden sm:block" />
             Airdrop Genesis
           </button>
         </Link>
@@ -36,7 +36,7 @@ export default function ArenaPageToggle({ activePage }: ArenaPageToggleProps) {
           <button
             className={`${baseBtn} ${activePage === "referrals" ? activeBtn : inactiveBtn}`}
           >
-            <FiUsers size={16} />
+            <FiUsers size={16} className="hidden sm:block" />
             Referrals
           </button>
         </Link>
@@ -44,7 +44,7 @@ export default function ArenaPageToggle({ activePage }: ArenaPageToggleProps) {
           <button
             className={`${baseBtn} ${activePage === "leaderboard" ? activeBtn : inactiveBtn}`}
           >
-            <FiBarChart2 size={16} />
+            <FiBarChart2 size={16} className="hidden sm:block" />
             Leaderboard
           </button>
         </Link>

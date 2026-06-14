@@ -624,6 +624,7 @@ export default function PortfolioPage() {
     previousBalances: `previousBalances_${user?.id || 'anonymous'}_${currentChain}`,
     cumulativeRealizedPnl: `cumulativeRealizedPnl_${user?.id || 'anonymous'}_${currentChain}`,
     initialNativeBalance: `initialNativeBalance_${user?.id || 'anonymous'}_${currentChain}`,
+    balanceHistory: `balanceHistory_${user?.id || 'anonymous'}_${currentChain}`,
   });
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
@@ -1497,12 +1498,11 @@ export default function PortfolioPage() {
 
     // Reset chain-scoped refs/state when switching chains to avoid cross-chain bleed
     initialNativeBalanceRef.current = null;
-    setBalanceHistory([]);
     previousBalancesRef.current = {};
     cumulativeRealizedPnlRef.current = 0;
 
     const storageKeys = getStorageKeys();
-    
+
     try {
       // Load previous balances from localStorage
       const savedBalances = localStorage.getItem(storageKeys.previousBalances);
@@ -1510,22 +1510,36 @@ export default function PortfolioPage() {
         previousBalancesRef.current = JSON.parse(savedBalances);
         isDev && console.log("📊 Loaded previous balances from localStorage:", previousBalancesRef.current);
       }
-      
+
       // Load cumulative realized PNL
       const savedCumulative = localStorage.getItem(storageKeys.cumulativeRealizedPnl);
       if (savedCumulative) {
         cumulativeRealizedPnlRef.current = parseFloat(savedCumulative) || 0;
         isDev && console.log("📊 Loaded cumulative realized PNL:", cumulativeRealizedPnlRef.current);
       }
-      
+
       // Load initial native balance
       const savedInitialBalance = localStorage.getItem(storageKeys.initialNativeBalance);
       if (savedInitialBalance) {
         initialNativeBalanceRef.current = parseFloat(savedInitialBalance);
         isDev && console.log("📊 Loaded initial native balance:", initialNativeBalanceRef.current, currentChain === "monad" ? "MON" : "SOL");
       }
+
+      // Load persisted balance history (per chain) so the 1d/7d/30d/Max chart has real data
+      const savedBalanceHistory = localStorage.getItem(storageKeys.balanceHistory);
+      if (savedBalanceHistory) {
+        const parsed = JSON.parse(savedBalanceHistory);
+        if (Array.isArray(parsed)) {
+          setBalanceHistory(parsed);
+        } else {
+          setBalanceHistory([]);
+        }
+      } else {
+        setBalanceHistory([]);
+      }
     } catch (error) {
       console.error("Error loading persisted data:", error);
+      setBalanceHistory([]);
     }
   }, [user?.id, currentChain]);
 
@@ -1559,8 +1573,18 @@ export default function PortfolioPage() {
     setActualBalanceChangePnlPercentage(0);
     setActualBalanceChangeNative(0);
     setActualBalanceChangeNativePercentage(0);
-    setBalanceHistory([]);
   }, [currentChain]);
+
+  // Persist balance history so the 1d/7d/30d/Max chart has real data across reloads
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storageKeys = getStorageKeys();
+      localStorage.setItem(storageKeys.balanceHistory, JSON.stringify(balanceHistory));
+    } catch (error) {
+      console.error("Error saving balance history:", error);
+    }
+  }, [balanceHistory, user?.id, currentChain]);
 
   // Update previous balances when actual balances come in - but ONLY if we don't have a saved value
   useEffect(() => {
@@ -2393,20 +2417,58 @@ export default function PortfolioPage() {
       // ROBUST ACTUAL BALANCE CHANGE PNL CALCULATION
       // Formula: Trading PNL = Current Balance - Initial Balance - (Deposits - Withdrawals)
       // This excludes external deposits/withdrawals to show pure trading performance
-      const currentNativeBalance = currentChain === 'monad' 
-        ? (chainBalances?.monad || 0)
-        : (solBalance || 0);
-      
+      // const currentNativeBalance = currentChain === 'monad' 
+      //   ? (chainBalances?.monad || 0)
+      //   : (solBalance || 0);
+      const currentNativeBalance = Number(chainBalance || 0);
       // Use correct price for the chain
       const nativePrice = currentChain === 'monad' ? (monPrice || 0.025) : contextSolPrice;
       
       // Initialize initial balance if not set (first time we see a balance) - per chain
+      // if (initialNativeBalanceRef.current === null && currentNativeBalance > 0) {
+      //     initialNativeBalanceRef.current = currentNativeBalance;
+
+      //     setBalanceHistory([
+      //       {
+      //         timestamp: Date.now(),
+      //         balance: currentNativeBalance,
+      //         balanceChange: 0,
+      //       },
+      //     ]);
+      //   initialNativeBalanceRef.current = currentNativeBalance;
+      //   const storageKeys = getStorageKeys();
+      //   try {
+      //     localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
+      //     isDev && console.log("📊 Initialized initial native balance:", currentNativeBalance, currentChain === "monad" ? "MON" : "SOL");
+      //   } catch (error) {
+      //     console.error("Error saving initial balance:", error);
+      //   }
+      // }
       if (initialNativeBalanceRef.current === null && currentNativeBalance > 0) {
         initialNativeBalanceRef.current = currentNativeBalance;
+
+        setBalanceHistory([
+          {
+            timestamp: Date.now(),
+            balance: currentNativeBalance,
+            balanceChange: 0,
+          },
+        ]);
+
         const storageKeys = getStorageKeys();
+
         try {
-          localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
-          isDev && console.log("📊 Initialized initial native balance:", currentNativeBalance, currentChain === "monad" ? "MON" : "SOL");
+          localStorage.setItem(
+            storageKeys.initialNativeBalance,
+            currentNativeBalance.toString()
+          );
+
+          isDev &&
+            console.log(
+              " Initialized initial native balance:",
+              currentNativeBalance,
+              currentChain === "monad" ? "MON" : "SOL"
+            );
         } catch (error) {
           console.error("Error saving initial balance:", error);
         }
@@ -2514,19 +2576,46 @@ export default function PortfolioPage() {
             }
             setActualBalanceChangeNativePercentage(nativePercentageChange);
 
-            // Update balance history for chart
-            setBalanceHistory((prev) => {
-              const newEntry = {
-                timestamp: Date.now(),
-                balance: currentNativeBalance,
-                balanceChange: tradingBalanceChange,
-              };
-              const updated = [...prev, newEntry];
-              // Keep last 100 data points
-              return updated.slice(-100);
-            });
+          //   // Update balance history for chart
+          //   setBalanceHistory((prev) => {
+          //     const newEntry = {
+          //       timestamp: Date.now(),
+          //       balance: currentNativeBalance,
+          //       balanceChange: tradingBalanceChange,
+          //     };
+          //     const updated = [...prev, newEntry];
+          //     // Keep last 100 data points
+          //     return updated.slice(-100);
+          //   });
             
-          })
+          // })
+        console.log("BALANCE DEBUG", {
+            chainBalance,
+            solBalance,
+            currentNativeBalance,
+            tradingBalanceChange,
+            initialBalance: initialNativeBalanceRef.current,
+          });
+        setBalanceHistory((prev) => {
+          const last = prev[prev.length - 1];
+
+          // Don't add duplicate points
+          if (
+            last &&
+            Math.abs(last.balance - currentNativeBalance) < 0.000001
+          ) {
+            return prev;
+          }
+
+          const newEntry = {
+            timestamp: Date.now(),
+            balance: currentNativeBalance,
+            balanceChange: tradingBalanceChange,
+          };
+
+          return [...prev, newEntry].slice(-100);
+        });
+        })
           .catch((error) => {
             console.error("Failed to fetch transaction history for PNL calculation:", error);
             // Fallback: calculate raw balance change (without deposits/withdrawals adjustment)
@@ -2834,6 +2923,44 @@ export default function PortfolioPage() {
   const selectedMonSet = useMemo(() => new Set(selectedMonWalletIds), [selectedMonWalletIds]);
   const isAllSolSelected = currentChain === "sol" && filteredWallets.length > 0 && selectedSolSet.size === filteredWallets.length;
   const isAllMonSelected = currentChain === "monad" && filteredWallets.length > 0 && selectedMonSet.size === filteredWallets.length;
+
+  const filteredBalanceHistory = useMemo(() => {
+  if (selectedTimeframe === "Max") return balanceHistory;
+
+  const now = Date.now();
+
+  const timeframeMs =
+    selectedTimeframe === "1d"
+      ? 24 * 60 * 60 * 1000
+      : selectedTimeframe === "7d"
+      ? 7 * 24 * 60 * 60 * 1000
+      : selectedTimeframe === "30d"
+      ? 30 * 24 * 60 * 60 * 1000
+      : Infinity;
+
+  return balanceHistory.filter(
+    (point) => now - point.timestamp <= timeframeMs
+  );
+}, [balanceHistory, selectedTimeframe]);
+
+  // Balance change stats for the selected timeframe (drives both the stat box and the chart)
+  const timeframeBalanceStats = useMemo(() => {
+    const currentNativeBalance = Number(chainBalance || 0);
+
+    if (filteredBalanceHistory.length === 0) {
+      return { nativeChange: 0, nativeChangePercent: 0, usdChange: 0, usdChangePercent: 0 };
+    }
+
+    const startBalance = filteredBalanceHistory[0]?.balance ?? currentNativeBalance;
+    const nativeChange = currentNativeBalance - startBalance;
+    const nativeChangePercent = startBalance > 0 ? (nativeChange / startBalance) * 100 : 0;
+
+    const startBalanceUsd = startBalance * nativePriceForDisplay;
+    const usdChange = nativeChange * nativePriceForDisplay;
+    const usdChangePercent = startBalanceUsd >= 1 ? (usdChange / startBalanceUsd) * 100 : 0;
+
+    return { nativeChange, nativeChangePercent, usdChange, usdChangePercent };
+  }, [filteredBalanceHistory, chainBalance, nativePriceForDisplay]);
 
   const handleRedistributeFunds = async (mode: "split" | "consolidate") => {
     if (!user?.bearerToken) {
@@ -3606,66 +3733,70 @@ export default function PortfolioPage() {
                       <div
                         className="text-xl sm:text-2xl font-semibold mb-2 tabular-nums"
                         style={{
-                          color: actualBalanceChangePnl >= 0 ? "#18c48c" : "#ef4444",
+                          color: timeframeBalanceStats.usdChange >= 0 ? "#18c48c" : "#ef4444",
                         }}
                       >
                         {sortByUSD && nativePriceForDisplay > 0 ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
-                            {formatSmartNumber(Math.abs(actualBalanceChangePnl) / (nativePriceForDisplay || 1))}
+                            {formatSmartNumber(Math.abs(timeframeBalanceStats.usdChange) / (nativePriceForDisplay || 1))}
                           </>
                         ) : (
-                          `${actualBalanceChangePnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(actualBalanceChangePnl))}`
+                          `${timeframeBalanceStats.usdChange >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(timeframeBalanceStats.usdChange))}`
                         )}
                       </div>
                       {/* Show native balance change (MON or SOL) */}
-                      <div 
+                      <div
                         className="text-sm mb-1 tabular-nums"
                         style={{
-                          color: actualBalanceChangeNative >= 0 ? "#18c48c" : "#ef4444",
+                          color: timeframeBalanceStats.nativeChange >= 0 ? "#18c48c" : "#ef4444",
                         }}
                       >
-                        {actualBalanceChangeNative >= 0 ? "+" : "-"}
-                        {formatSmartNumber(Math.abs(actualBalanceChangeNative))} {currentChain === 'monad' ? 'MON' : 'SOL'}
+                        {timeframeBalanceStats.nativeChange >= 0 ? "+" : "-"}
+                        {formatSmartNumber(Math.abs(timeframeBalanceStats.nativeChange))} {currentChain === 'monad' ? 'MON' : 'SOL'}
                       </div>
                       {/* Show native percentage change (clamped to ±999.99%) */}
-                      {actualBalanceChangeNativePercentage !== 0 && (() => {
-                        const clampedNativePct = Math.max(-999.99, Math.min(999.99, actualBalanceChangeNativePercentage));
-                        const isNativeClamped = Math.abs(actualBalanceChangeNativePercentage) > 999.99;
+                      {timeframeBalanceStats.nativeChangePercent !== 0 && (() => {
+                        const clampedNativePct = Math.max(-999.99, Math.min(999.99, timeframeBalanceStats.nativeChangePercent));
+                        const isNativeClamped = Math.abs(timeframeBalanceStats.nativeChangePercent) > 999.99;
                         return (
                           <div
                             className="text-sm mb-2 tabular-nums"
                             style={{
-                              color: actualBalanceChangeNativePercentage >= 0 ? "#18c48c" : "#ef4444",
+                              color: timeframeBalanceStats.nativeChangePercent >= 0 ? "#18c48c" : "#ef4444",
                             }}
                           >
                             {isNativeClamped
-                              ? (actualBalanceChangeNativePercentage > 0 ? ">+999.99%" : "<-999.99%")
+                              ? (timeframeBalanceStats.nativeChangePercent > 0 ? ">+999.99%" : "<-999.99%")
                               : `${clampedNativePct >= 0 ? "+" : ""}${formatSmallPrice(clampedNativePct)}%`
                             }
                           </div>
                         );
                       })()}
-                      {actualBalanceChangePnlPercentage !== 0 && (() => {
-                        const clampedUsdPct = Math.max(-999.99, Math.min(999.99, actualBalanceChangePnlPercentage));
-                        const isUsdClamped = Math.abs(actualBalanceChangePnlPercentage) > 999.99;
+                      {timeframeBalanceStats.usdChangePercent !== 0 && (() => {
+                        const clampedUsdPct = Math.max(-999.99, Math.min(999.99, timeframeBalanceStats.usdChangePercent));
+                        const isUsdClamped = Math.abs(timeframeBalanceStats.usdChangePercent) > 999.99;
                         return (
-                          <div className={`text-sm mb-3 tabular-nums ${actualBalanceChangePnlPercentage >= 0 ? 'text-[#18c48c]' : 'text-[#ef4444]'}`}>
+                          <div className={`text-sm mb-3 tabular-nums ${timeframeBalanceStats.usdChangePercent >= 0 ? 'text-[#18c48c]' : 'text-[#ef4444]'}`}>
                             {isUsdClamped
-                              ? (actualBalanceChangePnlPercentage > 0 ? ">+999.99% (USD)" : "<-999.99% (USD)")
+                              ? (timeframeBalanceStats.usdChangePercent > 0 ? ">+999.99% (USD)" : "<-999.99% (USD)")
                               : `${clampedUsdPct >= 0 ? "+" : ""}${formatSmallPrice(clampedUsdPct)}% (USD)`
                             }
                           </div>
                         );
                       })()}
                       {/* Interactive Chart */}
-                      {balanceHistory.length > 0 && (
+                      {filteredBalanceHistory.length > 0 && (
                         <div className="mt-2 h-32 sm:h-40 w-full">
-                          <BalanceChart 
-                            data={balanceHistory} 
-                            chain={currentChain}
-                            initialBalance={initialNativeBalanceRef.current || 0}
-                          />
+                         <BalanceChart 
+                          data={filteredBalanceHistory} 
+                          chain={currentChain}
+                          initialBalance={
+                            filteredBalanceHistory[0]?.balance ??
+                            initialNativeBalanceRef.current ??
+                            0
+                          }
+                        />
                         </div>
                       )}
                     </div>

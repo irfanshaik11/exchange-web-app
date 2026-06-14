@@ -55,7 +55,7 @@ function BadgeCard({ quest }: { quest: Quest }) {
           : 'bg-neutral-900/30 border-neutral-800/50'
       }`}
     >
-      <div className="flex items-center justify-between py-3 px-4 gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 px-4 gap-2 sm:gap-3">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Badge artwork or fallback icon */}
           <div className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center overflow-hidden border border-amber-500/40 bg-amber-500/10">
@@ -79,7 +79,7 @@ function BadgeCard({ quest }: { quest: Quest }) {
         </div>
 
         {!claimed && (
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0 pl-12 sm:pl-0">
             <input
               type="text"
               value={code}

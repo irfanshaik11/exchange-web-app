@@ -12,8 +12,14 @@
  *    so pages skip their loading state on mount.
  */
 
-import { useEffect } from "react";
-import useTrendingWebSocket from "~/hooks/useTrendingWebSocket";
+import { useEffect, useRef } from "react";
+import useTrendingWebSocket, {
+  type TrendingTimeframe,
+} from "~/hooks/useTrendingWebSocket";
+import {
+  preloadTrendingImages,
+  prefetchSparklines,
+} from "~/utils/trendingPreload";
 import useDexScreenerTrending from "~/hooks/useDexScreenerTrending";
 import usePumpPortalWebSocket from "~/hooks/usePumpPortalWebSocket";
 import {
@@ -32,13 +38,125 @@ import {
 
 // ─── Trending / Discover tabs ─────────────────────────────────────────────────
 
+// Background warm cadence. Trending WS pushes arrive every few seconds and
+// `tokens` gets a new identity on each, so both passes are throttled:
+//  - images every 10s (per-URL dedup makes repeats free, the throttle just
+//    avoids re-walking the top-50 on every push)
+//  - sparklines every 60s (these fire real OHLC fetches on cache misses;
+//    combined with the 5-min sparkline cache TTL this keeps background
+//    traffic to a few small same-origin requests per minute)
+const IMAGE_PRELOAD_INTERVAL_MS = 10 * 1000;
+const SPARKLINE_PREFETCH_INTERVAL_MS = 60 * 1000;
+
+// Timeframe board the user will land on when they open /discover — mirrors
+// discover.tsx's selectedTimeframe initializer (saved Top tab defaults to
+// 30m; Trending/Gainers default to 1h). Re-read on every prefetch cycle so a
+// mid-session tab switch warms the board they'll actually return to.
+function getLandingTimeframe(): TrendingTimeframe {
+  if (typeof window !== "undefined") {
+    try {
+      if (localStorage.getItem("discover_tab_v4") === "top") return "30m";
+    } catch {}
+  }
+  return "1h";
+}
+
+// Per-board warm size. Trending boards are curated to ~50 tokens, so 60
+// covers the WHOLE board — important because Gainers/Top re-sort the same
+// board (by % change / composite), so any row can be above the fold.
+const BOARD_WARM_LIMIT = 60;
+
 function TrendingWsPreloader() {
-  // One WS for all timeframes (1m/5m/30m/1h are delivered in a single snapshot).
-  useTrendingWebSocket({ timeframe: "1h", enabled: true });
-  // REST pre-fetch (instant from Redis) + live delta WS.
-  useDexScreenerTrending(true);
+  // One WS delivers all timeframes in a single snapshot; the hook's
+  // `timeframe` only selects which slice it returns. Subscribing to all four
+  // boards here lets us warm every board the Trending/Gainers/Top tabs can
+  // show (they all render this same feed, just different windows/sorts).
+  const { tokens: tokens1m } = useTrendingWebSocket({
+    timeframe: "1m",
+    enabled: true,
+  });
+  const { tokens: tokens5m } = useTrendingWebSocket({
+    timeframe: "5m",
+    enabled: true,
+  });
+  const { tokens: tokens30m } = useTrendingWebSocket({
+    timeframe: "30m",
+    enabled: true,
+  });
+  const { tokens: tokens1h } = useTrendingWebSocket({
+    timeframe: "1h",
+    enabled: true,
+  });
+  // REST pre-fetch (instant from Redis) + live delta WS. Also warmed below —
+  // the DEX Screener tab renders the same TokenAvatar + MiniSparkline rows.
+  const { tokens: dexScreenerTokens } = useDexScreenerTrending(true);
   // PumpPortal WS — tokens accumulate while the user is on other tabs.
   usePumpPortalWebSocket({ enabled: true });
+
+  // Warm avatars + sparkline OHLC for every trending-family board in the
+  // background, the same way Pulse pre-warms its images: by the time the
+  // user opens /discover (Trending / Gainers / Top / DEX Screener),
+  // TokenAvatar's retained-image fast-path and MiniSparkline's cache check
+  // both hit, so rows paint complete on the first frame instead of trickling
+  // in from per-row fetches (the "diagonal placeholder line" state).
+  const lastImagePreloadRef = useRef(0);
+  const lastSparklinePrefetchRef = useRef(0);
+  useEffect(() => {
+    const boards: Array<{
+      tf: TrendingTimeframe;
+      tokens: typeof tokens1h;
+    }> = [
+      { tf: "1m", tokens: tokens1m },
+      { tf: "5m", tokens: tokens5m },
+      { tf: "30m", tokens: tokens30m },
+      { tf: "1h", tokens: tokens1h },
+    ];
+    if (
+      boards.every((b) => b.tokens.length === 0) &&
+      dexScreenerTokens.length === 0
+    )
+      return;
+
+    const now = Date.now();
+    if (now - lastImagePreloadRef.current >= IMAGE_PRELOAD_INTERVAL_MS) {
+      lastImagePreloadRef.current = now;
+      for (const board of boards) {
+        preloadTrendingImages(board.tokens, { limit: BOARD_WARM_LIMIT });
+      }
+      preloadTrendingImages(dexScreenerTokens, { limit: BOARD_WARM_LIMIT });
+    }
+
+    if (
+      now - lastSparklinePrefetchRef.current >=
+      SPARKLINE_PREFETCH_INTERVAL_MS
+    ) {
+      lastSparklinePrefetchRef.current = now;
+      // Sequential sweep, landing board first, so the board the user will
+      // actually see warms before the rest. prefetchSparklines caps its own
+      // concurrency (4) and skips cached / in-flight / known-empty keys, so
+      // a full cold sweep is a bounded stream of small same-origin requests
+      // and steady-state cycles are nearly all cache hits.
+      const landingTf = getLandingTimeframe();
+      const ordered = [
+        ...boards.filter((b) => b.tf === landingTf),
+        ...boards.filter((b) => b.tf !== landingTf),
+      ];
+      void (async () => {
+        for (const board of ordered) {
+          await prefetchSparklines(board.tokens, board.tf, {
+            limit: BOARD_WARM_LIMIT,
+          }).catch(() => {});
+        }
+        // DEX Screener rows render with the same timeframe pills; warm the
+        // landing window for them too (primary endpoint only — un-indexed
+        // mints negative-cache and fall to the row's own fallback chain).
+        await prefetchSparklines(dexScreenerTokens, landingTf, {
+          limit: BOARD_WARM_LIMIT,
+        }).catch(() => {});
+      })();
+    }
+  }, [tokens1m, tokens5m, tokens30m, tokens1h, dexScreenerTokens]);
+
   return null;
 }
 

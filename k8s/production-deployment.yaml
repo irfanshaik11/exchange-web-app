@@ -25,6 +25,14 @@ spec:
               value: "https://backend.narrative.trade"
             - name: NEXT_PUBLIC_WEBSOCKET_URL
               value: "https://token-service.narrative.trade"
+            # Token service (Go) base URL. REQUIRED at runtime: server-side API routes
+            # (/api/token-service/*) read process.env at runtime, but NEXT_PUBLIC_* vars
+            # are only inlined into the client bundle at build. Without this the metadata
+            # proxy 500s and token names/images come back empty.
+            - name: NEXT_PUBLIC_GO_SERVICE_URL
+              value: "https://token-service.narrative.trade"
+            - name: NEXT_PUBLIC_TOKEN_SERVICE_URL
+              value: "https://token-service.narrative.trade"
             - name: NEXT_PUBLIC_IS_BACKEND_DEPLOYED
               value: "true"
             - name: NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID

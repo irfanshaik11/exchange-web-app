@@ -498,7 +498,7 @@ export default function ReferralsPage() {
               <main className="relative z-10 flex min-h-[80vh] flex-col items-center justify-center px-6">
                 <div className="text-center">
                   <GiMedal className="mx-auto mb-6 h-20 w-20 text-amber-400" />
-                  <h1 className="mb-4 text-5xl font-black tracking-tight text-white md:text-7xl">
+                  <h1 className="mb-4 text-3xl font-black tracking-tight text-white sm:text-5xl md:text-7xl">
                     REFERRALS
                   </h1>
                   <p className="mb-8 text-lg text-neutral-400">
@@ -577,7 +577,7 @@ export default function ReferralsPage() {
                   </div>
 
                   {/* Main title */}
-                  <h1 className="text-center text-5xl font-black tracking-tight text-white md:text-6xl">
+                  <h1 className="text-center text-3xl font-black tracking-tight text-white sm:text-5xl md:text-6xl">
                     REFERRALS
                   </h1>
 
@@ -605,18 +605,18 @@ export default function ReferralsPage() {
                   {/* Left: Username & Honors Progress */}
                   <div className="flex flex-1 flex-col gap-2 rounded-xl border border-white/[0.08] bg-white/[0.06] px-5 py-4 backdrop-blur-sm">
                     {/* Top row: Honors Badge + Username + Progress to next tier */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
                         {/* Honors badge */}
                         <img
                           src={`/ranks/degen-${Math.max(1, Math.min(4, honorsData.currentLevel))}.png`}
                           alt={`Honors ${honorsData.currentLevel}`}
-                          className="h-6 w-6 object-contain"
+                          className="h-6 w-6 flex-shrink-0 object-contain"
                         />
-                        <span className="text-sm font-semibold text-white">
+                        <span className="truncate text-sm font-semibold text-white">
                           {userName}
                         </span>
-                        <span className="text-xs font-medium text-amber-400/80">
+                        <span className="flex-shrink-0 whitespace-nowrap text-xs font-medium text-amber-400/80">
                           Honors{" "}
                           {
                             ["I", "II", "III", "IV"][
@@ -625,9 +625,9 @@ export default function ReferralsPage() {
                           }
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-shrink-0 items-center gap-1.5">
                         <FiUsers className="h-4 w-4 text-neutral-400" />
-                        <span className="text-sm font-medium text-neutral-300">
+                        <span className="whitespace-nowrap text-sm font-medium text-neutral-300">
                           {statsData.activeTradersCount} /{" "}
                           {honorsData.currentLevel < 4
                             ? honorsData.nextTierRequirement || 100
@@ -672,7 +672,7 @@ export default function ReferralsPage() {
                   </div>
 
                   {/* Right: Credits & SOL Earned */}
-                  <div className="flex min-w-[280px] flex-col justify-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.06] px-6 py-3.5 backdrop-blur-sm">
+                  <div className="flex flex-col justify-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.06] px-6 py-3.5 backdrop-blur-sm sm:min-w-[280px]">
                     {/* Credits earned row */}
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-neutral-400">
@@ -1583,7 +1583,7 @@ export default function ReferralsPage() {
                           {/* Unlocked: Show detailed rewards breakdown */}
                           <div className="space-y-4">
                             {/* Stats row - 3 columns */}
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-3 gap-2 sm:gap-3">
                               <div className="rounded-lg bg-neutral-900/50 p-3">
                                 <p className="mb-1 text-xs text-neutral-500">
                                   Total Earned

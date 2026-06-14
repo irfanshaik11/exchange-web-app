@@ -26,7 +26,7 @@ const config = {
   // Vercel ships sharp natively in its runtime; bundling would either fail on
   // the .node binary or duplicate it. The `/api/img/[hash]` route relies on
   // this for the on-demand WebP resize pipeline.
-  serverExternalPackages: ['sharp'],
+  serverExternalPackages: ['sharp', 'isows'],
   // Optimize package imports for faster loading
   experimental: {
     optimizePackageImports: ['react-icons', 'lucide-react'],
@@ -203,3 +203,5 @@ const config = {
 };
 
 export default config;
+
+// deploy trigger: 2026-06-12

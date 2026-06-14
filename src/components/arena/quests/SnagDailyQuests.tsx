@@ -45,16 +45,33 @@ const XLogo = () => (
 
 interface SnagDailyQuestsProps {
   quests: Quest[];
+  /**
+   * Whether the separate "Connect X Account" (SOCIAL_CONNECT_X) quest is already
+   * completed. If it is, the user's X account is linked, so the post quest skips
+   * the "Connect X" step and goes straight to Post → Verify — otherwise it can get
+   * stuck on "Connect X" when Snag's `twitterUser` metadata lags behind the linked
+   * account (the two are independent sources of truth).
+   */
+  connectXCompleted?: boolean;
   className?: string;
 }
 
-export default function SnagDailyQuests({ quests, className = '' }: SnagDailyQuestsProps) {
+export default function SnagDailyQuests({ quests, connectXCompleted = false, className = '' }: SnagDailyQuestsProps) {
   const connectSocial = useConnectSocial();
   const verifySocialQuest = useVerifySocialQuest();
   const claimQuest = useClaimQuest();
   const { data: socialStatus } = useSocialStatus();
 
-  const twitterConnected = !!socialStatus?.connections?.twitter;
+  // Local fallback for when the backend reports the X account is already linked
+  // (connect returns no oauthUrl) but Snag's `twitterUser` metadata is still stale —
+  // lets the quest advance to Post instead of dead-ending on "Connect X".
+  const [locallyConnected, setLocallyConnected] = useState(false);
+
+  // Treat the X account as connected if Snag reports a linked handle OR the
+  // "Connect X Account" quest is done — completing that quest requires a verified
+  // X link, so it's the authoritative signal even when Snag metadata is stale.
+  const twitterConnected =
+    !!socialStatus?.connections?.twitter || connectXCompleted || locallyConnected;
 
   const [postActionTaken, setPostActionTaken] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -65,6 +82,9 @@ export default function SnagDailyQuests({ quests, className = '' }: SnagDailyQue
     const result = await connectSocial.mutateAsync('twitter');
     if (result.oauthUrl) {
       window.location.href = result.oauthUrl; // returns with ?social_connected=twitter
+    } else if (result.connected) {
+      // Already linked — advance to the Post step rather than no-op on "Connect X".
+      setLocallyConnected(true);
     }
   }, [connectSocial]);
 
@@ -155,7 +175,7 @@ export default function SnagDailyQuests({ quests, className = '' }: SnagDailyQue
               : 'bg-neutral-900/30 border border-neutral-800/50'}
         `}
       >
-        <div className="relative flex items-center justify-between py-3 px-4 gap-3">
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 px-4 gap-2 sm:gap-3">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {isComplete ? (
               <div className="w-5 h-5 rounded-full border-2 border-emerald-500 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] flex items-center justify-center flex-shrink-0">
@@ -168,7 +188,7 @@ export default function SnagDailyQuests({ quests, className = '' }: SnagDailyQue
             )}
             <div className="flex-1 min-w-0">
               <span className="flex items-center gap-1.5">
-                <span className={`text-[14px] truncate ${isClaimed ? 'text-neutral-600 line-through' : 'text-white'}`}>
+                <span className={`text-[13px] sm:text-[14px] break-words sm:truncate min-w-0 ${isClaimed ? 'text-neutral-600 line-through' : 'text-white'}`}>
                   {postQuest.title}
                 </span>
                 {postQuest.description && (
@@ -182,7 +202,7 @@ export default function SnagDailyQuests({ quests, className = '' }: SnagDailyQue
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0 pl-8 sm:pl-0">
             <div className="flex items-center gap-1.5">
               <CreditsCoin className="w-4 h-4" />
               <span className={`font-bold text-sm ${isClaimed ? 'text-neutral-600' : isComplete ? 'text-emerald-400' : 'text-amber-400'}`}>

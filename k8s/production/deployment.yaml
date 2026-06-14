@@ -44,6 +44,16 @@ spec:
           value: "https://backend.narrative.trade"
         - name: NEXT_PUBLIC_WEBSOCKET_URL
           value: "https://token-service.narrative.trade"
+        # Token service (Go) base URL. REQUIRED at runtime: NEXT_PUBLIC_* vars are
+        # inlined into the CLIENT bundle at build, but server-side API routes (e.g.
+        # /api/token-service/token/[mint], /api/token-service/search) read process.env
+        # at RUNTIME. Without this the proxy returns 500 ("Token service URL not
+        # configured") and token names/images come back empty. Same Go service that
+        # serves the WebSocket above. Keep in sync with the value baked at build time.
+        - name: NEXT_PUBLIC_GO_SERVICE_URL
+          value: "https://token-service.narrative.trade"
+        - name: NEXT_PUBLIC_TOKEN_SERVICE_URL
+          value: "https://token-service.narrative.trade"
         - name: NEXT_PUBLIC_IS_BACKEND_DEPLOYED
           value: "true"
         - name: NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID

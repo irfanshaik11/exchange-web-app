@@ -30,6 +30,7 @@ import {
 } from "~/utils/api";
 import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
+import ExportWalletModal from "./ExportWalletModal";
 import {
   confirmOptimisticMarker,
   insertOptimisticMarker,
@@ -38,6 +39,7 @@ import {
 import { useCreditsSummary } from "~/hooks/useArena";
 import { useSolPrice } from "./SolPriceContext";
 import { useWatchlist } from "./WatchlistContext";
+import { WatchlistCarousel } from "./WatchlistCarousel";
 import { useQuickBuy } from "./QuickBuyContext";
 import { useSearch } from "./ui/SearchContext";
 import { formatSmartNumber, formatMarketCap } from "../utils/db";
@@ -712,6 +714,7 @@ export default function Header({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [showExportWalletModal, setShowExportWalletModal] = useState(false);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -1921,6 +1924,19 @@ export default function Header({
     };
   }, [mobileMenuOpen]);
 
+  // Auto-close the drawer once the viewport reaches lg, where the full nav is shown
+  // and the hamburger disappears — otherwise the body scroll-lock could stay stuck.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const handle = () => {
+      if (mql.matches) setMobileMenuOpen(false);
+    };
+    handle();
+    mql.addEventListener("change", handle);
+    return () => mql.removeEventListener("change", handle);
+  }, []);
+
   // Show Feature Updates modal only on first login
   // COMMENTED OUT: Disabled popout that shows "Enhanced Real-Time Data" on login
   // useEffect(() => {
@@ -1957,12 +1973,12 @@ export default function Header({
           className="flex max-w-full flex-nowrap items-center justify-between gap-1 px-2 py-2 md:px-4"
           style={{ backgroundColor: "transparent" }}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2 md:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2 md:gap-2 lg:gap-3">
             {/* Hamburger button */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg border transition-all duration-200 md:hidden"
+              className="flex h-10 min-h-[44px] w-10 min-w-[44px] flex-shrink-0 items-center justify-center rounded-lg border transition-all duration-200 lg:hidden"
               style={{
                 borderColor: AX.border,
                 color: AX.textSecondary,
@@ -2005,8 +2021,8 @@ export default function Header({
               </h3>
             </Link>
 
-            {/* Navigation container with arrows - hidden on small, visible from md (50% web app width) */}
-            <div className="relative hidden min-w-0 flex-1 items-center gap-0 overflow-hidden sm:gap-1 md:flex">
+            {/* Navigation container with arrows - hidden below lg; collapses into the hamburger drawer on smaller screens */}
+            <div className="relative hidden min-w-0 flex-1 items-center gap-0 overflow-hidden sm:gap-1 lg:flex">
               {/* Left arrow - hidden on very small screens to save space (user can swipe nav) */}
               {showLeftArrow && (
                 <button
@@ -2030,7 +2046,7 @@ export default function Header({
               {/* Navigation tabs - always visible with horizontal scroll */}
               <nav
                 ref={navScrollRef}
-                className="scrollbar-hide flex flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch] sm:gap-2 xl:gap-3"
+                className="scrollbar-hide flex flex-1 items-center gap-0.5 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch] lg:gap-1.5 xl:gap-3"
                 style={{
                   position: "relative",
                   zIndex: 1000,
@@ -2052,7 +2068,7 @@ export default function Header({
                       <Link
                         key={link.name}
                         href={chainAwareHref(link.href)}
-                        className={`relative flex min-h-[44px] flex-shrink-0 items-center gap-1.5 px-3 py-2 text-xs font-semibold whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
+                        className={`relative flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-semibold whitespace-nowrap xl:px-3.5 xl:text-sm`}
                         style={{
                           color: isActive ? "#0A0A0A" : AX.mint,
                           background: isActive
@@ -2093,7 +2109,7 @@ export default function Header({
                     <Link
                       key={link.name}
                       href={chainAwareHref(link.href)}
-                      className={`relative flex min-h-[44px] flex-shrink-0 items-center px-3 py-2 text-xs font-medium whitespace-nowrap sm:min-h-0 sm:px-3.5 sm:py-1.5 sm:text-sm`}
+                      className={`relative flex flex-shrink-0 items-center px-2 py-1.5 text-[13px] font-medium whitespace-nowrap xl:px-3 xl:text-sm`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
                         backgroundColor: isActive ? AX.mintGlow : "transparent",
@@ -2145,7 +2161,7 @@ export default function Header({
               )}
             </div>
           </div>
-          <div className="flex min-w-0 flex-shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-4">
+          <div className="flex min-w-0 flex-shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-3">
             {/* Morphing Arena Navigation - commented out, Arena now in main nav
             <MorphingArenaNav />
             */}
@@ -2392,10 +2408,10 @@ export default function Header({
                   </div>
                 )}
 
-                {/* Search button (desktop) - squarish pill; collapses to icon-only below lg */}
+                {/* Search button (desktop) - squarish pill; icon-only below xl, full label + "/" hint at xl+ */}
                 <button
                   onClick={() => openSearch()}
-                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-lg border px-2.5 transition-all duration-200 ease-out md:flex lg:px-3"
+                  className="hidden h-8 cursor-pointer items-center gap-2 rounded-lg border px-2.5 transition-all duration-200 ease-out md:flex xl:px-3"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -2413,11 +2429,11 @@ export default function Header({
                   }}
                 >
                   <FaSearch size={12} />
-                  <span className="hidden text-xs whitespace-nowrap lg:inline" style={{ color: AX.textMuted }}>
+                  <span className="hidden text-xs whitespace-nowrap xl:inline" style={{ color: AX.textMuted }}>
                     Search
                   </span>
-                  <span 
-                    className="ml-1.5 hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none lg:inline-block"
+                  <span
+                    className="ml-1.5 hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none xl:inline-block"
                     style={{
                       backgroundColor: AX.surface2,
                       color: AX.textMuted,
@@ -2454,6 +2470,26 @@ export default function Header({
                   <BlockchainSwitcher />
                 </div>
               </div>
+            )}
+
+            {/* Top-level Deposit Button */}
+            {user && !userLoading && (
+              <button
+                onClick={() => handleDepositClick()}
+                className="hidden h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-all duration-200 ease-out sm:flex"
+                style={{
+                  backgroundColor: AX.mint,
+                  color: "#000000",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.mintHover;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.mint;
+                }}
+              >
+                Deposit
+              </button>
             )}
 
             {/* Notifications Button */}
@@ -3052,6 +3088,43 @@ export default function Header({
                           Edit Username
                         </button>
 
+                        {/* Export Wallet Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            setShowExportWalletModal(true);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
+                          style={{
+                            color: AX.text,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                            />
+                          </svg>
+                          Export Wallet
+                        </button>
+
                         {/* Logout Button */}
                         <button
                           onClick={() => {
@@ -3179,290 +3252,7 @@ export default function Header({
             </div>
             END COMMENTED OUT: Active Positions icon */}
 
-              {/* Watchlist label button — opens watchlist modal */}
-              <button
-                className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1"
-                style={{ color: "#c5cdd8" }}
-                onClick={() => setWatchlistOpen(true)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(255, 255, 255, 0.06)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
-                <span className="text-xs font-medium">Watchlist</span>
-                <FaSortAmountDown size={10} style={{ color: "#8b94a5" }} />
-              </button>
-
-              {/* COMMENTED OUT: Watchlist Star icon — replaced with text label above
-            <div className="group relative">
-              <button
-                className="relative cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
-                style={{ color: AX.muted }}
-                onClick={() => setWatchlistOpen(true)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(24, 196, 140, 0.08)";
-                  e.currentTarget.style.color = AX.mint;
-                  e.currentTarget.style.boxShadow =
-                    "0 0 6px rgba(24, 196, 140, 0.25), 0 0 12px rgba(24, 196, 140, 0.12)";
-                  e.currentTarget.style.transform = "scale(1.05)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                  e.currentTarget.style.color = AX.muted;
-                  e.currentTarget.style.boxShadow = "none";
-                  e.currentTarget.style.transform = "scale(1)";
-                }}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-              </button>
-              <div
-                className="pointer-events-none absolute top-1/2 left-full z-50 ml-2 -translate-y-1/2 transform rounded px-2 py-1 text-sm font-medium whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                style={{
-                  backgroundColor: AX.surface,
-                  color: AX.text,
-                  border: `1px solid ${AX.border}`,
-                  boxShadow:
-                    "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-                }}
-              >
-                Watchlist
-                <div
-                  className="absolute top-1/2 right-full h-0 w-0 -translate-y-1/2 transform border-t-4 border-r-4 border-b-4 border-transparent"
-                  style={{ borderRightColor: AX.surface }}
-                ></div>
-              </div>
-            </div>
-            END COMMENTED OUT: Watchlist Star icon */}
-
-              {/* Divider before watchlist tokens - only show after hydration to prevent flicker */}
-              {isHydrated && watchlist.length > 0 && (
-                <div
-                  className="h-4 border-r"
-                  style={{ borderColor: "#262a35" }}
-                />
-              )}
-
-              {/* COMMENTED OUT: "All" dropdown — replaced by "Watchlist" label above
-            {isHydrated && watchlist.length > 0 && (
-              <div className="flex items-center">
-                <span className="text-xs font-medium" style={{ color: '#c5cdd8' }}>
-                  All
-                </span>
-                <FaChevronDown size={8} className="ml-1" style={{ color: '#8b94a5' }} />
-              </div>
-            )}
-            END COMMENTED OUT: "All" dropdown */}
-
-              {/* Watchlist Tokens Ticker - Scrollable Container (uses full available panel width) */}
-              {isHydrated && enrichedWatchlist.length > 0 && (
-                <div
-                  className="scrollbar-hide flex flex-1 items-center gap-3 overflow-x-auto pr-3 pl-1"
-                  style={{
-                    minWidth: 0, // Allow flex item to shrink below content size for proper scrolling
-                    scrollbarWidth: "none", // Firefox
-                    msOverflowStyle: "none", // IE/Edge
-                  }}
-                >
-                  {enrichedWatchlist.map((token, index) => {
-                    const tokenKey =
-                      token.pair_address || (token as any).mint || token.symbol;
-                    const tokenAddress =
-                      (token as any).mint || token.pair_address || "";
-                    const actualMint =
-                      (token as any).mint || token.pair_address || "";
-                    // Use helper function to get correctly mapped price and price change
-                    const { price, priceChange } =
-                      getWatchlistTokenPriceAndChange(token);
-                    const marketCap =
-                      (token as any).market_cap_usd ??
-                      (token as any).marketCapUSD ??
-                      (token as any).fully_diluted_value ??
-                      0;
-
-                    const rawImg = extractTokenImage(token as any);
-
-                    return (
-                      <div
-                        key={tokenKey}
-                        className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all duration-200 hover:bg-white/[0.07]"
-                        onMouseEnter={() => {
-                          // Prefetch OHLC + route + metadata + trades on hover
-                          const isMonadToken =
-                            actualMint.startsWith("0x") ||
-                            actualMint.startsWith("0X");
-                          // Build tradeUrl matching the onClick navigation exactly
-                          const hoverQueryParams = new URLSearchParams();
-                          if (token.name)
-                            hoverQueryParams.set("_name", token.name);
-                          if (token.symbol)
-                            hoverQueryParams.set("_symbol", token.symbol);
-                          if (price > 0)
-                            hoverQueryParams.set("_price", price.toString());
-                          if (
-                            token.market_cap_usd ||
-                            (token as any).fully_diluted_value
-                          ) {
-                            hoverQueryParams.set(
-                              "_mcap",
-                              (
-                                token.market_cap_usd ||
-                                (token as any).fully_diluted_value ||
-                                0
-                              ).toString(),
-                            );
-                          }
-                          const hoverTradeUrl = isMonadToken
-                            ? `/trade/monad/${tokenAddress}`
-                            : `/trade/${tokenAddress}`;
-                          preloadTradeChart(
-                            {
-                              mint: actualMint,
-                              pairAddress:
-                                token.pair_address || (token as any).mint,
-                              chain: isMonadToken ? "monad" : "sol",
-                              name: token.name,
-                              symbol: token.symbol,
-                              priceUsd: price,
-                              marketCapUsd:
-                                token.market_cap_usd ||
-                                (token as any).fully_diluted_value,
-                              image: rawImg || "",
-                              launchpadProtocol: (token as any)
-                                .launchpad_protocol,
-                            },
-                            { router, tradeUrl: hoverTradeUrl },
-                          );
-                        }}
-                        onClick={() => {
-                          if (tokenAddress) {
-                            // Check if it's a Monad token (starts with 0x)
-                            const isMonadToken =
-                              actualMint.startsWith("0x") ||
-                              actualMint.startsWith("0X");
-
-                            if (isMonadToken) {
-                              // Build Monad trade URL with query parameters
-                              const queryParams = new URLSearchParams();
-                              if (token.name)
-                                queryParams.set("_name", token.name);
-                              if (token.symbol)
-                                queryParams.set("_symbol", token.symbol);
-                              if (price > 0)
-                                queryParams.set("_price", price.toString());
-                              if (
-                                token.market_cap_usd ||
-                                (token as any).fully_diluted_value
-                              ) {
-                                queryParams.set(
-                                  "_mcap",
-                                  (
-                                    token.market_cap_usd ||
-                                    (token as any).fully_diluted_value ||
-                                    0
-                                  ).toString(),
-                                );
-                              }
-                              const imageUrl =
-                                extractTokenImage(token as any) || "";
-                              if (imageUrl) queryParams.set("_image", imageUrl);
-                              queryParams.set("_mint", tokenAddress);
-                              if ((token as any).launchpad_protocol)
-                                queryParams.set(
-                                  "_launchpad_protocol",
-                                  (token as any).launchpad_protocol,
-                                );
-                              queryParams.set("chain", "monad");
-
-                              const url = `/trade/monad/${tokenAddress}?${queryParams.toString()}`;
-                              router.push(url);
-                            } else {
-                              // For Solana tokens, include chain=sol query parameter
-                              router.push(`/trade/${tokenAddress}`);
-                            }
-                          }
-                        }}
-                      >
-                        {/* Token Image */}
-                        <FastImage
-                          src={rawImg ?? undefined}
-                          alt={token.symbol || ""}
-                          width={16}
-                          height={16}
-                          className="rounded-full ring-1 ring-white/10"
-                          symbol={token.symbol}
-                          name={token.name}
-                          showBubble={false}
-                          stableId={tokenAddress || undefined}
-                        />
-
-                        {/* Token Symbol */}
-                        <span
-                          className="text-xs font-semibold"
-                          style={{ color: "#d1d5db" }}
-                        >
-                          {token.symbol}
-                        </span>
-
-                        {/* Market Cap */}
-                        <span
-                          className="text-xs font-medium"
-                          style={{ color: "#a3e635" }}
-                        >
-                          ${formatMarketCap(marketCap)}
-                        </span>
-
-                        {/* COMMENTED OUT: Quick Buy + Unstar buttons — may re-enable later
-                  {isHovered && (
-                    <>
-                      <button
-                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all duration-150"
-                        style={{
-                          backgroundColor: 'rgba(133, 217, 159, 0.15)',
-                          color: '#85d99f',
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleWatchlistQuickBuy(token);
-                        }}
-                      >
-                        <HiLightningBolt size={10} />
-                        <span>{quickBuyAmount} {currentChain === 'monad' ? 'MON' : 'SOL'}</span>
-                      </button>
-
-                      <button
-                        className="p-0.5 transition-colors duration-150"
-                        style={{ color: '#f2c367' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFromWatchlist(tokenAddress);
-                        }}
-                        title="Remove from watchlist"
-                      >
-                        <FaStar size={12} />
-                      </button>
-                    </>
-                  )}
-                  END COMMENTED OUT: Quick Buy + Unstar buttons */}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <WatchlistCarousel />
             </div>
           </div>
         )}
@@ -3472,12 +3262,12 @@ export default function Header({
       {mobileMenuOpen && (
         <>
           <div
-            className="fixed inset-0 z-[10003] bg-black/60 transition-opacity duration-200 md:hidden"
+            className="fixed inset-0 z-[10003] bg-black/60 transition-opacity duration-200 lg:hidden"
             aria-hidden
             onClick={() => setMobileMenuOpen(false)}
           />
           <div
-            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#050608] shadow-2xl md:hidden"
+            className="fixed inset-y-0 left-0 z-[10004] flex w-[min(280px,85vw)] flex-col border-r bg-[#050608] shadow-2xl lg:hidden"
             style={{ borderColor: AX.border }}
             role="dialog"
             aria-modal="true"
@@ -3816,6 +3606,21 @@ export default function Header({
           }}
           updates={PLATFORM_UPDATES}
           storageKey={isFirstLogin ? "" : "header-updates-viewed"}
+        />
+      )}
+
+      {/* Export Wallet Modal */}
+      {showExportWalletModal && (
+        <ExportWalletModal
+          isOpen={showExportWalletModal}
+          onClose={() => setShowExportWalletModal(false)}
+          walletId={user?.walletId || undefined}
+          walletAddress={
+            walletList?.find((w: any) => w.isPrimary)?.solanaAddress?.trim() ||
+            primaryWalletAddresses?.solana ||
+            user?.publicKey ||
+            undefined
+          }
         />
       )}
 
