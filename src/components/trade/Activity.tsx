@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useResolvedTokenImages } from '~/hooks/useResolvedTokenImages';
 import type { Dispatch, SetStateAction } from 'react';
 import { formatSmartNumber, formatMarketCap, formatSmallPrice } from '~/utils/db';
 import type { TradeRow } from '~/utils/functions';
@@ -135,7 +136,24 @@ const Activity: React.FC<ActivityProps> = ({
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
   const { solPrice } = useSolPrice();
-  
+
+  // Resolve token avatars through the canonical pipeline (discards the dead
+  // speculative cdn.interstate.so URL, resolves the metadata URI to the real
+  // image, falls back to pump.fun/DexScreener, caches forever). Fixes the
+  // "letter tiles / no images" on the portfolio + wallet-scan activity feed.
+  const imageItems = useMemo(
+    () =>
+      (trades || [])
+        .filter((t) => t.tokenAddress)
+        .map((t) => ({
+          mint: t.tokenAddress as string,
+          raw: t.imageUrl || tokenMetadata[t.tokenAddress]?.imageUrl || null,
+          uri: tokenMetadata[t.tokenAddress]?.uri || null,
+        })),
+    [trades, tokenMetadata],
+  );
+  const resolvedImages = useResolvedTokenImages(imageItems);
+
   // Update current time every second to keep age labels fresh
   useEffect(() => {
     const interval = setInterval(() => {
@@ -672,7 +690,7 @@ const Activity: React.FC<ActivityProps> = ({
                           >
                             <div className="relative rounded-lg overflow-hidden w-10 h-10">
                               <FastImage
-                                src={metadata?.imageUrl || trade.imageUrl || pumpfunImages[trade.tokenAddress] || ''}
+                                src={resolvedImages[trade.tokenAddress] || (metadata?.imageUrl && !metadata.imageUrl.includes('cdn.interstate.so') ? metadata.imageUrl : '') || (trade.imageUrl && !trade.imageUrl.includes('cdn.interstate.so') ? trade.imageUrl : '') || pumpfunImages[trade.tokenAddress] || ''}
                                 alt={metadata?.name || metadata?.symbol || "Token"}
                                 symbol={metadata?.symbol}
                                 name={metadata?.name}

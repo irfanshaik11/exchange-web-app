@@ -13,6 +13,7 @@ import Image from 'next/image';
 import SellPopup from '../SellPopup';
 import { fetchChainTokenMetadata, fetchPumpfunImage, isPumpfunToken, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
+import { useResolvedTokenImages } from '~/hooks/useResolvedTokenImages';
 
 import PositionDetailModal from './PositionDetailModal';
 import toast from 'react-hot-toast';
@@ -162,6 +163,22 @@ const Positions: React.FC<PositionsProps> = ({
   });
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [pumpfunImages, setPumpfunImages] = useState<Record<string, string>>({}); // Fallback images from Pump.fun API
+
+  // Resolve token avatars via the canonical pipeline (discards the dead
+  // cdn.interstate.so speculative URL, resolves the metadata URI to the real
+  // image, registry fallback, caches forever) — fixes letter-tile positions.
+  const positionImageItems = useMemo(
+    () =>
+      (positions || [])
+        .filter((p) => p.tokenAddress)
+        .map((p) => ({
+          mint: p.tokenAddress,
+          raw: p.imageUrl || tokenMetadata[p.tokenAddress]?.imageUrl || null,
+          uri: tokenMetadata[p.tokenAddress]?.uri || null,
+        })),
+    [positions, tokenMetadata],
+  );
+  const resolvedImages = useResolvedTokenImages(positionImageItems);
 
   // Helper to get cached positions (used for ref initialization)
   const getCachedPositions = (): PositionRow[] => {
@@ -1663,7 +1680,7 @@ const Positions: React.FC<PositionsProps> = ({
               const isHidden = hiddenTokens.has(pos.tokenAddress);
               
               // Use position.imageUrl as fallback, then Pump.fun API fallback for pump tokens
-              const finalImageUrl = metadata?.imageUrl || sourcePosition.imageUrl || pumpfunImages[pos.tokenAddress] || '';
+              const finalImageUrl = resolvedImages[pos.tokenAddress] || (metadata?.imageUrl && !metadata.imageUrl.includes('cdn.interstate.so') ? metadata.imageUrl : '') || (sourcePosition.imageUrl && !sourcePosition.imageUrl.includes('cdn.interstate.so') ? sourcePosition.imageUrl : '') || pumpfunImages[pos.tokenAddress] || '';
               const tokenKey = getPositionKey(sourcePosition);
               const quickSellValue = quickSellInputs[tokenKey] ?? '100';
               const isSelling = sellingTokens.has(tokenKey);
