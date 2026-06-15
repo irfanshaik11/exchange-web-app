@@ -69,6 +69,28 @@ function formatAge(ms: number): string {
   return `${d}d`;
 }
 
+/**
+ * Normalize a token's created-at value to epoch milliseconds.
+ * The token service returns `created_at` as a Unix timestamp in SECONDS
+ * (e.g. 1766998376). Feeding that straight into `new Date(n)` treats it as
+ * milliseconds → lands ~20 days after 1970, so every token read as ~56y old
+ * ("20598d"). Numbers < 1e12 are seconds → ×1000; ≥1e12 are already ms; ISO
+ * strings parse directly. Returns 0 for missing/zero so callers fall back.
+ */
+function createdAtToMs(v: string | number | null | undefined): number {
+  if (v == null) return 0;
+  if (typeof v === "number") return v <= 0 ? 0 : v < 1e12 ? v * 1000 : v;
+  const trimmed = v.trim();
+  // Numeric string (incl. "0") → treat as epoch, NOT a date — new Date("0")
+  // would parse as year 2000.
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    return n <= 0 ? 0 : n < 1e12 ? n * 1000 : n;
+  }
+  const t = new Date(trimmed).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
 function formatUsdShort(n: number): string {
   const abs = Math.abs(n);
   if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -466,9 +488,8 @@ export default function MonitorPanel({
             token.buyUsd + token.sellUsd > 0
               ? token.buyUsd / (token.buyUsd + token.sellUsd)
               : 0.5;
-          const ageMs = meta?.createdAt
-            ? now - new Date(meta.createdAt as any).getTime()
-            : now - token.firstAt;
+          const createdMs = createdAtToMs(meta?.createdAt);
+          const ageMs = createdMs > 0 ? now - createdMs : now - token.firstAt;
 
           const marketCap = meta?.market_cap_usd ?? token.marketCapUsd ?? null;
           const liquidity = meta?.liquidity_usd ?? null;
