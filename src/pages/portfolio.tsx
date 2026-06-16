@@ -252,7 +252,7 @@ const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: '
 // SOL icon component for inline use (kept for backward compatibility)
 const SolIcon = () => <ChainIcon chain="sol" />;
 
-const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
+const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", "Transfers"];
 
 // Token metadata cache interface
 interface TokenMetadataCache extends UnifiedTokenMetadata {
@@ -559,7 +559,20 @@ export default function PortfolioPage() {
     } catch { /* ignore */ }
     return true;
   });
-  
+
+  interface WalletTransfer {
+    direction: "in" | "out";
+    counterparty: string;
+    mint: string;
+    decimals: number;
+    amount: number;
+    timestamp: string;
+    signature: string;
+    program: string;
+  }
+  const [transfers, setTransfers] = useState<WalletTransfer[]>([]);
+  const [loadingTransfers, setLoadingTransfers] = useState(false);
+
   // Load from cache when cache keys change (e.g., user or chain changes)
   useEffect(() => {
     if (!user?.id || typeof window === 'undefined') return;
@@ -1469,6 +1482,27 @@ export default function PortfolioPage() {
     }
     return primaryWalletAddresses?.solana || user?.publicKey || null;
   }, [currentChain, primaryWalletAddresses, user?.publicKey]);
+
+  // Fetch wallet transfers from interstate token API when Transfers tab is active
+  useEffect(() => {
+    const addr = primaryWalletAddresses?.solana || primarySolAddr;
+    if (!addr || currentChain !== "sol") return;
+    if (activeSpotTab !== 3) return;
+    let cancelled = false;
+    setLoadingTransfers(true);
+    fetch(`https://token.interstate.so/v1/wallet/${addr}/transfers`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) {
+          setTransfers(Array.isArray(data.transfers) ? data.transfers : []);
+          setLoadingTransfers(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoadingTransfers(false);
+      });
+    return () => { cancelled = true; };
+  }, [activeSpotTab, primaryWalletAddresses?.solana, primarySolAddr, currentChain]);
 
   // Build live prices from backend position data (currentPrice comes from Go token-service)
   const livePrices = useMemo(() => {
@@ -4095,6 +4129,8 @@ export default function PortfolioPage() {
                             return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
                           if (activeTab === 2)
                             return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
+                          if (activeTab === 3)
+                            return `${transfers.length} transfers`;
                           return "";
                         })()}
                       </div>
@@ -4268,6 +4304,84 @@ export default function PortfolioPage() {
                           isCacheValid={isCacheValid}
                           headerBgClass="bg-[#0c0e12]"
                         />
+                      </div>
+                    )}
+                  </div>
+                  {/* Transfers tab */}
+                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === 3 ? 'block' : 'none' }}>
+                    {!user?.id && !userLoading ? (
+                      <div className="py-8 text-center text-[#52525b] text-sm">
+                        Please log in to view your transfers.
+                      </div>
+                    ) : currentChain !== "sol" ? (
+                      <div className="py-8 text-center text-[#52525b] text-sm">
+                        Transfers are only available on Solana.
+                      </div>
+                    ) : (
+                      <div className="w-full">
+                        {/* Header row */}
+                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_80px] gap-2 px-4 py-2 border-b border-white/[0.06] bg-[#080a0d]/60 sticky top-0 z-10">
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Type</span>
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Amount</span>
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">From</span>
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">To</span>
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide text-right">Time</span>
+                        </div>
+                        {loadingTransfers ? (
+                          <div className="py-8 text-center text-[#52525b] text-sm">Loading...</div>
+                        ) : transfers.length === 0 ? (
+                          <div className="py-8 text-center text-[#52525b] text-sm">No transfers found.</div>
+                        ) : (
+                          transfers.map((t) => {
+                            const walletAddr = primaryWalletAddresses?.solana || primarySolAddr || "";
+                            const fromAddr = t.direction === "out" ? walletAddr : t.counterparty;
+                            const toAddr = t.direction === "in" ? walletAddr : t.counterparty;
+                            const shortAddr = (addr: string) =>
+                              addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : "—";
+                            const ts = new Date(t.timestamp);
+                            const timeStr = isNaN(ts.getTime())
+                              ? "—"
+                              : ts.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                            return (
+                              <div
+                                key={t.signature}
+                                className="grid grid-cols-[80px_1fr_1fr_1fr_80px] gap-2 px-4 py-2.5 border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors items-center"
+                              >
+                                <span className={`text-xs font-semibold ${t.direction === "in" ? "text-[#18c48c]" : "text-[#ef4444]"}`}>
+                                  {t.direction === "in" ? "Received" : "Sent"}
+                                </span>
+                                <span className="text-xs text-[#f4f4f5] font-medium">
+                                  {t.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                                  <span className="ml-1 text-[#71717a] text-[10px]">{t.mint.slice(0, 4)}…</span>
+                                </span>
+                                <a
+                                  href={`https://solscan.io/account/${fromAddr}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-[#71717a] hover:text-[#a1a1aa] font-mono transition-colors"
+                                >
+                                  {shortAddr(fromAddr)}
+                                </a>
+                                <a
+                                  href={`https://solscan.io/account/${toAddr}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-[#71717a] hover:text-[#a1a1aa] font-mono transition-colors"
+                                >
+                                  {shortAddr(toAddr)}
+                                </a>
+                                <a
+                                  href={`https://solscan.io/tx/${t.signature}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-[#52525b] hover:text-[#a1a1aa] transition-colors text-right"
+                                >
+                                  {timeStr}
+                                </a>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     )}
                   </div>
