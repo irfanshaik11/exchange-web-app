@@ -2647,15 +2647,15 @@ export default function TrackersPage() {
                         ) : (
                           <>
                             {/* HEADER BAR – JTX premium style */}
-                            <div className="flex justify-between gap-3 border-b border-white/[0.06] py-3.5 sm:items-center sm:gap-4 sm:py-4">
+                            <div className="flex min-w-0 flex-col gap-3 border-b border-white/[0.06] py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-4">
                               {/* Left: tabs + wallet count */}
-                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                              <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
                                 {/* Segmented control — one container, no per-tab
                                     borders. Active tab shows its signature color
                                     as a soft tinted fill + colored text; inactive
                                     tabs are neutral grey. Clean, no rainbow of
                                     outlines. */}
-                                <div className="inline-flex items-center gap-0.5 rounded-lg border border-white/[0.06] bg-[#08090c] p-0.5 sm:gap-1 sm:p-1">
+                                <div className="scrollbar-hide flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-white/[0.06] bg-[#08090c] p-0.5 sm:inline-flex sm:gap-1 sm:p-1">
                                   {TABS.map((tab, i) => {
                                     const c = TAB_COLORS[i] ?? "#18c48c";
                                     const active = activeTab === i;
@@ -2663,7 +2663,7 @@ export default function TrackersPage() {
                                       <button
                                         key={tab}
                                         onClick={() => setActiveTab(i)}
-                                        className="cursor-pointer rounded-md px-3 py-1.5 text-[10px] font-semibold whitespace-nowrap sm:px-4 sm:py-1.5 sm:text-xs"
+                                        className="shrink-0 cursor-pointer rounded-md px-3 py-1.5 text-[10px] font-semibold whitespace-nowrap sm:px-4 sm:py-1.5 sm:text-xs"
                                         style={{
                                           background: active ? `${c}24` : "transparent",
                                           color: active ? c : "#8b8b94",
@@ -2702,7 +2702,7 @@ export default function TrackersPage() {
                               </div>
 
                               {/* Right: action buttons - JTX style */}
-                              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+                              <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-2.5">
                                 {/* Quick-buy amount editor — sets the SOL used by
                                     every Quick Buy button in Live Trades / Monitor. */}
                                 {(activeTab === 1 || activeTab === 2) && (
