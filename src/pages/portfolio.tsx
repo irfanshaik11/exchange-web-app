@@ -4320,12 +4320,13 @@ export default function PortfolioPage() {
                     ) : (
                       <div className="w-full">
                         {/* Header row */}
-                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_80px] gap-2 px-4 py-2 border-b border-white/[0.06] bg-[#080a0d]/60 sticky top-0 z-10">
+                        <div className="grid grid-cols-[80px_1.1fr_1fr_1.3fr_88px_48px] gap-2 px-4 py-2 border-b border-white/[0.06] bg-[#080a0d]/60 sticky top-0 z-10">
                           <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Type</span>
                           <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Amount</span>
                           <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">From</span>
                           <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">To</span>
-                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide text-right">Time</span>
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Age</span>
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Explorer</span>
                         </div>
                         {loadingTransfers ? (
                           <div className="py-8 text-center text-[#52525b] text-sm">Loading...</div>
@@ -4334,49 +4335,100 @@ export default function PortfolioPage() {
                         ) : (
                           transfers.map((t) => {
                             const walletAddr = primaryWalletAddresses?.solana || primarySolAddr || "";
-                            const fromAddr = t.direction === "out" ? walletAddr : t.counterparty;
-                            const toAddr = t.direction === "in" ? walletAddr : t.counterparty;
+                            const isIn = t.direction === "in";
+                            const fromAddr = isIn ? t.counterparty : walletAddr;
+                            const toAddr = isIn ? walletAddr : t.counterparty;
                             const shortAddr = (addr: string) =>
                               addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : "—";
-                            const ts = new Date(t.timestamp);
-                            const timeStr = isNaN(ts.getTime())
-                              ? "—"
-                              : ts.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                            const tsMs = new Date(t.timestamp).getTime();
+                            const diffMs = Date.now() - tsMs;
+                            const diffMins = Math.floor(diffMs / 60000);
+                            const diffHours = Math.floor(diffMins / 60);
+                            const diffDays = Math.floor(diffHours / 24);
+                            const ageStr = isNaN(tsMs) ? "—"
+                              : diffDays > 0 ? `${diffDays}d`
+                              : diffHours > 0 ? `${diffHours}h`
+                              : diffMins > 0 ? `${diffMins}m`
+                              : "<1m";
+                            const typeColor = isIn ? "text-[#18c48c]" : "text-[#f43f5e]";
+                            const tokenMeta = tokenMetadataCache[t.mint];
+                            const tokenLogo = tokenMeta?.imageUrl;
+                            const formattedAmt = t.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+                            const ExternalLinkIcon = () => (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                              </svg>
+                            );
+                            const CopyIcon = () => (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            );
+                            const AddressCell = ({ addr, isWallet }: { addr: string; isWallet: boolean }) => (
+                              isWallet ? (
+                                <span className={`text-xs font-semibold ${typeColor}`}>Wallet</span>
+                              ) : (
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="text-xs text-[#71717a] font-mono truncate">{shortAddr(addr)}</span>
+                                  <button
+                                    onClick={() => navigator.clipboard.writeText(addr)}
+                                    className="text-[#52525b] hover:text-[#a1a1aa] transition-colors flex-shrink-0"
+                                  >
+                                    <CopyIcon />
+                                  </button>
+                                  <a
+                                    href={`https://solscan.io/account/${addr}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[#52525b] hover:text-[#a1a1aa] transition-colors flex-shrink-0"
+                                  >
+                                    <ExternalLinkIcon />
+                                  </a>
+                                </div>
+                              )
+                            );
                             return (
                               <div
                                 key={t.signature}
-                                className="grid grid-cols-[80px_1fr_1fr_1fr_80px] gap-2 px-4 py-2.5 border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors items-center"
+                                className="grid grid-cols-[80px_1.1fr_1fr_1.3fr_88px_48px] gap-2 px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors items-center"
                               >
-                                <span className={`text-xs font-semibold ${t.direction === "in" ? "text-[#18c48c]" : "text-[#ef4444]"}`}>
-                                  {t.direction === "in" ? "Received" : "Sent"}
-                                </span>
-                                <span className="text-xs text-[#f4f4f5] font-medium">
-                                  {t.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })}
-                                  <span className="ml-1 text-[#71717a] text-[10px]">{t.mint.slice(0, 4)}…</span>
-                                </span>
-                                <a
-                                  href={`https://solscan.io/account/${fromAddr}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-[#71717a] hover:text-[#a1a1aa] font-mono transition-colors"
-                                >
-                                  {shortAddr(fromAddr)}
-                                </a>
-                                <a
-                                  href={`https://solscan.io/account/${toAddr}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-[#71717a] hover:text-[#a1a1aa] font-mono transition-colors"
-                                >
-                                  {shortAddr(toAddr)}
-                                </a>
+                                {/* Type */}
+                                <div className={`flex items-center gap-1 text-xs font-semibold ${typeColor}`}>
+                                  <span>{isIn ? "↓" : "↑"}</span>
+                                  <span>{isIn ? "In" : "Out"}</span>
+                                </div>
+                                {/* Amount */}
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {tokenLogo ? (
+                                    <img src={tokenLogo} alt="" className="w-4 h-4 rounded-full flex-shrink-0" />
+                                  ) : (
+                                    <div className="w-4 h-4 rounded-full bg-white/[0.08] flex-shrink-0" />
+                                  )}
+                                  <span className={`text-xs font-semibold ${typeColor} truncate`}>
+                                    {isIn ? "+" : "-"}{formattedAmt}
+                                  </span>
+                                </div>
+                                {/* From */}
+                                <AddressCell addr={fromAddr} isWallet={fromAddr === walletAddr} />
+                                {/* To */}
+                                <AddressCell addr={toAddr} isWallet={toAddr === walletAddr} />
+                                {/* Age */}
+                                <span className="text-xs text-[#71717a]">{ageStr}</span>
+                                {/* Explorer */}
                                 <a
                                   href={`https://solscan.io/tx/${t.signature}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-[10px] text-[#52525b] hover:text-[#a1a1aa] transition-colors text-right"
+                                  className="text-[#52525b] hover:text-[#a1a1aa] transition-colors"
                                 >
-                                  {timeStr}
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <line x1="10" y1="14" x2="21" y2="3" />
+                                  </svg>
                                 </a>
                               </div>
                             );
