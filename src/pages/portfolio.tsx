@@ -253,6 +253,18 @@ const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: '
 const SolIcon = () => <ChainIcon chain="sol" />;
 
 const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", "Transfers"];
+const TRANSFERS_TAB = spotTabs.indexOf("Transfers");
+
+interface WalletTransfer {
+  direction: "in" | "out";
+  counterparty: string;
+  mint: string;
+  decimals: number;
+  amount: number;
+  timestamp: string;
+  signature: string;
+  program: string;
+}
 
 // Token metadata cache interface
 interface TokenMetadataCache extends UnifiedTokenMetadata {
@@ -560,18 +572,9 @@ export default function PortfolioPage() {
     return true;
   });
 
-  interface WalletTransfer {
-    direction: "in" | "out";
-    counterparty: string;
-    mint: string;
-    decimals: number;
-    amount: number;
-    timestamp: string;
-    signature: string;
-    program: string;
-  }
   const [transfers, setTransfers] = useState<WalletTransfer[]>([]);
   const [loadingTransfers, setLoadingTransfers] = useState(false);
+  const [transferError, setTransferError] = useState(false);
 
   // Load from cache when cache keys change (e.g., user or chain changes)
   useEffect(() => {
@@ -1483,23 +1486,26 @@ export default function PortfolioPage() {
     return primaryWalletAddresses?.solana || user?.publicKey || null;
   }, [currentChain, primaryWalletAddresses, user?.publicKey]);
 
-  // Fetch wallet transfers from interstate token API when Transfers tab is active
+  // Fetch wallet transfers from the Go service when Transfers tab is active
   useEffect(() => {
     const addr = primaryWalletAddresses?.solana || primarySolAddr;
     if (!addr || currentChain !== "sol") return;
-    if (activeSpotTab !== 3) return;
+    if (activeSpotTab !== TRANSFERS_TAB) return;
+    const baseUrl = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(/\/$/, "");
+    if (!baseUrl) { setLoadingTransfers(false); return; }
     let cancelled = false;
     setLoadingTransfers(true);
-    fetch(`https://token.interstate.so/v1/wallet/${addr}/transfers`)
-      .then((r) => r.json())
+    setTransferError(false);
+    fetch(`${baseUrl}/v1/wallet/${addr}/transfers`)
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((data) => {
         if (!cancelled) {
-          setTransfers(Array.isArray(data.transfers) ? data.transfers : []);
+          setTransfers(Array.isArray(data?.transfers) ? data.transfers : []);
           setLoadingTransfers(false);
         }
       })
       .catch(() => {
-        if (!cancelled) setLoadingTransfers(false);
+        if (!cancelled) { setTransferError(true); setLoadingTransfers(false); }
       });
     return () => { cancelled = true; };
   }, [activeSpotTab, primaryWalletAddresses?.solana, primarySolAddr, currentChain]);
@@ -4308,7 +4314,7 @@ export default function PortfolioPage() {
                     )}
                   </div>
                   {/* Transfers tab */}
-                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === 3 ? 'block' : 'none' }}>
+                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === TRANSFERS_TAB ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your transfers.
@@ -4330,6 +4336,8 @@ export default function PortfolioPage() {
                         </div>
                         {loadingTransfers ? (
                           <div className="py-8 text-center text-[#52525b] text-sm">Loading...</div>
+                        ) : transferError ? (
+                          <div className="py-8 text-center text-[#52525b] text-sm">Couldn&apos;t load transfers — try again.</div>
                         ) : transfers.length === 0 ? (
                           <div className="py-8 text-center text-[#52525b] text-sm">No transfers found.</div>
                         ) : (
@@ -4340,7 +4348,7 @@ export default function PortfolioPage() {
                             const toAddr = isIn ? walletAddr : t.counterparty;
                             const shortAddr = (addr: string) =>
                               addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : "—";
-                            const tsMs = new Date(t.timestamp).getTime();
+                            const tsMs = t.timestamp ? new Date(t.timestamp).getTime() : NaN;
                             const diffMs = Date.now() - tsMs;
                             const diffMins = Math.floor(diffMs / 60000);
                             const diffHours = Math.floor(diffMins / 60);
@@ -4353,7 +4361,8 @@ export default function PortfolioPage() {
                             const typeColor = isIn ? "text-[#18c48c]" : "text-[#f43f5e]";
                             const tokenMeta = tokenMetadataCache[t.mint];
                             const tokenLogo = tokenMeta?.imageUrl;
-                            const formattedAmt = t.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+                            const amt = Number(t.amount);
+                            const formattedAmt = Number.isFinite(amt) ? amt.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—";
                             const ExternalLinkIcon = () => (
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
