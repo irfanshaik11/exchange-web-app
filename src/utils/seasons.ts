@@ -33,19 +33,19 @@ export const SEASONS: readonly Season[] = [
     key: "SEASON1",
     label: "Season 1",
     start: new Date(Date.UTC(2026, 3, 30)),
-    end: new Date(Date.UTC(2026, 5, 30)),
+    end: new Date(Date.UTC(2099, 11, 31)),
   },
   {
     key: "SEASON2",
     label: "Season 2",
-    start: new Date(Date.UTC(2026, 5, 30)),
-    end: new Date(Date.UTC(2026, 7, 31)),
+    start: new Date(Date.UTC(2099, 11, 31)),
+    end: new Date(Date.UTC(2100, 1, 28)),
   },
   {
     key: "SEASON3",
     label: "Season 3",
-    start: new Date(Date.UTC(2026, 7, 31)),
-    end: new Date(Date.UTC(2026, 9, 31)),
+    start: new Date(Date.UTC(2100, 1, 28)),
+    end: new Date(Date.UTC(2100, 3, 30)),
   },
 ] as const;
 
