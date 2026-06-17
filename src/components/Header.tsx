@@ -78,6 +78,7 @@ import {
   transformToastToError,
 } from "~/utils/createSolanaToastHandler";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
+import type { Wallet } from "~/utils/functions";
 
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
@@ -218,6 +219,10 @@ const PolygonSwapModal = dynamic(
 );
 
 const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
+  ssr: false,
+});
+
+const WalletScanPanel = dynamic(() => import("./WalletScanPanel"), {
   ssr: false,
 });
 
@@ -709,6 +714,7 @@ export default function Header({
   >("deposit");
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [scanWallet, setScanWallet] = useState<Wallet | null>(null);
   const { isOpen: searchModalOpen, openSearch, closeSearch } = useSearch();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -3480,6 +3486,10 @@ export default function Header({
         onClose={() => closeSearch()}
         selectedTimeframe={selectedTimeframe}
         chain={currentChain}
+        onScanWallet={(address) => {
+          closeSearch();
+          setScanWallet({ address, name: "", createdAt: Date.now() });
+        }}
         onSubmit={(q) => {
           const trimmed = q.trim();
           // If it's likely a token address navigate directly to trade page
@@ -3597,6 +3607,12 @@ export default function Header({
           }
         }}
       />
+      {scanWallet && (
+        <WalletScanPanel
+          wallet={scanWallet}
+          onClose={() => setScanWallet(null)}
+        />
+      )}
       {/* Updates Modal */}
       {showUpdatesModal && (
         <UpdatesModal
