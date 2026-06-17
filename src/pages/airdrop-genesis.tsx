@@ -22,7 +22,6 @@ import SnagDailyQuests, { SNAG_DAILY_QUEST_IDS } from '~/components/arena/quests
 import BadgeQuests, { BADGE_QUEST_IDS } from '~/components/arena/quests/BadgeQuests';
 import KeyTweetsSection from '~/components/arena/quests/KeyTweetsSection';
 import SeasonRoadmap from '~/components/arena/season/SeasonRoadmap';
-import SeasonCountdownBanner from '~/components/arena/season/SeasonCountdownBanner';
 import ArenaInfoTooltip from '~/components/arena/common/ArenaInfoTooltip';
 // claimAllQuests direct import removed — replaced by useClaimAllQuests hook.
 import { useQueryClient } from '@tanstack/react-query';
@@ -805,9 +804,6 @@ export default function ArenaPage() {
                 <div className="w-2 h-2 rounded-full bg-yellow-500/30" />
               </div>
             </div>
-
-            {/* v2.0: Rollover countdown banner — only renders in last 14 days */}
-            <SeasonCountdownBanner />
 
             {/* v2.0: Season roadmap — primary way users learn there are 4 seasons */}
             <SeasonRoadmap />

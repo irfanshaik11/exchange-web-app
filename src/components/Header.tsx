@@ -93,7 +93,6 @@ import {
   FiUsers,
   FiGrid,
 } from "react-icons/fi";
-import { GiTrophy } from "react-icons/gi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import FastImage from "./FastImage";
@@ -1849,6 +1848,17 @@ export default function Header({
     };
   }, [checkScrollArrows]);
 
+  // Scroll the active nav item into view so it's never hidden behind the right arrow
+  useEffect(() => {
+    const nav = navScrollRef.current;
+    if (!nav) return;
+    const activeEl = nav.querySelector('[data-nav-active="true"]') as HTMLElement | null;
+    if (activeEl) {
+      activeEl.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'nearest' });
+      checkScrollArrows();
+    }
+  }, [router.pathname, checkScrollArrows]);
+
   // Update profile dropdown position when open (for portaled dropdown)
   const updateProfileDropdownPosition = useCallback(() => {
     if (!profileMenuRef.current) return;
@@ -2029,13 +2039,14 @@ export default function Header({
 
             {/* Navigation container with arrows - hidden below lg; collapses into the hamburger drawer on smaller screens */}
             <div className="relative hidden min-w-0 flex-1 items-center gap-0 overflow-hidden sm:gap-1 lg:flex">
-              {/* Left arrow - hidden on very small screens to save space (user can swipe nav) */}
-              {showLeftArrow && (
+              {/* Left arrow — always in the DOM so it never causes layout shift when it appears */}
                 <button
                   onClick={scrollLeft}
                   className="z-10 flex h-9 min-h-[44px] w-9 min-w-[44px] flex-shrink-0 items-center justify-center transition-all duration-300 ease-out sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0"
                   style={{
                     color: AX.text,
+                    visibility: showLeftArrow ? 'visible' : 'hidden',
+                    pointerEvents: showLeftArrow ? 'auto' : 'none',
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = AX.mint;
@@ -2044,10 +2055,10 @@ export default function Header({
                     e.currentTarget.style.color = AX.text;
                   }}
                   aria-label="Scroll left"
+                  tabIndex={showLeftArrow ? 0 : -1}
                 >
                   <FaChevronLeft size={14} />
                 </button>
-              )}
 
               {/* Navigation tabs - always visible with horizontal scroll */}
               <nav
@@ -2115,6 +2126,7 @@ export default function Header({
                     <Link
                       key={link.name}
                       href={chainAwareHref(link.href)}
+                      data-nav-active={isActive ? "true" : undefined}
                       className={`relative flex flex-shrink-0 items-center px-2 py-1.5 text-[13px] font-medium whitespace-nowrap xl:px-3 xl:text-sm`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
@@ -2147,12 +2159,14 @@ export default function Header({
               </nav>
 
               {/* Right arrow */}
-              {showRightArrow && (
+              {/* Right arrow — always in the DOM so it never causes layout shift when it appears */}
                 <button
                   onClick={scrollRight}
                   className="z-10 flex h-9 min-h-[44px] w-9 min-w-[44px] flex-shrink-0 items-center justify-center transition-all duration-300 ease-out sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0"
                   style={{
                     color: AX.text,
+                    visibility: showRightArrow ? 'visible' : 'hidden',
+                    pointerEvents: showRightArrow ? 'auto' : 'none',
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = AX.mint;
@@ -2161,10 +2175,10 @@ export default function Header({
                     e.currentTarget.style.color = AX.text;
                   }}
                   aria-label="Scroll right"
+                  tabIndex={showRightArrow ? 0 : -1}
                 >
                   <FaChevronRight size={14} />
                 </button>
-              )}
             </div>
           </div>
           <div className="flex min-w-0 flex-shrink-0 flex-nowrap items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-3">

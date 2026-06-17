@@ -29,7 +29,18 @@ const config = {
   serverExternalPackages: ['sharp', 'isows'],
   // Optimize package imports for faster loading
   experimental: {
-    optimizePackageImports: ['react-icons', 'lucide-react'],
+    optimizePackageImports: [
+      // List every react-icons sub-package used in the codebase so Next.js
+      // rewrites barrel imports to per-icon direct imports (e.g. react-icons/fa/FaStar).
+      // Listing the root 'react-icons' package does nothing for sub-paths.
+      'react-icons/ai', 'react-icons/bi', 'react-icons/bs',
+      'react-icons/fa', 'react-icons/fa6', 'react-icons/fi',
+      'react-icons/gi', 'react-icons/hi', 'react-icons/hi2',
+      'react-icons/io', 'react-icons/io5', 'react-icons/lu',
+      'react-icons/pi', 'react-icons/ri', 'react-icons/si',
+      'react-icons/tb', 'react-icons/tfi',
+      'lucide-react',
+    ],
   },
   // Disable page transitions and loading indicators
   compiler: {
