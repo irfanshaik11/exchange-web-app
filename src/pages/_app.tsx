@@ -1,4 +1,5 @@
 import { type AppType } from "next/app";
+import { Inter, Orbitron, Geist } from 'next/font/google';
 import "~/styles/globals.css";
 import "~/components/insights/iridescent.css";
 import "@rainbow-me/rainbowkit/styles.css";
@@ -456,8 +457,26 @@ const config = getDefaultConfig({
   ssr: true, // Keep SSR enabled, but handle client-side rendering in wrapper
 });
 
-// Fallback font (Inter import removed for offline build)
-const inter: { className: string; variable?: string } = { className: '', variable: '--font-inter' };
+const orbitron = Orbitron({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  variable: '--font-orbitron',
+  display: 'fallback', // 3s swap window — won't cause a 15s LCP event if font loads slowly
+});
+
+const geist = Geist({
+  subsets: ['latin'],
+  weight: ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
+  variable: '--font-geist',
+  display: 'swap',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
+  variable: '--font-sans',
+  display: 'swap',
+});
 
 function TokenHandler() {
   const { refreshUser } = useUser();
@@ -901,7 +920,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           `
         }} />
       </Head>
-      <div className={inter.className}>
+      <div className={`${inter.variable} ${orbitron.variable} ${geist.variable}`}>
         {/* MobileBlocker disabled - MOBILE VIEW DISABLED
         <MobileBlocker>
         */}
