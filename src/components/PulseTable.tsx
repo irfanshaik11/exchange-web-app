@@ -3541,7 +3541,7 @@ function PulseTable({
   // duplicate state updates. Now we use directNewTokens/directFinalStretchTokens/
   // directMigratedTokens directly in the memoized tokens computation.
   // wsTokens is only used as initial cache fallback from localStorage.
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════��═════════════════════════════
 
   // THROTTLED localStorage writes - prevent blocking main thread on rapid updates
   // Only write every 5 seconds max to avoid performance degradation
@@ -8928,7 +8928,7 @@ function PulseTable({
                   <div style={{ paddingBottom: "4px" }}>
                     <Link
                       href={`/trade/${tokenMint}`}
-                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
+                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-2xl px-2 py-1.5 text-sm"
                       style={{
                         color: AX.text,
                         backgroundColor: "#13151b",
@@ -8993,7 +8993,7 @@ function PulseTable({
                           {waveTokens.has(idx) &&
                             waveTokens.size <= 5 &&
                             memoizedTokens.length <= 50 && (
-                              <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
+                              <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-2xl">
                                 <div
                                   className="absolute top-0 left-0 h-full w-full"
                                   style={{
