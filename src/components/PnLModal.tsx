@@ -42,7 +42,7 @@ interface PnLModalProps {
 export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
   const router = useRouter();
   const currentChain = chain || (router.query.chain as string) || 'sol';
-  const { user, solBalance, chainBalances, usdcBalance } = useUser();
+  const { user, solBalance, chainBalances, solValueUsd } = useUser();
   const { solPrice } = useSolPrice();
   const chainBalance = currentChain === 'monad' ? (chainBalances?.monad ?? 0) : solBalance;
   
@@ -379,7 +379,7 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
 
           // Calculate total value
           const totalRemainingValue = fetchedPositions.reduce((acc, pos) => acc + pos.remainingUsdValue, 0);
-          const totalUsdValue = (chainBalance || 0) * solPrice + (usdcBalance || 0) + totalRemainingValue;
+          const totalUsdValue = (chainBalance || 0) * solPrice + (solValueUsd || 0) + totalRemainingValue;
           setTotalValue(totalUsdValue);
 
           // Generate realized PNL chart data (same style as portfolio page)
@@ -429,7 +429,7 @@ export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
     if (isOpen) {
       fetchData();
     }
-  }, [user?.id, user?.bearerToken, isOpen, chainBalance, usdcBalance, solPrice, currentChain, isTradeOnCurrentChain]);
+  }, [user?.id, user?.bearerToken, isOpen, chainBalance, solValueUsd, solPrice, currentChain, isTradeOnCurrentChain]);
 
   if (!isOpen) return null;
 

@@ -30,6 +30,7 @@ import {
 } from "~/utils/api";
 import QRCode from "react-qr-code";
 import { useUser } from "./UserContext";
+import TokenHoldings from "./wallet/TokenHoldings";
 import ExportWalletModal from "./ExportWalletModal";
 import {
   confirmOptimisticMarker,
@@ -222,6 +223,9 @@ const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
 });
 
 const WalletScanPanel = dynamic(() => import("./WalletScanPanel"), {
+  ssr: false,
+});
+const ConvertPanel = dynamic(() => import("./ConvertPanel"), {
   ssr: false,
 });
 
@@ -430,6 +434,10 @@ export default function Header({
     user,
     loading: userLoading,
     solBalance,
+    solValueUsd,
+    tokenBalances,
+    tokenBalancesLoading,
+    refreshTokenBalances,
     refreshBalance,
     primaryWalletAddresses,
     chainBalances,
@@ -708,6 +716,7 @@ export default function Header({
   >(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [bridgeOpen, setBridgeOpen] = useState(false);
   const [depositInitialTab, setDepositInitialTab] = useState<
     "convert" | "deposit" | "buy" | "withdraw"
   >("deposit");
@@ -803,6 +812,36 @@ export default function Header({
   const [showPolygonQR, setShowPolygonQR] = useState(false);
   const [showPolygonWithdraw, setShowPolygonWithdraw] = useState(false);
   const [showPolygonSwap, setShowPolygonSwap] = useState(false);
+
+  // Receive disclosure (wallet dropdown): reveals Solana + EVM deposit addresses.
+  const [receiveOpen, setReceiveOpen] = useState(false);
+  const [copiedAddr, setCopiedAddr] = useState<"sol" | "evm" | null>(null);
+
+  // Resolve a wallet address for a chain key (explorer links in TokenHoldings).
+  // Note: backend token balances use chain key 'solana'/'base'; legacy FE balance paths use 'sol'/'monad'. Handle both.
+  const addressForChain = useCallback(
+    (chain: string): string | null => {
+      if (chain === "solana" || chain === "sol")
+        return primaryWalletAddresses?.solana ?? user?.publicKey ?? null;
+      // every supported EVM chain (base, monad, ...) shares the one 0x address
+      return primaryWalletAddresses?.ethereum ?? null;
+    },
+    [primaryWalletAddresses?.solana, primaryWalletAddresses?.ethereum, user?.publicKey],
+  );
+
+  const copyReceiveAddress = useCallback(
+    (kind: "sol" | "evm", address: string | null | undefined) => {
+      if (!address) return;
+      navigator.clipboard.writeText(address);
+      setCopiedAddr(kind);
+      toast.success("Address copied", {
+        icon: <BiCheck className="h-5 w-5 text-emerald-400" />,
+        style: { background: "#1a1b1f", color: "#f0f5f5", border: "1px solid #18c48c" },
+      });
+      setTimeout(() => setCopiedAddr(null), 2000);
+    },
+    [],
+  );
 
   // Copy Polygon address handler
   const handleCopyPolygonAddress = useCallback(() => {
@@ -2512,6 +2551,16 @@ export default function Header({
               </button>
             )}
 
+            {/* Top-level Convert (cross-chain bridge) Button */}
+            {user && !userLoading && (
+              <button
+                onClick={() => setBridgeOpen(true)}
+                className="hidden h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-[#2A2B33] px-3 text-sm font-medium text-[#f4f4f5] transition-all duration-200 ease-out hover:border-[#18c48c] hover:text-[#18c48c] sm:flex"
+              >
+                Convert
+              </button>
+            )}
+
             {/* Notifications Button */}
             <div ref={notificationsRef} className="relative flex-shrink-0">
               <button
@@ -2551,7 +2600,15 @@ export default function Header({
               >
                 {/* Combined Balance + Username Button */}
                 <button
-                  onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                  onClick={() => {
+                    const next = !profileMenuOpen;
+                    setProfileMenuOpen(next);
+                    // Surface fresh per-chain token balances when the menu opens.
+                    if (next) {
+                      setReceiveOpen(false);
+                      void refreshTokenBalances();
+                    }
+                  }}
                   className="group/account flex h-10 min-h-[44px] cursor-pointer flex-row items-center justify-center gap-1.5 rounded-lg border px-2.5 transition-all duration-200 ease-out sm:h-8 sm:min-h-0 sm:gap-2 sm:px-3"
                   style={{
                     borderColor: AX.border,
@@ -2797,9 +2854,20 @@ export default function Header({
                               Convert USDC.e / USDC
                             </button>
                           </>
+                        ) : currentChain === "sol" ? (
+                          /* Solana: token-first per-chain holdings (Net worth + SOL + USDC). */
+                          <TokenHoldings
+                            tokenBalances={tokenBalances}
+                            solBalance={solBalance}
+                            solValueUsd={solValueUsd}
+                            addressFor={addressForChain}
+                            loading={tokenBalancesLoading}
+                          />
                         ) : (
                           <>
-                            {/* Standard chain balance display */}
+                            {/* Non-Solana (e.g. Monad): native chain balance display.
+                                TokenHoldings net worth is SOL + USDC only, so it would
+                                show $0 for a Monad user — keep the real MON value here. */}
                             <div className="mb-3">
                               <div className="mb-1 text-xs text-neutral-400">
                                 Total Value
@@ -3029,6 +3097,88 @@ export default function Header({
                                 </svg>
                                 Buy
                               </button>
+                            </div>
+
+                            {/* Receive — discloses Solana + EVM deposit addresses */}
+                            <div className="rounded-lg border border-[#2A2B33] bg-[#0C0C0F]">
+                              <button
+                                onClick={() => setReceiveOpen((v) => !v)}
+                                aria-expanded={receiveOpen}
+                                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-[#f4f4f5] transition-colors hover:bg-white/[0.04]"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <svg
+                                    className="h-3.5 w-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14"
+                                    />
+                                  </svg>
+                                  Receive
+                                </span>
+                                <svg
+                                  className={`h-3.5 w-3.5 text-[#71717a] transition-transform duration-200 ${
+                                    receiveOpen ? "rotate-180" : ""
+                                  }`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 9l-7 7-7-7"
+                                  />
+                                </svg>
+                              </button>
+
+                              {receiveOpen && (
+                                <div className="space-y-1.5 px-2 pb-2">
+                                  {/* Solana address */}
+                                  <ReceiveAddressRow
+                                    label="Solana"
+                                    logo="/solana.png"
+                                    logoColor="#14F195"
+                                    address={
+                                      primaryWalletAddresses?.solana ??
+                                      user?.publicKey ??
+                                      null
+                                    }
+                                    explorerHref={(a) =>
+                                      `https://solscan.io/account/${a}`
+                                    }
+                                    explorerLabel="Solscan"
+                                    copied={copiedAddr === "sol"}
+                                    onCopy={(a) => copyReceiveAddress("sol", a)}
+                                  />
+
+                                  {/* EVM address (gated on the 0x address existing) */}
+                                  {primaryWalletAddresses?.ethereum && (
+                                    <ReceiveAddressRow
+                                      label="EVM"
+                                      chip="Base · Monad"
+                                      logo="https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
+                                      logoColor="#0052FF"
+                                      address={primaryWalletAddresses.ethereum}
+                                      explorerHref={(a) =>
+                                        `https://basescan.org/address/${a}`
+                                      }
+                                      explorerLabel="Basescan"
+                                      copied={copiedAddr === "evm"}
+                                      onCopy={(a) => copyReceiveAddress("evm", a)}
+                                    />
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
@@ -3473,6 +3623,8 @@ export default function Header({
         initialTab={depositInitialTab}
         selectedChain={currentChain}
       />
+
+      <ConvertPanel open={bridgeOpen} onClose={() => setBridgeOpen(false)} />
       <WithdrawModal
         isOpen={withdrawOpen}
         onClose={() => setWithdrawOpen(false)}
@@ -3681,3 +3833,109 @@ const resolveWatchlistChange1h = (token: any) =>
       token?.price_change_24h ??
       0,
   );
+
+/* ---- Receive disclosure: one deposit-address row (logo + truncated addr + copy + explorer) ---- */
+interface ReceiveAddressRowProps {
+  label: string;
+  logo: string;
+  logoColor: string;
+  address: string | null;
+  explorerHref: (address: string) => string;
+  explorerLabel: string;
+  copied: boolean;
+  onCopy: (address: string) => void;
+  chip?: string;
+}
+
+function ReceiveAddressRow({
+  label,
+  logo,
+  logoColor,
+  address,
+  explorerHref,
+  explorerLabel,
+  copied,
+  onCopy,
+  chip,
+}: ReceiveAddressRowProps) {
+  const short = address
+    ? `${address.slice(0, 6)}...${address.slice(-4)}`
+    : "Not connected";
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-[#15161A] px-2.5 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full"
+          style={{ backgroundColor: logoColor }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logo}
+            alt={label}
+            className="h-full w-full object-cover"
+            loading="eager"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
+            }}
+          />
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[12px] font-semibold text-[#f4f4f5]">
+              {label}
+            </span>
+            {chip ? (
+              <span
+                className="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide text-[#a1a1aa]"
+                style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+              >
+                {chip}
+              </span>
+            ) : null}
+          </div>
+          <span
+            className="block truncate font-mono text-[11px] text-[#71717a]"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            {short}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-shrink-0 items-center gap-0.5">
+        <button
+          onClick={() => address && onCopy(address)}
+          disabled={!address}
+          title={`Copy ${label} address`}
+          aria-label={`Copy ${label} address`}
+          className="rounded p-1.5 transition-colors hover:bg-white/10 disabled:opacity-40"
+        >
+          {copied ? (
+            <BiCheck className="h-4 w-4 text-emerald-400" />
+          ) : (
+            <BiCopy className="h-4 w-4 text-neutral-400 hover:text-white" />
+          )}
+        </button>
+        {address ? (
+          <a
+            href={explorerHref(address)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`View on ${explorerLabel}`}
+            aria-label={`View ${label} address on ${explorerLabel}`}
+            className="rounded p-1.5 text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+              <path
+                d="M7 17 17 7M9 7h8v8"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
