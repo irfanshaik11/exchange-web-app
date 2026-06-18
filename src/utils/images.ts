@@ -2,26 +2,28 @@ export function normalizeImageUrl(src?: string | null): string | null {
   if (!src) return null;
   try {
     // Fix common double-protocol or prefixed glitches (e.g., "imaghttps://", "https://https://")
-    src = src.replace(/imaghttps:\/\//gi, 'https://');
-    src = src.replace(/https?:\/\/https?:\/\//gi, match => match.includes('https') ? 'https://' : 'http://');
+    src = src.replace(/imaghttps:\/\//gi, "https://");
+    src = src.replace(/https?:\/\/https?:\/\//gi, (match) =>
+      match.includes("https") ? "https://" : "http://",
+    );
 
     // Pass through relative paths (starting with /)
-    if (src.startsWith('/')) {
+    if (src.startsWith("/")) {
       return src;
     }
 
     // Handle raw IPFS CIDs (Flap.SH stores images as raw CIDs)
     // IPFS CIDv0 starts with "Qm" (46 chars)
     // IPFS CIDv1 starts with "baf" (typically "bafy" for images)
-    if (src.startsWith('Qm') || src.startsWith('baf')) {
-      return `https://cloudflare-ipfs.com/ipfs/${src}`;
+    if (src.startsWith("Qm") || src.startsWith("baf")) {
+      return `https://ipfs.io/ipfs/${src}`;
     }
 
     // Unwrap Next.js image proxy URLs (e.g., pump.fun/_next/image?url=...)
     try {
       const u = new URL(src);
-      if (u.pathname.startsWith('/_next/image') && u.searchParams.get('url')) {
-        src = u.searchParams.get('url') || src;
+      if (u.pathname.startsWith("/_next/image") && u.searchParams.get("url")) {
+        src = u.searchParams.get("url") || src;
       }
     } catch {}
 
@@ -29,58 +31,91 @@ export function normalizeImageUrl(src?: string | null): string | null {
     // Extract the underlying IPFS URL from the 'src' or 'ipfs' query param
     try {
       const u = new URL(src);
-      if (u.hostname === 'images.pump.fun' || u.hostname.endsWith('.pump.fun')) {
+      if (
+        u.hostname === "images.pump.fun" ||
+        u.hostname.endsWith(".pump.fun")
+      ) {
         // First try 'src' param (contains full IPFS URL)
-        const srcParam = u.searchParams.get('src');
+        const srcParam = u.searchParams.get("src");
         if (srcParam) {
           const decodedSrc = decodeURIComponent(srcParam);
-          if (decodedSrc.includes('ipfs')) {
+          if (decodedSrc.includes("ipfs")) {
             src = decodedSrc;
           }
         }
         // Fall back to 'ipfs' param (contains just the CID)
         else {
-          const ipfsParam = u.searchParams.get('ipfs');
+          const ipfsParam = u.searchParams.get("ipfs");
           if (ipfsParam) {
-            src = `https://cloudflare-ipfs.com/ipfs/${ipfsParam}`;
+            src = `https://ipfs.io/ipfs/${ipfsParam}`;
           }
         }
       }
     } catch {}
 
     // Force https for http URLs (most hosts support TLS)
-    if (src.startsWith('http://')) {
-      src = src.replace(/^http:\/\//i, 'https://');
+    if (src.startsWith("http://")) {
+      src = src.replace(/^http:\/\//i, "https://");
     }
     // Handle ipfs://CID or ipfs://ipfs/CID
-    if (src.startsWith('ipfs://')) {
-      const cid = src.replace('ipfs://', '').replace(/^ipfs\//, '');
-      return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+    if (src.startsWith("ipfs://")) {
+      const cid = src.replace("ipfs://", "").replace(/^ipfs\//, "");
+      return `https://ipfs.io/ipfs/${cid}`;
     }
-    // Prefer Cloudflare IPFS over slower gateways
-    if (src.startsWith('https://ipfs.io/ipfs/')) {
-      return src.replace('https://ipfs.io/ipfs/', 'https://cloudflare-ipfs.com/ipfs/');
+    // Normalize known IPFS gateways to a single LIVE gateway (ipfs.io).
+    // cloudflare-ipfs.com was removed: Cloudflare permanently shut down its
+    // public IPFS gateway in 2024, so rewriting to it produced dead URLs. The
+    // /api/img proxy resolves the CID server-side across gateways from here.
+    if (src.startsWith("https://ipfs.io/ipfs/")) {
+      return src;
     }
-    if (src.startsWith('https://gateway.pinata.cloud/ipfs/')) {
-      return src.replace('https://gateway.pinata.cloud/ipfs/', 'https://cloudflare-ipfs.com/ipfs/');
+    if (src.startsWith("https://gateway.pinata.cloud/ipfs/")) {
+      return src.replace(
+        "https://gateway.pinata.cloud/ipfs/",
+        "https://ipfs.io/ipfs/",
+      );
     }
-    if (src.includes('mypinata.cloud/ipfs/')) {
-      return src.replace(/https?:\/\/[^/]*mypinata\.cloud\/ipfs\//, 'https://cloudflare-ipfs.com/ipfs/');
+    if (src.includes("mypinata.cloud/ipfs/")) {
+      return src.replace(
+        /https?:\/\/[^/]*mypinata\.cloud\/ipfs\//,
+        "https://ipfs.io/ipfs/",
+      );
     }
-    if (src.startsWith('https://nftstorage.link/ipfs/')) {
-      return src.replace('https://nftstorage.link/ipfs/', 'https://cloudflare-ipfs.com/ipfs/');
+    if (src.startsWith("https://nftstorage.link/ipfs/")) {
+      return src.replace(
+        "https://nftstorage.link/ipfs/",
+        "https://ipfs.io/ipfs/",
+      );
     }
-    if (src.startsWith('https://cf-ipfs.com/ipfs/')) {
-      return src.replace('https://cf-ipfs.com/ipfs/', 'https://cloudflare-ipfs.com/ipfs/');
+    // Cloudflare shut down its public IPFS gateway in 2024 — rewrite the dead
+    // host to a live gateway so surfaces that render normalizeImageUrl output
+    // directly (toasts, Pulse/Monad tables) don't get a broken image.
+    if (src.startsWith("https://cloudflare-ipfs.com/ipfs/")) {
+      return src.replace(
+        "https://cloudflare-ipfs.com/ipfs/",
+        "https://ipfs.io/ipfs/",
+      );
     }
-    if (src.startsWith('https://infura-ipfs.io/ipfs/')) {
-      return src.replace('https://infura-ipfs.io/ipfs/', 'https://cloudflare-ipfs.com/ipfs/');
+    if (src.startsWith("https://cf-ipfs.com/ipfs/")) {
+      return src.replace("https://cf-ipfs.com/ipfs/", "https://ipfs.io/ipfs/");
     }
-    if (src.startsWith('https://ipfs.infura.io/ipfs/')) {
-      return src.replace('https://ipfs.infura.io/ipfs/', 'https://cloudflare-ipfs.com/ipfs/');
+    if (src.startsWith("https://infura-ipfs.io/ipfs/")) {
+      return src.replace(
+        "https://infura-ipfs.io/ipfs/",
+        "https://ipfs.io/ipfs/",
+      );
     }
-    if (src.startsWith('https://gateway.ipfs.io/ipfs/')) {
-      return src.replace('https://gateway.ipfs.io/ipfs/', 'https://cloudflare-ipfs.com/ipfs/');
+    if (src.startsWith("https://ipfs.infura.io/ipfs/")) {
+      return src.replace(
+        "https://ipfs.infura.io/ipfs/",
+        "https://ipfs.io/ipfs/",
+      );
+    }
+    if (src.startsWith("https://gateway.ipfs.io/ipfs/")) {
+      return src.replace(
+        "https://gateway.ipfs.io/ipfs/",
+        "https://ipfs.io/ipfs/",
+      );
     }
     // Arweave and other https URLs pass through
     return src;
@@ -89,7 +124,10 @@ export function normalizeImageUrl(src?: string | null): string | null {
   }
 }
 
-export function withImageFallback(primary?: string | null, fallback?: string | null): string | null {
+export function withImageFallback(
+  primary?: string | null,
+  fallback?: string | null,
+): string | null {
   return normalizeImageUrl(primary) || normalizeImageUrl(fallback) || null;
 }
 
@@ -100,44 +138,49 @@ export function withImageFallback(primary?: string | null, fallback?: string | n
 export function isMetadataUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   const lower = url.toLowerCase();
-  const hasImageExtension = /\.(png|jpg|jpeg|gif|webp|svg|avif|bmp|ico)$/i.test(lower);
+  const hasImageExtension = /\.(png|jpg|jpeg|gif|webp|svg|avif|bmp|ico)$/i.test(
+    lower,
+  );
 
   // Explicit image extensions are not metadata
   if (hasImageExtension) return false;
 
   // Quick positive match on explicit json/metadata paths
-  if (lower.endsWith('.json') || lower.includes('/metadata/')) return true;
+  if (lower.endsWith(".json") || lower.includes("/metadata/")) return true;
 
   // For metadata hosts, require json or /metadata/ in the path (avoid treating direct images as metadata)
   try {
     const { hostname, pathname } = new URL(lower);
     const isMetadataHost =
-      hostname.endsWith('.j7tracker.com') || hostname === 'j7tracker.com' ||
-      hostname.endsWith('.rapidlaunch.io') || hostname === 'rapidlaunch.io' ||
-      hostname.endsWith('.uxento.io') || hostname === 'uxento.io';
+      hostname.endsWith(".j7tracker.com") ||
+      hostname === "j7tracker.com" ||
+      hostname.endsWith(".rapidlaunch.io") ||
+      hostname === "rapidlaunch.io" ||
+      hostname.endsWith(".uxento.io") ||
+      hostname === "uxento.io";
     if (isMetadataHost) {
       return (
-        pathname.endsWith('.json') ||
-        pathname.includes('/metadata/') ||
-        pathname.includes('/data/')
+        pathname.endsWith(".json") ||
+        pathname.includes("/metadata/") ||
+        pathname.includes("/data/")
       );
     }
 
     // IPFS links without image extensions are often metadata JSON
     const isIpfs =
-      hostname.includes('ipfs') ||
-      lower.startsWith('ipfs://') ||
-      lower.includes('/ipfs/');
+      hostname.includes("ipfs") ||
+      lower.startsWith("ipfs://") ||
+      lower.includes("/ipfs/");
     if (isIpfs) return true;
 
     // Arweave URLs without extensions are often JSON metadata
-    if (hostname.includes('arweave')) return true;
+    if (hostname.includes("arweave")) return true;
 
     // Irys (formerly Bundlr) gateway — serves Arweave metadata JSON
-    if (hostname.includes('irys.xyz')) return true;
+    if (hostname.includes("irys.xyz")) return true;
 
     // Generic: if last path segment is a long hash/CID (>30 chars, no extension), likely metadata
-    const lastSegment = pathname.split('/').filter(Boolean).pop() || '';
+    const lastSegment = pathname.split("/").filter(Boolean).pop() || "";
     if (lastSegment.length > 30 && !/\.\w{2,5}$/.test(lastSegment)) return true;
   } catch {
     // If URL parse fails, fall through
@@ -148,7 +191,10 @@ export function isMetadataUrl(url: string | null | undefined): boolean {
 
 // Cache for resolved metadata images with TTL to allow retries for failed fetches
 // Structure: { image: string | null, timestamp: number }
-const metadataImageCache = new Map<string, { image: string | null; timestamp: number }>();
+const metadataImageCache = new Map<
+  string,
+  { image: string | null; timestamp: number }
+>();
 
 // Success cache: 30 minutes in-memory (images don't change)
 const SUCCESS_TTL_MS = 30 * 60 * 1000;
@@ -157,22 +203,25 @@ const FAILURE_TTL_MS = 30 * 1000;
 // localStorage: 7 days (token images are immutable on arweave/IPFS)
 const PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-const META_PERSIST_KEY = '__meta_img';
+const META_PERSIST_KEY = "__meta_img";
 let metaPersistTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Hydrate metadata cache from localStorage at module init (persists across sessions)
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   try {
     const raw = localStorage.getItem(META_PERSIST_KEY);
     if (raw) {
       const entries: [string, string, number?][] = JSON.parse(raw);
       const now = Date.now();
       for (const [metaUrl, imageUrl, ts] of entries) {
-        if (typeof metaUrl === 'string' && typeof imageUrl === 'string') {
-          const entryTime = typeof ts === 'number' ? ts : now;
+        if (typeof metaUrl === "string" && typeof imageUrl === "string") {
+          const entryTime = typeof ts === "number" ? ts : now;
           // Skip entries older than 7 days
           if (now - entryTime > PERSIST_TTL_MS) continue;
-          metadataImageCache.set(metaUrl, { image: imageUrl, timestamp: entryTime });
+          metadataImageCache.set(metaUrl, {
+            image: imageUrl,
+            timestamp: entryTime,
+          });
         }
       }
     }
@@ -182,19 +231,22 @@ if (typeof window !== 'undefined') {
 }
 
 function scheduleMetadataPersist() {
-  if (typeof window === 'undefined' || metaPersistTimer) return;
+  if (typeof window === "undefined" || metaPersistTimer) return;
   metaPersistTimer = setTimeout(() => {
     metaPersistTimer = null;
     try {
       const entries: [string, string, number][] = [];
       const now = Date.now();
       for (const [url, cached] of metadataImageCache) {
-        if (cached.image && (now - cached.timestamp) < PERSIST_TTL_MS) {
+        if (cached.image && now - cached.timestamp < PERSIST_TTL_MS) {
           entries.push([url, cached.image, cached.timestamp]);
         }
       }
       // Keep latest 500 entries
-      localStorage.setItem(META_PERSIST_KEY, JSON.stringify(entries.slice(-500)));
+      localStorage.setItem(
+        META_PERSIST_KEY,
+        JSON.stringify(entries.slice(-500)),
+      );
     } catch {}
   }, 2000);
 }
@@ -209,7 +261,10 @@ const pendingResolves = new Map<string, Promise<string | null>>();
  * Uses TTL-based caching: success cached for 30min, failure cached for 30sec
  * Deduplicates in-flight requests: concurrent calls for the same URL share one fetch
  */
-export async function resolveMetadataImage(url: string, force = false): Promise<string | null> {
+export async function resolveMetadataImage(
+  url: string,
+  force = false,
+): Promise<string | null> {
   if (!url || (!force && !isMetadataUrl(url))) return null;
 
   // Check cache with TTL
@@ -240,7 +295,7 @@ export async function resolveMetadataImage(url: string, force = false): Promise<
  */
 async function _doResolveMetadataImage(url: string): Promise<string | null> {
   try {
-    const metadataUrl = url.startsWith('/api/metadata')
+    const metadataUrl = url.startsWith("/api/metadata")
       ? url
       : `/api/metadata?url=${encodeURIComponent(url)}`;
 
@@ -251,7 +306,7 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
       const t = setTimeout(() => ctrl.abort(), 5000);
       response = await fetch(metadataUrl, {
         signal: ctrl.signal,
-        headers: { 'Accept': 'application/json' },
+        headers: { Accept: "application/json" },
       });
       clearTimeout(t);
     } catch {}
@@ -263,7 +318,7 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
         const t = setTimeout(() => ctrl.abort(), 5000);
         response = await fetch(url, {
           signal: ctrl.signal,
-          headers: { 'Accept': 'application/json' },
+          headers: { Accept: "application/json" },
         });
         clearTimeout(t);
       } catch {}
@@ -275,10 +330,13 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
     }
 
     // Check content-type: if it's an image, the proxy URL IS the image source
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.startsWith('image/')) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.startsWith("image/")) {
       // The /api/metadata endpoint proxied the actual image - use the proxy URL directly
-      metadataImageCache.set(url, { image: metadataUrl, timestamp: Date.now() });
+      metadataImageCache.set(url, {
+        image: metadataUrl,
+        timestamp: Date.now(),
+      });
       scheduleMetadataPersist();
       return metadataUrl;
     }
@@ -286,14 +344,20 @@ async function _doResolveMetadataImage(url: string): Promise<string | null> {
     // Try JSON parse even for non-JSON content types — arweave and other
     // decentralized storage often serve JSON with text/plain or octet-stream.
     // Only skip binary responses (images detected by content-type).
-    if (!contentType.includes('json')) {
+    if (!contentType.includes("json")) {
       // text/plain, application/octet-stream, etc. — try JSON parse as fallback
       try {
         const text = await response.text();
-        if (text.trimStart().startsWith('{') || text.trimStart().startsWith('[')) {
+        if (
+          text.trimStart().startsWith("{") ||
+          text.trimStart().startsWith("[")
+        ) {
           const parsed = JSON.parse(text);
           const imageUrl = extractMetaImage(parsed);
-          metadataImageCache.set(url, { image: imageUrl, timestamp: Date.now() });
+          metadataImageCache.set(url, {
+            image: imageUrl,
+            timestamp: Date.now(),
+          });
           if (imageUrl) scheduleMetadataPersist();
           return imageUrl;
         }
@@ -348,15 +412,23 @@ export function getCachedMetadataImage(url: string): string | null {
 }
 
 // Expose cache clear to window for debugging
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   (window as any).clearMetadataCache = clearMetadataImageCache;
 }
 
 export function extractMetaImage(meta: any): string | null {
-  if (!meta || typeof meta !== 'object') return null;
+  if (!meta || typeof meta !== "object") return null;
   const candidates: any[] = [];
   // Common fields
-  candidates.push(meta.image, meta.image_url, meta.logo, meta.icon, meta.imageUri, meta.img, meta.thumbnail);
+  candidates.push(
+    meta.image,
+    meta.image_url,
+    meta.logo,
+    meta.icon,
+    meta.imageUri,
+    meta.img,
+    meta.thumbnail,
+  );
   // Nested properties
   if (meta.properties) {
     const p = meta.properties;
@@ -366,13 +438,13 @@ export function extractMetaImage(meta: any): string | null {
   try {
     const files = meta.properties?.files;
     if (Array.isArray(files) && files.length) {
-      if (typeof files[0] === 'string') candidates.push(files[0]);
+      if (typeof files[0] === "string") candidates.push(files[0]);
       if (files[0]?.uri) candidates.push(files[0].uri);
     }
   } catch {}
   // First non-empty string wins
   for (const v of candidates) {
-    if (typeof v === 'string' && v.trim()) {
+    if (typeof v === "string" && v.trim()) {
       return normalizeImageUrl(v.trim());
     }
   }
@@ -384,7 +456,10 @@ export function extractMetaImage(meta: any): string | null {
  * Returns the resolved image if cached, null otherwise
  * Use this when you need to check the cache without async resolution
  */
-export function getCachedResolvedImage(url: string | null, force = false): string | null {
+export function getCachedResolvedImage(
+  url: string | null,
+  force = false,
+): string | null {
   if (!url || (!force && !isMetadataUrl(url))) return null;
 
   const cached = metadataImageCache.get(url);
@@ -460,11 +535,11 @@ const mintImageCache = new Map<string, { image: string; timestamp: number }>();
 // Token images are immutable once minted, so a long TTL is safe. Aligned with
 // the persist window so a hydrated entry isn't loaded only to be evicted.
 const MINT_IMG_TTL_MS = 24 * 60 * 60 * 1000;
-const MINT_IMG_PERSIST_KEY = '__mint_img';
+const MINT_IMG_PERSIST_KEY = "__mint_img";
 let mintImgPersistTimer: ReturnType<typeof setTimeout> | null = null;
 const mintImagePending = new Map<string, Promise<string | null>>();
 
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   try {
     const raw = localStorage.getItem(MINT_IMG_PERSIST_KEY);
     if (raw) {
@@ -474,10 +549,10 @@ if (typeof window !== 'undefined') {
         // Require a real, non-empty image and a real numeric timestamp — never
         // grant a malformed/legacy entry a fresh lease by defaulting ts to now.
         if (
-          typeof mint === 'string' &&
-          typeof imageUrl === 'string' &&
+          typeof mint === "string" &&
+          typeof imageUrl === "string" &&
           imageUrl.length > 0 &&
-          typeof ts === 'number' &&
+          typeof ts === "number" &&
           now - ts <= MINT_IMG_TTL_MS
         ) {
           mintImageCache.set(mint, { image: imageUrl, timestamp: ts });
@@ -488,7 +563,7 @@ if (typeof window !== 'undefined') {
 }
 
 function scheduleMintImagePersist() {
-  if (typeof window === 'undefined' || mintImgPersistTimer) return;
+  if (typeof window === "undefined" || mintImgPersistTimer) return;
   mintImgPersistTimer = setTimeout(() => {
     mintImgPersistTimer = null;
     try {
@@ -585,7 +660,7 @@ export async function resolveTokenImageByMint(
  * Priority order: image_url (API), image, logo, uri (WebSocket stream fallback), then others
  */
 export function extractTokenImage(token: any): string | null {
-  if (!token || typeof token !== 'object') return null;
+  if (!token || typeof token !== "object") return null;
 
   // Check all possible image field names in priority order
   // image_url: Primary field from /v1/trade/view API
@@ -604,7 +679,7 @@ export function extractTokenImage(token: any): string | null {
 
   // Return first non-empty string value
   for (const value of imageFields) {
-    if (typeof value === 'string' && value.trim()) {
+    if (typeof value === "string" && value.trim()) {
       const normalized = normalizeImageUrl(value.trim());
       if (normalized) {
         return normalized;

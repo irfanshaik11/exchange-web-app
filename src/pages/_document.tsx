@@ -22,7 +22,6 @@ export default function Document() {
         <link rel="dns-prefetch" href="https://arweave.net" />
         <link rel="dns-prefetch" href="https://gateway.irys.xyz" />
         <link rel="dns-prefetch" href="https://pump.mypinata.cloud" />
-        <link rel="dns-prefetch" href="https://cloudflare-ipfs.com" />
         <link rel="dns-prefetch" href="https://ipfs.io" />
         <link rel="dns-prefetch" href="https://dweb.link" />
         {/* Chunk load error recovery — production only.

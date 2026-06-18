@@ -256,26 +256,74 @@ function clampToAllowedWidth(width?: number | null): AllowedProxyWidth {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /** Speculative cdn.interstate.so/{mint}.webp URLs 403 when unwarmed — never proxy. */
-export function isSpeculativeInterstateCdn(url: string | null | undefined): boolean {
-  return Boolean(url && url.includes('cdn.interstate.so/'));
+export function isSpeculativeInterstateCdn(
+  url: string | null | undefined,
+): boolean {
+  return Boolean(url && url.includes("cdn.interstate.so/"));
 }
 
-/** Hosts that load reliably in the browser without the /api/img server proxy. */
+/**
+ * From a prioritized list of candidate image fields, return the first that is
+ * actually renderable — skipping empty values and speculative
+ * `cdn.interstate.so/{mint}.webp` guesses that 403 until the backend warm
+ * pipeline runs (which is currently never, in prod).
+ *
+ * The trending board historically trusted the raw `image` field even when it
+ * was the dead CDN guess, so a token with a perfectly good `logo`/metadata
+ * `uri` still rendered a letter placeholder. The token detail page never had
+ * this problem because it resolves the metadata URI. This mirrors that
+ * behavior: prefer any working source over the speculative CDN.
+ */
+export function pickRenderableImageSource(
+  candidates: Array<string | null | undefined>,
+): string | null {
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "string") continue;
+    if (isSpeculativeInterstateCdn(candidate)) continue;
+    return candidate;
+  }
+  return null;
+}
+
+/**
+ * Hosts that load reliably in the browser without the /api/img server proxy.
+ *
+ * Public IPFS gateways are NOT in this list — they rate-limit / stall when a
+ * board loads ~30+ avatars concurrently from one client, so direct <img> loads
+ * fail and the token renders a letter placeholder (this was the dominant cause
+ * of "missing images on trending"). Routing them through /api/img instead
+ * fetches server-side (single origin, cached, resized) which loads reliably.
+ *
+ * REMOVED hosts and why:
+ *  - `ipfs.io`, `dweb.link`: public gateways that stall under board concurrency.
+ *  - `cloudflare-ipfs.com`, `cf-ipfs.com`: Cloudflare PERMANENTLY SHUT DOWN its
+ *    public IPFS gateway in 2024 — these now fail outright in the browser. The
+ *    CID is still valid, so `normalizeImageSource` rewrites them to a live
+ *    gateway and `/api/img` resolves the CID server-side across gateways.
+ *
+ * The CDN-backed hosts below (pinata, nftstorage, dexscreener, four.meme) stay
+ * direct because they serve browser loads reliably.
+ *
+ * `gmgn.ai` is direct-load by NECESSITY: it is the unwrap target of the
+ * `lens.google.com/uploadbyurl?url=gmgn.ai/external-res/...` wrapper, and
+ * gmgn.ai returns 403 to server-side (proxy) fetches via Cloudflare bot
+ * protection — but its optimized `_v2.webp` thumbnails load reliably as a
+ * direct browser <img>. So these MUST bypass /api/img.
+ */
 const DIRECT_LOAD_IMAGE_HOST_PATTERNS = [
-  'static.four.meme',
-  'four.meme',
-  'cloudflare-ipfs.com',
-  'mypinata.cloud',
-  'cf-ipfs.com',
-  'ipfs.io',
-  'nftstorage.link',
-  'dweb.link',
-  'pinata.cloud',
-  'dexscreener.com',
+  "static.four.meme",
+  "four.meme",
+  "mypinata.cloud",
+  "nftstorage.link",
+  "pinata.cloud",
+  "dexscreener.com",
+  "gmgn.ai",
 ] as const;
 
-export function shouldBypassImageProxy(url: string | null | undefined): boolean {
-  if (!url || !url.startsWith('http')) return false;
+export function shouldBypassImageProxy(
+  url: string | null | undefined,
+): boolean {
+  if (!url || !url.startsWith("http")) return false;
   try {
     const host = new URL(url).hostname.toLowerCase();
     return DIRECT_LOAD_IMAGE_HOST_PATTERNS.some(
@@ -310,6 +358,88 @@ function normalizeForHash(url: string): string {
   }
 }
 
+/** Dead IPFS gateways whose host must be rewritten to a live one. */
+const DEAD_IPFS_GATEWAY_HOSTS = ["cloudflare-ipfs.com", "cf-ipfs.com"] as const;
+/** Live public IPFS gateway used as the rewrite target. */
+const LIVE_IPFS_GATEWAY_HOST = "ipfs.io";
+
+/**
+ * Repair image source URLs that the trending/pulse feeds store verbatim from
+ * upstream metadata but that cannot render in the browser:
+ *
+ *  - `cloudflare-ipfs.com` / `cf-ipfs.com`: Cloudflare permanently shut down its
+ *    public IPFS gateway in 2024, so these now fail. The CID is still valid, so
+ *    rewrite the dead gateway host to a live one (`ipfs.io`). Routed through
+ *    /api/img it then resolves server-side across multiple gateways.
+ *  - `lens.google.com/uploadbyurl?url=<real>`: a Google Lens reverse-image
+ *    search URL, not an actual image. The real image lives in the `url` query
+ *    param — unwrap it (and re-normalize in case it is itself a dead gateway).
+ *
+ * Anything else (including non-http values) is returned unchanged. This is the
+ * single chokepoint every avatar/preload path funnels through via
+ * `computeHashImageUrl`, so the render URL and the prewarm URL stay identical.
+ */
+/**
+ * Bounds the Lens-unwrap recursion to exactly one unwrap (lens → real image);
+ * the unwrapped inner URL is still gateway-rewritten. Guards against a
+ * pathologically self-referential `url` param. With the `depth < MAX` gate,
+ * only depth 0 may unwrap, so at most one recursion occurs.
+ */
+const MAX_NORMALIZE_DEPTH = 1;
+
+export function normalizeImageSource(
+  src: string | null | undefined,
+): string | null {
+  return normalizeImageSourceInner(src, 0);
+}
+
+function normalizeImageSourceInner(
+  src: string | null | undefined,
+  depth: number,
+): string | null {
+  if (!src || typeof src !== "string") return null;
+  if (!src.startsWith("http")) return src;
+
+  let url: URL;
+  try {
+    url = new URL(src);
+  } catch {
+    return src;
+  }
+  const host = url.hostname.toLowerCase();
+
+  // Unwrap Google Lens "uploadbyurl" wrapper → the real embedded image URL.
+  if (
+    depth < MAX_NORMALIZE_DEPTH &&
+    host === "lens.google.com" &&
+    url.pathname.startsWith("/uploadbyurl")
+  ) {
+    const inner = url.searchParams.get("url");
+    if (inner) {
+      const decoded = (() => {
+        try {
+          return decodeURIComponent(inner);
+        } catch {
+          return inner;
+        }
+      })();
+      // Recurse: the unwrapped URL may itself be a dead gateway (depth-bounded).
+      return normalizeImageSourceInner(decoded, depth + 1);
+    }
+  }
+
+  // Rewrite dead Cloudflare IPFS gateway → live gateway (CID path is preserved).
+  if (
+    DEAD_IPFS_GATEWAY_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))
+  ) {
+    url.protocol = "https:";
+    url.hostname = LIVE_IPFS_GATEWAY_HOST;
+    return url.toString();
+  }
+
+  return src;
+}
+
 /**
  * Compute the hash-based proxy URL for an image source.
  *
@@ -324,6 +454,11 @@ export function computeHashImageUrl(
   width?: number,
 ): string | null {
   if (!src) return null;
+
+  // Repair dead-gateway / wrapper URLs BEFORE any bypass/hash decision so the
+  // proxy fetches a resolvable source and the cache key stays stable.
+  const repaired = normalizeImageSource(src);
+  if (repaired) src = repaired;
 
   // Pass through URLs that don't need proxying
   if (

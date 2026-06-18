@@ -181,7 +181,6 @@ export function buildFetchCandidates(parsed: URL): string[] {
     if (httpVersion && !candidates.includes(httpVersion)) candidates.push(httpVersion);
 
     const gateways = [
-      'https://cloudflare-ipfs.com/ipfs/',
       'https://ipfs.io/ipfs/',
       'https://gateway.pinata.cloud/ipfs/',
       'https://nftstorage.link/ipfs/',
