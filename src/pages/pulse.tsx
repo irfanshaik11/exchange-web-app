@@ -113,6 +113,8 @@ const PLATFORM_UPDATES = [
   },
 ];
 
+const BNB_PASSCODE = '0987';
+
 // Module-level Solana token cache — survives SPA navigation (tab lifetime).
 // Same pattern as _hadDataByTitle in PulseTable.tsx / MonadTable.tsx.
 const _lastSolanaTokens = {
@@ -146,22 +148,38 @@ function PulsePageInner() {
   const { user } = useUser();
   const router = useRouter();
 
+  // BNB passcode gate — declared first so router effects below can reference it
+  const [bnbUnlocked, setBnbUnlocked] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('bnb_unlocked') === '1';
+  });
+  const [showBnbPasscode, setShowBnbPasscode] = useState(false);
+  const [bnbPasscodeInput, setBnbPasscodeInput] = useState('');
+  const [bnbPasscodeError, setBnbPasscodeError] = useState(false);
+
   // CRITICAL: Initialize chain from URL immediately to avoid race conditions
   // This ensures we react to the correct chain before router.query is ready
   // Priority: URL param > localStorage > default (sol)
   const [currentChain, setCurrentChain] = useState<string>(() => {
+    const isBnbSession = typeof window !== 'undefined' && sessionStorage.getItem('bnb_unlocked') === '1';
     // Initialize from router query if available, otherwise check URL directly
     if (typeof window !== "undefined" && router.isReady && router.query.chain) {
-      return router.query.chain as string;
+      const c = router.query.chain as string;
+      if (c === 'bnb' && !isBnbSession) return 'sol';
+      return c;
     }
     // Also check URL params directly for immediate access
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const chainFromUrl = urlParams.get("chain");
-      if (chainFromUrl) return chainFromUrl;
+      if (chainFromUrl) {
+        if (chainFromUrl === 'bnb' && !isBnbSession) return 'sol';
+        return chainFromUrl;
+      }
       // Check localStorage for persisted chain
       const savedChain = localStorage.getItem("selected-chain");
       if (savedChain && (savedChain === "sol" || savedChain === "monad" || savedChain === "bnb")) {
+        if (savedChain === 'bnb' && !isBnbSession) return 'sol';
         return savedChain;
       }
     }
@@ -171,37 +189,36 @@ function PulsePageInner() {
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
     if (!router.isReady) return;
-    // Only update if there's an explicit chain in the query
     if (router.query.chain) {
       const chainFromQuery = router.query.chain as string;
+      // If someone navigates directly to ?chain=bnb without a session, intercept
+      if (chainFromQuery === 'bnb' && !bnbUnlocked) {
+        setShowBnbPasscode(true);
+        router.replace('/pulse?chain=sol', undefined, { shallow: true });
+        return;
+      }
       if (chainFromQuery !== currentChain) {
-        isDev && console.log(
-          "[Pulse] Chain changed from router:",
-          currentChain,
-          "->",
-          chainFromQuery,
-        );
+        isDev && console.log("[Pulse] Chain changed from router:", currentChain, "->", chainFromQuery);
         setCurrentChain(chainFromQuery);
       }
     }
-  }, [router.query.chain, router.isReady, currentChain]);
+  }, [router.query.chain, router.isReady, currentChain, bnbUnlocked]);
 
   // Also watch router.asPath as a fallback for shallow routing
   useEffect(() => {
     if (!router.isReady) return;
     const urlParams = new URLSearchParams(router.asPath.split("?")[1] || "");
     const chainFromUrl = urlParams.get("chain");
-    // Only update if there's an explicit chain in the URL
+    if (chainFromUrl === 'bnb' && !bnbUnlocked) {
+      setShowBnbPasscode(true);
+      router.replace('/pulse?chain=sol', undefined, { shallow: true });
+      return;
+    }
     if (chainFromUrl && chainFromUrl !== currentChain) {
-      isDev && console.log(
-        "[Pulse] Chain changed from URL:",
-        currentChain,
-        "->",
-        chainFromUrl,
-      );
+      isDev && console.log("[Pulse] Chain changed from URL:", currentChain, "->", chainFromUrl);
       setCurrentChain(chainFromUrl);
     }
-  }, [router.asPath, router.isReady, currentChain]);
+  }, [router.asPath, router.isReady, currentChain, bnbUnlocked]);
 
   const chain = currentChain;
   const isBnbRoute = chain === 'bnb';
@@ -210,9 +227,26 @@ function PulsePageInner() {
   // BNB filter panel state
   const [showBnbFilter, setShowBnbFilter] = useState(false);
   const { filters: bnbFilters, hasActiveFilters: bnbHasActiveFilters } = useBnbFilters();
+
   // const isBaseRoute = chain === 'base';
   // const isEthereumRoute = chain === 'eth';
   const isSolanaRoute = chain === "sol"; // Only Solana if explicitly set
+
+  const handleBnbPasscodeSubmit = () => {
+    if (bnbPasscodeInput === BNB_PASSCODE) {
+      setBnbUnlocked(true);
+      sessionStorage.setItem('bnb_unlocked', '1');
+      setShowBnbPasscode(false);
+      setBnbPasscodeInput('');
+      setBnbPasscodeError(false);
+      setCurrentChain('bnb');
+      localStorage.setItem('selected-chain', 'bnb');
+      router.replace('/pulse?chain=bnb', undefined, { shallow: true });
+    } else {
+      setBnbPasscodeError(true);
+      setBnbPasscodeInput('');
+    }
+  };
 
   // Debug logging for chain state (dev only)
   isDev && console.log("[Pulse] Chain state:", {
@@ -1567,6 +1601,10 @@ function PulsePageInner() {
                     aria-label="View BNB Chain tokens"
                     className={bnbButtonClasses}
                     onClick={() => {
+                      if (!bnbUnlocked) {
+                        setShowBnbPasscode(true);
+                        return;
+                      }
                       setCurrentChain("bnb");
                       localStorage.setItem("selected-chain", "bnb");
                       router.replace("/pulse?chain=bnb", undefined, { shallow: true });
@@ -1985,6 +2023,79 @@ function PulsePageInner() {
         isOpen={showBnbFilter}
         onClose={() => setShowBnbFilter(false)}
       />
+
+      {/* BNB Passcode Modal */}
+      {showBnbPasscode && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0"
+            style={{ backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 99998 }}
+            onClick={() => {
+              setShowBnbPasscode(false);
+              setBnbPasscodeInput('');
+              setBnbPasscodeError(false);
+            }}
+          />
+          {/* Modal */}
+          <div
+            className="fixed left-1/2 top-1/2 w-80 -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl"
+            style={{ backgroundColor: '#0f1117', border: '1px solid #2a2f3f', zIndex: 99999 }}
+          >
+            {/* Header */}
+            <div className="mb-4 flex items-center gap-2.5">
+              <SiBinance size={20} style={{ color: '#F3BA2F' }} />
+              <span className="text-base font-semibold text-white">BNB Chain Access</span>
+            </div>
+            <p className="mb-4 text-sm" style={{ color: '#94a3b8' }}>
+              Enter the passcode to unlock BNB Chain.
+            </p>
+            {/* Input */}
+            <input
+              type="password"
+              value={bnbPasscodeInput}
+              autoFocus
+              placeholder="Enter passcode"
+              onChange={(e) => {
+                setBnbPasscodeInput(e.target.value);
+                setBnbPasscodeError(false);
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleBnbPasscodeSubmit(); }}
+              className="w-full rounded-lg px-3 py-2.5 text-sm text-white outline-none transition-colors"
+              style={{
+                backgroundColor: '#1a1c24',
+                border: `1px solid ${bnbPasscodeError ? '#ef4444' : '#2a2f3f'}`,
+              }}
+            />
+            {bnbPasscodeError && (
+              <p className="mt-2 text-xs" style={{ color: '#f87171' }}>
+                Incorrect passcode. Try again.
+              </p>
+            )}
+            {/* Buttons */}
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => {
+                  setShowBnbPasscode(false);
+                  setBnbPasscodeInput('');
+                  setBnbPasscodeError(false);
+                }}
+                className="flex-1 rounded-lg py-2 text-sm font-medium transition-colors hover:text-white"
+                style={{ backgroundColor: '#1a1c24', border: '1px solid #2a2f3f', color: '#94a3b8' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBnbPasscodeSubmit}
+                className="flex-1 rounded-lg py-2 text-sm font-semibold transition-opacity hover:opacity-90"
+                style={{ backgroundColor: '#F3BA2F', color: '#000' }}
+              >
+                Unlock
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
