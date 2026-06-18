@@ -54,6 +54,19 @@ export default function TweetCard({ id, className = "" }: TweetCardProps) {
           border-color: rgba(255, 255, 255, 0.15);
           color: #ededf0;
         }
+        @media (max-width: 640px) {
+          .tweet-card :where(.react-tweet-theme) {
+            // --tweet-header-font-size: 0.8rem;
+            --tweet-header-line-height: 1.1rem;
+            --tweet-body-font-size: 0.875rem;
+            --tweet-body-line-height: 1.25rem;
+            --tweet-info-font-size: 0.75rem;
+            --tweet-info-line-height: 1rem;
+          }
+          .tweet-card [class*="replies"] {
+            display: none !important;
+          }
+        }
       `}} />
 
       <Tweet id={id} />
