@@ -7,7 +7,7 @@ const LandingHeader = () => {
                 <img
                     src="/interstate/logo.png"
                     alt="Interstate logo"
-                    className="h-9 w-9 lg:h-12 lg:w-12 flex-shrink-0 object-contain transition-all duration-200 group-hover:drop-shadow-[0_0_8px_rgba(24,196,140,0.4)] sm:h-5 sm:w-auto"
+                    className="h-9 w-9 md:h-10 md:w-10 lg:h-12 lg:w-12 flex-shrink-0 object-contain transition-all duration-200 group-hover:drop-shadow-[0_0_8px_rgba(24,196,140,0.4)] sm:h-5 sm:w-auto"
                 />
                 <h3 className="text-3xl md:text-4xl md:font-bold tracking-tight text-[#CBD0EB]">Interstate</h3>
             </Link>
