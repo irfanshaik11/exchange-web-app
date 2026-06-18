@@ -34,6 +34,15 @@ export default function TweetCard({ id, className = "" }: TweetCardProps) {
         .tweet-card [class*="actions"] {
           display: none !important;
         }
+        /* Cap the tweet body to a max number of lines and truncate the rest with an ellipsis. */
+        .tweet-card [class*="tweet-body"] {
+          display: -webkit-box;
+          -webkit-line-clamp: 4;
+          line-clamp: 4;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
         .tweet-card [class*="infoLink"] {
           opacity: 0;
           pointer-events: none;
