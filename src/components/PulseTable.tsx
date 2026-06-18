@@ -5876,7 +5876,7 @@ function PulseTable({
   }, []);
   const displayTokensForList = frozenTokens ?? filteredTokensForDisplay;
 
-  const PULSE_ROW_HEIGHT = 88; // 78px content + 10px gap
+  const PULSE_ROW_HEIGHT = isBnb ? 100 : 110;
 
   // Add wave animation for Meteora tokens with bonding_pct > 98.6% in Final Stretch ONLY
   // PERFORMANCE: Skip this effect entirely for New Pairs and Migrated columns
@@ -9232,14 +9232,15 @@ function PulseTable({
 
               return (
                 <div key={tokenMint} style={style}>
-                  <div style={{ paddingBottom: "4px" }}>
+                  <div style={{ height: '100%', paddingBottom: "4px" }}>
                     <Link
                       href={tokenHref}
                       {...(isBnbToken ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
+                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-hidden rounded-lg px-2 py-1.5 text-sm"
                       style={{
                         color: AX.text,
                         backgroundColor: "#13151b",
+                        height: '100%',
                       }}
                       onMouseEnter={(e) => {
                         // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
