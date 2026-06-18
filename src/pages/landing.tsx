@@ -14,14 +14,21 @@ const testimonials = [
   { id: "2066467204070293555" },
   { id: "2066802889452872170" },
   { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
 ];
 
-const testimonials2 = [
-  { id: "2066802889452872170" },
-  { id: "2066802889452872170" },
-  { id: "2066802889452872170" },
-  { id: "2066802889452872170" },
-];
+// Cap how many testimonial cards show at each grid width so rows stay balanced:
+// 1 col → 3 cards, 2 cols → 4, 3 cols (md–xl) → 6, 4 cols (2xl) → 8. Each card
+// past the first three reveals at the first breakpoint that has room for it.
+function testimonialVisibility(i: number): string {
+  if (i < 3) return "";                 // always visible (1 col shows 3)
+  if (i < 4) return "hidden sm:block";  // 2 cols shows 4
+  if (i < 6) return "hidden md:block";  // 3 cols shows 6
+  return "hidden 2xl:block";            // 4 cols shows 8
+}
 
 /* ----------------------------- components ----------------------------- */
 
@@ -287,9 +294,9 @@ export default function Landing() {
                 Follow Interstate on <FaXTwitter size={13} />
               </Link>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {[...testimonials, ...testimonials2].map((t) => (
-                <TweetCard key={t.id} id={t.id} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-4 gap-4">
+              {testimonials.map((t, i) => (
+                <TweetCard key={`${t.id}-${i}`} id={t.id} className={testimonialVisibility(i)} />
               ))}
             </div>
           </div>
