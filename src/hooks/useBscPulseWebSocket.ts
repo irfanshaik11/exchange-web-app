@@ -591,16 +591,8 @@ function openChannel(channel: Channel) {
         prepend: true,
         enrich: true,
       });
-    } else if (type === 'price_update') {
-      const normalized = normalizeBscToken(data);
-      const nextChannel = (msgChannel ?? normalized.channel ?? data?.channel ?? null) as Channel | null;
-      const id = mintKey(normalized.mint);
-      if (nextChannel && id && getTokenChannel(id) !== nextChannel) {
-        upsertToken(nextChannel, normalized, { prepend: true, enrich: false });
-      } else {
-        applyPriceUpdate(data);
-      }
     }
+    // price_update intentionally ignored — token data is frozen at snapshot/new_token time
   };
 
   ws.onerror = (err) => { console.error(`[BscPulse] ❌ ${channel} error:`, err); };

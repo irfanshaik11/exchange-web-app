@@ -256,7 +256,7 @@ function PulsePageInner() {
     isSolanaRoute,
   });
   const chainButtonBase =
-    "relative inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-300 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
+    "relative inline-flex h-7 w-7 items-center justify-center rounded-full text-neutral-300 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
   const solanaButtonClasses = `${chainButtonBase} ${
     isSolanaRoute
       ? "text-white"
@@ -1573,11 +1573,6 @@ function PulsePageInner() {
             <div className="mb-1 flex flex-wrap gap-3 px-2 pt-2 items-center justify-between">
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-medium text-white">Trenches</h1>
-                {isBnbRoute && (
-                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: '#F3BA2F22', color: '#F3BA2F', border: '1px solid #F3BA2F44' }}>
-                    BNB Chain
-                  </span>
-                )}
                 <div className="flex items-center gap-3">
                   {/* Chain toggle buttons — setCurrentChain fires synchronously on click
                       so isSolanaRoute/isBnbRoute flip in the same frame, no router delay. */}
@@ -1593,7 +1588,7 @@ function PulsePageInner() {
                     <img
                       src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
                       alt="Solana"
-                      className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
+                      className="h-5 w-5 rounded-full object-cover"
                     />
                   </button>
                   {/* MONAD DISABLED — support paused, may re-enable later. */}
@@ -1610,7 +1605,11 @@ function PulsePageInner() {
                       router.replace("/pulse?chain=bnb", undefined, { shallow: true });
                     }}
                   >
-                    <SiBinance className="h-5 w-5 text-[#F3BA2F]" />
+                    <img
+                      src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png"
+                      alt="BNB Chain"
+                      className="h-4 w-4 rounded-full object-cover"
+                    />
                   </button>
                   {/* <Link
                     href="/pulse?chain=base"
@@ -1756,7 +1755,7 @@ function PulsePageInner() {
                   )}
                   {activeTab === "final-stretch" && (
                     <PulseTable
-                      title="Almost bor"
+                      title="Almost bonded"
                       tokens={displayFinalStretch as any}
                       loading={displayFinalStretch.length === 0}
                       isFirstOrLast="only"
@@ -1793,7 +1792,7 @@ function PulsePageInner() {
                   hasExternalActiveFilters={bnbHasActiveFilters('new')}
                 />
                 <PulseTable
-                  title="Almost bor"
+                  title="Almost bonded"
                   tokens={displayFinalStretch as any}
                   loading={displayFinalStretch.length === 0}
                   showBubbleMetrics={false}
