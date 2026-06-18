@@ -48,6 +48,31 @@ const CHAIN_META: Record<string, ChainMeta> = {
     color: "#0052FF",
     explorerBase: "https://basescan.org/address/",
   },
+  ethereum: {
+    name: "Ethereum",
+    logo: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+    color: "#627EEA",
+    explorerBase: "https://etherscan.io/address/",
+  },
+  bsc: {
+    name: "BNB Chain",
+    logo: "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+    color: "#F0B90B",
+    explorerBase: "https://bscscan.com/address/",
+  },
+  monad: {
+    // No clean first-party logo handy yet — rely on the colored-letter fallback.
+    name: "Monad",
+    logo: "",
+    color: "#836EF9",
+    explorerBase: "https://monadexplorer.com/address/",
+  },
+  hyperevm: {
+    name: "HyperEVM",
+    logo: "https://assets.coingecko.com/coins/images/50882/small/hyperliquid.jpg",
+    color: "#97FCE4",
+    explorerBase: "https://hyperevmscan.io/address/",
+  },
 };
 
 const chainMeta = (chain: string): ChainMeta =>
