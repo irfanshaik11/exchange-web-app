@@ -582,6 +582,25 @@ input[type="number"] {
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Continuous, GPU-composited rotation. will-change + translateZ promote the
+   element to its own layer so the compositor just spins a cached bitmap —
+   no per-frame repaint, so no jitter. */
+.animate-spin-slow {
+  animation: spinSlow 28s linear infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-slow { animation: none; }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

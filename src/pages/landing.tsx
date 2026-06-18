@@ -1,11 +1,13 @@
 import Head from "next/head";
 import Link from "next/link";
 import LandingHeader from '~/components/layout/LandingHeader';
-import { ArrowRight, Download } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Download } from 'lucide-react';
 import SimpleMarquee from '~/components/ui/marquee/SimpleMarquee';
 import MarketsMarquee from '~/components/ui/marquee/MarketsMarquee';
 import { FaXTwitter } from "react-icons/fa6";
+import { SiOpenai } from "react-icons/si";
 import TweetCard from '~/components/cards/tweet-card';
+import LandingFooter from '~/components/layout/footer/LandingFooter';
 
 /* ----------------------------- data ----------------------------- */
 
@@ -300,6 +302,59 @@ export default function Landing() {
               ))}
             </div>
           </div>
+
+          {/* CTA */}
+          <section className="relative py-20 md:py-28 lg:py-32 overflow-hidden border-t border-white/5">
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px) 0 0 / 100% 64px, radial-gradient(ellipse at 50% 120%, rgba(24,196,140,0.06), transparent 60%)",
+                WebkitMaskImage: "radial-gradient(ellipse at 50% 60%, #000, transparent 75%)",
+                maskImage: "radial-gradient(ellipse at 50% 60%, #000, transparent 75%)",
+              }}
+            />
+
+            <div className="relative flex flex-col items-center gap-10 text-center lg:flex-row lg:gap-16 lg:text-left">
+              {/* Left — rotating bloom */}
+              <div className="flex w-full justify-center lg:w-1/2">
+                <img
+                  src="/interstate/glass-bloom-raw.png"
+                  alt="Interstate glass bloom"
+                  loading="lazy"
+                  className="block h-auto w-56 lg:w-[clamp(300px,32vw,440px)] animate-spin-slow drop-shadow-[0_24px_60px_rgba(24,196,140,0.28)]"
+                />
+              </div>
+
+              {/* Right — copy + actions */}
+              <div className="w-full lg:w-1/2">
+                <h2 className="text-[clamp(34px,4vw,56px)] leading-[1.1] font-semibold tracking-[-0.025em] text-[#5f5f68] m-0">
+                  <span className="text-[#ededf0]">Start trading</span> with real power.
+                </h2>
+                <p className="text-[#8a8a93] text-[17px] mt-[18px] mb-8">
+                  Join traders moving faster, paying less, and staying in full control.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3.5 justify-center lg:justify-start flex-wrap">
+                  <Link
+                    href="/"
+                    className="inline-flex items-center justify-center gap-2 w-full sm:w-auto bg-[#04977c] text-white px-[26px] py-3.5 rounded-xl text-[15px] font-semibold hover:-translate-y-px transition-transform"
+                  >
+                    Launch the web app <ArrowUpRight className="size-3" />
+                  </Link>
+                  <Link
+                    href="#"
+                    className="inline-flex items-center justify-center gap-2 w-full sm:w-auto bg-[#161719] text-[#ededf0] border border-white/[0.08] px-[26px] py-3.5 rounded-xl text-[15px] font-semibold hover:-translate-y-px transition-transform"
+                  >
+                    Launch in ChatGPT <SiOpenai size={14} />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Footer */}
+          <LandingFooter />
         </section>
       </main>
     </>
