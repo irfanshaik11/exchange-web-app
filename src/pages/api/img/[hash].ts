@@ -13,6 +13,7 @@ import {
   fetchImageFromCandidates,
   resolveJsonMetadataImage,
   resolveFinalContentType,
+  cfImageResize,
 } from "~/utils/imageProxyHelpers";
 
 // Pin to Node.js runtime — sharp is a native addon and won't run on Edge.
@@ -263,7 +264,12 @@ export default async function handler(
 
     const candidates = buildFetchCandidates(parsed);
 
-    let result: { body: Buffer; contentType: string; status: number };
+    let result: {
+      body: Buffer;
+      contentType: string;
+      status: number;
+      url: string;
+    };
     try {
       result = await fetchImageFromCandidates(candidates);
     } catch (e: unknown) {
@@ -293,10 +299,17 @@ export default async function handler(
 
     let finalBody: Buffer;
     let finalContentType: string;
+    // URL the final image bytes came from — the source for Cloudflare edge
+    // resizing when sharp is unavailable (Workers). Prefer the candidate that
+    // actually succeeded (result.url, post-redirect) so a fallback-gateway win
+    // still resizes even when the primary/original URL was dead; metadata
+    // tokens use the resolved image URL.
+    let finalImageUrl = result.url || originalUrl;
 
     if (metadataResult) {
       finalBody = metadataResult.body;
       finalContentType = metadataResult.contentType;
+      finalImageUrl = metadataResult.sourceUrl;
     } else {
       finalBody = result.body;
       finalContentType = resolveFinalContentType(
@@ -306,9 +319,15 @@ export default async function handler(
     }
 
     // Resize + transcode to WebP unless format is unsuitable (SVG/GIF).
-    // On any sharp failure we fall through to the original bytes.
+    // Primary: sharp (local/Node dev). On Cloudflare Workers sharp is a no-op
+    // and returns null, so fall back to Cloudflare Image Resizing (cf.image),
+    // which resizes at the edge. cfImageResize returns null unless it actually
+    // produced WebP (feature off / non-resizable), in which case we ship the
+    // original bytes — exactly today's behavior. No regression either way.
     if (!shouldSkipResize(finalContentType)) {
-      const resized = await resizeToWebp(finalBody, width);
+      const resized =
+        (await resizeToWebp(finalBody, width)) ??
+        (await cfImageResize(finalImageUrl, width));
       if (resized) {
         finalBody = resized.buffer;
         finalContentType = resized.contentType;
