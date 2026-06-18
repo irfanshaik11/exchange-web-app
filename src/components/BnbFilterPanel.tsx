@@ -60,6 +60,15 @@ const QUOTE_TOKENS = [
 type ColTab = BnbColumnKey;
 type ContentTab = 'metrics' | 'socials';
 
+// Sentinel value: launchpads/quoteTokens = [NONE] means "none selected" (all chips grey).
+// Distinct from [] which means "no restriction" (all chips active).
+const NONE = '__none__';
+
+type SavedPreset = { id: string; name: string; draft: Record<ColTab, BnbFilters>; savedAt: string };
+const SAVED_KEY = 'bnb_saved_filters';
+const loadPresets = (): SavedPreset[] => { try { return JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]'); } catch { return []; } };
+const persistPresets = (p: SavedPreset[]) => localStorage.setItem(SAVED_KEY, JSON.stringify(p));
+
 const COL_TABS: { key: ColTab; label: string }[] = [
   { key: 'new',          label: 'New' },
   { key: 'finalStretch', label: 'Almost bonded' },
@@ -255,10 +264,16 @@ export interface BnbFilterPanelProps {
 }
 
 export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFilterPanelProps) {
-  const { filters, setColumnFilters, resetColumnFilters, hasActiveFilters } = useBnbFilters();
+  const { filters, setColumnFilters } = useBnbFilters();
 
   const [colTab, setColTab] = useState<ColTab>(initialColumn);
   const [contentTab, setContentTab] = useState<ContentTab>('metrics');
+  const [showSaved, setShowSaved] = useState(false);
+  const [savedPresets, setSavedPresets] = useState<SavedPreset[]>(() => loadPresets());
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [copyDone, setCopyDone] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
 
   // Work on a local draft; only commit on Apply
   const [draft, setDraft] = useState<Record<ColTab, BnbFilters>>(() => ({
@@ -267,18 +282,6 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
     migrated: { ...filters.migrated },
   }));
 
-  // Sync draft when panel opens (in case external reset happened)
-  const openPanel = useCallback(() => {
-    setDraft({
-      new: { ...filters.new },
-      finalStretch: { ...filters.finalStretch },
-      migrated: { ...filters.migrated },
-    });
-    setColTab(initialColumn);
-    setContentTab('metrics');
-  }, [filters, initialColumn]);
-
-  // Expose openPanel via ref if needed (unused here — parent opens via isOpen prop)
   const cur = draft[colTab];
 
   const set = useCallback(
@@ -299,26 +302,80 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
     setDraft((prev) => ({ ...prev, [colTab]: { ...defaultBnbFilters } }));
   };
 
-  const handleResetAll = () => {
-    setDraft({ new: { ...defaultBnbFilters }, finalStretch: { ...defaultBnbFilters }, migrated: { ...defaultBnbFilters } });
+  const handleSave = () => {
+    const preset: SavedPreset = {
+      id: String(Date.now()),
+      name: `Filter ${new Date().toLocaleString()}`,
+      draft: { new: { ...draft.new }, finalStretch: { ...draft.finalStretch }, migrated: { ...draft.migrated } },
+      savedAt: new Date().toISOString(),
+    };
+    const updated = [...savedPresets, preset];
+    setSavedPresets(updated);
+    persistPresets(updated);
+  };
+
+  const handleDeletePreset = (id: string) => {
+    const updated = savedPresets.filter((p) => p.id !== id);
+    setSavedPresets(updated);
+    persistPresets(updated);
+  };
+
+  const handleLoadPreset = (preset: SavedPreset) => {
+    setDraft({ new: { ...preset.draft.new }, finalStretch: { ...preset.draft.finalStretch }, migrated: { ...preset.draft.migrated } });
+    setShowSaved(false);
+  };
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 3000);
+  };
+
+  const handleCopyConfig = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(draft, null, 2));
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 2000);
+      const colLabel = COL_TABS.find((t) => t.key === colTab)?.label ?? colTab;
+      showToast(`Filters for ${colLabel} copied to clipboard`);
+    } catch { /* ignore */ }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setImportText(text);
+    } catch { /* ignore */ }
+  };
+
+  const handleImportText = () => {
+    try {
+      const parsed = JSON.parse(importText);
+      if (parsed.new && parsed.finalStretch && parsed.migrated) {
+        setDraft(parsed);
+        setShowImportExport(false);
+        setImportText('');
+      }
+    } catch { /* invalid JSON — ignore */ }
   };
 
   const launchpadList = colTab === 'new' ? LAUNCHPADS_NEW : LAUNCHPADS_FS_MIG;
 
-  // [] = "all selected / no restriction" — all pills glow; explicit list = only those glow
+  // [] = "all selected / no restriction" — all pills glow
+  // [NONE] = sentinel for "none selected" — all pills grey
+  // [...values] = explicit selection — only those glow
   const lpAllMode = cur.launchpads.length === 0;
   const qtAllMode = cur.quoteTokens.length === 0;
 
   const toggleLaunchpad = (value: string) => {
     if (lpAllMode) {
-      // deselect just this one — switch to explicit list of all others
       set({ launchpads: launchpadList.map((l) => l.value).filter((v) => v !== value) });
     } else {
-      const next = cur.launchpads.includes(value)
-        ? cur.launchpads.filter((v) => v !== value)
-        : [...cur.launchpads, value];
-      // if all are explicitly re-selected, collapse back to all-mode
-      set({ launchpads: launchpadList.every((l) => next.includes(l.value)) ? [] : next });
+      // Strip NONE sentinel when user explicitly picks a chip
+      const current = cur.launchpads.filter((v) => v !== NONE);
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      set({ launchpads: next.length === 0 ? [NONE] : launchpadList.every((l) => next.includes(l.value)) ? [] : next });
     }
   };
 
@@ -326,15 +383,16 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
     if (qtAllMode) {
       set({ quoteTokens: QUOTE_TOKENS.map((t) => t.value).filter((v) => v !== value) });
     } else {
-      const next = cur.quoteTokens.includes(value)
-        ? cur.quoteTokens.filter((v) => v !== value)
-        : [...cur.quoteTokens, value];
-      set({ quoteTokens: QUOTE_TOKENS.every((t) => next.includes(t.value)) ? [] : next });
+      const current = cur.quoteTokens.filter((v) => v !== NONE);
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      set({ quoteTokens: next.length === 0 ? [NONE] : QUOTE_TOKENS.every((t) => next.includes(t.value)) ? [] : next });
     }
   };
 
-  const isLpActive  = (value: string) => lpAllMode || cur.launchpads.includes(value);
-  const isQtActive  = (value: string) => qtAllMode || cur.quoteTokens.includes(value);
+  const isLpActive = (value: string) => lpAllMode || (cur.launchpads.includes(value) && !cur.launchpads.includes(NONE));
+  const isQtActive = (value: string) => qtAllMode || (cur.quoteTokens.includes(value) && !cur.quoteTokens.includes(NONE));
 
   const draftHasActive = hasBnbActiveFilters(cur);
 
@@ -374,11 +432,11 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
         >
           <div className="flex flex-1 gap-1">
             {COL_TABS.map(({ key, label }) => {
-              const active = colTab === key;
+              const active = colTab === key && !showSaved;
               return (
                 <button
                   key={key}
-                  onClick={() => setColTab(key)}
+                  onClick={() => { setColTab(key); setShowSaved(false); }}
                   className="cursor-pointer px-3 py-2 text-sm font-medium transition-colors"
                   style={{
                     color: active ? C.text : C.muted,
@@ -391,8 +449,13 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
               );
             })}
             <button
+              onClick={() => setShowSaved((v) => !v)}
               className="cursor-pointer px-3 py-2 text-sm transition-colors"
-              style={{ color: C.muted, borderBottom: '2px solid transparent', marginBottom: -1 }}
+              style={{
+                color: showSaved ? C.text : C.muted,
+                borderBottom: showSaved ? `2px solid ${C.bnb}` : '2px solid transparent',
+                marginBottom: -1,
+              }}
             >
               Saved
             </button>
@@ -409,6 +472,32 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
 
         {/* ── Scrollable body ─────────────────────────────────────────────────── */}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+
+          {/* ── Saved presets view ──────────────────────────────────────────── */}
+          {showSaved && (
+            <div>
+              {savedPresets.length === 0 ? (
+                <p className="mt-6 text-center text-sm" style={{ color: C.muted }}>No saved filters yet. Set your filters and click Save.</p>
+              ) : (
+                <div className="flex flex-col gap-2 mt-2">
+                  {savedPresets.map((preset) => (
+                    <div key={preset.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.surface2, border: `1px solid ${C.border}` }}>
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: C.text }}>{preset.name}</p>
+                        <p className="text-xs" style={{ color: C.muted }}>{new Date(preset.savedAt).toLocaleString()}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleLoadPreset(preset)} className="cursor-pointer rounded px-2 py-1 text-xs font-semibold transition-colors hover:bg-white/10" style={{ color: C.bnb, border: `1px solid ${C.bnb}` }}>Load</button>
+                        <button onClick={() => handleDeletePreset(preset.id)} className="cursor-pointer rounded px-2 py-1 text-xs font-semibold transition-colors hover:bg-white/10" style={{ color: C.red, border: `1px solid ${C.red}` }}>Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!showSaved && (<>
 
           {/* Search inputs */}
           <div className="grid grid-cols-2 gap-3">
@@ -445,7 +534,7 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
                 Launchpads
               </span>
               <button
-                onClick={() => set({ launchpads: [] })}
+                onClick={() => set({ launchpads: lpAllMode ? [NONE] : [] })}
                 className="cursor-pointer rounded px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-white/10"
                 style={{ backgroundColor: C.surface2, color: C.text, border: `1px solid ${C.border}` }}
               >
@@ -473,7 +562,7 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
                 Quote Tokens
               </span>
               <button
-                onClick={() => set({ quoteTokens: [] })}
+                onClick={() => set({ quoteTokens: qtAllMode ? [NONE] : [] })}
                 className="cursor-pointer rounded px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-white/10"
                 style={{ backgroundColor: C.surface2, color: C.text, border: `1px solid ${C.border}` }}
               >
@@ -604,6 +693,7 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
               </div>
             </div>
           )}
+          </>)}
         </div>
 
         {/* ── Footer ──────────────────────────────────────────────────────────── */}
@@ -612,17 +702,15 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
           style={{ borderTop: `1px solid ${C.border}` }}
         >
           <button
-            className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-colors hover:bg-white/10"
+            onClick={() => setShowImportExport(true)}
+            className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-white/10"
             style={{ color: C.muted, border: `1px solid ${C.border}` }}
           >
             Import/Export
           </button>
           <div className="flex gap-2">
             <button
-              onClick={() => {
-                handleApply();
-                // no-op save for now
-              }}
+              onClick={handleSave}
               className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-colors hover:bg-white/10"
               style={{ color: C.muted, border: `1px solid ${C.border}` }}
             >
@@ -638,6 +726,94 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
           </div>
         </div>
       </div>
+
+      {/* ── Toast notification ──────────────────────────────────────────────── */}
+      {toastMsg && (
+        <div
+          className="fixed left-1/2 top-6 flex -translate-x-1/2 items-center gap-3 rounded-xl px-4 py-3 shadow-xl"
+          style={{ backgroundColor: '#1a2a1a', border: `1px solid #39d35355`, zIndex: 10000010, minWidth: 280 }}
+        >
+          <span
+            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: C.green }}
+          >
+            <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+              <path d="M1 5L4.5 8.5L11 1" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span className="flex-1 text-sm font-medium" style={{ color: C.text }}>{toastMsg}</span>
+          <button onClick={() => setToastMsg('')} className="cursor-pointer hover:opacity-70">
+            <FaTimes size={12} style={{ color: C.muted }} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Import/Export modal ─────────────────────────────────────────────── */}
+      {showImportExport && (
+        <>
+          <div
+            className="fixed inset-0"
+            style={{ backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 10000002 }}
+            onClick={() => setShowImportExport(false)}
+          />
+          <div
+            className="fixed top-1/2 left-1/2 w-[90vw] max-w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl"
+            style={{ backgroundColor: '#18191c', border: `1px solid ${C.border}`, zIndex: 10000003 }}
+          >
+            {/* Header */}
+            <div className="mb-5 flex items-center justify-between">
+              <span className="text-lg font-bold" style={{ color: C.text }}>Import/Export</span>
+              <button onClick={() => setShowImportExport(false)} className="cursor-pointer rounded p-1 hover:bg-white/10">
+                <FaTimes size={16} style={{ color: C.muted }} />
+              </button>
+            </div>
+
+            {/* Export */}
+            <div>
+              <p className="mb-3 text-sm font-semibold" style={{ color: C.text }}>Export Filters</p>
+              <button
+                onClick={handleCopyConfig}
+                className="w-full cursor-pointer rounded-xl py-3 text-sm font-bold transition-all hover:brightness-110"
+                style={{ backgroundColor: copyDone ? '#4ade80' : '#86efac', color: '#000' }}
+              >
+                {copyDone ? 'Copied!' : 'Copy your config'}
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div className="my-5" style={{ borderTop: `1px solid ${C.border}` }} />
+
+            {/* Import */}
+            <div>
+              <p className="mb-3 text-sm font-semibold" style={{ color: C.text }}>Import Filters</p>
+              <div className="relative rounded-xl p-3" style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  placeholder="Paste your filter config here"
+                  rows={6}
+                  className="w-full resize-none bg-transparent text-sm outline-none"
+                  style={{ color: C.text }}
+                />
+                <button
+                  onClick={handlePasteFromClipboard}
+                  className="absolute right-3 bottom-2 cursor-pointer text-sm font-semibold"
+                  style={{ color: C.green }}
+                >
+                  Paste
+                </button>
+              </div>
+              <button
+                onClick={handleImportText}
+                className="mt-3 w-full cursor-pointer rounded-xl py-3 text-sm font-bold transition-all hover:brightness-110"
+                style={{ backgroundColor: '#2d4a3e', color: importText.trim() ? C.green : C.muted }}
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Suppress number input spinners globally for this panel */}
       <style>{`
