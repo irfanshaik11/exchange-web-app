@@ -104,6 +104,18 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-orbitron: "Orbitron", sans-serif;
   --font-geist: "Geist", sans-serif;
+  
+
+  --animate-marquee: marquee 25s linear infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
 }
 
 @theme inline {
