@@ -1,7 +1,213 @@
 import Head from "next/head";
+import Link from "next/link";
 import LandingHeader from '~/components/layout/LandingHeader';
 import { ArrowRight, Download } from 'lucide-react';
+import SimpleMarquee from '~/components/ui/marquee/SimpleMarquee';
+import MarketsMarquee from '~/components/ui/marquee/MarketsMarquee';
+import { FaXTwitter } from "react-icons/fa6";
 
+/* ----------------------------- data ----------------------------- */
+
+const testimonials = [
+  {
+    name: "Paradigm",
+    handle: "@paradigm",
+    initial: "P",
+    color: "#6b7280",
+    text: "Paradigm leads $7.6 million seed funding round for perp DEX aggregator Liquid.",
+  },
+  {
+    name: "YAHOOSKI",
+    handle: "@shakespoppi",
+    initial: "SH",
+    color: "#f97316",
+    text: "It doesn't feel like you're using an ordinary trading platform. Everything is already where you expect it to be.",
+  },
+  {
+    name: "STER",
+    handle: "@sterjke",
+    initial: "S",
+    color: "#3b82f6",
+    text: "You connect your wallet, watch the flow, and when the moment comes, you just take it. No ceremony. Just the trade.",
+  },
+  {
+    name: "Waytoff",
+    handle: "@waytoff_",
+    initial: "W",
+    color: "#60a5fa",
+    text: "Mobile first DeFi apps are becoming more important every cycle. @liquidtrading is building around that with a strong focus on mobile and speed.",
+  },
+];
+
+const testimonials2 = [
+  {
+    name: "z4ch",
+    handle: "@0xz4ch",
+    initial: "Z",
+    color: "#3b82f6",
+    text: "guys what are we trading / predicting today? @liquidtrading has so many prediction markets live right now",
+  },
+  {
+    name: "wcu",
+    handle: "@spyruxs",
+    initial: "W",
+    color: "#a855f7",
+    text: "it is time for us hyperliquid maxis to finally rise up against the evil short sellers @liquidtrading",
+  },
+  {
+    name: "PHEONIX",
+    handle: "@pnxgrp",
+    initial: "P",
+    color: "#f97316",
+    text: "Liquid secures $7.6M in a Seed funding round led by Paradigm, with participation from General Catalyst, Alpen and angel investors.",
+  },
+  {
+    name: "Crypto Fundraises",
+    handle: "@Crypto_Dealflow",
+    initial: "CF",
+    color: "#3b82f6",
+    text: "Decentralized leverage trading platform @liquidtrading raised $7.60M in a Seed funding round led by Paradigm.",
+  },
+];
+
+/* ----------------------------- components ----------------------------- */
+
+type TweetData = { name: string; handle: string; initial: string; color: string; text: string };
+
+function Tweet({ t }: { t: TweetData }) {
+  return (
+    <div className="border border-white/5 rounded-2xl bg-[#0b0c0f] p-4">
+      <div className="flex items-center gap-2.5 mb-3">
+        <span
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+          style={{ background: t.color }}
+        >
+          {t.initial}
+        </span>
+        <div className="flex flex-col leading-[1.2]">
+          <span className="text-[13px] font-semibold text-[#ededf0]">{t.name}</span>
+          <span className="text-[12px] text-[#8a8a93]">{t.handle}</span>
+        </div>
+        <FaXTwitter className="ml-auto text-[#8a8a93]" size={14} />
+      </div>
+      <p className="text-[13.5px] text-[#c9c9d0] leading-[1.55] m-0">{t.text}</p>
+    </div>
+  );
+}
+
+function Logo({ size = 22 }: { size?: number }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <img
+        src="/interstate/logo.png"
+        alt="Interstate logo"
+        className="inline-block object-contain rounded-full shrink-0"
+        style={{ width: size + 6, height: size + 6 }}
+      />
+      <span
+        className="font-semibold tracking-[0.12em] uppercase leading-none text-[#ededf0]"
+        style={{ fontSize: size * 0.82, fontFamily: "'Orbitron', sans-serif" }}
+      >
+        interstate
+      </span>
+    </span>
+  );
+}
+
+function MiniTrading() {
+  return (
+    <div className="p-3 h-full flex flex-col">
+      <div className="flex items-center justify-between text-[11px] text-[#8a8a93] mb-2">
+        <Logo size={12} />
+        <span className="inline-flex items-center gap-1.5 text-[#ededf0]">
+          <i className="w-3 h-3 rounded-full inline-block" style={{ background: "#e8c14a" }} />
+          GOLD
+        </span>
+      </div>
+      <svg className="flex-1 w-full" viewBox="0 0 300 130" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="mini1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#18c48c" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#18c48c" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d="M0,100 L30,92 L60,96 L90,72 L120,80 L150,56 L180,64 L210,40 L240,48 L270,28 L300,34" stroke="#18c48c" strokeWidth="1.6" fill="none" />
+        <path d="M0,100 L30,92 L60,96 L90,72 L120,80 L150,56 L180,64 L210,40 L240,48 L270,28 L300,34 L300,130 L0,130 Z" fill="url(#mini1)" />
+      </svg>
+    </div>
+  );
+}
+
+function MiniAssetList() {
+  const rows = [
+    { s: "BTC", p: "70,351", c: "-0.34%", up: false },
+    { s: "XYZ100", p: "24,041", c: "-1.40%", up: false },
+    { s: "GOLD", p: "4,503.8", c: "-3.51%", up: false },
+    { s: "EUR", p: "1.1571", c: "-0.09%", up: false },
+    { s: "OPENAI", p: "912.91", c: "-0.92%", up: false },
+    { s: "ETH", p: "2,344.0", c: "-0.19%", up: false },
+    { s: "SILVER", p: "68.081", c: "-6.40%", up: false },
+    { s: "CL", p: "95.165", c: "+0.80%", up: true },
+    { s: "HYPE", p: "39.374", c: "+0.59%", up: true },
+    { s: "SOL", p: "89.421", c: "+0.46%", up: true },
+  ];
+  return (
+    <div className="p-3 h-full flex flex-col text-[11px]">
+      <div className="bg-white/[0.04] border border-white/5 rounded-lg px-2.5 py-2 text-[#8a8a93] mb-2.5">
+        Search for an asset
+      </div>
+      <div className="grid grid-cols-[1.2fr_1fr_1fr] px-1 py-1.5 text-[#5f5f68] border-b border-white/5">
+        <span>Symbol</span>
+        <span className="text-right">Price</span>
+        <span className="text-right">24h</span>
+      </div>
+      {rows.map((r) => (
+        <div key={r.s} className="grid grid-cols-[1.2fr_1fr_1fr] px-1 py-1.5 border-b border-white/5 text-[#8a8a93]">
+          <span className="text-[#ededf0] font-semibold">{r.s}</span>
+          <span className="text-right">{r.p}</span>
+          <span className={`text-right ${r.up ? "text-[#18c48c]" : "text-[#f0616d]"}`}>{r.c}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MiniOrder() {
+  return (
+    <div className="relative w-[200px] bg-[#0c0e12] border border-white/[0.12] rounded-[22px] pb-3.5 shadow-[0_24px_50px_rgba(0,0,0,0.5)] overflow-hidden">
+      <div className="w-14 h-[5px] rounded-full bg-white/[0.14] mx-auto mt-2.5" />
+      <div className="flex items-center justify-between px-3.5 pt-3 pb-1.5 text-[13px] text-[#ededf0]">
+        <span className="inline-flex items-center gap-1.5">
+          <i className="w-3 h-3 rounded-full inline-block" style={{ background: "#f7931a" }} />
+          BTC
+        </span>
+        <b>$70,570.00</b>
+      </div>
+      <div className="flex gap-2 px-3.5 py-1">
+        <span className="flex-1 text-center py-[7px] rounded-lg text-[12px] font-semibold border border-[rgba(24,196,140,0.4)] text-[#18c48c]">Long</span>
+        <span className="flex-1 text-center py-[7px] rounded-lg text-[12px] font-semibold border border-white/5 text-[#8a8a93]">Short</span>
+      </div>
+      <div className="flex gap-1 px-3.5 pt-2.5 pb-1.5 text-[11px]">
+        <span className="flex-1 text-center py-[5px] rounded-md bg-white/[0.06] text-[#ededf0]">Market</span>
+        <span className="flex-1 text-center py-[5px] rounded-md text-[#8a8a93]">Limit</span>
+        <span className="flex-1 text-center py-[5px] rounded-md text-[#8a8a93]">TWAP</span>
+      </div>
+      <div className="flex justify-between px-3.5 py-[7px] text-[11px] text-[#8a8a93]">
+        <span>Size</span>
+        <b className="text-[#ededf0]">$167,710.10</b>
+      </div>
+      <div className="flex justify-between px-3.5 py-[7px] text-[11px] text-[#8a8a93]">
+        <span>Amount</span>
+        <b className="text-[#ededf0]">$24.00</b>
+      </div>
+      <div className="mx-3.5 mt-2 text-center bg-[#18c48c] text-[#04130d] rounded-lg py-[9px] text-[12px] font-bold">
+        Long BTC
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------- page ----------------------------- */
 
 export default function Landing() {
   return (
@@ -13,11 +219,11 @@ export default function Landing() {
           content="Trade any market, any time, from anywhere. 24/7 Markets, up to 200x leverage, instant settlement."
         />
       </Head>
-      {/* the color reference was taken from /discover page */}
-
 
       <main className="min-h-screen w-full bg-[#030304] text-zinc-100">
         <LandingHeader />
+
+        {/* Hero */}
         <section className='relative flex flex-col items-center justify-center flex-1 h-screen w-full overflow-hidden bg-[#030304]'>
           <video
             aria-hidden="true"
@@ -28,15 +234,11 @@ export default function Landing() {
             className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
             src="/videos/homepage_hero_f1.mp4"
           />
-          {/* base lighter vignette — always visible */}
           <div
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none"
-            style={{
-              background: "radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0.9) 100%)",
-            }}
+            style={{ background: "radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0.9) 100%)" }}
           />
-          {/* stronger vignette — pulses in and out */}
           <div
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none"
@@ -66,15 +268,12 @@ export default function Landing() {
               </a>
             </div>
             <div className="hidden lg:flex gap-3">
-              {/* Start Trading Button */}
               <button className="group relative flex items-center justify-center overflow-hidden bg-[#04977c] hover:bg-[#037f68] transition-all duration-300 py-3 w-50 h-13 rounded-xl text-lg font-bold shadow-sm text-white z-10 cursor-pointer">
                 <div className="flex items-center justify-center gap-1.5 translate-x-3 group-hover:translate-x-0 transition-transform duration-300 ease-out">
                   <span>Start trading</span>
                   <ArrowRight className="size-5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 ease-out shrink-0" />
                 </div>
               </button>
-
-              {/* Download App Button */}
               <button className="group relative flex items-center justify-center overflow-hidden bg-white/12 hover:bg-white/20 backdrop-blur-md transition-all duration-300 border border-white/10 rounded-xl text-lg font-bold w-50 h-13 z-10 cursor-pointer">
                 <div className="flex items-center justify-center gap-1.5 -translate-x-3 group-hover:translate-x-0 transition-transform duration-300 ease-out">
                   <Download className="size-5 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 ease-out shrink-0" />
@@ -83,15 +282,97 @@ export default function Landing() {
               </button>
             </div>
           </div>
+          <div className="absolute bottom-0 w-full overflow-hidden py-6">
+            <div className="pointer-events-none absolute left-0 top-0 z-20 h-full w-10 lg:w-50 bg-gradient-to-r from-black via-black/80 to-transparent" />
+            <div className="pointer-events-none absolute right-0 top-0 z-20 h-full w-10 lg:w-50 bg-gradient-to-l from-black via-black/80 to-transparent" />
+            <SimpleMarquee forceWhite={true} />
+          </div>
+        </section>
+
+        {/* Content sections */}
+        <section className="px-2.5 md:px-8 lg:px-16 xl:px-24">
+          <MarketsMarquee />
+
+          {/* Trading simplified */}
+          <div className="py-[60px] md:py-[90px] border-t border-white/5">
+            <h2 className="text-[clamp(28px,4vw,46px)] font-medium leading-[1.18] tracking-[-0.02em] text-[#5f5f68] mb-9 max-w-[920px]">
+              <span className="text-[#ededf0]">Trading, simplified.</span> Pick a market, choose a direction,
+              set your leverage, and you&apos;re set.
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="border border-white/5 rounded-2xl p-7 bg-[#0b0c0f]">
+                <div className="text-[13px] text-[#18c48c] font-bold tracking-[0.06em]">01</div>
+                <h3 className="text-xl font-semibold mt-3 mb-2 text-[#ededf0]">Pick a market</h3>
+                <p className="text-[15px] text-[#8a8a93] leading-[1.55] m-0">From Bitcoin and Gold to Tesla and FX — choosing what to trade is the core of every trade.</p>
+              </div>
+              <div className="border border-white/5 rounded-2xl p-7 bg-[#0b0c0f]">
+                <div className="text-[13px] text-[#18c48c] font-bold tracking-[0.06em]">02</div>
+                <h3 className="text-xl font-semibold mt-3 mb-2 text-[#ededf0]">Set your leverage</h3>
+                <p className="text-[15px] text-[#8a8a93] leading-[1.55] m-0">Dial in your exposure with full control over your position size.</p>
+              </div>
+              <div className="border border-white/5 rounded-2xl p-7 bg-[#0b0c0f]">
+                <div className="text-[13px] text-[#18c48c] font-bold tracking-[0.06em]">03</div>
+                <h3 className="text-xl font-semibold mt-3 mb-2 text-[#ededf0]">Execute instantly</h3>
+                <p className="text-[15px] text-[#8a8a93] leading-[1.55] m-0">Open and close positions in seconds, 24/7, with instant on-chain settlement.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* See it. Size it. Snipe it. */}
+          <div className="py-[60px] md:py-[90px] border-t border-white/5">
+            <h2 className="text-[clamp(28px,4vw,46px)] font-medium leading-[1.18] tracking-[-0.02em] text-[#5f5f68] mb-9 max-w-[920px]">
+              <span className="text-[#ededf0]">See it. Size it. Snipe it.</span> Tools to find new token
+              launches within 100ms of launch, enabling you to snipe tokens as they&apos;re newly
+              launched or migrated across every market.
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1.2fr_0.7fr] gap-[18px] items-stretch">
+              <div className="bg-[#0b0c0f] border border-white/5 rounded-2xl overflow-hidden min-h-[360px] relative">
+                <MiniTrading />
+              </div>
+              <div className="bg-[#0b0c0f] border border-white/5 rounded-2xl overflow-hidden min-h-[360px] relative">
+                <MiniAssetList />
+              </div>
+              <div className="bg-transparent border-0 rounded-2xl overflow-hidden min-h-[360px] relative flex items-center justify-center">
+                <MiniOrder />
+              </div>
+            </div>
+          </div>
+
+          {/* Trusted by */}
+          <div className="py-[60px] md:py-[90px] border-t border-white/5">
+            <div className="flex items-end justify-between gap-5 mb-9 flex-wrap">
+              <div>
+                <h2 className="text-[clamp(28px,4vw,46px)] font-medium leading-[1.18] tracking-[-0.02em] text-[#ededf0] m-0">
+                  Trusted by 40,000+ traders
+                </h2>
+                <p className="text-[#8a8a93] mt-2 text-[15px]">See what traders are saying.</p>
+              </div>
+              <Link
+                href="https://x.com/interstatefdn"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 border border-white/[0.08] rounded-full px-[18px] py-2.5 text-[14px] text-[#ededf0] no-underline hover:bg-white/[0.04] transition-colors"
+              >
+                Follow Interstate on <FaXTwitter size={13} />
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {testimonials.map((t) => (
+                <Tweet key={t.handle} t={t} />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+              {testimonials2.map((t) => (
+                <Tweet key={t.handle} t={t} />
+              ))}
+            </div>
+          </div>
         </section>
       </main>
-
     </>
   );
 }
 
-
-//SSR the page to ensure the title and description are correct for SEO and social media sharing, faster render etc. This is important for the landing page because it is the first page users see when they visit the site. It also helps with SEO and social media sharing.
 export async function getServerSideProps() {
   return { props: {} };
 }
