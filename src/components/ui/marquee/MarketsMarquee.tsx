@@ -91,8 +91,23 @@ function MarketPill({ m, dimmed }: { m: Market; dimmed: boolean }) {
   );
 }
 
+// Repeat the items enough that one "copy" is wider than any viewport, so the
+// loop never reveals empty space before it snaps. The copy is then rendered
+// twice and the track is translated by -50% (exactly one copy) for a seamless,
+// pixel-perfect infinite scroll — same principle as SimpleMarquee.
+const REPEAT = 3;
+
 function MarqueeRow({ items, reverse = false, tab }: { items: Market[]; reverse?: boolean; tab: Tab }) {
-  const doubled = [...items, ...items];
+  const copy = Array.from({ length: REPEAT }, () => items).flat();
+  // Scale duration with REPEAT so the per-pixel scroll speed stays constant.
+  const animStyle = { animation: `lqscroll ${48 * REPEAT}s linear infinite${reverse ? " reverse" : ""}` };
+  const renderCopy = (key: string) => (
+    <div className="flex gap-3 pr-3 shrink-0" aria-hidden={key === "b"}>
+      {copy.map((m, i) => (
+        <MarketPill key={`${m.sym}-${key}-${i}`} m={m} dimmed={tab !== "all" && m.category !== tab} />
+      ))}
+    </div>
+  );
   return (
     <div
       className="overflow-hidden"
@@ -101,13 +116,9 @@ function MarqueeRow({ items, reverse = false, tab }: { items: Market[]; reverse?
         maskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
       }}
     >
-      <div
-        className="flex gap-3 w-max"
-        style={{ animation: `lqscroll 48s linear infinite${reverse ? " reverse" : ""}` }}
-      >
-        {doubled.map((m, i) => (
-          <MarketPill key={`${m.sym}-${i}`} m={m} dimmed={tab !== "all" && m.category !== tab} />
-        ))}
+      <div className="flex w-max" style={animStyle}>
+        {renderCopy("a")}
+        {renderCopy("b")}
       </div>
     </div>
   );
@@ -137,7 +148,7 @@ export default function MarketsMarquee() {
           </span>{" "}
           <span className="text-white">Bitcoin</span> and{" "}
           <span
-            className="inline-flex items-center justify-center rounded-full font-bold align-middle p-4 mt-0.5"
+            className="inline-flex items-center justify-center rounded-full font-bold align-middle p-3 md:p-4 mt-0.5"
             style={{ background: "#3a300f", color: "#e8c14a", width: "1.05em", height: "1.05em", fontSize: "0.4em" }}
           >
             Au
