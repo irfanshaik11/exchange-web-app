@@ -10,10 +10,8 @@
 
 export const BNB_CHAIN_COLOR = '#F3BA2F' as const;
 
-// Stable CoinMarketCap CDN URL for the BNB chain icon.
-// Used as a fallback for protocols that don't have a dedicated logo.
 export const BNB_CHAIN_ICON =
-  'https://s2.coinmarketcap.com/static/img/coins/64x64/1839.png' as const;
+  'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png' as const;
 
 export interface BnbProtocolDef {
   /** Human-readable display name (filter chip label, bubble tooltip). */

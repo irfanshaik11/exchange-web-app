@@ -25,7 +25,7 @@ import {
   FaRunning,
   FaGasPump,
   FaCoins,
-  FaBan,
+  FaHandHoldingUsd,
   FaRedo,
   FaDollarSign,
   FaRocket,
@@ -50,6 +50,7 @@ import {
   PiTelegramLogo,
 } from "react-icons/pi";
 import { FaDice, FaXTwitter, FaRegEyeSlash } from "react-icons/fa6";
+import { TbFall } from "react-icons/tb";
 import {
   BsPersonGear,
   BsCoin,
@@ -75,7 +76,7 @@ import { HiOutlineRocketLaunch } from "react-icons/hi2";
 import { GoPeople, GoStack } from "react-icons/go";
 import { IoPersonOutline } from "react-icons/io5";
 import { MdTrendingUp, MdEmojiEvents, MdDynamicFeed } from "react-icons/md";
-import { SiBinance, SiSolana } from "react-icons/si";
+import { SiSolana } from "react-icons/si";
 // Removed @web3icons/react to fix React version conflict
 import Image from "next/image";
 import InterstatePopout from "./InterstatePopout";
@@ -6287,7 +6288,7 @@ function PulseTable({
             }}
           >
             {isBnb
-              ? <SiBinance size={14} style={{ color: AX.bnbGold, flexShrink: 0 }} />
+              ? <img src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" alt="BNB" style={{ width: 14, height: 14, flexShrink: 0, borderRadius: '50%' }} />
               : <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
             }
             <input
@@ -6378,74 +6379,46 @@ function PulseTable({
 
                     return (
                       <div
-                        className="absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border shadow-xl"
+                        className="absolute top-full left-0 z-50 mt-1 w-32 rounded-lg border shadow-xl"
                         style={{
                           backgroundColor: "rgba(15, 16, 18, 0.95)",
                           borderColor: AX.border,
                         }}
                       >
-                        <div className="space-y-1.5 p-2">
-                          {/* Slippage - Running person icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaRunning
-                              size={10}
+                        <div className="space-y-2 p-3">
+                          {/* Slippage */}
+                          <div className="flex items-center gap-2">
+                            <TbFall
+                              size={14}
                               className="opacity-80"
-                              style={{ strokeWidth: "2" }}
+                              style={{ color: AX.muted }}
                             />
-                            <span className="text-xs font-light text-gray-300">
-                              {(settings.maxSlippage * 100).toFixed(0)}%
+                            <span className="text-sm text-gray-300">
+                              Auto
                             </span>
                           </div>
 
-                          {/* Priority Fee - Gas pump icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
+                          {/* Priority Fee */}
+                          <div className="flex items-center gap-2">
                             <FaGasPump
-                              size={10}
-                              className="opacity-90"
-                              style={{ color: "#FCD34D", strokeWidth: "2" }}
+                              size={14}
+                              className="opacity-80"
+                              style={{ color: AX.muted }}
                             />
-                            <span className="text-xs font-light text-yellow-400">
+                            <span className="text-sm text-gray-300">
                               {settings.priority}
                             </span>
-                            <span
-                              className="text-xs font-light"
-                              style={{ color: "#d11f3a" }}
-                            >
-                              ⚠
-                            </span>
                           </div>
 
-                          {/* Bribe - Coins icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
-                            <FaCoins
-                              size={10}
-                              className="opacity-90"
-                              style={{ color: "#FCD34D", strokeWidth: "2" }}
+                          {/* Bribe */}
+                          <div className="flex items-center gap-2">
+                            <FaHandHoldingUsd
+                              size={14}
+                              className="opacity-80"
+                              style={{ color: AX.muted }}
                             />
-                            <span className="text-xs font-light text-yellow-400">
+                            <span className="text-sm text-gray-300">
                               {settings.bribe}
-                            </span>
-                            <span
-                              className="text-xs font-light"
-                              style={{ color: "#d11f3a" }}
-                            >
-                              ⚠
-                            </span>
-                          </div>
-
-                          {/* MEV Protection - Ban icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaBan
-                              size={10}
-                              className="opacity-90"
-                              style={{ strokeWidth: "2" }}
-                            />
-                            <span className="text-xs font-light text-gray-300">
-                              {settings.mevMode === "off"
-                                ? "Off"
-                                : settings.mevMode === "reduced"
-                                  ? "Reduced"
-                                  : "Secure"}
                             </span>
                           </div>
                         </div>

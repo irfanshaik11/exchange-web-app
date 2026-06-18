@@ -11,7 +11,6 @@ import {
   SiNvidia,
   SiTesla,
   SiSpacex,
-  SiBinance,
   SiRipple,
   SiOpenai,
   SiDogecoin,
@@ -51,7 +50,7 @@ const marketsRow2: Market[] = [
   { name: "Coreweave", sym: "CRWV", icon: dot("CW", "#ffffff"), bg: "#101114" },
   { name: "Nasdaq 100", sym: "NDX", icon: dot("100", "#4da2ff"), bg: "#0c2540" },
   { name: "Apple", sym: "AAPL", icon: <SiApple />, bg: "#0a0a0a", fg: "#ffffff" },
-  { name: "BNB", sym: "BNB", icon: <SiBinance />, bg: "#1c1708", fg: "#f0b90b" },
+  { name: "BNB", sym: "BNB", icon: <img src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" alt="BNB" style={{ width: 16, height: 16, borderRadius: '50%' }} />, bg: "#1c1708", fg: "#f0b90b" },
   { name: "Anthropic", sym: "ANTHR", icon: dot("A", "#0a0a0a"), bg: "#ffffff" },
 ];
 

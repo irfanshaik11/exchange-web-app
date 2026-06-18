@@ -44,7 +44,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePulseFromQueryCache } from "~/hooks/usePulseFromQueryCache";
 import { env } from "~/env";
 
-import { SiBinance, SiSolana } from "react-icons/si";
 import { FaDiscord } from "react-icons/fa";
 import { FaRegEyeSlash } from "react-icons/fa6";
 import { extractTokenImage } from "../utils/images";
@@ -2043,7 +2042,7 @@ function PulsePageInner() {
           >
             {/* Header */}
             <div className="mb-4 flex items-center gap-2.5">
-              <SiBinance size={20} style={{ color: '#F3BA2F' }} />
+              <img src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" alt="BNB" style={{ width: 20, height: 20, borderRadius: '50%' }} />
               <span className="text-base font-semibold text-white">BNB Chain Access</span>
             </div>
             <p className="mb-4 text-sm" style={{ color: '#94a3b8' }}>
