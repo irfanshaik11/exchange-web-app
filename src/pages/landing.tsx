@@ -5,95 +5,25 @@ import { ArrowRight, Download } from 'lucide-react';
 import SimpleMarquee from '~/components/ui/marquee/SimpleMarquee';
 import MarketsMarquee from '~/components/ui/marquee/MarketsMarquee';
 import { FaXTwitter } from "react-icons/fa6";
+import TweetCard from '~/components/cards/tweet-card';
 
 /* ----------------------------- data ----------------------------- */
 
 const testimonials = [
-  {
-    name: "Paradigm",
-    handle: "@paradigm",
-    initial: "P",
-    color: "#6b7280",
-    text: "Paradigm leads $7.6 million seed funding round for perp DEX aggregator Liquid.",
-  },
-  {
-    name: "YAHOOSKI",
-    handle: "@shakespoppi",
-    initial: "SH",
-    color: "#f97316",
-    text: "It doesn't feel like you're using an ordinary trading platform. Everything is already where you expect it to be.",
-  },
-  {
-    name: "STER",
-    handle: "@sterjke",
-    initial: "S",
-    color: "#3b82f6",
-    text: "You connect your wallet, watch the flow, and when the moment comes, you just take it. No ceremony. Just the trade.",
-  },
-  {
-    name: "Waytoff",
-    handle: "@waytoff_",
-    initial: "W",
-    color: "#60a5fa",
-    text: "Mobile first DeFi apps are becoming more important every cycle. @liquidtrading is building around that with a strong focus on mobile and speed.",
-  },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
 ];
 
 const testimonials2 = [
-  {
-    name: "z4ch",
-    handle: "@0xz4ch",
-    initial: "Z",
-    color: "#3b82f6",
-    text: "guys what are we trading / predicting today? @liquidtrading has so many prediction markets live right now",
-  },
-  {
-    name: "wcu",
-    handle: "@spyruxs",
-    initial: "W",
-    color: "#a855f7",
-    text: "it is time for us hyperliquid maxis to finally rise up against the evil short sellers @liquidtrading",
-  },
-  {
-    name: "PHEONIX",
-    handle: "@pnxgrp",
-    initial: "P",
-    color: "#f97316",
-    text: "Liquid secures $7.6M in a Seed funding round led by Paradigm, with participation from General Catalyst, Alpen and angel investors.",
-  },
-  {
-    name: "Crypto Fundraises",
-    handle: "@Crypto_Dealflow",
-    initial: "CF",
-    color: "#3b82f6",
-    text: "Decentralized leverage trading platform @liquidtrading raised $7.60M in a Seed funding round led by Paradigm.",
-  },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
+  { id: "2066802889452872170" },
 ];
 
 /* ----------------------------- components ----------------------------- */
-
-type TweetData = { name: string; handle: string; initial: string; color: string; text: string };
-
-function Tweet({ t }: { t: TweetData }) {
-  return (
-    <div className="border border-white/5 rounded-2xl bg-[#0b0c0f] p-4">
-      <div className="flex items-center gap-2.5 mb-3">
-        <span
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-          style={{ background: t.color }}
-        >
-          {t.initial}
-        </span>
-        <div className="flex flex-col leading-[1.2]">
-          <span className="text-[13px] font-semibold text-[#ededf0]">{t.name}</span>
-          <span className="text-[12px] text-[#8a8a93]">{t.handle}</span>
-        </div>
-        <FaXTwitter className="ml-auto text-[#8a8a93]" size={14} />
-      </div>
-      <p className="text-[13.5px] text-[#c9c9d0] leading-[1.55] m-0">{t.text}</p>
-    </div>
-  );
-}
 
 function Logo({ size = 22 }: { size?: number }) {
   return (
@@ -220,11 +150,11 @@ export default function Landing() {
         />
       </Head>
 
-      <main className="min-h-screen w-full bg-[#030304] text-zinc-100">
+      <main className="min-h-screen w-full bg-[#000] text-zinc-100">
         <LandingHeader />
 
         {/* Hero */}
-        <section className='relative flex flex-col items-center justify-center flex-1 h-screen w-full overflow-hidden bg-[#030304]'>
+        <section className='relative flex flex-col items-center justify-center flex-1 h-screen w-full overflow-hidden bg-[#000]'>
           <video
             aria-hidden="true"
             autoPlay
@@ -282,6 +212,7 @@ export default function Landing() {
               </button>
             </div>
           </div>
+          <div className="pointer-events-none absolute bottom-0 left-0 w-full h-16 z-10 bg-gradient-to-t from-black to-transparent" />
           <div className="absolute bottom-0 w-full overflow-hidden py-6">
             <div className="pointer-events-none absolute left-0 top-0 z-20 h-full w-10 lg:w-50 bg-gradient-to-r from-black via-black/80 to-transparent" />
             <div className="pointer-events-none absolute right-0 top-0 z-20 h-full w-10 lg:w-50 bg-gradient-to-l from-black via-black/80 to-transparent" />
@@ -356,14 +287,9 @@ export default function Landing() {
                 Follow Interstate on <FaXTwitter size={13} />
               </Link>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {testimonials.map((t) => (
-                <Tweet key={t.handle} t={t} />
-              ))}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-              {testimonials2.map((t) => (
-                <Tweet key={t.handle} t={t} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[...testimonials, ...testimonials2].map((t) => (
+                <TweetCard key={t.id} id={t.id} />
               ))}
             </div>
           </div>

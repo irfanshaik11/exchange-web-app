@@ -29,7 +29,7 @@ const config = {
     "@turnkey/core",
     "@wallet-standard/app",
     "@wallet-standard/base",
-  ],
+  , 'react-tweet'],
   // Keep `sharp` (native addon) external to the serverless function bundle.
   // Vercel ships sharp natively in its runtime; bundling would either fail on
   // the .node binary or duplicate it. The `/api/img/[hash]` route relies on
