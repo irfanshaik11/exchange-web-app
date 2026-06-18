@@ -11,7 +11,10 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import PulseTable from "../components/PulseTable";
-// import BnbTable from "../components/BnbTable";
+import { startBscPulse, useBscPulseData, normalizeBscToken } from "../hooks/useBscPulseWebSocket";
+import { BnbFiltersProvider, useBnbFilters } from "../contexts/BnbFiltersContext";
+import { BnbFilterPanel } from "../components/BnbFilterPanel";
+import { applyBnbFilters } from "../utils/bnbFilterUtils";
 // MONAD DISABLED — support paused, may re-enable later. Import retained because the
 // (unreachable) JSX branch below still references MonadTable; remove `false &&` in the
 // `isMonadRoute` ternary to restore the Monad view.
@@ -110,6 +113,8 @@ const PLATFORM_UPDATES = [
   },
 ];
 
+const BNB_PASSCODE = '0987';
+
 // Module-level Solana token cache — survives SPA navigation (tab lifetime).
 // Same pattern as _hadDataByTitle in PulseTable.tsx / MonadTable.tsx.
 const _lastSolanaTokens = {
@@ -118,7 +123,7 @@ const _lastSolanaTokens = {
   migrated: [] as any[],
 };
 
-export default function PulsePage() {
+function PulsePageInner() {
   // Tab navigation state - MOBILE VIEW DISABLED
   const [activeTab, setActiveTab] = useState<
     "new" | "final-stretch" | "migrated"
@@ -143,22 +148,38 @@ export default function PulsePage() {
   const { user } = useUser();
   const router = useRouter();
 
+  // BNB passcode gate — declared first so router effects below can reference it
+  const [bnbUnlocked, setBnbUnlocked] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('bnb_unlocked') === '1';
+  });
+  const [showBnbPasscode, setShowBnbPasscode] = useState(false);
+  const [bnbPasscodeInput, setBnbPasscodeInput] = useState('');
+  const [bnbPasscodeError, setBnbPasscodeError] = useState(false);
+
   // CRITICAL: Initialize chain from URL immediately to avoid race conditions
   // This ensures we react to the correct chain before router.query is ready
   // Priority: URL param > localStorage > default (sol)
   const [currentChain, setCurrentChain] = useState<string>(() => {
+    const isBnbSession = typeof window !== 'undefined' && sessionStorage.getItem('bnb_unlocked') === '1';
     // Initialize from router query if available, otherwise check URL directly
     if (typeof window !== "undefined" && router.isReady && router.query.chain) {
-      return router.query.chain as string;
+      const c = router.query.chain as string;
+      if (c === 'bnb' && !isBnbSession) return 'sol';
+      return c;
     }
     // Also check URL params directly for immediate access
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const chainFromUrl = urlParams.get("chain");
-      if (chainFromUrl) return chainFromUrl;
+      if (chainFromUrl) {
+        if (chainFromUrl === 'bnb' && !isBnbSession) return 'sol';
+        return chainFromUrl;
+      }
       // Check localStorage for persisted chain
       const savedChain = localStorage.getItem("selected-chain");
-      if (savedChain && (savedChain === "sol" || savedChain === "monad")) {
+      if (savedChain && (savedChain === "sol" || savedChain === "monad" || savedChain === "bnb")) {
+        if (savedChain === 'bnb' && !isBnbSession) return 'sol';
         return savedChain;
       }
     }
@@ -168,44 +189,64 @@ export default function PulsePage() {
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
     if (!router.isReady) return;
-    // Only update if there's an explicit chain in the query
     if (router.query.chain) {
       const chainFromQuery = router.query.chain as string;
+      // If someone navigates directly to ?chain=bnb without a session, intercept
+      if (chainFromQuery === 'bnb' && !bnbUnlocked) {
+        setShowBnbPasscode(true);
+        router.replace('/pulse?chain=sol', undefined, { shallow: true });
+        return;
+      }
       if (chainFromQuery !== currentChain) {
-        isDev && console.log(
-          "[Pulse] Chain changed from router:",
-          currentChain,
-          "->",
-          chainFromQuery,
-        );
+        isDev && console.log("[Pulse] Chain changed from router:", currentChain, "->", chainFromQuery);
         setCurrentChain(chainFromQuery);
       }
     }
-  }, [router.query.chain, router.isReady, currentChain]);
+  }, [router.query.chain, router.isReady, currentChain, bnbUnlocked]);
 
   // Also watch router.asPath as a fallback for shallow routing
   useEffect(() => {
     if (!router.isReady) return;
     const urlParams = new URLSearchParams(router.asPath.split("?")[1] || "");
     const chainFromUrl = urlParams.get("chain");
-    // Only update if there's an explicit chain in the URL
+    if (chainFromUrl === 'bnb' && !bnbUnlocked) {
+      setShowBnbPasscode(true);
+      router.replace('/pulse?chain=sol', undefined, { shallow: true });
+      return;
+    }
     if (chainFromUrl && chainFromUrl !== currentChain) {
-      isDev && console.log(
-        "[Pulse] Chain changed from URL:",
-        currentChain,
-        "->",
-        chainFromUrl,
-      );
+      isDev && console.log("[Pulse] Chain changed from URL:", currentChain, "->", chainFromUrl);
       setCurrentChain(chainFromUrl);
     }
-  }, [router.asPath, router.isReady, currentChain]);
+  }, [router.asPath, router.isReady, currentChain, bnbUnlocked]);
 
   const chain = currentChain;
-  // const isBnbRoute = chain === 'bnb';
+  const isBnbRoute = chain === 'bnb';
   const isMonadRoute = chain === "monad";
+
+  // BNB filter panel state
+  const [showBnbFilter, setShowBnbFilter] = useState(false);
+  const { filters: bnbFilters, hasActiveFilters: bnbHasActiveFilters } = useBnbFilters();
+
   // const isBaseRoute = chain === 'base';
   // const isEthereumRoute = chain === 'eth';
   const isSolanaRoute = chain === "sol"; // Only Solana if explicitly set
+
+  const handleBnbPasscodeSubmit = () => {
+    if (bnbPasscodeInput === BNB_PASSCODE) {
+      setBnbUnlocked(true);
+      sessionStorage.setItem('bnb_unlocked', '1');
+      setShowBnbPasscode(false);
+      setBnbPasscodeInput('');
+      setBnbPasscodeError(false);
+      setCurrentChain('bnb');
+      localStorage.setItem('selected-chain', 'bnb');
+      router.replace('/pulse?chain=bnb', undefined, { shallow: true });
+    } else {
+      setBnbPasscodeError(true);
+      setBnbPasscodeInput('');
+    }
+  };
 
   // Debug logging for chain state (dev only)
   isDev && console.log("[Pulse] Chain state:", {
@@ -221,11 +262,11 @@ export default function PulsePage() {
       ? "text-white"
       : "text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
-  // const bnbButtonClasses = `${chainButtonBase} ${
-  //   isBnbRoute
-  //     ? 'bg-[#222733] text-white shadow-lg shadow-blue-500/20'
-  //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
-  // }`;
+  const bnbButtonClasses = `${chainButtonBase} ${
+    isBnbRoute
+      ? "text-white"
+      : "text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
+  }`;
   // MONAD DISABLED — support paused, may re-enable later.
   // const monadButtonClasses = `${chainButtonBase} ${
   //   isMonadRoute
@@ -252,7 +293,7 @@ export default function PulsePage() {
           ? localStorage.getItem("selected-chain")
           : null;
       const chainToUse =
-        savedChain === "sol" || savedChain === "monad" ? savedChain : "sol";
+        savedChain === "sol" || savedChain === "monad" || savedChain === "bnb" ? savedChain : "sol";
       router.replace(`/pulse?chain=${chainToUse}`, undefined, {
         shallow: true,
       });
@@ -327,7 +368,7 @@ export default function PulsePage() {
         const away = hiddenAtRef.current > 0 ? Date.now() - hiddenAtRef.current : 0;
         hiddenAtRef.current = 0;
 
-        if (away > STALE_TAB_THRESHOLD_MS && !isMonadRoute) {
+        if (away > STALE_TAB_THRESHOLD_MS && !isMonadRoute && !isBnbRoute) {
           isDev && console.log(`[Pulse] Tab hidden for ${Math.round(away / 1000)}s, refreshing Solana data...`);
 
           // Don't clear localStorage caches — let React Query's placeholderData
@@ -346,7 +387,7 @@ export default function PulsePage() {
   // CRITICAL: Only enable Solana data fetching when NOT on Monad route
   // This prevents Solana data from loading when on Monad chain
   // Wait for router to be ready before determining which chain we're on
-  const shouldFetchSolanaData = router.isReady && !isMonadRoute;
+  const shouldFetchSolanaData = router.isReady && !isMonadRoute && !isBnbRoute;
 
   const {
     data: tokens = [],
@@ -437,6 +478,32 @@ export default function PulsePage() {
     return [];
   });
   const [monadMigratedTick, setMonadMigratedTick] = useState(0);
+
+  // BNB — singleton store (module-level, survives route changes).
+  // startBscPulse() connects once on first BNB visit; stays alive permanently.
+  useEffect(() => {
+    if (isBnbRoute) startBscPulse();
+  }, [isBnbRoute]);
+
+  const bscData = useBscPulseData();
+
+  // Debug BNB data — remove once confirmed working
+  useEffect(() => {
+    if (isBnbRoute) {
+      console.log('[Pulse BNB] connected=', bscData.connected, 'new=', bscData.newTokens.length, 'fs=', bscData.finalStretchTokens.length, 'mig=', bscData.migratedTokens.length);
+      if (bscData.newTokens[0]) {
+        const t = bscData.newTokens[0];
+        console.log(
+          '[Pulse BNB] first token',
+          'mint=', t.mint?.slice(0, 12),
+          'symbol=', t.symbol,
+          'protocol=', t.launchpad_protocol,
+          'image_url=', t.image_url ? 'yes' : 'no',
+          'image=', t.image ? 'yes' : 'no',
+        );
+      }
+    }
+  }, [isBnbRoute, bscData.connected, bscData.newTokens.length, bscData.finalStretchTokens.length, bscData.migratedTokens.length]);
 
   // Function to fetch token image from backend
   const fetchTokenImage = useCallback(
@@ -906,6 +973,9 @@ export default function PulsePage() {
   // Checks ALL data sources: HTTP (React Query), WebSocket, and launchpad
   // Stops loading the instant ANY source delivers data
   const isLoading = useMemo(() => {
+    if (isBnbRoute) {
+      return bscData.newTokens.length === 0 && !bscData.connected;
+    }
     if (isMonadRoute) {
       return monadNew.length === 0 && monadNewTick === 0;
     }
@@ -925,6 +995,9 @@ export default function PulsePage() {
     // (refetchInterval in useQueryTokens will keep retrying silently)
     return true;
   }, [
+    isBnbRoute,
+    bscData.newTokens.length,
+    bscData.connected,
     isMonadRoute,
     tokens.length,
     launchpadData?.new?.length,
@@ -1236,6 +1309,9 @@ export default function PulsePage() {
   const { preloadImages } = useImagePreloader();
 
   useEffect(() => {
+    // BNB images are preloaded in PulseTable; this effect targets Solana/Monad lists only.
+    if (isBnbRoute) return;
+
     const allTokens = [
       ...((newPairsToShow as any[]) || []),
       ...((finalStretchToShow as any[]) || []),
@@ -1250,7 +1326,7 @@ export default function PulsePage() {
     if (imageSources.length > 0) {
       preloadImages(imageSources, { priority: true, timeout: 2000 });
     }
-  }, [newPairsToShow, finalStretchToShow, migratedToShow, preloadImages]);
+  }, [isBnbRoute, newPairsToShow, finalStretchToShow, migratedToShow, preloadImages]);
 
   // Sync rolling trade cache with visible pulse tokens (debounced to prevent excessive requests)
   // CRITICAL: Only sync cache for Solana route - Monad tokens use different service
@@ -1373,8 +1449,10 @@ export default function PulsePage() {
   // (kept for compatibility, but wsLoading is currently false)
   // const newPairsLoadingLegacy = (httpNewTick === 0 && wsLoading && newPairsData.length === 0);
 
-  // Build a unified list of addresses to fetch realtime market data for (cap 200)
+  // Build a unified list of addresses for realtime market data — SOL route only.
+  // On BNB/Monad routes, pass [] so the SOL WebSocket doesn't reconnect on chain switch.
   const realtimeAddrs = useMemo(() => {
+    if (!isSolanaRoute) return [];
     const src: any[] = [
       ...((newPairsToShow as any[]) || []),
       ...((finalStretchToShow as any[]) || []),
@@ -1389,7 +1467,7 @@ export default function PulsePage() {
       if (uniq.size >= 200) break;
     }
     return Array.from(uniq);
-  }, [newPairsToShow, finalStretchToShow, migratedToShow]);
+  }, [isSolanaRoute, newPairsToShow, finalStretchToShow, migratedToShow]);
 
   const {
     marketData,
@@ -1439,27 +1517,30 @@ export default function PulsePage() {
     [marketData],
   );
 
-  // For Monad route, ONLY use Monad data - never Solana data
-  // For Solana route, use the regular build function results
-  const enrichedNewPairsToShow = isMonadRoute ? monadNew : newPairsToShow;
-  const enrichedFinalStretch = isMonadRoute
-    ? monadFinalStretch
-    : finalStretchToShow;
-  const enrichedMigrated = isMonadRoute ? monadMigrated : migratedToShow;
+  // Route-based data selection: BNB → bnb state (filtered), Monad → monad state, else → Solana
+  const enrichedNewPairsToShow = isBnbRoute
+    ? applyBnbFilters(bscData.newTokens, bnbFilters.new)
+    : isMonadRoute ? monadNew : newPairsToShow;
+  const enrichedFinalStretch = isBnbRoute
+    ? applyBnbFilters(bscData.finalStretchTokens, bnbFilters.finalStretch)
+    : isMonadRoute ? monadFinalStretch : finalStretchToShow;
+  const enrichedMigrated = isBnbRoute
+    ? applyBnbFilters(bscData.migratedTokens, bnbFilters.migrated)
+    : isMonadRoute ? monadMigrated : migratedToShow;
 
-  // Write to module-level Solana cache when data is present
-  if (!isMonadRoute) {
+  // Write to module-level Solana cache only on the SOL route
+  if (isSolanaRoute) {
     if (enrichedNewPairsToShow.length > 0) _lastSolanaTokens.newPairs = enrichedNewPairsToShow;
     if (enrichedFinalStretch.length > 0)   _lastSolanaTokens.finalStretch = enrichedFinalStretch;
     if (enrichedMigrated.length > 0)       _lastSolanaTokens.migrated = enrichedMigrated;
   }
 
-  // Fall back to cached data when hooks haven't resolved yet (Frame 0 on remount)
-  const displayNewPairs = (!isMonadRoute && enrichedNewPairsToShow.length === 0 && _lastSolanaTokens.newPairs.length > 0)
+  // Fall back to cached SOL data only when on the SOL route (prevents SOL tokens flashing on BNB view)
+  const displayNewPairs = (isSolanaRoute && enrichedNewPairsToShow.length === 0 && _lastSolanaTokens.newPairs.length > 0)
     ? _lastSolanaTokens.newPairs : enrichedNewPairsToShow;
-  const displayFinalStretch = (!isMonadRoute && enrichedFinalStretch.length === 0 && _lastSolanaTokens.finalStretch.length > 0)
+  const displayFinalStretch = (isSolanaRoute && enrichedFinalStretch.length === 0 && _lastSolanaTokens.finalStretch.length > 0)
     ? _lastSolanaTokens.finalStretch : enrichedFinalStretch;
-  const displayMigrated = (!isMonadRoute && enrichedMigrated.length === 0 && _lastSolanaTokens.migrated.length > 0)
+  const displayMigrated = (isSolanaRoute && enrichedMigrated.length === 0 && _lastSolanaTokens.migrated.length > 0)
     ? _lastSolanaTokens.migrated : enrichedMigrated;
 
   // MonadTable debug useEffect removed — was causing unnecessary work on every data change
@@ -1492,40 +1573,45 @@ export default function PulsePage() {
             <div className="mb-1 flex flex-wrap gap-3 px-2 pt-2 items-center justify-between">
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-medium text-white">Trenches</h1>
+                {isBnbRoute && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: '#F3BA2F22', color: '#F3BA2F', border: '1px solid #F3BA2F44' }}>
+                    BNB Chain
+                  </span>
+                )}
                 <div className="flex items-center gap-3">
-                  <Link
-                    href="/pulse?chain=sol"
+                  {/* Chain toggle buttons — setCurrentChain fires synchronously on click
+                      so isSolanaRoute/isBnbRoute flip in the same frame, no router delay. */}
+                  <button
                     aria-label="View Solana tokens"
                     className={solanaButtonClasses}
+                    onClick={() => {
+                      setCurrentChain("sol");
+                      localStorage.setItem("selected-chain", "sol");
+                      router.replace("/pulse?chain=sol", undefined, { shallow: true });
+                    }}
                   >
                     <img
                       src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
                       alt="Solana"
                       className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
                     />
-                  </Link>
+                  </button>
                   {/* MONAD DISABLED — support paused, may re-enable later. */}
-                  {/* <Link
-                    href="/pulse?chain=monad"
-                    aria-label="View Monad tokens"
-                    className={monadButtonClasses}
-                  >
-                    <img
-                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                      alt="Monad"
-                      className="h-7 w-7 rounded-full object-cover"
-                    />
-                  </Link> */}
-                  {/* <Link
-                    href="/pulse?chain=bnb"
-                    aria-label="View BNB tokens (beta)"
+                  <button
+                    aria-label="View BNB Chain tokens"
                     className={bnbButtonClasses}
+                    onClick={() => {
+                      if (!bnbUnlocked) {
+                        setShowBnbPasscode(true);
+                        return;
+                      }
+                      setCurrentChain("bnb");
+                      localStorage.setItem("selected-chain", "bnb");
+                      router.replace("/pulse?chain=bnb", undefined, { shallow: true });
+                    }}
                   >
-                    <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
-                    <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30 bg-[#111214]">
-                      Beta
-                    </span>
-                  </Link> */}
+                    <SiBinance className="h-5 w-5 text-[#F3BA2F]" />
+                  </button>
                   {/* <Link
                     href="/pulse?chain=base"
                     aria-label="View Base tokens (coming soon)"
@@ -1651,60 +1737,81 @@ export default function PulsePage() {
             </div>
           </div>
 
-          {false ? ( // isBnbRoute commented out
+          {isBnbRoute ? (
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
-              <div className="content-mobile-only lg:hidden">
-                <div className="transition-all duration-300 ease-in-out">
+              {/* Mobile: single column */}
+              <div className="content-mobile-only flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
+                <div className="flex h-full min-h-0 flex-col transition-all duration-300 ease-in-out">
                   {activeTab === "new" && (
-                    <BnbTable
+                    <PulseTable
                       title="New Pairs"
                       tokens={displayNewPairs as any}
-                      loading={newPairsLoading}
+                      loading={displayNewPairs.length === 0}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
+                      currentChain="bnb"
+                      onOpenFilter={() => setShowBnbFilter(true)}
+                      hasExternalActiveFilters={bnbHasActiveFilters('new')}
                     />
                   )}
                   {activeTab === "final-stretch" && (
-                    <BnbTable
-                      title="Final Stretch"
+                    <PulseTable
+                      title="Almost bor"
                       tokens={displayFinalStretch as any}
+                      loading={displayFinalStretch.length === 0}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
+                      currentChain="bnb"
+                      onOpenFilter={() => setShowBnbFilter(true)}
+                      hasExternalActiveFilters={bnbHasActiveFilters('finalStretch')}
                     />
                   )}
                   {activeTab === "migrated" && (
-                    <BnbTable
+                    <PulseTable
                       title="Migrated"
                       tokens={displayMigrated as any}
+                      loading={displayMigrated.length === 0}
                       isFirstOrLast="only"
                       showBubbleMetrics={false}
+                      currentChain="bnb"
+                      onOpenFilter={() => setShowBnbFilter(true)}
+                      hasExternalActiveFilters={bnbHasActiveFilters('migrated')}
                     />
                   )}
                 </div>
               </div>
-              */}
-              {/* All tables horizontally - always visible */}
-              {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
-                <BnbTable
+              {/* Desktop: all three columns */}
+              <div className="content-desktop-only hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex gap-3">
+                <PulseTable
                   title="New Pairs"
                   tokens={displayNewPairs as any}
-                  loading={newPairsLoading}
+                  loading={displayNewPairs.length === 0}
                   isFirstOrLast="first"
                   showBubbleMetrics={false}
+                  currentChain="bnb"
+                  onOpenFilter={() => setShowBnbFilter(true)}
+                  hasExternalActiveFilters={bnbHasActiveFilters('new')}
                 />
-                <BnbTable
-                  title="Final Stretch"
+                <PulseTable
+                  title="Almost bor"
                   tokens={displayFinalStretch as any}
+                  loading={displayFinalStretch.length === 0}
                   showBubbleMetrics={false}
+                  currentChain="bnb"
+                  onOpenFilter={() => setShowBnbFilter(true)}
+                  hasExternalActiveFilters={bnbHasActiveFilters('finalStretch')}
                 />
-                <BnbTable
+                <PulseTable
                   title="Migrated"
                   tokens={displayMigrated as any}
+                  loading={displayMigrated.length === 0}
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
+                  currentChain="bnb"
+                  onOpenFilter={() => setShowBnbFilter(true)}
+                  hasExternalActiveFilters={bnbHasActiveFilters('migrated')}
                 />
-              </div> */}
+              </div>
             </div>
           ) : false && isMonadRoute ? ( // MONAD DISABLED — remove `false &&` to restore. // || isBaseRoute || isEthereumRoute
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -1910,6 +2017,93 @@ export default function PulsePage() {
           onExport={exportBlacklist}
         />
       )}
+
+      {/* BNB Filter Panel */}
+      <BnbFilterPanel
+        isOpen={showBnbFilter}
+        onClose={() => setShowBnbFilter(false)}
+      />
+
+      {/* BNB Passcode Modal */}
+      {showBnbPasscode && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0"
+            style={{ backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 99998 }}
+            onClick={() => {
+              setShowBnbPasscode(false);
+              setBnbPasscodeInput('');
+              setBnbPasscodeError(false);
+            }}
+          />
+          {/* Modal */}
+          <div
+            className="fixed left-1/2 top-1/2 w-80 -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl"
+            style={{ backgroundColor: '#0f1117', border: '1px solid #2a2f3f', zIndex: 99999 }}
+          >
+            {/* Header */}
+            <div className="mb-4 flex items-center gap-2.5">
+              <SiBinance size={20} style={{ color: '#F3BA2F' }} />
+              <span className="text-base font-semibold text-white">BNB Chain Access</span>
+            </div>
+            <p className="mb-4 text-sm" style={{ color: '#94a3b8' }}>
+              Enter the passcode to unlock BNB Chain.
+            </p>
+            {/* Input */}
+            <input
+              type="password"
+              value={bnbPasscodeInput}
+              autoFocus
+              placeholder="Enter passcode"
+              onChange={(e) => {
+                setBnbPasscodeInput(e.target.value);
+                setBnbPasscodeError(false);
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleBnbPasscodeSubmit(); }}
+              className="w-full rounded-lg px-3 py-2.5 text-sm text-white outline-none transition-colors"
+              style={{
+                backgroundColor: '#1a1c24',
+                border: `1px solid ${bnbPasscodeError ? '#ef4444' : '#2a2f3f'}`,
+              }}
+            />
+            {bnbPasscodeError && (
+              <p className="mt-2 text-xs" style={{ color: '#f87171' }}>
+                Incorrect passcode. Try again.
+              </p>
+            )}
+            {/* Buttons */}
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => {
+                  setShowBnbPasscode(false);
+                  setBnbPasscodeInput('');
+                  setBnbPasscodeError(false);
+                }}
+                className="flex-1 rounded-lg py-2 text-sm font-medium transition-colors hover:text-white"
+                style={{ backgroundColor: '#1a1c24', border: '1px solid #2a2f3f', color: '#94a3b8' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBnbPasscodeSubmit}
+                className="flex-1 rounded-lg py-2 text-sm font-semibold transition-opacity hover:opacity-90"
+                style={{ backgroundColor: '#F3BA2F', color: '#000' }}
+              >
+                Unlock
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
+  );
+}
+
+export default function PulsePage() {
+  return (
+    <BnbFiltersProvider>
+      <PulsePageInner />
+    </BnbFiltersProvider>
   );
 }
