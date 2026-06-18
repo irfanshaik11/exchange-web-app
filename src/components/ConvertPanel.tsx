@@ -115,26 +115,25 @@ const CHAIN_META: Record<string, ChainMeta> = {
   },
   ethereum: {
     name: "Ethereum",
-    logo: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+    logo: "/ethereum.png",
     color: "#627EEA",
     nativeGas: "ETH",
   },
   bsc: {
     name: "BNB Chain",
-    logo: "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+    logo: "/bnb.png",
     color: "#F0B90B",
     nativeGas: "BNB",
   },
   monad: {
-    // No clean first-party logo handy yet — rely on the colored-letter fallback.
     name: "Monad",
-    logo: "",
+    logo: "/monad.png",
     color: "#836EF9",
     nativeGas: "MON",
   },
   hyperevm: {
     name: "HyperEVM",
-    logo: "https://assets.coingecko.com/coins/images/50882/small/hyperliquid.jpg",
+    logo: "/hyperevm.png",
     color: "#97FCE4",
     nativeGas: "HYPE",
   },
