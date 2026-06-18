@@ -30,6 +30,7 @@ export const env = createEnv({
     NEXT_PUBLIC_BACKEND_URL: z.string(),
     NEXT_PUBLIC_GO_SERVICE_URL: z.string().url(),
     NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL: z.string().url().optional(),
+    NEXT_PUBLIC_BNB_TOKEN_SERVICE_URL: z.string().url().optional(),
     NEXT_PUBLIC_BLOCKVISION_API_KEY: z.string().optional(),
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED: z.preprocess(
       (val) => val === "true" || val === true,
@@ -79,6 +80,8 @@ export const env = createEnv({
     NEXT_PUBLIC_GO_SERVICE_URL: process.env.NEXT_PUBLIC_GO_SERVICE_URL,
     NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL:
       process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL,
+    NEXT_PUBLIC_BNB_TOKEN_SERVICE_URL:
+      process.env.NEXT_PUBLIC_BNB_TOKEN_SERVICE_URL,
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL,
     NEXT_PUBLIC_BLOCKVISION_API_KEY:
       process.env.NEXT_PUBLIC_BLOCKVISION_API_KEY,

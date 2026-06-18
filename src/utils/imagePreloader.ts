@@ -8,7 +8,10 @@ import {
   isMetadataUrl,
   resolveMetadataImage,
 } from "./images";
-import { computeHashImageUrl } from "./imageHash";
+import {
+  computeHashImageUrl,
+  isSpeculativeInterstateCdn,
+} from "./imageHash";
 import {
   isImageDead,
   recordImageFailure,
@@ -232,6 +235,7 @@ export function extractImageUrls(tokens: any[]): string[] {
 
       const normalized = normalizeImageUrl(raw) || raw;
       if (!normalized) return null;
+      if (isSpeculativeInterstateCdn(normalized)) return null;
 
       if (normalized.startsWith("/api/")) return normalized;
 

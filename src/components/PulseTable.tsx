@@ -227,6 +227,8 @@ interface PulseTableProps {
   skeletonRowCount?: number;
   showBubbleMetrics?: boolean; // Feature flag for bubble metrics (Buyers, Sellers, Wallets, 24h TX, Vol 24h)
   currentChain?: string; // Chain from parent to avoid router.query timing issues
+  onOpenFilter?: () => void; // When set, overrides the internal filter toggle (used by BNB to open BnbFilterPanel)
+  hasExternalActiveFilters?: boolean; // Drives the dot indicator when using external filter
 }
 
 // PHASE 4 (M1): LRU Cache to prevent unbounded memory growth
@@ -292,8 +294,89 @@ const safeNum = (val: any): number => {
   return isFinite(num) ? num : 0;
 };
 
+function hasMeaningfulTokenText(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function preserveTokenMetadata(prev: any, next: any): any {
+  const merged = { ...next };
+  for (const key of ["name", "symbol", "image_url", "image", "logo", "uri"] as const) {
+    const nextVal = merged[key];
+    const prevVal = prev[key];
+    const nextMissing =
+      nextVal === undefined ||
+      nextVal === null ||
+      (typeof nextVal === "string" && nextVal.trim() === "");
+    if (nextMissing && hasMeaningfulTokenText(prevVal)) {
+      merged[key] = prevVal;
+    }
+  }
+  return merged;
+}
+
 // Get best available buy/sell data from token (prefers 5m, falls back through timeframes)
+const getBnbBondingPct = (token: any): number => {
+  const raw = token?.bonding_curve_progress ?? token?.bonding_pct;
+  if (raw == null || raw === "" || raw === -1) return 0;
+  const n = typeof raw === "string" ? parseFloat(raw) : Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n <= 1.01 ? n * 100 : n;
+};
+
+const formatBnbBondingPct = (token: any): string => {
+  const pct = getBnbBondingPct(token);
+  if (!Number.isFinite(pct) || pct <= 0) return "—";
+  if (pct < 1) return pct.toFixed(1);
+  return String(Math.round(pct));
+};
+
+const isBnbChainToken = (token: any): boolean =>
+  token?._chain === "bnb" || token?.chain === "bnb";
+
+const getBnbVolumeUsd = (token: any): number => {
+  const parseVol = (val: string | number | undefined | null): number => {
+    if (val === undefined || val === null) return 0;
+    if (typeof val === "number") return isFinite(val) && val > 0 ? val : 0;
+    const parsed = parseFloat(val);
+    return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
+  };
+
+  const vol = token?.volume;
+  if (vol && typeof vol === "object" && !Array.isArray(vol)) {
+    return (
+      parseVol(vol.volume_24h_usd) ||
+      parseVol(vol.volume_6h_usd) ||
+      parseVol(vol.volume_1h_usd) ||
+      parseVol(vol.volume_5m_usd) ||
+      0
+    );
+  }
+
+  return parseVol(token?.volume_24h) || 0;
+};
+
 const getBuySellData = (token: Token): { buys: number; sells: number } => {
+  if ((token as any)?._chain === "bnb" || (token as any)?.chain === "bnb") {
+    const txCount =
+      safeNum((token as any).tx_count_5m) || safeNum((token as any).tx_count_24h);
+    const buyVol =
+      safeNum((token as any).total_buys_5m) ||
+      safeNum((token as any).total_buys_24h) ||
+      safeNum((token as any).total_buy_volume_24h);
+    const sellVol =
+      safeNum((token as any).total_sells_5m) ||
+      safeNum((token as any).total_sells_24h) ||
+      safeNum((token as any).total_sell_volume_24h);
+    const totalVol = buyVol + sellVol;
+    if (txCount > 0 && totalVol > 0) {
+      return {
+        buys: Math.round(txCount * (buyVol / totalVol)),
+        sells: Math.round(txCount * (sellVol / totalVol)),
+      };
+    }
+    if (txCount > 0) return { buys: txCount, sells: 0 };
+  }
+
   // Try 5m first (most relevant for new tokens)
   const buys5m = safeNum(token.total_buys_5m);
   const sells5m = safeNum(token.total_sells_5m);
@@ -327,6 +410,7 @@ const formatHolderCount = (holders: number): string => {
 // Format volume value (e.g., 1500000 -> "$1.5M")
 const formatVolumeDisplay = (val: number): string => {
   const rounded = Math.round(val);
+  if (!Number.isFinite(rounded) || rounded <= 0) return "—";
   if (rounded >= 1e12) return `$${Math.round(rounded / 1e12)}T`;
   if (rounded >= 1e9) return `$${Math.round(rounded / 1e9)}B`;
   if (rounded >= 1e6) return `$${Math.round(rounded / 1e6)}M`;
@@ -834,7 +918,6 @@ function useSmoothProgress(
  * Adds buy + sell volumes and multiplies by SOL price.
  */
 const calculateVolumeUsd = (token: any, solPrice: number): number => {
-  // Parse volume string to number, handling undefined/null
   const parseVol = (val: string | number | undefined): number => {
     if (val === undefined || val === null) return 0;
     if (typeof val === "number") return val;
@@ -842,6 +925,9 @@ const calculateVolumeUsd = (token: any, solPrice: number): number => {
     return isNaN(parsed) ? 0 : parsed;
   };
 
+  if ((token as any)?._chain === "bnb" || (token as any)?.chain === "bnb") {
+    return getBnbVolumeUsd(token);
+  }
   // Check each time period from highest to lowest
   // Use the first period that has non-zero data
   const vol24h =
@@ -1106,8 +1192,11 @@ const StatusPopupContent = React.memo(function StatusPopupContent({
     (token as any).launchpad_protocol || ""
   ).toLowerCase();
 
+  const isBnb = isBnbChainToken(token);
+
   // Compute bonding progress once
   const bondingProgress = useMemo(() => {
+    if (isBnb) return getBnbBondingPct(token);
     if (isNewPairs) {
       return typeof token.bonding_pct === "number"
         ? token.bonding_pct
@@ -1116,9 +1205,30 @@ const StatusPopupContent = React.memo(function StatusPopupContent({
     return typeof token.bonding_curve_progress === "number"
       ? token.bonding_curve_progress
       : parseFloat(token.bonding_curve_progress || "0");
-  }, [isNewPairs, token.bonding_pct, token.bonding_curve_progress]);
+  }, [isBnb, isNewPairs, token]);
 
   // Render status content based on type
+  if (isBnb) {
+    if (isNewPairs) {
+      const label = formatBnbBondingPct(token);
+      return (
+        <span style={{ color: AX.aiGreen }}>
+          Bonding: {label === "—" ? "0%" : `${label}%`}
+        </span>
+      );
+    }
+    if (isFinalStretch) {
+      return <span style={{ color: AX.aiCyan }}>Almost bonded</span>;
+    }
+    if (isMigrated) {
+      const proto =
+        launchpadProtocol === "four.meme" || launchpadProtocol === "flap"
+          ? launchpadProtocol
+          : launchpadProtocol || "Migrated";
+      return <span style={{ color: AX.aiBlue }}>{proto}</span>;
+    }
+  }
+
   if (isNewPairs) {
     return (
       <span style={{ color: AX.aiGreen }}>
@@ -1623,7 +1733,11 @@ function SocialIconsWithMetadata({
                 className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const url = `https://dexscreener.com/solana/${token.mint}`;
+                  const isBnb = (token as any)._chain === 'bnb' || (token as any).chain === 'bnb';
+                  const addr = (token as any).pair_address || token.mint;
+                  const url = isBnb
+                    ? `https://dexscreener.com/bsc/${addr}`
+                    : `https://dexscreener.com/solana/${token.mint}`;
                   window.open(url, "_blank");
                 }}
               >
@@ -1792,10 +1906,17 @@ function TokenImage({
   }
   const blDevWallet = token.dev_wallet || token.creator_wallet || null;
 
+  const isBnbToken = isBnbChainToken(token);
+
   // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
     // Don't apply bonding progress to migrated column
     if (!isNewPairs || columnType === "migrated") return 0;
+
+    if (isBnbChainToken(token)) {
+      const pct = getBnbBondingPct(token);
+      return pct > 0 ? Math.min(pct / 100, 1) : 0;
+    }
 
     // Priority order: bonding_pct, bonding_curve_progress, graduationPercent, market cap / 70k
     const bondingPct = (token as any).bonding_pct;
@@ -2097,20 +2218,19 @@ function TokenImage({
     return (Math.abs(hash) % 60) / 100;
   };
 
-  // Use real progress if available, otherwise use unique test progress
-  // For New Pairs, progress should be 0-60% range, so we scale it to 0-1 for the border
+  // Use real progress if available, otherwise use unique test progress (Solana only)
   const finalProgress =
     migrationProgress > 0
       ? migrationProgress
-      : isNewPairs
+      : isNewPairs && !isBnbToken
         ? getUniqueTestProgress(token)
         : 0;
 
-  // Scale New Pairs progress to fill more of the border (since they max out at ~60%)
-  // Cap at 95% to never show full completion
-  const rawScaledProgress = isNewPairs
-    ? Math.min(finalProgress / 0.6, 0.95)
-    : finalProgress;
+  // Solana New Pairs max out at ~60% — scale to fill the border. BNB uses actual %.
+  const rawScaledProgress =
+    isBnbToken || !isNewPairs
+      ? finalProgress
+      : Math.min(finalProgress / 0.6, 0.95);
 
   // Smooth animation for progress bar - uses requestAnimationFrame for buttery transitions
   const scaledProgress = useSmoothProgress(rawScaledProgress, 400);
@@ -2130,7 +2250,12 @@ function TokenImage({
     }
   };
 
+  const canPreviewImage = Boolean(
+    imageUrl && !isMetadataUrl(imageUrl),
+  );
+
   const handleImageEnter = () => {
+    if (!canPreviewImage) return;
     setShowImagePreview(true);
     const inner = imageContainerRef.current
       ?.firstElementChild as HTMLDivElement | null;
@@ -2559,8 +2684,9 @@ function TokenImage({
           ></div>
         </div>
       </div>
-      {/* Image Preview Window */}
+      {/* Image Preview Window — skip when image unresolved (avoids giant ? overlay) */}
       {showImagePreview &&
+        canPreviewImage &&
         createPortal(
           <div
             className="pointer-events-none fixed z-[9999]"
@@ -2594,8 +2720,8 @@ function TokenImage({
                   stableId={token.mint || token.pair_address || undefined}
                 />
               </div>
-              {/* Migration progress tooltip - only for New Pairs */}
-              {isNewPairs && (
+              {/* Migration progress tooltip - Solana New Pairs only */}
+              {isNewPairs && !isBnbToken && (
                 <div
                   className="absolute -top-10 left-1/2 z-50 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
                   style={{
@@ -2986,6 +3112,8 @@ function PulseTable({
   skeletonRowCount = 10,
   showBubbleMetrics = false,
   currentChain: chainProp,
+  onOpenFilter,
+  hasExternalActiveFilters = false,
 }: PulseTableProps) {
   // Track whether we ever had data — prevents "No tokens found" flash on tab return
   // Uses module-level map so state persists across Next.js Pages Router remounts
@@ -3140,8 +3268,16 @@ function PulseTable({
       rawToken.bundler_held_percentage ??
       0;
 
+    const { name: rawName, symbol: rawSymbol, ...rest } = rawToken;
+
     return {
-      ...rawToken,
+      ...rest,
+      ...(hasMeaningfulTokenText(rawName)
+        ? { name: String(rawName).trim() }
+        : {}),
+      ...(hasMeaningfulTokenText(rawSymbol)
+        ? { symbol: String(rawSymbol).trim() }
+        : {}),
       // Holder count variants
       holder_count: holderValue,
       holders: holderValue,
@@ -3202,6 +3338,7 @@ function PulseTable({
   // Sync baseTokens with tokens prop when it changes (initial load or parent refresh)
   // SMART MERGE: Preserve good market cap values from WebSocket updates
   useEffect(() => {
+    if (chainProp === 'bnb') return;
     if (tokens && tokens.length > 0) {
       setBaseTokens((prev) => {
         // Normalize all incoming tokens for consistent filtering
@@ -3211,30 +3348,42 @@ function PulseTable({
 
         // Create a map of existing tokens with their market caps
         const existingMap = new Map<string, Token>();
-        prev.forEach((t) => existingMap.set(t.mint, t));
+        prev.forEach((t) => {
+          const key = (t.mint || "").toLowerCase() || t.mint;
+          existingMap.set(key, t);
+        });
 
-        // Merge: use parent data but preserve good market cap from existing
+        // Merge: use parent data but preserve good market cap + metadata from existing
         return normalizedTokens.map((newToken) => {
-          const existing = existingMap.get(newToken.mint);
+          const key = (newToken.mint || "").toLowerCase() || newToken.mint;
+          const existing = existingMap.get(key);
           if (!existing) return newToken;
+
+          let merged = preserveTokenMetadata(existing, newToken);
 
           // If existing has a good market cap but new doesn't, preserve it
           const existingMc = getTokenMarketCap(existing);
           const newMc = getTokenMarketCap(newToken);
 
           if (existingMc > 0 && newMc === 0) {
-            // Preserve the good market cap from WebSocket updates
-            return {
-              ...newToken,
+            merged = {
+              ...merged,
               market_cap_usd: existing.market_cap_usd,
               fully_diluted_value: (existing as any).fully_diluted_value,
             };
           }
-          return newToken;
+          return merged;
         });
       });
     }
-  }, [tokens, normalizeHttpToken]);
+  }, [tokens, normalizeHttpToken, chainProp]);
+
+  useEffect(() => {
+    if (chainProp === "bnb") {
+      setFilteredTokens([]);
+    }
+  }, [chainProp]);
+
   // State for WebSocket real-time updates
   const wsCacheStorageKey = useMemo(() => {
     const lowerTitle = title.toLowerCase();
@@ -3516,6 +3665,7 @@ function PulseTable({
   // Fetch filtered tokens from API when protocols are selected
   const fetchFilteredTokens = useCallback(
     async (protocols: string[]) => {
+      if (chainProp === 'bnb') return;
       if (protocols.length === 0) {
         setFilteredTokens([]);
         // Clear protocol cache
@@ -3578,7 +3728,7 @@ function PulseTable({
         setIsFetchingFiltered(false);
       }
     },
-    [title, normalizeHttpToken],
+    [title, normalizeHttpToken, chainProp],
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -4448,6 +4598,16 @@ function PulseTable({
     // Priority: HTTP shows immediately → WebSocket merges on top → IndexedDB caches both
     // ═══════════════════════════════════════════════════════════════════════════
     if (hasNoCustomFilters) {
+      // BNB tokens come from props only — never merge Solana WS/cache/HTTP on top.
+      if (chainProp === 'bnb') {
+        // BNB live state comes from useBscPulseData — never use baseTokens (Solana-only cache).
+        const source = tokens;
+        if (isNewPairs || title.toLowerCase().includes('migrated')) {
+          return source.slice(0, 100);
+        }
+        return filterNonZeroLiquidity(source).slice(0, 100);
+      }
+
       const isFinalStretch =
         title.toLowerCase().includes("final") ||
         title.toLowerCase().includes("stretch");
@@ -4720,27 +4880,31 @@ function PulseTable({
     // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
     // IMPORTANT: Use direct bridge tokens instead of wsTokens state for instant updates
     // This eliminates the state copy that was causing progressive latency
-    const directTokensForChannel = (channel === "new"
-      ? directNewTokens
-      : channel === "final_stretch"
-        ? directFinalStretchTokens
-        : channel === "migrated"
-          ? directMigratedTokens
-          : []) as unknown as Token[];
+    // SKIP for BNB: BNB tokens come entirely from props; the SOL WS cache / SOL
+    // direct-bridge tokens must not overwrite them.
+    if (chainProp !== 'bnb') {
+      const directTokensForChannel = (channel === "new"
+        ? directNewTokens
+        : channel === "final_stretch"
+          ? directFinalStretchTokens
+          : channel === "migrated"
+            ? directMigratedTokens
+            : []) as unknown as Token[];
 
-    // Use direct tokens if available, fall back to wsTokens cache (initial load only)
-    const wsSource =
-      directTokensForChannel.length > 0 ? directTokensForChannel : wsTokens;
+      // Use direct tokens if available, fall back to wsTokens cache (initial load only)
+      const wsSource =
+        directTokensForChannel.length > 0 ? directTokensForChannel : wsTokens;
 
-    if (hasSpecificProtocols) {
-      wsSource.forEach((token) => {
-        if (tokenMatchesFilters(token)) {
-          mergedMap.set(token.mint, token);
-        }
-      });
-    } else {
-      // No specific protocols selected - include all WebSocket tokens
-      wsSource.forEach((token) => mergedMap.set(token.mint, token));
+      if (hasSpecificProtocols) {
+        wsSource.forEach((token) => {
+          if (tokenMatchesFilters(token)) {
+            mergedMap.set(token.mint, token);
+          }
+        });
+      } else {
+        // No specific protocols selected - include all WebSocket tokens
+        wsSource.forEach((token) => mergedMap.set(token.mint, token));
+      }
     }
 
     // Filter zero liquidity tokens - DISABLED for new pairs and migrated to maximize speed
@@ -6243,37 +6407,47 @@ function PulseTable({
               className="relative z-[9999] flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
               style={{
                 backgroundColor: "transparent",
-                color: showFilters
-                  ? AX.aiBlue
-                  : hasActiveFilters
-                    ? "#31e3ac"
-                    : AX.muted,
+                color: onOpenFilter
+                  ? (hasExternalActiveFilters ? "#F3BA2F" : AX.muted)
+                  : showFilters
+                    ? AX.aiBlue
+                    : hasActiveFilters
+                      ? "#31e3ac"
+                      : AX.muted,
               }}
               onMouseEnter={(e) => {
-                if (!showFilters) {
-                  e.currentTarget.style.color = hasActiveFilters
-                    ? "#5eead4"
-                    : "#E6E7EA";
+                if (onOpenFilter) {
+                  e.currentTarget.style.color = hasExternalActiveFilters ? "#fcd34d" : "#E6E7EA";
+                } else if (!showFilters) {
+                  e.currentTarget.style.color = hasActiveFilters ? "#5eead4" : "#E6E7EA";
                 }
               }}
               onMouseLeave={(e) => {
-                if (!showFilters) {
-                  e.currentTarget.style.color = hasActiveFilters
-                    ? "#31e3ac"
-                    : AX.muted;
+                if (onOpenFilter) {
+                  e.currentTarget.style.color = hasExternalActiveFilters ? "#F3BA2F" : AX.muted;
+                } else if (!showFilters) {
+                  e.currentTarget.style.color = hasActiveFilters ? "#31e3ac" : AX.muted;
                 }
               }}
-              onClick={() => setShowFilters(!showFilters)}
+              onClick={() => {
+                if (onOpenFilter) {
+                  onOpenFilter();
+                } else {
+                  setShowFilters(!showFilters);
+                }
+              }}
             >
               <BsSliders2 size={14} />
 
               {/* Active filter indicator dot */}
-              {hasActiveFilters && (
+              {(onOpenFilter ? hasExternalActiveFilters : hasActiveFilters) && (
                 <span
                   className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
                   style={{
-                    backgroundColor: "#31e3ac",
-                    boxShadow: "0 0 4px rgba(49, 227, 172, 0.5)",
+                    backgroundColor: onOpenFilter ? "#F3BA2F" : "#31e3ac",
+                    boxShadow: onOpenFilter
+                      ? "0 0 4px rgba(243, 186, 47, 0.5)"
+                      : "0 0 4px rgba(49, 227, 172, 0.5)",
                   }}
                 />
               )}
@@ -8978,15 +9152,17 @@ function PulseTable({
               // Use prop from parent (more reliable) or fallback to router.query
               const currentChain =
                 chainProp || (router.query.chain as string) || "sol";
-              // Build query params for optimistic UI
-              // Note: mint is in URL path AND query for backward compat + robustness
-              // Query params removed — trade page resolves metadata via WS + search
+              const isBnbToken = currentChain === 'bnb';
+              const tokenHref = isBnbToken
+                ? `https://dexscreener.com/bsc/${(token as any).pair_address || tokenMint}`
+                : `/trade/${tokenMint}`;
 
               return (
                 <div key={tokenMint} style={style}>
                   <div style={{ paddingBottom: "4px" }}>
                     <Link
-                      href={`/trade/${tokenMint}`}
+                      href={tokenHref}
+                      {...(isBnbToken ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                       className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
                       style={{
                         color: AX.text,
@@ -9211,7 +9387,8 @@ function PulseTable({
                                     className="flex-shrink-0 text-sm font-semibold"
                                     style={{ color: AX.text }}
                                   >
-                                    {token.symbol}
+                                    {token.symbol ||
+                                      (isBnbToken ? shortAddr(token) : "")}
                                   </span>
                                   <span
                                     className="truncate text-xs"
@@ -9760,7 +9937,22 @@ function PulseTable({
                                   </div>
                                 </div>
                                 <div className="flex items-center justify-end gap-2 text-xs">
-                                  {/* Total Fees in SOL */}
+                                  {isBnbToken ? (
+                                    <InterstateTooltip label="Bonding curve progress">
+                                      <div
+                                        className="flex cursor-default flex-row items-center gap-1"
+                                        style={{ color: AX.muted }}
+                                      >
+                                        <span className="text-xs">%</span>
+                                        <span
+                                          className="number-font text-xs font-medium"
+                                          style={{ color: "#ffffff" }}
+                                        >
+                                          {formatBnbBondingPct(token)}
+                                        </span>
+                                      </div>
+                                    </InterstateTooltip>
+                                  ) : (
                                   <InterstateTooltip label="Global Fees Paid">
                                     <div
                                       className="flex cursor-default flex-row items-center gap-1"
@@ -9864,6 +10056,7 @@ function PulseTable({
                                       })()}
                                     </div>
                                   </InterstateTooltip>
+                                  )}
                                   <div
                                     className="flex flex-row items-center gap-1"
                                     style={{ color: AX.muted }}
@@ -10189,6 +10382,7 @@ function PulseTable({
                             return null;
                           })()}
                         </div>
+                        {!isBnbToken && (
                         <div className="badges-scroll absolute bottom-1 left-[76px] flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto overflow-y-hidden">
                           <BottomCardInfoHolder
                             PassedIcon={BsPersonGear}
@@ -10252,6 +10446,7 @@ function PulseTable({
                       />
                       */}
                         </div>
+                        )}
                       </div>
                     </Link>
                   </div>

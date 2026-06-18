@@ -255,6 +255,37 @@ function clampToAllowedWidth(width?: number | null): AllowedProxyWidth {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+/** Speculative cdn.interstate.so/{mint}.webp URLs 403 when unwarmed — never proxy. */
+export function isSpeculativeInterstateCdn(url: string | null | undefined): boolean {
+  return Boolean(url && url.includes('cdn.interstate.so/'));
+}
+
+/** Hosts that load reliably in the browser without the /api/img server proxy. */
+const DIRECT_LOAD_IMAGE_HOST_PATTERNS = [
+  'static.four.meme',
+  'four.meme',
+  'cloudflare-ipfs.com',
+  'mypinata.cloud',
+  'cf-ipfs.com',
+  'ipfs.io',
+  'nftstorage.link',
+  'dweb.link',
+  'pinata.cloud',
+  'dexscreener.com',
+] as const;
+
+export function shouldBypassImageProxy(url: string | null | undefined): boolean {
+  if (!url || !url.startsWith('http')) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return DIRECT_LOAD_IMAGE_HOST_PATTERNS.some(
+      (pattern) => host === pattern || host.endsWith(`.${pattern}`),
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Normalize a URL for deterministic hashing.
  * Strips trailing slashes, lowercases protocol+host, sorts query params.
@@ -305,6 +336,14 @@ export function computeHashImageUrl(
 
   // Only proxy external HTTP(S) URLs
   if (!src.startsWith("http")) {
+    return src;
+  }
+
+  if (isSpeculativeInterstateCdn(src)) {
+    return null;
+  }
+
+  if (shouldBypassImageProxy(src)) {
     return src;
   }
 
