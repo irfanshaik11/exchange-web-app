@@ -11,7 +11,7 @@ import TweetCard from '~/components/cards/tweet-card';
 
 const testimonials = [
   { id: "2066802889452872170" },
-  { id: "2066802889452872170" },
+  { id: "2066467204070293555" },
   { id: "2066802889452872170" },
   { id: "2066802889452872170" },
 ];
