@@ -130,6 +130,11 @@ import {
   transformToastToError,
 } from "~/utils/createSolanaToastHandler";
 import { hasActiveFilters as checkActiveFilters } from "~/utils/discoverFilterUtils";
+import {
+  BNB_CHAIN_COLOR,
+  BNB_CHAIN_ICON,
+  findBnbProtocol,
+} from "~/utils/bnbProtocols";
 import { TokenAge } from "./TokenAge";
 import { TokenCountdown24h } from "./TokenCountdown24h";
 
@@ -2006,6 +2011,12 @@ function TokenImage({
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     const mintAddress = token.mint?.toLowerCase() || "";
 
+    // BNB chain: each protocol has a dedicated color defined in BNB_PROTOCOLS.
+    // Unknown BNB protocols fall back to BNB chain gold rather than Solana green.
+    if (isBnbChainToken(token)) {
+      return findBnbProtocol(launchpadProtocol)?.color ?? BNB_CHAIN_COLOR;
+    }
+
     // Check if mint address contains "bags" - override any protocol
     if (mintAddress.includes("bags")) {
       return "#31e3ac"; // Green for bags
@@ -2103,6 +2114,12 @@ function TokenImage({
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     const mintAddress = token.mint?.toLowerCase() || "";
 
+    // BNB chain: each protocol has a dedicated icon defined in BNB_PROTOCOLS.
+    // Unknown BNB protocols display the BNB chain icon as a recognisable fallback.
+    if (isBnbChainToken(token)) {
+      return findBnbProtocol(launchpadProtocol)?.icon ?? BNB_CHAIN_ICON;
+    }
+
     // Check if mint address contains "bags" - override any protocol
     if (mintAddress.includes("bags")) {
       return "https://bags.fm/assets/images/bags-icon.png";
@@ -2159,6 +2176,12 @@ function TokenImage({
   const getAmmDisplayName = (t: Token): string => {
     const protocol = ((t as any).launchpad_protocol || "").toLowerCase();
     const mint = (t.mint || "").toLowerCase();
+
+    // BNB chain: use the canonical label from BNB_PROTOCOLS for the tooltip.
+    if (isBnbChainToken(t)) {
+      return findBnbProtocol(protocol)?.label ?? "BNB";
+    }
+
     if (mint.includes("bags")) return "Bags";
     if (!protocol) return "Pump";
     if (protocol.includes("pump"))

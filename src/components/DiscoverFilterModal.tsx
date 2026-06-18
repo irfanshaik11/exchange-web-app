@@ -63,12 +63,13 @@ const protocols = [
   {
     name: "Bonk",
     icon: (
-      <div
-        className="flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-xs font-bold"
-        style={{ color: "#f0f5f5" }}
-      >
-        B
-      </div>
+      <Image
+        src="https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png"
+        alt="Bonk"
+        width={16}
+        height={16}
+        className="rounded-full"
+      />
     ),
     color: "#ff6b35",
   },
@@ -128,12 +129,13 @@ const protocols = [
   {
     name: "Raydium",
     icon: (
-      <div
-        className="flex h-4 w-4 items-center justify-center rounded-full bg-gray-500 text-xs font-bold"
-        style={{ color: "#f0f5f5" }}
-      >
-        R
-      </div>
+      <Image
+        src="https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png"
+        alt="Raydium"
+        width={16}
+        height={16}
+        className="rounded-full"
+      />
     ),
     color: "#6b7280",
   },
@@ -170,33 +172,39 @@ const quoteTokens = [
   {
     name: "SOL",
     icon: (
-      <div
-        className="flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
-        style={{ backgroundColor: "#31e3ac", color: "#f0f5f5" }}
-      >
-        S
-      </div>
+      <Image
+        src="https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png"
+        alt="SOL"
+        width={16}
+        height={16}
+        className="rounded-full"
+      />
     ),
     color: "#31e3ac",
   },
   {
     name: "USDC",
     icon: (
-      <div
-        className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-xs font-bold"
-        style={{ color: "#f0f5f5" }}
-      >
-        U
-      </div>
+      <Image
+        src="https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png"
+        alt="USDC"
+        width={16}
+        height={16}
+        className="rounded-full"
+      />
     ),
     color: "#06b6d4",
   },
   {
     name: "USD1",
     icon: (
-      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-yellow-500 text-xs font-bold text-black">
-        1
-      </span>
+      <Image
+        src="https://s2.coinmarketcap.com/static/img/coins/64x64/36148.png"
+        alt="USD1"
+        width={16}
+        height={16}
+        className="rounded-full"
+      />
     ),
     color: "#fbbf24",
   },
@@ -588,7 +596,7 @@ export default function DiscoverFilterModal({
                 Select All
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-3 gap-1.5 justify-items-start">
               {protocols.map((protocol) => {
                 const selected = pendingFilters.protocols.includes(
                   protocol.name,
@@ -596,12 +604,12 @@ export default function DiscoverFilterModal({
                 return (
                   <button
                     key={protocol.name}
-                    className="flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-200"
+                    className="flex cursor-pointer items-center gap-2 rounded-full px-2 py-1 text-xs font-semibold whitespace-nowrap transition-all duration-200"
                     style={{
                       backgroundColor: selected
                         ? `${protocol.color}15`
                         : "transparent",
-                      border: `1.5px solid ${selected ? protocol.color : AX.border}`,
+                      border: `1px solid ${selected ? protocol.color : AX.border}`,
                       color: selected ? protocol.color : AX.textMuted,
                     }}
                     onMouseEnter={(e) => {
@@ -670,12 +678,12 @@ export default function DiscoverFilterModal({
                   return (
                     <button
                       key="__mayhem_mode_chip"
-                      className="flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-200"
+                      className="flex cursor-pointer items-center gap-2 rounded-full px-2 py-1 text-xs font-semibold whitespace-nowrap transition-all duration-200"
                       style={{
                         backgroundColor: isMayhemActive
                           ? `${MAYHEM}15`
                           : "transparent",
-                        border: `1.5px solid ${isMayhemActive ? MAYHEM : AX.border}`,
+                        border: `1px solid ${isMayhemActive ? MAYHEM : AX.border}`,
                         color: isMayhemActive ? MAYHEM : AX.textMuted,
                       }}
                       onMouseEnter={(e) => {
@@ -745,7 +753,7 @@ export default function DiscoverFilterModal({
             >
               Quote Tokens
             </h4>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-1.5 justify-items-start">
               {quoteTokens.map((token) => {
                 const selected = pendingFilters.quoteTokens.includes(
                   token.name,
@@ -753,12 +761,12 @@ export default function DiscoverFilterModal({
                 return (
                   <button
                     key={token.name}
-                    className="flex cursor-pointer items-center gap-2 rounded-full px-3.5 py-2 text-xs font-semibold transition-all duration-200"
+                    className="flex cursor-pointer items-center gap-2 rounded-full px-2 py-1 text-xs font-semibold transition-all duration-200"
                     style={{
                       backgroundColor: selected
                         ? `${token.color}15`
                         : "transparent",
-                      border: `1.5px solid ${selected ? token.color : AX.border}`,
+                      border: `1px solid ${selected ? token.color : AX.border}`,
                       color: selected ? token.color : AX.textMuted,
                     }}
                     onMouseEnter={(e) => {

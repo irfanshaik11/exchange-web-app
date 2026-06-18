@@ -9,6 +9,7 @@ import {
   type BnbFilters,
   type BnbColumnKey,
 } from '~/contexts/BnbFiltersContext';
+import { BNB_PROTOCOLS } from '~/utils/bnbProtocols';
 
 // ─── Design tokens (mirrors PulseTable AX palette) ───────────────────────────
 const C = {
@@ -24,41 +25,35 @@ const C = {
   red: '#ef4444',
 } as const;
 
-// ─── Launchpads per column ────────────────────────────────────────────────────
-const LAUNCHPADS_NEW = [
-  { label: 'Fourmeme',       value: 'four.meme',       color: '#22c55e' },
-  { label: 'Cubepeg',        value: 'cubepeg',         color: '#8b5cf6' },
-  { label: 'Likwid Dex',     value: 'likwid',          color: '#ec4899' },
-  { label: 'Goplus Creator', value: 'goplus creator',  color: '#f59e0b' },
-  { label: 'Goplus Skill',   value: 'goplus skill',    color: '#f59e0b' },
-  { label: 'OpenFour',       value: 'openfour',        color: '#06b6d4' },
-  { label: 'X Mode',         value: 'x mode',          color: '#f59e0b' },
-  { label: 'Flap',           value: 'flap',            color: '#8b5cf6' },
-  { label: 'Flap AI',        value: 'flap ai',         color: '#8b5cf6' },
-  { label: 'Printr',         value: 'printr',          color: '#06b6d4' },
-  { label: 'Clanker',        value: 'clanker',         color: '#6366f1' },
-  { label: 'Luna.fun',       value: 'luna.fun',        color: '#ec4899' },
-  { label: 'Pancake',        value: 'pancake',         color: '#f59e0b' },
-  { label: 'Uniswap',        value: 'uniswap',         color: '#ff007a' },
-];
+// ─── Launchpads per column (derived from shared BNB_PROTOCOLS) ───────────────
+const LAUNCHPADS_NEW = BNB_PROTOCOLS.map(({ label, value, color, icon }) => ({
+  label,
+  value,
+  color,
+  icon,
+}));
 
-const LAUNCHPADS_FS_MIG = LAUNCHPADS_NEW.filter(
-  (l) => !['clanker', 'pancake', 'uniswap'].includes(l.value),
+const LAUNCHPADS_FS_MIG = BNB_PROTOCOLS.filter((p) => !p.newPairsOnly).map(
+  ({ label, value, color, icon }) => ({ label, value, color, icon }),
 );
 
+// All icon URLs use the CoinMarketCap CDN (stable, no hotlink restrictions).
+const CMC = (id: number) =>
+  `https://s2.coinmarketcap.com/static/img/coins/64x64/${id}.png`;
+
 const QUOTE_TOKENS = [
-  { label: 'BNB',    value: 'bnb',    color: C.bnb },
-  { label: 'USD1',   value: 'usd1',   color: '#f59e0b' },
-  { label: 'FORM',   value: 'form',   color: '#22c55e' },
-  { label: 'U',      value: 'u',      color: '#f59e0b' },
-  { label: 'USDT',   value: 'usdt',   color: '#22c55e' },
-  { label: 'USDC',   value: 'usdc',   color: '#3b82f6' },
-  { label: 'ASTER',  value: 'aster',  color: '#f59e0b' },
-  { label: 'CAKE',   value: 'cake',   color: '#ec4899' },
-  { label: 'lisUSD', value: 'lisusd', color: '#3b82f6' },
-  { label: '币安人生', value: '币安人生', color: '#f59e0b' },
-  { label: 'KGST',   value: 'kgst',   color: '#ef4444' },
-  { label: 'OTHERS', value: 'others', color: C.muted },
+  { label: 'BNB',    value: 'bnb',    color: C.bnb,      icon: CMC(1839)  },
+  { label: 'USD1',   value: 'usd1',   color: '#f59e0b',  icon: CMC(36148) },
+  { label: 'FORM',   value: 'form',   color: '#22c55e',  icon: CMC(35896) },
+  { label: 'U',      value: 'u',      color: '#f59e0b',  icon: CMC(39120) },
+  { label: 'USDT',   value: 'usdt',   color: '#22c55e',  icon: CMC(825)   },
+  { label: 'USDC',   value: 'usdc',   color: '#3b82f6',  icon: CMC(3408)  },
+  { label: 'ASTER',  value: 'aster',  color: '#f59e0b',  icon: CMC(36341) },
+  { label: 'CAKE',   value: 'cake',   color: '#ec4899',  icon: CMC(7186)  },
+  { label: 'lisUSD', value: 'lisusd', color: '#3b82f6',  icon: CMC(21330) },
+  { label: '币安人生', value: '币安人生', color: '#f59e0b', icon: CMC(38590) },
+  { label: 'KGST',   value: 'kgst',   color: '#ef4444',  icon: CMC(39162) },
+  { label: 'OTHERS', value: 'others', color: C.muted,    icon: undefined  },
 ];
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
@@ -78,24 +73,34 @@ function Pill({
   color,
   active,
   onClick,
+  icon,
 }: {
   label: string;
   color: string;
   active: boolean;
   onClick: () => void;
+  icon?: string;
 }) {
   return (
     <button
       onClick={onClick}
-      className="cursor-pointer whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all duration-200"
+      className="flex cursor-pointer items-center gap-2 whitespace-nowrap px-2 py-1 text-xs font-medium transition-all duration-200"
       style={{
         borderRadius: 20,
-        border: `1.5px solid ${active ? color : C.border}`,
-        backgroundColor: active ? `${color}22` : 'transparent',
+        border: `1px solid ${active ? color : C.border}`,
+        backgroundColor: active ? `${color}18` : 'transparent',
         color: active ? color : C.muted,
-        boxShadow: active ? `0 0 8px ${color}33` : 'none',
+        boxShadow: active ? `0 0 5px ${color}22` : 'none',
       }}
     >
+      {icon && (
+        <img
+          src={icon}
+          alt=""
+          aria-hidden
+          className="h-3.5 w-3.5 flex-shrink-0 rounded-full object-cover"
+        />
+      )}
       {label}
     </button>
   );
@@ -440,22 +445,20 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
                 Launchpads
               </span>
               <button
-                onClick={() => {
-                  // "Select All" always resets to no-restriction (all pills glow)
-                  set({ launchpads: [] });
-                }}
-                className="cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition-colors"
-                style={{ backgroundColor: '#1e2233', color: C.muted, border: `1px solid ${C.border}` }}
+                onClick={() => set({ launchpads: [] })}
+                className="cursor-pointer rounded px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-white/10"
+                style={{ backgroundColor: C.surface2, color: C.text, border: `1px solid ${C.border}` }}
               >
-                Select All
+                {lpAllMode ? 'Unselect All' : 'Select All'}
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-3 gap-1.5 justify-items-start">
               {launchpadList.map((lp) => (
                 <Pill
                   key={lp.value}
                   label={lp.label}
                   color={lp.color}
+                  icon={lp.icon}
                   active={isLpActive(lp.value)}
                   onClick={() => toggleLaunchpad(lp.value)}
                 />
@@ -470,22 +473,20 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
                 Quote Tokens
               </span>
               <button
-                onClick={() => {
-                  // "Select All" always resets to no-restriction (all pills glow)
-                  set({ quoteTokens: [] });
-                }}
-                className="cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition-colors"
-                style={{ backgroundColor: '#1e2233', color: C.muted, border: `1px solid ${C.border}` }}
+                onClick={() => set({ quoteTokens: [] })}
+                className="cursor-pointer rounded px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-white/10"
+                style={{ backgroundColor: C.surface2, color: C.text, border: `1px solid ${C.border}` }}
               >
-                Select All
+                {qtAllMode ? 'Unselect All' : 'Select All'}
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-3 gap-1.5 justify-items-start">
               {QUOTE_TOKENS.map((qt) => (
                 <Pill
                   key={qt.value}
                   label={qt.label}
                   color={qt.color}
+                  icon={qt.icon}
                   active={isQtActive(qt.value)}
                   onClick={() => toggleQuoteToken(qt.value)}
                 />
