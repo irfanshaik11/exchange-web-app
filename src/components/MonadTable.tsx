@@ -3740,7 +3740,7 @@ function MonadTable({
             {title.includes("New Pairs")
               ? "New"
               : title.includes("Almost bonded")
-                ? "Alomost bo"
+                ? "Almost bo"
                 : title.includes("Migrated")
                   ? "Migrated"
                   : title}

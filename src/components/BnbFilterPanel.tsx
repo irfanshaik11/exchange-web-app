@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
 import { BiRefresh } from 'react-icons/bi';
@@ -63,10 +63,28 @@ const QUOTE_TOKENS = [
 type ColTab = BnbColumnKey;
 type ContentTab = 'metrics' | 'socials';
 
-type SavedPreset = { id: string; name: string; draft: Record<ColTab, BnbFilters>; savedAt: string };
+type SavedPreset = { version: number; id: string; name: string; draft: Record<ColTab, BnbFilters>; savedAt: string };
 const SAVED_KEY = 'bnb_saved_filters';
+const MAX_PRESETS = 20;
 const loadPresets = (): SavedPreset[] => { try { return JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]'); } catch { return []; } };
 const persistPresets = (p: SavedPreset[]) => localStorage.setItem(SAVED_KEY, JSON.stringify(p));
+
+function isBnbFilters(obj: unknown): obj is BnbFilters {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const o = obj as Record<string, unknown>;
+  return (
+    Array.isArray(o.launchpads) &&
+    Array.isArray(o.quoteTokens) &&
+    typeof o.searchKeywords === 'string' &&
+    typeof o.excludeKeywords === 'string'
+  );
+}
+
+function isBnbFiltersState(obj: unknown): obj is Record<ColTab, BnbFilters> {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  return isBnbFilters(o.new) && isBnbFilters(o.finalStretch) && isBnbFilters(o.migrated);
+}
 
 const COL_TABS: { key: ColTab; label: string }[] = [
   { key: 'new',          label: 'New' },
@@ -274,6 +292,16 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
   const [copyDone, setCopyDone] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
   // Work on a local draft; only commit on Apply
   const [draft, setDraft] = useState<Record<ColTab, BnbFilters>>(() => ({
     new: { ...filters.new },
@@ -302,7 +330,12 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
   };
 
   const handleSave = () => {
+    if (savedPresets.length >= MAX_PRESETS) {
+      showToast(`Preset limit reached (${MAX_PRESETS}). Delete one before saving.`);
+      return;
+    }
     const preset: SavedPreset = {
+      version: 1,
       id: String(Date.now()),
       name: `Filter ${new Date().toLocaleString()}`,
       draft: { new: { ...draft.new }, finalStretch: { ...draft.finalStretch }, migrated: { ...draft.migrated } },
@@ -330,14 +363,16 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMsg(''), 3000);
   };
 
   const handleCopyConfig = async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(draft, null, 2));
       setCopyDone(true);
-      setTimeout(() => setCopyDone(false), 2000);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopyDone(false), 2000);
       const colLabel = COL_TABS.find((t) => t.key === colTab)?.label ?? colTab;
       showToast(`Filters for ${colLabel} copied to clipboard`);
     } catch { /* ignore */ }
@@ -352,13 +387,17 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
 
   const handleImportText = () => {
     try {
-      const parsed = JSON.parse(importText);
-      if (parsed.new && parsed.finalStretch && parsed.migrated) {
-        setDraft(parsed);
-        setShowImportExport(false);
-        setImportText('');
+      const parsed: unknown = JSON.parse(importText);
+      if (!isBnbFiltersState(parsed)) {
+        showToast('Invalid config — expected { new, finalStretch, migrated } shape');
+        return;
       }
-    } catch { /* invalid JSON — ignore */ }
+      setDraft(parsed);
+      setShowImportExport(false);
+      setImportText('');
+    } catch {
+      showToast('Invalid JSON — could not parse config');
+    }
   };
 
   const launchpadList = colTab === 'new' ? LAUNCHPADS_NEW : LAUNCHPADS_FS_MIG;

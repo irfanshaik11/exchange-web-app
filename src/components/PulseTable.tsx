@@ -231,8 +231,6 @@ const AX = {
   // Chain accent colors
   bnbGold: "#F3BA2F",
   bnbGoldHover: "#fcd34d",
-  filterGreen: "#31e3ac",
-  filterGreenHover: "#5eead4",
 };
 
 interface PulseTableProps {
@@ -9191,7 +9189,7 @@ function PulseTable({
                     <Link
                       href={tokenHref}
                       {...(isBnbToken ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-hidden rounded-lg px-2 py-1.5 text-sm"
+                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 rounded-lg px-2 py-1.5 text-sm"
                       style={{
                         color: AX.text,
                         backgroundColor: "#13151b",

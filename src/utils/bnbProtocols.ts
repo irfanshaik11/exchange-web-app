@@ -121,15 +121,19 @@ export const BNB_PROTOCOLS: readonly BnbProtocolDef[] = [
   },
 ];
 
+// Sorted once at module load — longer values first so "flap ai" beats "flap",
+// "goplus creator" beats "goplus skill", etc. Avoids re-sorting on every lookup.
+const BNB_PROTOCOLS_BY_LENGTH = [...BNB_PROTOCOLS].sort(
+  (a, b) => b.value.length - a.value.length,
+);
+
 /**
  * Look up a BNB protocol definition by its API `launchpad_protocol` string.
  *
  * Matching strategy:
  *  1. Exact match on `def.value` (preferred).
  *  2. Longer-first substring match as a fallback for API variants
- *     (e.g. "pancakeswap" → "pancake"). Sorting longer strings first
- *     ensures "flap ai" is evaluated before "flap" and "goplus creator"
- *     before "goplus skill", preventing short keys from absorbing longer ones.
+ *     (e.g. "pancakeswap" → "pancake").
  */
 export function findBnbProtocol(
   raw: string | undefined | null,
@@ -140,8 +144,5 @@ export function findBnbProtocol(
   const exact = BNB_PROTOCOLS.find((def) => def.value === p);
   if (exact) return exact;
 
-  const byLength = [...BNB_PROTOCOLS].sort(
-    (a, b) => b.value.length - a.value.length,
-  );
-  return byLength.find((def) => p.includes(def.value));
+  return BNB_PROTOCOLS_BY_LENGTH.find((def) => p.includes(def.value));
 }
