@@ -22,6 +22,17 @@ const testimonials = [
   { id: "2066802889452872170" },
 ];
 
+const press = [
+  { name: "Bloomberg",     src: "/static/icons/brand_logos/bloomberg-logomark.webp",     h: "h-5 lg:h-7",      href: "https://www.bloomberg.com/news/newsletters/2026-03-17/permissionless-works-both-ways-in-decentralized-finance-defi" },
+  { name: "Fortune",       src: "/static/icons/brand_logos/fortune-logomark.webp",       h: "h-[18px] lg:h-6", href: "https://fortune.com/2026/04/28/liquid-18-million-leveraged-trading/" },
+  { name: "WSJ Pro",       src: "/static/icons/brand_logos/wsjpro-logomark.webp",        h: "h-5 lg:h-7",      href: "https://createsend.com/t/d-DADD75CDBC1772642540EF23F30FEDED" },
+  { name: "Axios",         src: "/static/icons/brand_logos/axios-logomark.webp",         h: "h-4 lg:h-6",      href: "https://www.axios.com/newsletters/axios-pro-rata" },
+  { name: "The Block",     src: "/static/icons/brand_logos/the-block-logomark.webp",     h: "h-5 lg:h-7",      href: "https://www.theblock.co/post/377341/paradigm-leads-funding-perp-dex-aggregator-liquid" },
+  { name: "Decrypt",       src: "/static/icons/brand_logos/decrypt-logomark.svg",        h: "h-6 lg:h-8",      href: "https://decrypt.co/347272/morning-minute-crypto-slides-into-extreme-fear-as-bitcoin-tumbles" },
+  { name: "CoinMarketCap", src: "/static/icons/brand_logos/coinmarketcap-logomark.webp", h: "h-7 lg:h-10",     href: "https://coinmarketcap.com/community/articles/690a09326d591f7d463e263a/" },
+  { name: "TradingView",   src: "/static/icons/brand_logos/tradingview-logomark.webp",   h: "h-5 lg:h-7",      href: "https://www.tradingview.com/news/the_block:54bc6f289094b:0-paradigm-leads-7-6-million-seed-funding-round-for-perp-dex-aggregator-liquid/" },
+];
+
 // Cap how many testimonial cards show at each grid width so rows stay balanced:
 // 1 col → 3 cards, 2 cols → 4, 3 cols (md–xl) → 6, 4 cols (2xl) → 8. Each card
 // past the first three reveals at the first breakpoint that has room for it.
@@ -315,6 +326,30 @@ export default function Landing() {
             </div>
           </div>
 
+          {/* Press / as seen in */}
+          <div className="border-t border-white/5 py-8 md:py-10">
+            <div className="flex flex-col items-center gap-5 lg:gap-8">
+              <div className="flex flex-wrap items-center justify-center gap-6 gap-y-8 [&>a]:w-[calc(33%_-_16px)] md:[&>a]:w-[calc(25%_-_18px)] lg:[&>a]:w-auto lg:flex-nowrap lg:gap-12">
+                {press.map((p) => (
+                  <a
+                    key={p.name}
+                    href={p.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center justify-center transition-opacity hover:opacity-70 ${p.h}`}
+                  >
+                    <img
+                      src={p.src}
+                      alt={p.name}
+                      loading="lazy"
+                      className="h-full w-auto object-contain brightness-0 invert"
+                    />
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Self-custody / Security */}
           <div className="py-[60px] md:py-[90px] border-t border-white/5">
             <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-2 lg:gap-20">
@@ -394,7 +429,7 @@ export default function Landing() {
               {/* Left — rotating bloom */}
               <div className="flex w-full justify-center lg:w-1/2">
                 <img
-                  src="/interstate/glass-bloom-raw.png"
+                  src="/interstate/glass-bloom-sm.webp"
                   alt="Interstate glass bloom"
                   loading="lazy"
                   className="block h-auto w-56 lg:w-[clamp(300px,32vw,440px)] animate-spin-slow drop-shadow-[0_24px_60px_rgba(24,196,140,0.28)]"
