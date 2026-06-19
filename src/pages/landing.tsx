@@ -1,7 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import LandingHeader from '~/components/layout/LandingHeader';
-import { ArrowRight, ArrowUpRight, UserPlus } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, UserPlus, Cpu, KeyRound, BadgeCheck, Server } from 'lucide-react';
 import SimpleMarquee from '~/components/ui/marquee/SimpleMarquee';
 import MarketsMarquee from '~/components/ui/marquee/MarketsMarquee';
 import { FaXTwitter } from "react-icons/fa6";
@@ -315,6 +315,66 @@ export default function Landing() {
             </div>
           </div>
 
+          {/* Self-custody / Security */}
+          <div className="py-[60px] md:py-[90px] border-t border-white/5">
+            <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-2 lg:gap-20">
+
+              {/* Visual — privacy circle */}
+              <div className="relative flex items-center justify-center">
+                <img
+                  src="/privacy-circle.avif"
+                  alt="Self-custody privacy"
+                  loading="lazy"
+                  className="mx-auto block h-auto w-full max-w-[440px] rounded-2xl sm:max-w-[500px]"
+                />
+              </div>
+
+              {/* Content */}
+              <div className="flex flex-col gap-8">
+                <div className="flex items-center gap-2 text-sm font-medium text-[#8a8a93]">
+                  <span>Secured by</span>
+                  <span className="inline-flex items-center gap-1.5 text-[#ededf0]">
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                    </svg>
+                    <span className="font-semibold tracking-wide">Turnkey</span>
+                  </span>
+                </div>
+
+                <div className="space-y-5">
+                  <h2 className="text-[clamp(30px,4vw,52px)] font-semibold leading-[1.08] tracking-[-0.02em] text-[#ededf0]">
+                    Self-custody wallets<br className="hidden sm:block" /> and infrastructure
+                  </h2>
+                  <p className="max-w-xl text-[16px] leading-relaxed text-[#8a8a93]">
+                    Trade without compromise. Interstate delivers true{" "}
+                    <span className="rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[13px] font-medium text-[#ededf0]">self-custody</span>{" "}
+                    wallets on scalable, battle-tested infrastructure — the speed, security, and precision to
+                    trade onchain. Advanced protection keeps your keys safe and your assets in your control.{" "}
+                    <strong className="font-semibold text-[#ededf0]">Your keys. Your crypto. Always.</strong>
+                  </p>
+                </div>
+
+                {/* feature grid */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {[
+                    { icon: <Cpu className="h-5 w-5" />, label: "Trusted Hardware" },
+                    { icon: <KeyRound className="h-5 w-5" />, label: "Non-Custodial" },
+                    { icon: <Server className="h-5 w-5" />, label: "Enterprise-Grade" },
+                    { icon: <BadgeCheck className="h-5 w-5" />, label: "Fully Verifiable" },
+                  ].map((f) => (
+                    <div
+                      key={f.label}
+                      className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-[#0b0c0f] p-4 transition-colors hover:border-white/[0.12]"
+                    >
+                      <span className="text-[#18c48c]">{f.icon}</span>
+                      <span className="text-[15px] font-medium text-[#ededf0]">{f.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* CTA */}
           <section className="relative py-20 md:py-28 lg:py-32 overflow-hidden border-t border-white/5">
             <div
@@ -327,6 +387,8 @@ export default function Landing() {
                 maskImage: "radial-gradient(ellipse at 50% 60%, #000, transparent 75%)",
               }}
             />
+
+            {/*  */}
 
             <div className="relative flex flex-col items-center gap-10 text-center lg:flex-row lg:gap-16 lg:text-left">
               {/* Left — rotating bloom */}
