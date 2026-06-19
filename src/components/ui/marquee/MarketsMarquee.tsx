@@ -16,13 +16,24 @@ import {
 
 /* ─── types ─────────────────────────────────────────────────────────────── */
 
+type Category = "crypto" | "rwa" | "meme";
+
 type Market = {
   name: string;
   sym: string;
   icon: React.ReactNode;
   bg: string;
   fg?: string;
-  category: "crypto" | "rwa";
+  category: Category;
+};
+
+type Tab = "all" | "crypto" | "meme" | "rwa";
+
+const TAB_LABELS: Record<Tab, string> = {
+  all: "All",
+  crypto: "Crypto",
+  meme: "Meme coins",
+  rwa: "Real World",
 };
 
 /* ─── helpers ────────────────────────────────────────────────────────────── */
@@ -31,30 +42,45 @@ const dot = (label: string, color: string) => (
   <span style={{ color, fontWeight: 700, fontSize: 13 }}>{label}</span>
 );
 
+// A pill is "lit" when it matches the active tab. "Crypto" is treated as a
+// superset that also lights up meme coins; "Meme coins" lights only memes.
+const isLit = (m: Market, tab: Tab) =>
+  tab === "all" ||
+  m.category === tab ||
+  (tab === "crypto" && m.category === "meme");
+
 /* ─── data ───────────────────────────────────────────────────────────────── */
 
 const marketsRow1: Market[] = [
-  { name: "Nvidia",   sym: "NVDA",   icon: <SiNvidia />,   bg: "#0d2818", fg: "#76b900", category: "rwa" },
-  { name: "Solana",   sym: "SOL",    icon: <SiSolana />,   bg: "#0a0a0a", fg: "#14f195", category: "crypto" },
-  { name: "Crude Oil",sym: "CL",     icon: dot("CL","#c98b3c"), bg: "#2a1c0e",            category: "rwa" },
-  { name: "OpenAI",   sym: "OPENAI", icon: <SiOpenai />,   bg: "#ffffff", fg: "#0a0a0a", category: "rwa" },
-  { name: "Bitcoin",  sym: "BTC",    icon: <SiBitcoin />,  bg: "#f7931a", fg: "#ffffff", category: "crypto" },
-  { name: "Google",   sym: "GOOG",   icon: <SiGoogle />,   bg: "#ffffff", fg: "#4285f4", category: "rwa" },
-  { name: "Gold",     sym: "XAU",    icon: dot("Au","#e8c14a"), bg: "#3a300f",            category: "rwa" },
-  { name: "Tesla",    sym: "TSLA",   icon: <SiTesla />,    bg: "#e31937", fg: "#ffffff", category: "rwa" },
-  { name: "Ethereum", sym: "ETH",    icon: <SiEthereum />, bg: "#1a1a2e", fg: "#a8b0e0", category: "crypto" },
+  { name: "Nvidia",    sym: "NVDA",   icon: <SiNvidia />,   bg: "#0d2818", fg: "#76b900", category: "rwa" },
+  { name: "Solana",    sym: "SOL",    icon: <SiSolana />,   bg: "#0a0a0a", fg: "#14f195", category: "crypto" },
+  { name: "Crude Oil", sym: "CL",     icon: dot("CL","#c98b3c"), bg: "#2a1c0e",            category: "rwa" },
+  { name: "OpenAI",    sym: "OPENAI", icon: <SiOpenai />,   bg: "#ffffff", fg: "#0a0a0a", category: "rwa" },
+  { name: "Bitcoin",   sym: "BTC",    icon: <SiBitcoin />,  bg: "#f7931a", fg: "#ffffff", category: "crypto" },
+  { name: "Shiba Inu", sym: "SHIB",   icon: dot("Sh","#f3a13b"),  bg: "#241008", fg: "#f3a13b", category: "meme" },
+  { name: "Google",    sym: "GOOG",   icon: <SiGoogle />,   bg: "#ffffff", fg: "#4285f4", category: "rwa" },
+  { name: "Gold",      sym: "XAU",    icon: dot("Au","#e8c14a"), bg: "#3a300f",            category: "rwa" },
+  { name: "dogwifhat", sym: "WIF",    icon: dot("WIF","#e8b98a"), bg: "#241a10", fg: "#e8b98a", category: "meme" },
+  { name: "Tesla",     sym: "TSLA",   icon: <SiTesla />,    bg: "#e31937", fg: "#ffffff", category: "rwa" },
+  { name: "Pudgy Penguins", sym: "PENGU", icon: dot("Pg","#5cc0e8"), bg: "#0a1f2a", fg: "#5cc0e8", category: "meme" },
+  { name: "Ethereum",  sym: "ETH",    icon: <SiEthereum />, bg: "#1a1a2e", fg: "#a8b0e0", category: "crypto" },
+  { name: "Popcat",    sym: "POPCAT", icon: dot("Pop","#e3b877"), bg: "#2a1d0e", fg: "#e3b877", category: "meme" },
 ];
 
 const marketsRow2: Market[] = [
-  { name: "Dogecoin",   sym: "DOGE",   icon: <SiDogecoin />, bg: "#1c1708", fg: "#c2a633", category: "crypto" },
+  { name: "Dogecoin",   sym: "DOGE",   icon: <SiDogecoin />, bg: "#1c1708", fg: "#c2a633", category: "meme" },
   { name: "SpaceX",     sym: "SPACEX", icon: <SiSpacex />,   bg: "#0a0a0a", fg: "#ffffff", category: "rwa" },
+  { name: "Pepe",       sym: "PEPE",   icon: dot("Pe","#5cb85c"),  bg: "#0f2410", fg: "#5cb85c", category: "meme" },
   { name: "Silver",     sym: "XAG",    icon: dot("Ag","#c0c0c8"),  bg: "#26282b",           category: "rwa" },
   { name: "Sui",        sym: "SUI",    icon: dot("S","#4da2ff"),   bg: "#0c2a52", fg: "#4da2ff", category: "crypto" },
   { name: "Coreweave",  sym: "CRWV",   icon: dot("CW","#ffffff"),  bg: "#101114",           category: "rwa" },
   { name: "Nasdaq 100", sym: "NDX",    icon: dot("100","#4da2ff"), bg: "#0c2540",           category: "rwa" },
   { name: "Apple",      sym: "AAPL",   icon: <SiApple />,    bg: "#0a0a0a", fg: "#ffffff", category: "rwa" },
+  { name: "Bonk",       sym: "BONK",   icon: dot("Bk","#fcd535"),  bg: "#241c08", fg: "#fcd535", category: "meme" },
   { name: "BNB",        sym: "BNB",    icon: <SiBinance />,  bg: "#1c1708", fg: "#f0b90b", category: "crypto" },
+  { name: "Brett",      sym: "BRETT",  icon: dot("Br","#4f8cff"),  bg: "#0b1733", fg: "#4f8cff", category: "meme" },
   { name: "Anthropic",  sym: "ANTHR",  icon: dot("A","#0a0a0a"),   bg: "#ffffff",           category: "rwa" },
+  { name: "Mog Coin",   sym: "MOG",    icon: dot("Mg","#a98bf5"),  bg: "#15102a", fg: "#a98bf5", category: "meme" },
 ];
 
 const marketsRow3: Market[] = [
@@ -65,8 +91,11 @@ const marketsRow3: Market[] = [
   { name: "ExxonMobil",sym: "XOM",  icon: dot("EX","#e31937"),   bg: "#fff",               category: "rwa" },
   { name: "Alibaba",   sym: "BABA", icon: dot("a","#ff6a00"),    bg: "#2a1505",            category: "rwa" },
   { name: "SK Hynix",  sym: "SKHX", icon: dot("SK","#ff5a36"),   bg: "#1a1410",            category: "rwa" },
+  { name: "Floki",     sym: "FLOKI",icon: dot("Fl","#f0a73f"),   bg: "#241808", fg: "#f0a73f", category: "meme" },
+  { name: "Peanut",    sym: "PNUT", icon: dot("Pn","#c08348"),   bg: "#1f1308", fg: "#c08348", category: "meme" },
   { name: "Platinum",  sym: "XPT",  icon: dot("Pt","#cdd2d8"),   bg: "#26282b",            category: "rwa" },
   { name: "Chainlink", sym: "LINK", icon: dot("◈","#ffffff"),    bg: "#2a5ada",            category: "crypto" },
+  { name: "Turbo",     sym: "TURBO",icon: dot("Tb","#4fd6c4"),   bg: "#0b2622", fg: "#4fd6c4", category: "meme" },
 ];
 
 /* ─── sub-components ─────────────────────────────────────────────────────── */
@@ -104,7 +133,7 @@ function MarqueeRow({ items, reverse = false, tab }: { items: Market[]; reverse?
   const renderCopy = (key: string) => (
     <div className="flex gap-3 pr-3 shrink-0" aria-hidden={key === "b"}>
       {copy.map((m, i) => (
-        <MarketPill key={`${m.sym}-${key}-${i}`} m={m} dimmed={tab !== "all" && m.category !== tab} />
+        <MarketPill key={`${m.sym}-${key}-${i}`} m={m} dimmed={!isLit(m, tab)} />
       ))}
     </div>
   );
@@ -125,8 +154,6 @@ function MarqueeRow({ items, reverse = false, tab }: { items: Market[]; reverse?
 }
 
 /* ─── main component ─────────────────────────────────────────────────────── */
-
-type Tab = "all" | "crypto" | "rwa";
 
 export default function MarketsMarquee() {
   const [tab, setTab] = useState<Tab>("all");
@@ -158,15 +185,15 @@ export default function MarketsMarquee() {
 
         {/* Filter tabs */}
         <div className="flex md:inline-flex w-full md:w-auto bg-white/[0.04] border border-white/[0.07] rounded-full p-1 flex-shrink-0">
-          {(["all", "crypto", "rwa"] as Tab[]).map((t) => (
+          {(["all", "crypto", "meme", "rwa"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 md:flex-none text-sm px-[18px] py-[7px] rounded-full cursor-pointer transition-colors duration-150 ${
+              className={`flex-1 md:flex-none text-sm px-[18px] py-[7px] rounded-full cursor-pointer transition-colors duration-150 whitespace-nowrap ${
                 tab === t ? "bg-[#1a1b1f] text-white" : "bg-transparent text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              {t === "all" ? "All" : t === "crypto" ? "Crypto" : "Real World"}
+              {TAB_LABELS[t]}
             </button>
           ))}
         </div>
