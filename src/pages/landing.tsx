@@ -59,8 +59,8 @@ function MiniTrading() {
       <div className="flex items-center justify-between text-[11px] text-[#8a8a93] mb-2">
         <Logo size={12} />
         <span className="inline-flex items-center gap-1.5 text-[#ededf0]">
-          <i className="w-3 h-3 rounded-full inline-block" style={{ background: "#e8c14a" }} />
-          GOLD
+          <i className="w-3 h-3 rounded-full inline-block" style={{ background: "#e8b98a" }} />
+          WIF
         </span>
       </div>
       <svg className="flex-1 w-full" viewBox="0 0 300 130" preserveAspectRatio="none">
@@ -79,21 +79,21 @@ function MiniTrading() {
 
 function MiniAssetList() {
   const rows = [
-    { s: "BTC", p: "70,351", c: "-0.34%", up: false },
-    { s: "XYZ100", p: "24,041", c: "-1.40%", up: false },
-    { s: "GOLD", p: "4,503.8", c: "-3.51%", up: false },
-    { s: "EUR", p: "1.1571", c: "-0.09%", up: false },
-    { s: "OPENAI", p: "912.91", c: "-0.92%", up: false },
-    { s: "ETH", p: "2,344.0", c: "-0.19%", up: false },
-    { s: "SILVER", p: "68.081", c: "-6.40%", up: false },
-    { s: "CL", p: "95.165", c: "+0.80%", up: true },
-    { s: "HYPE", p: "39.374", c: "+0.59%", up: true },
-    { s: "SOL", p: "89.421", c: "+0.46%", up: true },
+    { s: "WIF", p: "1.8420", c: "+5.12%", up: true },
+    { s: "DOGE", p: "0.1623", c: "+2.41%", up: true },
+    { s: "PENGU", p: "0.0182", c: "+8.04%", up: true },
+    { s: "POPCAT", p: "0.4210", c: "-1.30%", up: false },
+    { s: "BONK", p: "0.000023", c: "-2.80%", up: false },
+    { s: "PNUT", p: "0.1840", c: "-0.92%", up: false },
+    { s: "BRETT", p: "0.0451", c: "+3.20%", up: true },
+    { s: "FLOKI", p: "0.00012", c: "-2.10%", up: false },
+    { s: "MEW", p: "0.0079", c: "+0.59%", up: true },
+    { s: "TURBO", p: "0.0061", c: "+1.80%", up: true },
   ];
   return (
     <div className="p-3 h-full flex flex-col text-[11px]">
       <div className="bg-white/[0.04] border border-white/5 rounded-lg px-2.5 py-2 text-[#8a8a93] mb-2.5">
-        Search for an asset
+        Search for a coin
       </div>
       <div className="grid grid-cols-[1.2fr_1fr_1fr] px-1 py-1.5 text-[#5f5f68] border-b border-white/5">
         <span>Symbol</span>
@@ -117,30 +117,30 @@ function MiniOrder() {
       <div className="w-14 h-[5px] rounded-full bg-white/[0.14] mx-auto mt-2.5" />
       <div className="flex items-center justify-between px-3.5 pt-3 pb-1.5 text-[13px] text-[#ededf0]">
         <span className="inline-flex items-center gap-1.5">
-          <i className="w-3 h-3 rounded-full inline-block" style={{ background: "#f7931a" }} />
-          BTC
+          <i className="w-3 h-3 rounded-full inline-block" style={{ background: "#e8b98a" }} />
+          WIF
         </span>
-        <b>$70,570.00</b>
+        <b>$1.8420</b>
       </div>
       <div className="flex gap-2 px-3.5 py-1">
-        <span className="flex-1 text-center py-[7px] rounded-lg text-[12px] font-semibold border border-[rgba(24,196,140,0.4)] text-[#18c48c]">Long</span>
-        <span className="flex-1 text-center py-[7px] rounded-lg text-[12px] font-semibold border border-white/5 text-[#8a8a93]">Short</span>
+        <span className="flex-1 text-center py-[7px] rounded-lg text-[12px] font-semibold border border-[rgba(24,196,140,0.4)] text-[#18c48c]">Buy</span>
+        <span className="flex-1 text-center py-[7px] rounded-lg text-[12px] font-semibold border border-white/5 text-[#8a8a93]">Sell</span>
       </div>
       <div className="flex gap-1 px-3.5 pt-2.5 pb-1.5 text-[11px]">
         <span className="flex-1 text-center py-[5px] rounded-md bg-white/[0.06] text-[#ededf0]">Market</span>
         <span className="flex-1 text-center py-[5px] rounded-md text-[#8a8a93]">Limit</span>
-        <span className="flex-1 text-center py-[5px] rounded-md text-[#8a8a93]">TWAP</span>
+        <span className="flex-1 text-center py-[5px] rounded-md text-[#8a8a93]">Snipe</span>
       </div>
       <div className="flex justify-between px-3.5 py-[7px] text-[11px] text-[#8a8a93]">
-        <span>Size</span>
-        <b className="text-[#ededf0]">$167,710.10</b>
-      </div>
-      <div className="flex justify-between px-3.5 py-[7px] text-[11px] text-[#8a8a93]">
-        <span>Amount</span>
+        <span>Pay</span>
         <b className="text-[#ededf0]">$24.00</b>
       </div>
+      <div className="flex justify-between px-3.5 py-[7px] text-[11px] text-[#8a8a93]">
+        <span>Receive</span>
+        <b className="text-[#ededf0]">13.03 WIF</b>
+      </div>
       <div className="mx-3.5 mt-2 text-center bg-[#18c48c] text-[#04130d] rounded-lg py-[9px] text-[12px] font-bold">
-        Long BTC
+        Buy WIF
       </div>
     </div>
   );
@@ -233,27 +233,39 @@ export default function Landing() {
         <section className="px-2.5 md:px-8 lg:px-16 xl:px-24">
           <MarketsMarquee />
 
-          {/* Trading simplified */}
+          {/* Predictions simplified */}
           <div className="py-[60px] md:py-[90px] border-t border-white/5">
-            <h2 className="text-[clamp(28px,4vw,46px)] font-medium leading-[1.18] tracking-[-0.02em] text-[#5f5f68] mb-9 max-w-[920px]">
-              <span className="text-[#ededf0]">Trading, simplified.</span> Pick a market, choose a direction,
-              set your leverage, and you&apos;re set.
+            <h2 className="text-[clamp(28px,4vw,46px)] font-medium leading-[1.12] tracking-[-0.02em] text-[#5f5f68] mb-10 max-w-[920px]">
+              <span className="text-[#ededf0]">Predictions, simplified.</span> Pick a market, take a
+              side, and settle when it resolves.
             </h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="border border-white/5 rounded-2xl p-7 bg-[#0b0c0f]">
-                <div className="text-[13px] text-[#18c48c] font-bold tracking-[0.06em]">01</div>
-                <h3 className="text-xl font-semibold mt-3 mb-2 text-[#ededf0]">Pick a market</h3>
-                <p className="text-[15px] text-[#8a8a93] leading-[1.55] m-0">From Bitcoin and Gold to Tesla and FX — choosing what to trade is the core of every trade.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="rounded-2xl border border-white/[0.06] bg-[#090a0c] p-7 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] transition-[border-color,box-shadow]! duration-300! hover:border-white/[0.14] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_4px_20px_-6px_rgba(0,0,0,0.6)] flex">
+                <div className="flex w-full items-stretch gap-4">
+                  <span className="flex w-[72px] shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] font-mono text-[15px] font-medium tracking-[0.02em] text-[#18c48c] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">01</span>
+                  <div className="min-w-0">
+                    <h3 className="mb-1.5 text-[19px] font-semibold tracking-[-0.01em] text-[#ededf0]">Pick a market</h3>
+                    <p className="m-0 text-[15px] leading-[1.5] text-[#8a8a93]">From elections and sports to crypto prices and culture — find a question you have a view on.</p>
+                  </div>
+                </div>
               </div>
-              <div className="border border-white/5 rounded-2xl p-7 bg-[#0b0c0f]">
-                <div className="text-[13px] text-[#18c48c] font-bold tracking-[0.06em]">02</div>
-                <h3 className="text-xl font-semibold mt-3 mb-2 text-[#ededf0]">Set your leverage</h3>
-                <p className="text-[15px] text-[#8a8a93] leading-[1.55] m-0">Dial in your exposure with full control over your position size.</p>
+              <div className="rounded-2xl border border-white/[0.06] bg-[#090a0c] p-7 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] transition-[border-color,box-shadow]! duration-300! hover:border-white/[0.14] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_4px_20px_-6px_rgba(0,0,0,0.6)] flex">
+                <div className="flex w-full items-stretch gap-4">
+                  <span className="flex w-[72px] shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] font-mono text-[15px] font-medium tracking-[0.02em] text-[#18c48c] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">02</span>
+                  <div className="min-w-0">
+                    <h3 className="mb-1.5 text-[19px] font-semibold tracking-[-0.01em] text-[#ededf0]">Take your side</h3>
+                    <p className="m-0 text-[15px] leading-[1.5] text-[#8a8a93]">Back Yes or No at live odds, with full control over your stake.</p>
+                  </div>
+                </div>
               </div>
-              <div className="border border-white/5 rounded-2xl p-7 bg-[#0b0c0f]">
-                <div className="text-[13px] text-[#18c48c] font-bold tracking-[0.06em]">03</div>
-                <h3 className="text-xl font-semibold mt-3 mb-2 text-[#ededf0]">Execute instantly</h3>
-                <p className="text-[15px] text-[#8a8a93] leading-[1.55] m-0">Open and close positions in seconds, 24/7, with instant on-chain settlement.</p>
+              <div className="rounded-2xl border border-white/[0.06] bg-[#090a0c] p-7 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] transition-[border-color,box-shadow]! duration-300! hover:border-white/[0.14] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_4px_20px_-6px_rgba(0,0,0,0.6)] flex">
+                <div className="flex w-full items-stretch gap-4">
+                  <span className="flex w-[72px] shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] font-mono text-[15px] font-medium tracking-[0.02em] text-[#18c48c] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">03</span>
+                  <div className="min-w-0">
+                    <h3 className="mb-1.5 text-[19px] font-semibold tracking-[-0.01em] text-[#ededf0]">Settle on resolution</h3>
+                    <p className="m-0 text-[15px] leading-[1.5] text-[#8a8a93]">Cash out anytime or hold to resolution, 24/7, with instant on-chain settlement.</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -261,9 +273,9 @@ export default function Landing() {
           {/* See it. Size it. Snipe it. */}
           <div className="py-[60px] md:py-[90px] border-t border-white/5">
             <h2 className="text-[clamp(28px,4vw,46px)] font-medium leading-[1.18] tracking-[-0.02em] text-[#5f5f68] mb-9 max-w-[920px]">
-              <span className="text-[#ededf0]">See it. Size it. Snipe it.</span> Tools to find new token
-              launches within 100ms of launch, enabling you to snipe tokens as they&apos;re newly
-              launched or migrated across every market.
+              <span className="text-[#ededf0]">See it. Size it. Snipe it.</span> Tools that surface new
+              memecoin launches within 100ms, so you can snipe coins the moment they go live or
+              migrate — across every market.
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1.2fr_0.7fr] gap-[18px] items-stretch">
               <div className="bg-[#0b0c0f] border border-white/5 rounded-2xl overflow-hidden min-h-[360px] relative">
