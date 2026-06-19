@@ -796,7 +796,6 @@ function TokenImage({
         return "#eab308"; // Yellow for migrated
       } else {
         return "#31e3ac"; // Green for new pairs and final stretch (matching PulseTable)
-        return "#31e3ac"; // Green for new pairs and final stretch (matching PulseTable)
       }
     }
 
@@ -866,12 +865,12 @@ function TokenImage({
       return "https://avatars.githubusercontent.com/u/173274001?s=200&v=4";
     }
 
-    // Map flap.sh to LinkedIn logo
+    // CoinGecko CDN — stable, no hotlink restrictions (LinkedIn URLs are blocked).
     if (
       launchpadProtocol.includes("flap.sh") ||
       launchpadProtocol === "flapsh"
     ) {
-      return "https://media.licdn.com/dms/image/v2/D4D0BAQFG5I0EDOrmJQ/company-logo_200_200/company-logo_200_200/0/1714693191952/flap_sh_logo?e=2147483647&v=beta&t=2kcdij2YPOFjLdPYzAhQxKgbGcuyh7Cdyp0AkGR8V6A";
+      return "https://dappbay-static.bnbchain.org/static/dapp-uploads/yn7msN78FM-fW7LsGrgzs";
     }
 
     // Map Kuru to Twitter profile image
@@ -3740,8 +3739,8 @@ function MonadTable({
           >
             {title.includes("New Pairs")
               ? "New"
-              : title.includes("Final Stretch")
-                ? "Soon"
+              : title.includes("Almost bonded")
+                ? "Almost bo"
                 : title.includes("Migrated")
                   ? "Migrated"
                   : title}

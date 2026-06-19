@@ -300,7 +300,7 @@ export function formatMarketCap(
 
   const num = typeof val === "string" ? parseFloat(val) : val;
 
-  if (isNaN(num) || !isFinite(num)) {
+  if (isNaN(num) || !isFinite(num) || num === 0) {
     return "-";
   }
 

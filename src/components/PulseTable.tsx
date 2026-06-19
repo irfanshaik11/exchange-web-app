@@ -25,7 +25,7 @@ import {
   FaRunning,
   FaGasPump,
   FaCoins,
-  FaBan,
+  FaHandHoldingUsd,
   FaRedo,
   FaDollarSign,
   FaRocket,
@@ -37,6 +37,7 @@ import {
   FaRegUser,
   FaFire,
   FaTimes,
+  FaFilter,
 } from "react-icons/fa";
 import {
   PiCrownSimpleLight,
@@ -48,6 +49,7 @@ import {
   PiTelegramLogo,
 } from "react-icons/pi";
 import { FaDice, FaXTwitter, FaRegEyeSlash } from "react-icons/fa6";
+import { TbFall } from "react-icons/tb";
 import {
   BsPersonGear,
   BsCoin,
@@ -126,6 +128,12 @@ import {
   transformToastToError,
 } from "~/utils/createSolanaToastHandler";
 import { hasActiveFilters as checkActiveFilters } from "~/utils/discoverFilterUtils";
+import {
+  BNB_CHAIN_COLOR,
+  BNB_CHAIN_ICON,
+  findBnbProtocol,
+} from "~/utils/bnbProtocols";
+import { computeHashImageUrl } from "~/utils/imageHash";
 import { TokenAge } from "./TokenAge";
 import { TokenCountdown24h } from "./TokenCountdown24h";
 
@@ -158,6 +166,8 @@ import BottomCardInfoHolder from "./BottomCardInfoHolder";
 import InterstateTooltip from "./InterstateTooltip";
 import { useBlacklist } from "~/hooks/useBlacklist";
 import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
+
+const BNB_ICON_32 = computeHashImageUrl(BNB_CHAIN_ICON, 32) ?? BNB_CHAIN_ICON;
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
 /* ---- JTX-style Dark Palette ---- */
@@ -216,6 +226,10 @@ const AX = {
   // Badge backgrounds
   badgeBg: "rgba(255,255,255,0.04)",
   twitterBlue: "#1DA1F2",
+
+  // Chain accent colors
+  bnbGold: "#F3BA2F",
+  bnbGoldHover: "#fcd34d",
 };
 
 interface PulseTableProps {
@@ -418,6 +432,7 @@ const formatVolumeDisplay = (val: number): string => {
 };
 
 const WS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const METEORA_WAVE_THRESHOLD = 98.6; // bonding_pct above which Meteora tokens get wave animation
 
 const LIQUIDITY_FIELD_CANDIDATES = [
   "liquidity_usd",
@@ -1124,7 +1139,7 @@ const StatusPopupContent = React.memo(function StatusPopupContent({
   const titleLower = title.toLowerCase();
   const isNewPairs = titleLower.includes("new");
   const isFinalStretch =
-    titleLower.includes("final") || titleLower.includes("stretch");
+    titleLower.includes("final") || titleLower.includes("stretch") || titleLower.includes("almost bonded");
   const isMigrated = titleLower.includes("migrated");
   const launchpadProtocol = (
     (token as any).launchpad_protocol || ""
@@ -1934,6 +1949,12 @@ function TokenImage({
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     const mintAddress = token.mint?.toLowerCase() || "";
 
+    // BNB chain: each protocol has a dedicated color defined in BNB_PROTOCOLS.
+    // Unknown BNB protocols fall back to BNB chain gold rather than Solana green.
+    if (isBnbChainToken(token)) {
+      return findBnbProtocol(launchpadProtocol)?.color ?? BNB_CHAIN_COLOR;
+    }
+
     // Check if mint address contains "bags" - override any protocol
     if (mintAddress.includes("bags")) {
       return "#31e3ac"; // Green for bags
@@ -2031,6 +2052,12 @@ function TokenImage({
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     const mintAddress = token.mint?.toLowerCase() || "";
 
+    // BNB chain: each protocol has a dedicated icon defined in BNB_PROTOCOLS.
+    // Unknown BNB protocols display the BNB chain icon as a recognisable fallback.
+    if (isBnbChainToken(token)) {
+      return findBnbProtocol(launchpadProtocol)?.icon ?? BNB_CHAIN_ICON;
+    }
+
     // Check if mint address contains "bags" - override any protocol
     if (mintAddress.includes("bags")) {
       return "https://bags.fm/assets/images/bags-icon.png";
@@ -2087,6 +2114,12 @@ function TokenImage({
   const getAmmDisplayName = (t: Token): string => {
     const protocol = ((t as any).launchpad_protocol || "").toLowerCase();
     const mint = (t.mint || "").toLowerCase();
+
+    // BNB chain: use the canonical label from BNB_PROTOCOLS for the tooltip.
+    if (isBnbChainToken(t)) {
+      return findBnbProtocol(protocol)?.label ?? "BNB";
+    }
+
     if (mint.includes("bags")) return "Bags";
     if (!protocol) return "Pump";
     if (protocol.includes("pump"))
@@ -2227,7 +2260,7 @@ function TokenImage({
   const bondingPct = (token as any).bonding_pct ?? 0;
   const isMigratedColumn = columnType === "migrated";
   const isHighBondingMeteora =
-    isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
+    isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > METEORA_WAVE_THRESHOLD;
   return (
     <>
       <div
@@ -2251,12 +2284,12 @@ function TokenImage({
           style={{
             border: "none",
             padding: "0",
-            width: "66px",
-            height: "66px",
-            minWidth: "66px",
-            minHeight: "66px",
-            maxWidth: "66px",
-            maxHeight: "66px",
+            width: "56px",
+            height: "56px",
+            minWidth: "56px",
+            minHeight: "56px",
+            maxWidth: "56px",
+            maxHeight: "56px",
           }}
         >
           {/* Single colored border container (moved inward) */}
@@ -2285,12 +2318,12 @@ function TokenImage({
               })()}`,
               padding: "2px",
               backgroundColor: "#0a0b0d",
-              width: "66px",
-              height: "66px",
-              minWidth: "66px",
-              minHeight: "66px",
-              maxWidth: "66px",
-              maxHeight: "66px",
+              width: "56px",
+              height: "56px",
+              minWidth: "56px",
+              minHeight: "56px",
+              maxWidth: "56px",
+              maxHeight: "56px",
             }}
           >
             {/* Image container */}
@@ -2299,12 +2332,12 @@ function TokenImage({
               onMouseEnter={handleImageEnter}
               onMouseLeave={handleImageLeave}
               style={{
-                width: "60px",
-                height: "60px",
-                minWidth: "60px",
-                minHeight: "60px",
-                maxWidth: "60px",
-                maxHeight: "60px",
+                width: "50px",
+                height: "50px",
+                minWidth: "50px",
+                minHeight: "50px",
+                maxWidth: "50px",
+                maxHeight: "50px",
               }}
             >
               <FastImage
@@ -2312,8 +2345,8 @@ function TokenImage({
                 alt={token.name || token.symbol || ""}
                 symbol={token.symbol}
                 name={token.name}
-                width={60}
-                height={60}
+                width={50}
+                height={50}
                 className="h-full w-full object-cover"
                 priority={priority}
                 showBubble={false}
@@ -3056,6 +3089,8 @@ function PulseTable({
   onOpenFilter,
   hasExternalActiveFilters = false,
 }: PulseTableProps) {
+  const isBnb = chainProp === 'bnb';
+
   // Track whether we ever had data — prevents "No tokens found" flash on tab return
   // Uses module-level map so state persists across Next.js Pages Router remounts
   const hadDataRef = useRef(_hadDataByTitle.get(title) ?? false);
@@ -3279,7 +3314,7 @@ function PulseTable({
   // Sync baseTokens with tokens prop when it changes (initial load or parent refresh)
   // SMART MERGE: Preserve good market cap values from WebSocket updates
   useEffect(() => {
-    if (chainProp === 'bnb') return;
+    if (isBnb) return;
     if (tokens && tokens.length > 0) {
       setBaseTokens((prev) => {
         // Normalize all incoming tokens for consistent filtering
@@ -3320,7 +3355,7 @@ function PulseTable({
   }, [tokens, normalizeHttpToken, chainProp]);
 
   useEffect(() => {
-    if (chainProp === "bnb") {
+    if (isBnb) {
       setFilteredTokens([]);
     }
   }, [chainProp]);
@@ -3606,7 +3641,7 @@ function PulseTable({
   // Fetch filtered tokens from API when protocols are selected
   const fetchFilteredTokens = useCallback(
     async (protocols: string[]) => {
-      if (chainProp === 'bnb') return;
+      if (isBnb) return;
       if (protocols.length === 0) {
         setFilteredTokens([]);
         // Clear protocol cache
@@ -4540,7 +4575,7 @@ function PulseTable({
     // ═══════════════════════════════════════════════════════════════════════════
     if (hasNoCustomFilters) {
       // BNB tokens come from props only — never merge Solana WS/cache/HTTP on top.
-      if (chainProp === 'bnb') {
+      if (isBnb) {
         // BNB live state comes from useBscPulseData — never use baseTokens (Solana-only cache).
         const source = tokens;
         if (isNewPairs || title.toLowerCase().includes('migrated')) {
@@ -4551,7 +4586,8 @@ function PulseTable({
 
       const isFinalStretch =
         title.toLowerCase().includes("final") ||
-        title.toLowerCase().includes("stretch");
+        title.toLowerCase().includes("stretch") ||
+        title.toLowerCase().includes("almost bonded");
       const isMigrated = title.toLowerCase().includes("migrated");
 
       // 1. Start with HTTP data as the BASE (shows immediately on page load)
@@ -4823,7 +4859,7 @@ function PulseTable({
     // This eliminates the state copy that was causing progressive latency
     // SKIP for BNB: BNB tokens come entirely from props; the SOL WS cache / SOL
     // direct-bridge tokens must not overwrite them.
-    if (chainProp !== 'bnb') {
+    if (!isBnb) {
       const directTokensForChannel = (channel === "new"
         ? directNewTokens
         : channel === "final_stretch"
@@ -5580,7 +5616,8 @@ function PulseTable({
       // Special sorting for Final Stretch: prioritize high bonding Meteora tokens by newest + highest bonding
       if (
         title.toLowerCase().includes("final") ||
-        title.toLowerCase().includes("stretch")
+        title.toLowerCase().includes("stretch") ||
+        title.toLowerCase().includes("almost bonded")
       ) {
         const aLaunchpadProtocol =
           (a as any).launchpad_protocol?.toLowerCase() || "";
@@ -5590,8 +5627,8 @@ function PulseTable({
         const bIsMeteora = bLaunchpadProtocol.includes("meteora");
         const aBondingPct = (a as any).bonding_pct ?? 0;
         const bBondingPct = (b as any).bonding_pct ?? 0;
-        const aIsHighBondingMeteora = aIsMeteora && aBondingPct > 98.6;
-        const bIsHighBondingMeteora = bIsMeteora && bBondingPct > 98.6;
+        const aIsHighBondingMeteora = aIsMeteora && aBondingPct > METEORA_WAVE_THRESHOLD;
+        const bIsHighBondingMeteora = bIsMeteora && bBondingPct > METEORA_WAVE_THRESHOLD;
 
         // High bonding Meteora tokens go to top
         if (aIsHighBondingMeteora && !bIsHighBondingMeteora) return -1;
@@ -5778,7 +5815,7 @@ function PulseTable({
   }, []);
   const displayTokensForList = frozenTokens ?? filteredTokensForDisplay;
 
-  const PULSE_ROW_HEIGHT = 110; // 100px content + 10px gap
+  const PULSE_ROW_HEIGHT = isBnb ? 100 : 110;
 
   // Add wave animation for Meteora tokens with bonding_pct > 98.6% in Final Stretch ONLY
   // PERFORMANCE: Skip this effect entirely for New Pairs and Migrated columns
@@ -5786,7 +5823,8 @@ function PulseTable({
   const isFinalStretch = useMemo(
     () =>
       title.toLowerCase().includes("final") ||
-      title.toLowerCase().includes("stretch"),
+      title.toLowerCase().includes("stretch") ||
+      title.toLowerCase().includes("almost bonded"),
     [title],
   );
 
@@ -5812,7 +5850,7 @@ function PulseTable({
       const isMeteora = launchpadProtocol.includes("meteora");
       const bondingPct = (token as any).bonding_pct ?? 0;
 
-      if (isMeteora && bondingPct > 98.6) {
+      if (isMeteora && bondingPct > METEORA_WAVE_THRESHOLD) {
         newWaveTokens.add(idx);
       }
     }
@@ -6097,14 +6135,14 @@ function PulseTable({
       >
         {/* Left side container for title */}
         <div className="flex flex-shrink-0 items-center gap-1 font-normal">
-          {/* Column icon - outline style */}
-          {title.includes("New Pairs") && (
+          {/* Column icon - outline style (hidden for BNB) */}
+          {!isBnb && title.toLowerCase().includes("new pairs") && (
             <PiLeafLight size={14} style={{ color: AX.text }} />
           )}
-          {title.includes("Final Stretch") && (
+          {!isBnb && title.toLowerCase().includes("final stretch") && (
             <HiOutlineFire size={14} style={{ color: "#fcaf25" }} />
           )}
-          {title.includes("Migrated") && (
+          {!isBnb && title.toLowerCase().includes("migrated") && (
             <HiOutlineRocketLaunch size={14} style={{ color: "#52c75f" }} />
           )}
           <span
@@ -6118,10 +6156,22 @@ function PulseTable({
               ? "New"
               : title.includes("Final Stretch")
                 ? "Soon"
-                : title.includes("Migrated")
-                  ? "Migrated"
-                  : title}
+                : title.includes("Almost bonded")
+                  ? "Almost bo"
+                  : title.includes("Migrated")
+                    ? "Migrated"
+                    : title}
           </span>
+          {/* % MC badge — BNB Almost bonded column only */}
+          {isBnb && title.includes("Almost bonded") && (
+            <span
+              className="flex-shrink-0 whitespace-nowrap text-xs font-medium"
+              style={{ letterSpacing: '0.2px' }}
+            >
+              <span style={{ color: '#31e3ac' }}>%</span>
+              <span style={{ color: '#9CA3AF' }}> MC</span>
+            </span>
+          )}
           {/* Pause indicator — shown when the user hovers the column and the live feed is frozen */}
           {frozenTokens !== null && (
             <FaPause
@@ -6175,7 +6225,10 @@ function PulseTable({
               height: "26px",
             }}
           >
-            <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
+            {isBnb
+              ? <img src={BNB_ICON_32} alt="BNB" style={{ width: 14, height: 14, flexShrink: 0, borderRadius: '50%' }} />
+              : <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
+            }
             <input
               type="text"
               value={thunderAmount}
@@ -6264,74 +6317,46 @@ function PulseTable({
 
                     return (
                       <div
-                        className="absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border shadow-xl"
+                        className="absolute top-full left-0 z-50 mt-1 w-32 rounded-lg border shadow-xl"
                         style={{
                           backgroundColor: "rgba(15, 16, 18, 0.95)",
                           borderColor: AX.border,
                         }}
                       >
-                        <div className="space-y-1.5 p-2">
-                          {/* Slippage - Running person icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaRunning
-                              size={10}
+                        <div className="space-y-2 p-3">
+                          {/* Slippage */}
+                          <div className="flex items-center gap-2">
+                            <TbFall
+                              size={14}
                               className="opacity-80"
-                              style={{ strokeWidth: "2" }}
+                              style={{ color: AX.muted }}
                             />
-                            <span className="text-xs font-light text-gray-300">
-                              {(settings.maxSlippage * 100).toFixed(0)}%
+                            <span className="text-sm text-gray-300">
+                              Auto
                             </span>
                           </div>
 
-                          {/* Priority Fee - Gas pump icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
+                          {/* Priority Fee */}
+                          <div className="flex items-center gap-2">
                             <FaGasPump
-                              size={10}
-                              className="opacity-90"
-                              style={{ color: "#FCD34D", strokeWidth: "2" }}
+                              size={14}
+                              className="opacity-80"
+                              style={{ color: AX.muted }}
                             />
-                            <span className="text-xs font-light text-yellow-400">
+                            <span className="text-sm text-gray-300">
                               {settings.priority}
                             </span>
-                            <span
-                              className="text-xs font-light"
-                              style={{ color: "#d11f3a" }}
-                            >
-                              ⚠
-                            </span>
                           </div>
 
-                          {/* Bribe - Coins icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
-                            <FaCoins
-                              size={10}
-                              className="opacity-90"
-                              style={{ color: "#FCD34D", strokeWidth: "2" }}
+                          {/* Bribe */}
+                          <div className="flex items-center gap-2">
+                            <FaHandHoldingUsd
+                              size={14}
+                              className="opacity-80"
+                              style={{ color: AX.muted }}
                             />
-                            <span className="text-xs font-light text-yellow-400">
+                            <span className="text-sm text-gray-300">
                               {settings.bribe}
-                            </span>
-                            <span
-                              className="text-xs font-light"
-                              style={{ color: "#d11f3a" }}
-                            >
-                              ⚠
-                            </span>
-                          </div>
-
-                          {/* MEV Protection - Ban icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaBan
-                              size={10}
-                              className="opacity-90"
-                              style={{ strokeWidth: "2" }}
-                            />
-                            <span className="text-xs font-light text-gray-300">
-                              {settings.mevMode === "off"
-                                ? "Off"
-                                : settings.mevMode === "reduced"
-                                  ? "Reduced"
-                                  : "Secure"}
                             </span>
                           </div>
                         </div>
@@ -6348,8 +6373,8 @@ function PulseTable({
               className="relative z-[9999] flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-all duration-300 ease-out"
               style={{
                 backgroundColor: "transparent",
-                color: onOpenFilter
-                  ? (hasExternalActiveFilters ? "#F3BA2F" : AX.muted)
+                color: isBnb
+                  ? (hasExternalActiveFilters ? AX.bnbGold : AX.muted)
                   : showFilters
                     ? AX.aiBlue
                     : hasActiveFilters
@@ -6357,15 +6382,15 @@ function PulseTable({
                       : AX.muted,
               }}
               onMouseEnter={(e) => {
-                if (onOpenFilter) {
-                  e.currentTarget.style.color = hasExternalActiveFilters ? "#fcd34d" : "#E6E7EA";
+                if (isBnb) {
+                  e.currentTarget.style.color = hasExternalActiveFilters ? AX.bnbGoldHover : "#E6E7EA";
                 } else if (!showFilters) {
                   e.currentTarget.style.color = hasActiveFilters ? "#5eead4" : "#E6E7EA";
                 }
               }}
               onMouseLeave={(e) => {
-                if (onOpenFilter) {
-                  e.currentTarget.style.color = hasExternalActiveFilters ? "#F3BA2F" : AX.muted;
+                if (isBnb) {
+                  e.currentTarget.style.color = hasExternalActiveFilters ? AX.bnbGold : AX.muted;
                 } else if (!showFilters) {
                   e.currentTarget.style.color = hasActiveFilters ? "#31e3ac" : AX.muted;
                 }
@@ -6378,15 +6403,15 @@ function PulseTable({
                 }
               }}
             >
-              <BsSliders2 size={14} />
+              {isBnb ? <FaFilter size={12} /> : <BsSliders2 size={14} />}
 
               {/* Active filter indicator dot */}
-              {(onOpenFilter ? hasExternalActiveFilters : hasActiveFilters) && (
+              {(isBnb ? hasExternalActiveFilters : hasActiveFilters) && (
                 <span
                   className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full"
                   style={{
-                    backgroundColor: onOpenFilter ? "#F3BA2F" : "#31e3ac",
-                    boxShadow: onOpenFilter
+                    backgroundColor: isBnb ? AX.bnbGold : "#31e3ac",
+                    boxShadow: isBnb
                       ? "0 0 4px rgba(243, 186, 47, 0.5)"
                       : "0 0 4px rgba(49, 227, 172, 0.5)",
                   }}
@@ -9094,20 +9119,22 @@ function PulseTable({
               const currentChain =
                 chainProp || (router.query.chain as string) || "sol";
               const isBnbToken = currentChain === 'bnb';
+              // TODO: replace with internal BNB token page (same route as Solana /trade/{mint}) once built
               const tokenHref = isBnbToken
                 ? `https://dexscreener.com/bsc/${(token as any).pair_address || tokenMint}`
                 : `/trade/${tokenMint}`;
 
               return (
                 <div key={tokenMint} style={style}>
-                  <div style={{ paddingBottom: "4px" }}>
+                  <div style={{ height: '100%', paddingBottom: "4px" }}>
                     <Link
                       href={tokenHref}
                       {...(isBnbToken ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 overflow-visible rounded-lg px-2 py-1.5 text-sm"
+                      className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 rounded-lg px-2 py-1.5 text-sm"
                       style={{
                         color: AX.text,
                         backgroundColor: "#13151b",
+                        height: '100%',
                       }}
                       onMouseEnter={(e) => {
                         // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)
@@ -9203,9 +9230,9 @@ function PulseTable({
                           <div
                             className="relative flex flex-shrink-0 flex-col items-center"
                             style={{
-                              width: "70px",
-                              minWidth: "70px",
-                              maxWidth: "70px",
+                              width: "56px",
+                              minWidth: "56px",
+                              maxWidth: "56px",
                             }}
                           >
                             <TokenImage
@@ -9216,7 +9243,8 @@ function PulseTable({
                                 title.toLowerCase().includes("migrated")
                                   ? "migrated"
                                   : title.toLowerCase().includes("final") ||
-                                      title.toLowerCase().includes("stretch")
+                                      title.toLowerCase().includes("stretch") ||
+                                      title.toLowerCase().includes("almost bonded")
                                     ? "final-stretch"
                                     : "new"
                               }
@@ -9325,7 +9353,7 @@ function PulseTable({
                               <div className="flex min-w-0 flex-col">
                                 <div className="flex min-w-0 items-center gap-1.5">
                                   <span
-                                    className="flex-shrink-0 text-sm font-semibold"
+                                    className="flex-shrink-0 text-xs font-semibold"
                                     style={{ color: AX.text }}
                                   >
                                     {token.symbol ||
@@ -9823,18 +9851,15 @@ function PulseTable({
                                     </span>
                                     {/* PHASE 4 (C1): Replaced SmoothNumber with static span - eliminates RAF animations */}
                                     {(() => {
-                                      const isFinalStretchColumn =
-                                        title.toLowerCase().includes("final") ||
-                                        title.toLowerCase().includes("stretch");
                                       const lp = (
                                         (token as any).launchpad_protocol || ""
                                       ).toLowerCase();
                                       const bonding =
                                         (token as any).bonding_pct ?? 0;
                                       const hasGreenWave =
-                                        isFinalStretchColumn &&
+                                        isFinalStretch &&
                                         lp.includes("meteora") &&
-                                        bonding > 98.6;
+                                        bonding > METEORA_WAVE_THRESHOLD;
                                       const mcVal = getTokenMarketCap(token);
                                       if (hasGreenWave) {
                                         return (
@@ -10092,7 +10117,7 @@ function PulseTable({
                                       const bondingPct =
                                         (token as any).bonding_pct ?? 0;
                                       const isHighBondingMeteora =
-                                        isMeteora && bondingPct > 98.6;
+                                        isMeteora && bondingPct > METEORA_WAVE_THRESHOLD;
 
                                       if (isHighBondingMeteora) {
                                         setSelectedToken(token);
@@ -10245,9 +10270,6 @@ function PulseTable({
                             const isMeteora =
                               launchpadProtocol.includes("meteora");
                             const bondingPct = (token as any).bonding_pct ?? 0;
-                            const isFinalStretch =
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch");
                             const isMigratedColumn = title
                               .toLowerCase()
                               .includes("migrated");
@@ -10255,7 +10277,7 @@ function PulseTable({
                               isFinalStretch &&
                               !isMigratedColumn &&
                               isMeteora &&
-                              bondingPct > 98.6;
+                              bondingPct > METEORA_WAVE_THRESHOLD;
 
                             if (isHighBondingMeteora) {
                               return (

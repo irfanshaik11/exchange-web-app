@@ -1,6 +1,8 @@
 import Head from "next/head";
 import Link from "next/link";
 import { FaArrowRight, FaArrowUpRightFromSquare, FaXTwitter } from "react-icons/fa6";
+import { computeHashImageUrl } from '~/utils/imageHash';
+import { BNB_CHAIN_ICON } from '~/utils/bnbProtocols';
 import Header from "../components/Header";
 import {
   SiBitcoin,
@@ -11,11 +13,12 @@ import {
   SiNvidia,
   SiTesla,
   SiSpacex,
-  SiBinance,
   SiRipple,
   SiOpenai,
   SiDogecoin,
 } from "react-icons/si";
+
+const BNB_ICON_32 = computeHashImageUrl(BNB_CHAIN_ICON, 32) ?? BNB_CHAIN_ICON;
 
 /* ----------------------------- data ----------------------------- */
 
@@ -51,7 +54,7 @@ const marketsRow2: Market[] = [
   { name: "Coreweave", sym: "CRWV", icon: dot("CW", "#ffffff"), bg: "#101114" },
   { name: "Nasdaq 100", sym: "NDX", icon: dot("100", "#4da2ff"), bg: "#0c2540" },
   { name: "Apple", sym: "AAPL", icon: <SiApple />, bg: "#0a0a0a", fg: "#ffffff" },
-  { name: "BNB", sym: "BNB", icon: <SiBinance />, bg: "#1c1708", fg: "#f0b90b" },
+  { name: "BNB", sym: "BNB", icon: <img src={BNB_ICON_32} alt="BNB" style={{ width: 16, height: 16, borderRadius: '50%' }} />, bg: "#1c1708", fg: "#f0b90b" },
   { name: "Anthropic", sym: "ANTHR", icon: dot("A", "#0a0a0a"), bg: "#ffffff" },
 ];
 

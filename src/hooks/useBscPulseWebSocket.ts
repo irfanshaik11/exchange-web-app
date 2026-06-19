@@ -386,8 +386,20 @@ function applyPriceUpdate(raw: any) {
 function updateTokenEverywhere(mint: string, patch: Partial<any>) {
   const id = mintKey(mint);
   if (!id) return;
+  const numericFields = ['market_cap_usd', 'fully_diluted_value', 'total_fully_diluted_valuation', 'liquidity_usd', 'price_usd'];
   const merge = (arr: any[]) =>
-    arr.map((t) => (mintKey(t.mint) === id ? { ...t, ...patch } : t));
+    arr.map((t) => {
+      if (mintKey(t.mint) !== id) return t;
+      const merged = { ...t, ...patch };
+      for (const field of numericFields) {
+        const prev = Number(t[field] ?? 0);
+        const next = Number(patch[field] ?? 0);
+        if (prev > 0 && (next <= 0 || !Number.isFinite(next))) {
+          merged[field] = t[field];
+        }
+      }
+      return merged;
+    });
   _store = {
     ..._store,
     newTokens: merge(_store.newTokens),
@@ -489,13 +501,9 @@ function refreshTokenMetadata(mint: string, hint?: any) {
     });
   }
 
-  const hasWsName =
-    hasMeaningfulText(hint?.name) && hasMeaningfulText(hint?.symbol);
-
-  void (hasWsName
-    ? Promise.resolve(null)
-    : fetchTokenDetailEnrichment(id, hint)
-  )
+  // /v1/token/{mint} is the trade-page endpoint — not for the pulse board.
+  // Name/image enrichment flows through resolveUriMetadata and fetchProtocolEnrichment only.
+  void Promise.resolve(null)
     .then(async (patch) => {
       if (patch) applyPatch(patch);
       const merged = { ...hint, ...(_enrichmentCache.get(id) ?? {}), ...(patch ?? {}) };
@@ -592,14 +600,7 @@ function openChannel(channel: Channel) {
         enrich: true,
       });
     } else if (type === 'price_update') {
-      const normalized = normalizeBscToken(data);
-      const nextChannel = (msgChannel ?? normalized.channel ?? data?.channel ?? null) as Channel | null;
-      const id = mintKey(normalized.mint);
-      if (nextChannel && id && getTokenChannel(id) !== nextChannel) {
-        upsertToken(nextChannel, normalized, { prepend: true, enrich: false });
-      } else {
-        applyPriceUpdate(data);
-      }
+      applyPriceUpdate(data);
     }
   };
 
