@@ -10,12 +10,12 @@ interface TweetCardProps {
 export default function TweetCard({ id, className = "" }: TweetCardProps) {
   return (
     <div
-      className={`tweet-card w-full overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2 backdrop-blur-sm transition-all duration-300 hover:border-neutral-700 hover:scale-[1.01] ${className}`}
+      className={`tweet-card group block h-[300px] w-full overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/40 p-2 backdrop-blur-sm transition-all duration-300 hover:border-white/[0.14] hover:scale-[1.01] ${className}`}
     >
       <style dangerouslySetInnerHTML={{ __html: `
         .tweet-card :where(.react-tweet-theme) {
           --tweet-bg-color: transparent;
-          --tweet-bg-color-hover: rgba(255, 255, 255, 0.03);
+          --tweet-bg-color-hover: transparent;
           --tweet-border: none;
           --tweet-font-family: var(--font-sans), -apple-system, sans-serif;
           --tweet-font-color: #ededf0;
@@ -34,34 +34,30 @@ export default function TweetCard({ id, className = "" }: TweetCardProps) {
         .tweet-card [class*="actions"] {
           display: none !important;
         }
-        /* Cap the tweet body to a max number of lines and truncate the rest with an ellipsis. */
-        .tweet-card [class*="tweet-body"] {
-          display: -webkit-box;
-          -webkit-line-clamp: 4;
-          line-clamp: 4;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
         .tweet-card [class*="infoLink"] {
           opacity: 0;
           pointer-events: none;
           user-select: none;
         }
-        .tweet-card [class*="replies"] [class*="link"] {
-          width: 100%;
-          color: #8a8a93;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 10px;
-          padding: 0.75rem 1rem;
-          margin-top: 0.75rem;
-        //   display: none;
-          transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+        /* Hide react-tweet's built-in replies / "Read more" link — we render our
+           own footer button pinned to the bottom of the card instead. */
+        .tweet-card [class*="replies"] {
+          display: none !important;
         }
-        .tweet-card [class*="replies"] [class*="link"]:hover {
-          background-color: rgba(255, 255, 255, 0.04);
-          border-color: rgba(255, 255, 255, 0.15);
-          color: #ededf0;
+        /* Internal scroll area so tall tweets (media, quotes, replies) don't elongate the card */
+        .tweet-card .tweet-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+        }
+        .tweet-card .tweet-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .tweet-card .tweet-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .tweet-card .tweet-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.12);
+          border-radius: 999px;
         }
         @media (max-width: 640px) {
           .tweet-card :where(.react-tweet-theme) {
@@ -78,7 +74,19 @@ export default function TweetCard({ id, className = "" }: TweetCardProps) {
         }
       `}} />
 
-      <Tweet id={id} />
+      <div className="flex h-full flex-col rounded-xl transition-colors duration-300 group-hover:bg-white/[0.03]">
+        <div className="tweet-scroll min-h-0 flex-1 overflow-y-auto">
+          <Tweet id={id} />
+        </div>
+        <a
+          href={`https://x.com/i/status/${id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 block shrink-0 rounded-[10px] border border-white/[0.08] px-4 py-3 text-center text-[13px] font-medium text-[#8a8a93] transition-colors hover:border-white/[0.15] hover:bg-white/[0.04] hover:text-[#ededf0]"
+        >
+          Read more on X
+        </a>
+      </div>
     </div>
   );
 }
