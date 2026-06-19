@@ -1,61 +1,61 @@
+import Link from "next/link";
+import { FaXTwitter, FaTelegram } from "react-icons/fa6";
+
 /* ----------------------------- data ----------------------------- */
 
-const footerCols = [
+// DOM order is the phone order (single-column stack); `order` controls the
+// multi-column layout from sm up (left→right: Resources, Socials, Company).
+const navColumns = [
   {
-    title: "Markets",
-    groups: [
-      { h: "PRE-IPO", items: ["SpaceX", "OpenAI", "Anthropic"] },
-      { h: "STOCKS", items: ["TSLA", "AAPL", "NVDA", "GOOG"] },
-      { h: "COMMODITIES", items: ["Gold", "Silver", "Oil", "Copper"] },
-      { h: "CRYPTO", items: ["BTC", "ETH", "SOL", "LINK", "DOGE"] },
-      { h: "FOREX", items: [] },
+    title: "Company",
+    order: "sm:order-3",
+    links: [
+      { label: "Documentation", href: "#" },
+      { label: "Privacy Policy", href: "#" },
+      { label: "Terms of Service", href: "#" },
     ],
   },
   {
-    title: "Predictions",
-    groups: [
-      {
-        h: "POLITICS",
-        items: ["Dem Nominee 2028", "Trump Visits China", "GOP Nominee 2028", "US-Iran Ceasefire"],
-      },
-      { h: "SPORTS", items: ["FIFA World Cup '26", "NCAA Tournament '26", "F1 Champion '26"] },
-      { h: "FINANCE", items: ["Kraken IPO", "SPCE Earnings", "Consensys IPO", "MicroStrategy Sells BTC"] },
-      { h: "TECH", items: ["OpenAI Hardware", "GPT-6 Release", "ChatGPT Outage", "Tesla Q1 Deliveries"] },
-      { h: "CLIMATE", items: ["March '26 Temp"] },
-    ],
+    title: "Resources",
+    order: "sm:order-1",
+    links: [{ label: "Brand Kit", href: "#" }],
   },
   {
-    title: "Blog",
-    groups: [
-      { h: "TRADING", items: ["Leverage Trading", "Short Selling", "Liquidation"] },
-      { h: "RISK", items: ["Stop Loss", "Short Squeeze", "Cross vs Isolated"] },
-      { h: "MECHANICS", items: ["Funding Rates", "Airdrop Farming"] },
-      { h: "PRE-IPO", items: ["SpaceX Perps", "OpenAI Perps", "Anthropic Perps"] },
+    title: "Socials",
+    order: "sm:order-2",
+    links: [
+      { label: "Twitter", href: "#" },
+      { label: "Telegram", href: "#" },
     ],
   },
 ];
 
-const companyLinks = ["Support", "Docs", "Terms of Service", "Privacy Policy", "Careers", "Brand Kit", "Audits"];
-const socialLinks = ["X", "TikTok", "Instagram", "Youtube", "Telegram", "Discord", "LinkedIn"];
+const socials = [
+  { label: "X", href: "#", icon: FaXTwitter },
+  { label: "Telegram", href: "#", icon: FaTelegram },
+];
 
 /* ----------------------------- components ----------------------------- */
 
-function Logo({ size = 22 }: { size?: number }) {
+function NavGroup({ group }: { group: (typeof navColumns)[number] }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <img
-        src="/interstate/logo.png"
-        alt="Interstate logo"
-        className="inline-block object-contain rounded-full shrink-0"
-        style={{ width: size + 6, height: size + 6 }}
-      />
-      <span
-        className="font-semibold tracking-[0.12em] uppercase leading-none text-[#ededf0]"
-        style={{ fontSize: size * 0.82, fontFamily: "'Orbitron', sans-serif" }}
-      >
-        interstate
-      </span>
-    </span>
+    <div className={group.order}>
+      <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.16em] text-white/40">
+        {group.title}
+      </h4>
+      <ul className="flex flex-col gap-3.5">
+        {group.links.map((l) => (
+          <li key={l.label}>
+            <a
+              href={l.href}
+              className="text-sm text-white/60 transition-colors duration-200 hover:text-white"
+            >
+              {l.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -63,53 +63,91 @@ function Logo({ size = 22 }: { size?: number }) {
 
 export default function LandingFooter() {
   return (
-    <footer className="border-t border-white/5 pt-14 pb-9">
-      <div className="mb-10">
-        <Logo size={20} />
+    <footer className="relative isolate pt-20 pb-12 lg:pt-28 lg:pb-14">
+      {/* Gradient hairline separator */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
+      />
+
+      {/* Decorative layer — clipped on its own so the giant wordmark/glow can't
+          overflow the page, while the footer itself stays unclipped (so the
+          -ml-2 logo isn't cut off). */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        {/* Atmospheric emerald glow */}
+        <div className="absolute -top-28 left-1/2 h-72 w-[70%] -translate-x-1/2 rounded-full bg-[rgba(24,196,140,0.06)] blur-[130px]" />
+
+        {/* Giant brand wordmark anchor — bleeds off the bottom edge */}
+        <span className="absolute inset-x-0 -bottom-[0.14em] origin-bottom scale-y-[3] select-none whitespace-nowrap text-center text-[clamp(4rem,17vw,15rem)] font-extrabold uppercase leading-none tracking-tighter bg-gradient-to-b from-white/[0.07] to-transparent bg-clip-text text-transparent sm:scale-y-100">
+          Interstate
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_0.7fr_0.7fr] gap-8">
-        {footerCols.map((col) => (
-          <div key={col.title}>
-            <h4 className="text-[15px] font-semibold mb-[18px] text-[#ededf0]">{col.title}</h4>
-            {col.groups.map((g) => (
-              <div key={g.h} className="flex flex-col gap-[9px] mb-5">
-                <span className="text-[11px] tracking-[0.08em] text-[#5f5f68] mb-0.5">{g.h}</span>
-                {g.items.map((it) => (
-                  <a key={it} href="#" className="text-[14px] text-[#8a8a93] hover:text-[#ededf0] transition-colors">
-                    {it}
-                  </a>
-                ))}
-              </div>
-            ))}
-          </div>
-        ))}
+      {/* Content */}
+      <div className="relative z-10 grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-8">
+        {/* Brand block */}
+        <div className="flex max-w-md flex-col lg:col-span-6">
+          <Link
+            aria-label="Interstate home"
+            href="/"
+            className="group mb-6 -ml-2 flex w-fit flex-shrink-0 items-center gap-1.5 tracking-tight select-none transition-all duration-200"
+          >
+            <img
+              src="/interstate/logo.png"
+              alt="Interstate logo"
+              className="h-11 w-11 md:h-12 md:w-12 lg:h-14 lg:w-14 flex-shrink-0 object-contain transition-all duration-200 group-hover:drop-shadow-[0_0_8px_rgba(24,196,140,0.4)]"
+            />
+            <h3 className="text-4xl md:text-5xl font-bold tracking-tight text-[#CBD0EB]">Interstate</h3>
+          </Link>
 
-        <div className="lg:text-right">
-          <h4 className="text-[15px] font-semibold mb-[18px] text-[#ededf0]">Company</h4>
-          <div className="flex flex-col gap-[9px] mb-5">
-            {companyLinks.map((l) => (
-              <a key={l} href="#" className="text-[14px] text-[#8a8a93] hover:text-[#ededf0] transition-colors">
-                {l}
+          <h2 className="bg-gradient-to-br from-white via-white to-white/55 bg-clip-text text-[1.75rem] font-semibold leading-[1.2] tracking-tight text-transparent sm:text-[2rem] sm:leading-[1.15]">
+            We&apos;re building towards a faster, interoperable &amp; decentralized future.
+          </h2>
+
+          {/* <div className="mt-9 flex items-center gap-3">
+            {socials.map(({ label, href, icon: Icon }) => (
+              <a
+                key={label}
+                href={href}
+                aria-label={label}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.02] text-[#CBD0EB] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.07] hover:text-white"
+              >
+                <Icon className="h-[17px] w-[17px]" />
               </a>
             ))}
-          </div>
+          </div> */}
         </div>
 
-        <div className="lg:text-right">
-          <h4 className="text-[15px] font-semibold mb-[18px] text-[#ededf0]">Social</h4>
-          <div className="flex flex-col gap-[9px] mb-5">
-            {socialLinks.map((l) => (
-              <a key={l} href="#" className="text-[14px] text-[#8a8a93] hover:text-[#ededf0] transition-colors">
-                {l}
-              </a>
-            ))}
+        {/* Nav cluster — confidently grouped on the right */}
+        <nav className="grid grid-cols-2 gap-x-12 gap-y-10 sm:grid-cols-3 sm:gap-x-10 sm:text-right lg:col-span-6 lg:gap-x-16">
+          {/* Phone: Company in the left column */}
+          <NavGroup group={navColumns[0]} />
+          {/* Phone: Resources + Socials stacked in the right column.
+              sm+: `contents` flattens them into the 3-col grid. */}
+          <div className="flex flex-col gap-6 text-right sm:contents">
+            <NavGroup group={navColumns[1]} />
+            <NavGroup group={navColumns[2]} />
           </div>
-        </div>
+        </nav>
       </div>
 
-      <div className="mt-8 pt-6 border-t border-white/5 text-[13px] text-[#5f5f68]">
-        <span>© {new Date().getFullYear()} Interstate. All rights reserved.</span>
+      {/* Bottom bar */}
+      <div className="relative z-10 mt-20 flex flex-col-reverse items-center gap-5 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left lg:mt-28">
+        <span className="text-[13px] text-white/40">
+          © {new Date().getFullYear()} Interstate. All rights reserved.
+        </span>
+        <a
+          href="#"
+          className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-[13px] text-white/55 transition-colors duration-200 hover:border-white/20 hover:text-white/80"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#18c48c] opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#18c48c]" />
+          </span>
+          All systems operational
+        </a>
       </div>
     </footer>
   );
