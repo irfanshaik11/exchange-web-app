@@ -104,7 +104,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (ipfsMatch && ipfsMatch[1]) {
       const cid = ipfsMatch[1];
       const gateways = [
-        'https://cloudflare-ipfs.com/ipfs/',
         'https://ipfs.io/ipfs/',
         'https://gateway.pinata.cloud/ipfs/',
         'https://nftstorage.link/ipfs/',

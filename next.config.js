@@ -21,30 +21,52 @@ const config = {
     position: "bottom-right",
   },
   // Transpile these packages to fix CommonJS/ESM issues
-  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit',  '@turnkey/react-wallet-kit', '@turnkey/core', '@wallet-standard/app', '@wallet-standard/base'],
+  transpilePackages: [
+    "@vanilla-extract/sprinkles",
+    "@vanilla-extract/css",
+    "@rainbow-me/rainbowkit",
+    "@turnkey/react-wallet-kit",
+    "@turnkey/core",
+    "@wallet-standard/app",
+    "@wallet-standard/base",
+  ],
   // Keep `sharp` (native addon) external to the serverless function bundle.
   // Vercel ships sharp natively in its runtime; bundling would either fail on
   // the .node binary or duplicate it. The `/api/img/[hash]` route relies on
   // this for the on-demand WebP resize pipeline.
-  serverExternalPackages: ['sharp', 'isows'],
+  serverExternalPackages: ["sharp", "isows"],
   // Optimize package imports for faster loading
   experimental: {
     optimizePackageImports: [
       // List every react-icons sub-package used in the codebase so Next.js
       // rewrites barrel imports to per-icon direct imports (e.g. react-icons/fa/FaStar).
       // Listing the root 'react-icons' package does nothing for sub-paths.
-      'react-icons/ai', 'react-icons/bi', 'react-icons/bs',
-      'react-icons/fa', 'react-icons/fa6', 'react-icons/fi',
-      'react-icons/gi', 'react-icons/hi', 'react-icons/hi2',
-      'react-icons/io', 'react-icons/io5', 'react-icons/lu',
-      'react-icons/pi', 'react-icons/ri', 'react-icons/si',
-      'react-icons/tb', 'react-icons/tfi',
-      'lucide-react',
+      "react-icons/ai",
+      "react-icons/bi",
+      "react-icons/bs",
+      "react-icons/fa",
+      "react-icons/fa6",
+      "react-icons/fi",
+      "react-icons/gi",
+      "react-icons/hi",
+      "react-icons/hi2",
+      "react-icons/io",
+      "react-icons/io5",
+      "react-icons/lu",
+      "react-icons/pi",
+      "react-icons/ri",
+      "react-icons/si",
+      "react-icons/tb",
+      "react-icons/tfi",
+      "lucide-react",
     ],
   },
   // Disable page transitions and loading indicators
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? { exclude: ["error", "warn"] }
+        : false,
   },
   // Turbopack configuration - explicitly set root to fix workspace detection
   turbopack: {
@@ -54,32 +76,36 @@ const config = {
     // Handle @react-native-async-storage warning (optional dependency for MetaMask SDK)
     config.resolve.fallback = {
       ...config.resolve.fallback,
-      '@react-native-async-storage/async-storage': false,
+      "@react-native-async-storage/async-storage": false,
     };
 
     // Ignore test files from node_modules (fixes Next.js 16 bundling issues)
     // Use NormalModuleReplacementPlugin to replace test file imports with empty modules
-    const emptyModulePath = path.resolve(__dirname, './src/utils/empty-module.js');
+    const emptyModulePath = path.resolve(
+      __dirname,
+      "./src/utils/empty-module.js",
+    );
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
         /node_modules\/thread-stream\/test\/.*$/,
-        emptyModulePath
+        emptyModulePath,
       ),
       new webpack.NormalModuleReplacementPlugin(
         /node_modules\/@turnkey\/core\/node_modules\/thread-stream\/test\/.*$/,
-        emptyModulePath
+        emptyModulePath,
       ),
       new webpack.NormalModuleReplacementPlugin(
         /node_modules\/thread-stream\/bench\.js$/,
-        emptyModulePath
+        emptyModulePath,
       ),
       new webpack.NormalModuleReplacementPlugin(
         /node_modules\/@turnkey\/core\/node_modules\/thread-stream\/bench\.js$/,
-        emptyModulePath
+        emptyModulePath,
       ),
       new webpack.IgnorePlugin({
-        resourceRegExp: /^(tap|desm|fastbench|pino-elasticsearch|why-is-node-running|tape)$/,
-      })
+        resourceRegExp:
+          /^(tap|desm|fastbench|pino-elasticsearch|why-is-node-running|tape)$/,
+      }),
     );
 
     return config;
@@ -112,8 +138,14 @@ const config = {
       { protocol: "https", hostname: "raw.githubusercontent.com" },
       { protocol: "https", hostname: "gateway.irys.xyz" },
       { protocol: "https", hostname: "encrypted-tbn3.gstatic.com" },
-      { protocol: "https", hostname: "bronze-manual-jaguar-516.mypinata.cloud" },
-      { protocol: "https", hostname: "pub-392e3698ab10439a9bf254db45b52c0b.r2.dev" },
+      {
+        protocol: "https",
+        hostname: "bronze-manual-jaguar-516.mypinata.cloud",
+      },
+      {
+        protocol: "https",
+        hostname: "pub-392e3698ab10439a9bf254db45b52c0b.r2.dev",
+      },
       { protocol: "https", hostname: "dweb.link" },
       { protocol: "https", hostname: "metadata.rapidlaunch.io" },
       { protocol: "https", hostname: "dflow.net" },
@@ -136,39 +168,45 @@ const config = {
   async headers() {
     return [
       {
-        // All routes (HTML, API): no caching
-        source: '/:path*',
-        headers: [
-          { key: 'Cache-Control', value: 'no-store, must-revalidate' },
-        ],
+        // All routes (HTML, API) EXCEPT the hash-based image proxy: no caching.
+        // /api/img is excluded so its route handler can own Cache-Control per
+        // response status — a successful resize is immutable for a year, but a
+        // 403/404 (un-warmed CDN guess, dead IPFS gateway) is only short-cached
+        // (`max-age=10`) so it recovers as soon as the real image lands. The
+        // old blanket `/api/img/:hash*` immutable rule froze those errors for a
+        // FULL YEAR, which is why missing trending images never healed.
+        source: "/((?!api/img/).*)",
+        headers: [{ key: "Cache-Control", value: "no-store, must-revalidate" }],
       },
       {
         // Content-hashed static assets: cache forever (hash changes on rebuild)
-        source: '/_next/static/:path*',
+        source: "/_next/static/:path*",
         headers: [
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
-        ],
-      },
-      {
-        // Hash-based image proxy: deterministic URLs, cache forever
-        source: '/api/img/:hash*',
-        headers: [
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
         ],
       },
       {
         // TradingView charting library — 25MB of static JS, never changes between deploys
-        source: '/charting_library/:path*',
+        source: "/charting_library/:path*",
         headers: [
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
         ],
       },
       {
         // KOL profile pics — a wallet's X avatar effectively never changes;
         // cache forever so the FE loads each once and never refetches.
-        source: '/kol-avatars/:path*',
+        source: "/kol-avatars/:path*",
         headers: [
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
         ],
       },
     ];

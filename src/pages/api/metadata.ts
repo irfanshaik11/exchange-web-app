@@ -40,7 +40,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const gateways = [
         parsed.toString(),
         parsed.protocol === 'http:' ? parsed.toString().replace(/^http:/i, 'https:') : parsed.toString(),
-        `https://cloudflare-ipfs.com/ipfs/${cid}`,
         `https://ipfs.io/ipfs/${cid}`,
         `https://gateway.pinata.cloud/ipfs/${cid}`,
         `https://nftstorage.link/ipfs/${cid}`,

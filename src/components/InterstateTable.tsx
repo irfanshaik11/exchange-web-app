@@ -44,7 +44,10 @@ import {
   extractMetaImage,
   isMetadataUrl,
 } from "~/utils/images";
-import { computeHashImageUrl } from "~/utils/imageHash";
+import {
+  computeHashImageUrl,
+  pickRenderableImageSource,
+} from "~/utils/imageHash";
 import { getRetainedImage } from "~/utils/imagePreloader";
 import {
   TIMEFRAME_CONFIG,
@@ -939,13 +942,23 @@ const TokenAvatar: React.FC<{
     if (rawUri && isMetadataUrl(rawUri)) {
       return computeHashImageUrl(rawUri) || "";
     }
-    // 4. Direct image URL or ui-avatars fallback
-    const raw = imageUrl || token.logo || "";
+    // 4. Direct image URL — pick the first candidate that's actually
+    //    renderable, skipping speculative cdn.interstate.so guesses that 403
+    //    until warmed. Trusting the raw `image` field even when it was the dead
+    //    CDN guess is exactly why trending rows showed a letter placeholder
+    //    while the token detail page (which resolves the metadata URI) did not.
+    const raw =
+      pickRenderableImageSource([
+        (token as any).image_url,
+        (token as any).image,
+        token.logo,
+        safeUri,
+      ]) || "";
     if (!raw) return "";
     const proxyUrl = computeHashImageUrl(raw) || "";
     if (mintKey) resolvedImageCache[mintKey] = proxyUrl;
     return proxyUrl;
-  }, [meta, imageUrl, token.logo, mintKey, rawUri]);
+  }, [meta, imageUrl, token.logo, mintKey, rawUri, safeUri]);
 
   // Note: the background-prewarm fast-path (retained-bitmap → instant first
   // paint) is seeded in the visibleSrc useState initializer above, not here —
@@ -968,19 +981,49 @@ const TokenAvatar: React.FC<{
       return;
     }
     let cancelled = false;
-    // Use window.Image to bypass the next/image default import shadowing the global.
-    const preloader = new window.Image();
-    preloader.onload = () => {
-      if (cancelled) return;
-      setVisibleSrc(imgSrc);
-      if (cachedAvatarMint) loadedAvatarCache.set(cachedAvatarMint, imgSrc);
+    let attempt = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    // Cold-load reliability. On a hard refresh ~50 avatars fetch at once and
+    // public IPFS gateways (and the cold image proxy) rate-limit/stall the
+    // burst, so the first load often fails. Without a retry the row is stuck on
+    // the letter placeholder for the whole mount — which is exactly why images
+    // appear on a warm SPA navigation (already cached) but not on hard refresh.
+    // Retry a few times with backoff + jitter so burst-failed avatars heal
+    // within a couple seconds.
+    const MAX_IMAGE_RETRIES = 3;
+    const loadImage = () => {
+      // Cache-bust retries: a failed /api/img response is briefly cacheable
+      // (max-age=10) and gateways may 429, so a fresh query param forces a real
+      // refetch instead of replaying the failure. visibleSrc is set to the URL
+      // that actually loaded so the rendered <img> hits the same cache entry.
+      const attemptSrc =
+        attempt === 0
+          ? imgSrc
+          : `${imgSrc}${imgSrc.includes("?") ? "&" : "?"}retry=${attempt}`;
+      // Use window.Image to bypass the next/image default import shadowing the global.
+      const preloader = new window.Image();
+      preloader.onload = () => {
+        if (cancelled) return;
+        setVisibleSrc(attemptSrc);
+        if (cachedAvatarMint)
+          loadedAvatarCache.set(cachedAvatarMint, attemptSrc);
+      };
+      preloader.onerror = () => {
+        if (cancelled) return;
+        if (attempt < MAX_IMAGE_RETRIES) {
+          attempt += 1;
+          const delay = attempt * 700 + Math.floor(Math.random() * 500);
+          retryTimer = setTimeout(loadImage, delay);
+        } else {
+          setImgError(true);
+        }
+      };
+      preloader.src = attemptSrc;
     };
-    preloader.onerror = () => {
-      if (!cancelled) setImgError(true);
-    };
-    preloader.src = imgSrc;
+    loadImage();
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [imgSrc, cachedAvatarMint]);
 

@@ -236,11 +236,11 @@ function normalizeAssetUrl(raw?: string | null): string | null {
   if (s.startsWith("data:")) return s;
   if (s.startsWith("ipfs://")) {
     const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+    return `https://ipfs.io/ipfs/${cid}`;
   }
   if (/^ipfs[/:]/i.test(s)) {
     const cid = s.replace(/^ipfs[/:]/i, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+    return `https://ipfs.io/ipfs/${cid}`;
   }
   if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s))
     return `https://arweave.net/${s}`;
