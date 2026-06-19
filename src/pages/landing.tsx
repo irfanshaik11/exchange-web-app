@@ -1,11 +1,11 @@
 import Head from "next/head";
 import Link from "next/link";
 import LandingHeader from '~/components/layout/LandingHeader';
-import { ArrowRight, ArrowUpRight, Download } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, UserPlus } from 'lucide-react';
 import SimpleMarquee from '~/components/ui/marquee/SimpleMarquee';
 import MarketsMarquee from '~/components/ui/marquee/MarketsMarquee';
 import { FaXTwitter } from "react-icons/fa6";
-import { SiOpenai } from "react-icons/si";
+import { SiClaude } from "react-icons/si";
 import TweetCard from '~/components/cards/tweet-card';
 import LandingFooter from '~/components/layout/footer/LandingFooter';
 
@@ -171,18 +171,18 @@ export default function Landing() {
             muted
             playsInline
             className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-            src="/videos/homepage_hero_f1.mp4"
+            src="/videos/landing_hero_f1-half.mp4"
           />
           <div
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none"
-            style={{ background: "radial-gradient(ellipse at center, transparent 0%, transparent 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0.9) 100%)" }}
+            style={{ background: "radial-gradient(ellipse at center, transparent 0%, transparent 55%, rgba(0,0,0,0.6) 85%, rgba(0,0,0,0.9) 100%)" }}
           />
           <div
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none"
             style={{
-              background: "radial-gradient(ellipse at center, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 35%, rgba(0,0,0,0.88) 65%, rgba(0,0,0,1) 100%)",
+              background: "radial-gradient(ellipse at center, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.88) 80%, rgba(0,0,0,1) 100%)",
               animation: "vignette-pulse 4s ease-in-out infinite",
             }}
           />
@@ -203,7 +203,7 @@ export default function Landing() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Download app
+                Sign up
               </a>
             </div>
             <div className="hidden lg:flex gap-3">
@@ -215,16 +215,16 @@ export default function Landing() {
               </button>
               <button className="group relative flex items-center justify-center overflow-hidden bg-white/12 hover:bg-white/20 backdrop-blur-md transition-all duration-300 border border-white/10 rounded-xl text-lg font-bold w-50 h-13 z-10 cursor-pointer">
                 <div className="flex items-center justify-center gap-1.5 -translate-x-3 group-hover:translate-x-0 transition-transform duration-300 ease-out">
-                  <Download className="size-5 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 ease-out shrink-0" />
-                  <span>Download app</span>
+                  <UserPlus className="size-5 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 ease-out shrink-0" />
+                  <span>Sign up</span>
                 </div>
               </button>
             </div>
           </div>
           <div className="pointer-events-none absolute bottom-0 left-0 w-full h-16 z-10 bg-gradient-to-t from-black to-transparent" />
           <div className="absolute bottom-0 w-full overflow-hidden py-6">
-            <div className="pointer-events-none absolute left-0 top-0 z-20 h-full w-10 lg:w-50 bg-gradient-to-r from-black via-black/80 to-transparent" />
-            <div className="pointer-events-none absolute right-0 top-0 z-20 h-full w-10 lg:w-50 bg-gradient-to-l from-black via-black/80 to-transparent" />
+            <div className="pointer-events-none absolute left-0 top-0 z-20 h-full w-5 sm:w-10 lg:w-16 bg-gradient-to-r from-black via-black/80 to-transparent" />
+            <div className="pointer-events-none absolute right-0 top-0 z-20 h-full w-5 sm:w-10 lg:w-16 bg-gradient-to-l from-black via-black/80 to-transparent" />
             <SimpleMarquee forceWhite={true} />
           </div>
         </section>
@@ -283,9 +283,9 @@ export default function Landing() {
             <div className="flex items-end justify-between gap-5 mb-9 flex-wrap">
               <div>
                 <h2 className="text-[clamp(28px,4vw,46px)] font-medium leading-[1.18] tracking-[-0.02em] text-[#ededf0] m-0">
-                  Trusted by 40,000+ traders
+                  Trusted by 10,000+ traders
                 </h2>
-                <p className="text-[#8a8a93] mt-2 text-[15px]">See what traders are saying.</p>
+                <p className="text-[#8a8a93] mt-2 text-[15px]">Trade solana coins, predictions, and more at light speed</p>
               </div>
               <Link
                 href="https://x.com/interstatefdn"
@@ -346,7 +346,7 @@ export default function Landing() {
                     href="#"
                     className="inline-flex items-center justify-center gap-2 w-full sm:w-auto bg-[#161719] text-[#ededf0] border border-white/[0.08] px-[26px] py-3.5 rounded-xl text-[15px] font-semibold hover:-translate-y-px transition-transform"
                   >
-                    Launch in ChatGPT <SiOpenai size={14} />
+                    Launch in Claude <span className="text-[#D97757]"><SiClaude size={18} /></span>
                   </Link>
                 </div>
               </div>
