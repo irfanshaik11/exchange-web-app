@@ -92,6 +92,9 @@ export default function BlockchainSwitcher() {
     if (path.startsWith('/trade/monad/')) {
       return 'monad';
     }
+    if (path.startsWith('/bnb-trade/')) {
+      return 'bnb';
+    }
     if (path === '/trade/[id]') {
       return 'sol';
     }

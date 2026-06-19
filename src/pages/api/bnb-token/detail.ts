@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { resolveBnbMarketCapUsd, resolveBnbPriceUsd } from '~/utils/bnbToken';
 
 const BNB_HTTP_BASE = (
   process.env.NEXT_PUBLIC_BNB_TOKEN_SERVICE_URL || 'https://token-bnb.interstate.so'

@@ -4,6 +4,17 @@ import {
   computeHashImageUrl,
   isSpeculativeInterstateCdn,
 } from '~/utils/imageHash';
+import {
+  needsBnbMarketDataEnrichment,
+  resolveBnbMarketCapUsd,
+  resolveBnbPairAddress,
+  resolveBnbPriceUsd,
+  resolveBnbVolumeUsd,
+  resolveBnbCirculatingSupply,
+  toFiniteNumber,
+  fetchBnbTokenMetrics,
+  fetchBnbPulseTokens,
+} from '~/utils/bnbToken';
 
 const BNB_HTTP_BASE =
   (process.env.NEXT_PUBLIC_BNB_TOKEN_SERVICE_URL || 'https://token-bnb.interstate.so').replace(/\/+$/, '');
@@ -17,11 +28,7 @@ const IS_DEV = process.env.NODE_ENV !== 'production';
 // ─── Field normalizer ────────────────────────────────────────────────────────
 export function normalizeBscToken(t: any): any {
   const pick = (...vals: any[]) => vals.find((v) => v !== undefined && v !== null && v !== '');
-  const toNum = (v: any): number | undefined => {
-    if (v == null || v === '') return undefined;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  };
+  const toNum = toFiniteNumber;
 
   const bondingRaw = t.bonding_curve_progress ?? t.bondingCurveProgress;
   let bondingPct: number | null = null;
@@ -30,17 +37,9 @@ export function normalizeBscToken(t: any): any {
   }
   const mintRaw = t.mint ?? t.mint_address ?? t.token_address ?? t.address ?? '';
   const mint = mintRaw ? String(mintRaw).toLowerCase() : '';
-  const priceUsdRaw = pick(t.priceUsd, t.price_usd, t.usd_price, t.price?.usd);
-  const priceUsd = toNum(priceUsdRaw) ?? priceUsdRaw;
-  const rawSupply = t.circulating_supply;
-  const rawSupplyNum = toNum(rawSupply);
-  const circulatingTokens = rawSupplyNum != null ? rawSupplyNum / 1e18 : undefined;
-  const marketCapRaw = pick(t.marketCapUsd, t.market_cap_usd, t.market_cap);
-  const computedMarketCap =
-    toNum(priceUsdRaw) != null && circulatingTokens != null
-      ? toNum(priceUsdRaw)! * circulatingTokens
-      : undefined;
-  const marketCap = toNum(marketCapRaw) ?? marketCapRaw ?? computedMarketCap;
+  const priceUsd = resolveBnbPriceUsd(t);
+  const marketCap = resolveBnbMarketCapUsd(t);
+  const pairAddress = resolveBnbPairAddress(t);
 
   const imageUrlRaw = pick(
     t.logo,
@@ -85,7 +84,7 @@ export function normalizeBscToken(t: any): any {
     ...rest,
     mint,
     mint_address: mint,
-    pair_address: t.pair_address ?? t.pool_address ?? mint,
+    ...(pairAddress ? { pair_address: pairAddress } : {}),
     market_cap_usd: marketCap,
     fully_diluted_value: marketCap,
     total_fully_diluted_valuation: marketCap,
@@ -109,6 +108,14 @@ export function normalizeBscToken(t: any): any {
     holder_count: pick(t.holderCount, t.holder_count, t.total_holders),
     total_holders: pick(t.holderCount, t.holder_count, t.total_holders),
     bonding_curve_progress: bondingPct,
+    top10_holding_pct: pick(t.top10_holders_pct, t.top10_holding_pct, t.top_10_holder_percent),
+    top10_holders_pct: pick(t.top10_holders_pct, t.top10_holding_pct),
+    dev_holding_pct: pick(t.dev_holding_pct, t.dev_holding, t.creator_holding_pct),
+    dev_holding: pick(t.dev_holding_pct, t.dev_holding),
+    sniper_pct: pick(t.sniper_pct, t.snipers_hold_pct, t.sniper_percent),
+    snipers_hold_pct: pick(t.sniper_pct, t.snipers_hold_pct),
+    creator_wallet: pick(t.creator_wallet, t.creator, t.dev_wallet, t.deployer),
+    dev_wallet: pick(t.dev_wallet, t.creator_wallet, t.creator),
     created_at: t.created_at ?? t.createdAt ?? t.launch_time ?? t.launchTime,
     launch_time: t.launch_time ?? t.launchTime,
     protocol: t.protocol ?? t.launchpad_protocol,
@@ -179,6 +186,11 @@ function mergePriceOnly(existing: any, update: any): any {
   keepPositive('volume_24h');
   keepPositive('tx_count_24h');
   keepPositive('tx_count_5m');
+  keepPositive('total_buys_5m');
+  keepPositive('total_sells_5m');
+  if (!update.pair_address && existing.pair_address) {
+    merged.pair_address = existing.pair_address;
+  }
   return merged;
 }
 
@@ -283,6 +295,8 @@ let _store: BscStore = { ...EMPTY_STORE };
 const _enrichmentCache = new Map<string, Partial<any>>();
 const _enrichmentInFlight = new Set<string>();
 const _detailFetchedMints = new Set<string>();
+const _metricsFetchedMints = new Set<string>();
+const _metricsInFlight = new Set<string>();
 const _listeners = new Set<() => void>();
 const _wsRefs: Partial<Record<Channel, WebSocket>> = {};
 const _pingTimers: Partial<Record<Channel, ReturnType<typeof setInterval>>> = {};
@@ -527,14 +541,86 @@ function refreshTokenMetadata(mint: string, hint?: any) {
     });
 }
 
+function queueMarketDataEnrichment(token: any, force = false) {
+  if (typeof window === 'undefined') return;
+  const mint = mintKey(token?.mint);
+  if (!mint) return;
+
+  const existingVol = resolveBnbVolumeUsd(token);
+  const needsMc = needsBnbMarketDataEnrichment(token);
+  const needsVol = existingVol == null || existingVol <= 0;
+
+  if (!needsMc && !needsVol && !force) {
+    _metricsFetchedMints.add(mint);
+    return;
+  }
+
+  if (_metricsFetchedMints.has(mint) && !force) return;
+  if (_metricsInFlight.has(mint)) return;
+
+  _metricsFetchedMints.add(mint);
+  _metricsInFlight.add(mint);
+
+  void fetchBnbTokenMetrics(mint)
+    .then((metrics) => {
+      if (!metrics) return;
+      const normalized = normalizeBscToken({
+        ...token,
+        mint,
+        price_usd: metrics.priceUsd,
+        market_cap_usd: metrics.marketCapUsd,
+        volume_24h: metrics.volume24hUsd,
+        tx_count_24h: metrics.txCount24h,
+        tx_count_5m: metrics.txCount5m,
+      });
+      const patch: Record<string, any> = {
+        pair_address: normalized.pair_address,
+        circulating_supply: normalized.circulating_supply,
+        liquidity_usd: normalized.liquidity_usd,
+        price_usd: normalized.price_usd ?? metrics.priceUsd,
+        usd_price: normalized.usd_price ?? metrics.priceUsd,
+        market_cap_usd: normalized.market_cap_usd ?? metrics.marketCapUsd,
+        fully_diluted_value: normalized.fully_diluted_value ?? metrics.marketCapUsd,
+        total_fully_diluted_valuation:
+          normalized.total_fully_diluted_valuation ?? metrics.marketCapUsd,
+        volume_24h: normalized.volume_24h ?? metrics.volume24hUsd,
+        tx_count_24h: normalized.tx_count_24h ?? metrics.txCount24h,
+        tx_count_5m: normalized.tx_count_5m ?? metrics.txCount5m,
+      };
+      if (metrics.volume5mUsd != null && metrics.volume5mUsd > 0) {
+        patch.volume = {
+          ...(token?.volume && typeof token.volume === 'object' ? token.volume : {}),
+          volume_5m_usd: metrics.volume5mUsd,
+          volume_24h_usd: metrics.volume24hUsd ?? metrics.volume5mUsd,
+        };
+      }
+      for (const key of Object.keys(patch)) {
+        if (patch[key] === undefined || patch[key] === null || patch[key] === '') {
+          delete patch[key];
+        }
+      }
+      if (Object.keys(patch).length === 0) return;
+      const prev = _enrichmentCache.get(mint) ?? {};
+      const merged = { ...prev, ...patch };
+      _enrichmentCache.set(mint, merged);
+      updateTokenEverywhere(mint, merged);
+    })
+    .finally(() => {
+      _metricsInFlight.delete(mint);
+    });
+}
+
 function queueEnrichmentIfNeeded(token: any, force = false) {
   if (typeof window === 'undefined') return;
   const mint = mintKey(token?.mint);
   if (!mint) return;
+
+  queueMarketDataEnrichment(token, force);
+
   if (_detailFetchedMints.has(mint) && !force) return;
-  const needsEnrichment =
+  const needsMetadata =
     needsNameEnrichment(token) || needsImageEnrichment(token);
-  if (!needsEnrichment) {
+  if (!needsMetadata) {
     _detailFetchedMints.add(mint);
     return;
   }
@@ -631,6 +717,7 @@ export function startBscPulse() {
   (['new', 'final_stretch', 'migrated'] as Channel[]).forEach(closeChannel);
   _store = { ...EMPTY_STORE };
   _detailFetchedMints.clear();
+  _metricsFetchedMints.clear();
   notify();
   openChannel('new');
   openChannel('final_stretch');

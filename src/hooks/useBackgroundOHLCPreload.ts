@@ -1,6 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { getCachedData as getWsPrefetchData } from '~/utils/ohlcPrefetchManager';
+import {
+  buildBnbOhlcUrl,
+  fetchBnbUsdPrice,
+  transformBnbOhlcCandles,
+} from '~/utils/bnbToken';
 
 interface OHLCData {
   unix_time: number;
@@ -51,6 +56,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1s', timefr
 
   // Detect chain from URL path or query
   const chain = router.pathname.startsWith('/trade/monad') ? 'monad' :
+                router.pathname.startsWith('/trade/bnb') || router.pathname.startsWith('/bnb-trade') ? 'bnb' :
                 (router.query.chain as string) || 'sol';
 
   // RACE FIX: Compute the current mint synchronously during render (not in effect).
@@ -135,6 +141,8 @@ export default function useBackgroundOHLCPreload(interval: string = '1s', timefr
               url.searchParams.set('mint', mintAddress);
               url.searchParams.set('interval', interval);
               url.searchParams.set('timeframe', timeframe);
+            } else if (chain === 'bnb') {
+              url = new URL(buildBnbOhlcUrl(mintAddress, '1m', '24h'));
             } else {
               // Solana uses new /v1/ohlcv/{tokenAddress} endpoint
               // Use display resolution for preload so it covers more history
@@ -156,7 +164,10 @@ export default function useBackgroundOHLCPreload(interval: string = '1s', timefr
             if (response.ok) {
               const data = await response.json();
 
-              if (chain === 'sol' && data?.candles) {
+              if (chain === 'bnb' && data?.candles) {
+                const bnbUsd = await fetchBnbUsdPrice();
+                items = transformBnbOhlcCandles(data.candles, bnbUsd);
+              } else if (chain === 'sol' && data?.candles) {
                 // Solana returns { candles: [...] }
                 items = data.candles.map((c: any) => ({
                   unix_time: c.time || c.unix_time,
@@ -171,7 +182,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1s', timefr
                 items = data.data.items;
               }
 
-              if (data?.success && items.length > 0) {
+              if ((chain === 'bnb' || data?.success) && items.length > 0) {
                 // Cache the data globally with parameter-specific key and mint validation
                 globalOHLCCache.set(cacheKey, { data: items, timestamp: now, mint: mintAddress });
 
@@ -224,7 +235,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1s', timefr
  * Stores result in the globalOHLCCache so useBackgroundOHLCPreload picks it up instantly.
  * Best-effort: silent fail on errors.
  */
-export function prefetchOHLC(mint: string, chain: 'sol' | 'monad' = 'sol'): void {
+export function prefetchOHLC(mint: string, chain: 'sol' | 'monad' | 'bnb' = 'sol'): void {
   const interval = '1s';
   const timeframe = '30d';
   const cacheKey = `${mint}:${interval}:${timeframe}`;
@@ -236,7 +247,10 @@ export function prefetchOHLC(mint: string, chain: 'sol' | 'monad' = 'sol'): void
   globalOHLCCache.set(cacheKey, { data: [], timestamp: Date.now(), mint });
 
   let url: URL;
-  if (chain === 'monad') {
+  if (chain === 'bnb') {
+    if (typeof window === 'undefined') return;
+    url = new URL(buildBnbOhlcUrl(mint, '1m', '24h'));
+  } else if (chain === 'monad') {
     url = new URL(`${process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL}/v1/trade/ohlc-data`);
     url.searchParams.set('mint', mint);
     url.searchParams.set('interval', interval);
@@ -255,9 +269,12 @@ export function prefetchOHLC(mint: string, chain: 'sol' | 'monad' = 'sol'): void
     },
   })
     .then((r) => r.json())
-    .then((data) => {
+    .then(async (data) => {
       let items: OHLCData[] = [];
-      if (chain === 'sol' && data?.candles) {
+      if (chain === 'bnb' && data?.candles) {
+        const bnbUsd = await fetchBnbUsdPrice();
+        items = transformBnbOhlcCandles(data.candles, bnbUsd);
+      } else if (chain === 'sol' && data?.candles) {
         items = data.candles.map((c: any) => ({
           unix_time: c.time || c.unix_time,
           o: c.open ?? c.o,
@@ -269,7 +286,7 @@ export function prefetchOHLC(mint: string, chain: 'sol' | 'monad' = 'sol'): void
       } else if (data?.data?.items) {
         items = data.data.items;
       }
-      if (data?.success && items.length > 0) {
+      if (items.length > 0) {
         globalOHLCCache.set(cacheKey, { data: items, timestamp: Date.now(), mint });
       } else {
         // Remove the in-flight marker so the hook can try its own fetch

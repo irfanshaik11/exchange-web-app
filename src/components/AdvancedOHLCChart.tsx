@@ -9,6 +9,13 @@ import {
   MAYHEM_MARK_IMAGE_URL,
 } from "../utils/kolLookup";
 import * as ohlcPrefetchManager from "../utils/ohlcPrefetchManager";
+import {
+  buildBnbOhlcUrl,
+  buildBnbOhlcWsUrl,
+  buildBnbSeedCandles,
+  fetchBnbUsdPrice,
+  transformBnbOhlcCandles,
+} from "../utils/bnbToken";
 
 
 // Re-export types from BackendOHLCChart for consistency
@@ -62,7 +69,7 @@ export interface AdvancedOHLCChartProps {
   tokenSymbol?: string | null;
   tokenName?: string | null;
   tokenDecimals?: number | null;
-  network?: "solana" | "monad" | "hyperliquid"; // Network type (defaults to 'solana' for backward compatibility)
+  network?: "solana" | "monad" | "bnb" | "hyperliquid"; // Network type (defaults to 'solana' for backward compatibility)
   priceLines?: {
     avgEntryPriceUsd?: number | null;
     avgExitPriceUsd?: number | null;
@@ -79,6 +86,8 @@ export interface AdvancedOHLCChartProps {
   }) => void;
   tokenAgeSec?: number;
   circulatingSupply?: number;
+  /** Flat-line seed when upstream OHLC is empty (BNB new tokens). */
+  seedPriceUsd?: number;
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
@@ -103,6 +112,60 @@ const VALID_INTERVALS: BackendInterval[] = [
 // MC values for any non-1B-supply token (e.g. JUP @ 6.86B real supply).
 const DEFAULT_SUPPLY = 1;
 const CHART_DEBUG = false; // Set to true only when debugging chart issues
+
+const isHttpOhlcNetwork = (network?: string) => network === "monad";
+
+function rawSnapshotToBackendCandles(
+  raw: any[],
+  network: string | undefined,
+  bnbUsd: number,
+): BackendOHLCData[] {
+  const source = Array.isArray(raw) ? raw : [];
+  const converted: BackendOHLCData[] =
+    network === "bnb"
+      ? transformBnbOhlcCandles(source, bnbUsd)
+      : source.map((c: any) => ({
+          unix_time: c.unix_time ?? c.time,
+          o: c.o ?? c.open ?? 0,
+          h: c.h ?? c.high ?? 0,
+          l: c.l ?? c.low ?? 0,
+          c: c.c ?? c.close ?? 0,
+          v_usd: c.v_usd ?? c.v ?? c.volume ?? 0,
+        }));
+  return converted.filter(
+    (c) => !(c.o === 0 && c.h === 0 && c.l === 0 && c.c === 0),
+  );
+}
+
+function rawRealtimeToBackendCandle(
+  raw: any,
+  network: string | undefined,
+  bnbUsd: number,
+): BackendOHLCData {
+  if (network === "bnb") {
+    const [converted] = transformBnbOhlcCandles([raw], bnbUsd);
+    if (converted) return converted;
+  }
+  return {
+    unix_time: raw.unix_time ?? raw.time,
+    o: raw.o ?? raw.open ?? 0,
+    h: raw.h ?? raw.high ?? 0,
+    l: raw.l ?? raw.low ?? 0,
+    c: raw.c ?? raw.close ?? 0,
+    v_usd: raw.v_usd ?? raw.v ?? raw.volume ?? 0,
+  };
+}
+
+const getTvResolutionStorageKey = (network?: string) =>
+  isHttpOhlcNetwork(network) ? `tv_chart_resolution_${network}` : "tv_chart_resolution";
+
+const getDefaultTvResolution = (
+  network?: string,
+  interval: BackendInterval = "1m",
+) =>
+  isHttpOhlcNetwork(network)
+    ? (INTERVAL_TO_RESOLUTION[interval] || "1")
+    : "1S";
 
 // Map our intervals to TradingView resolution format
 const INTERVAL_TO_RESOLUTION: Record<BackendInterval, string> = {
@@ -542,6 +605,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   onChartMetrics,
   tokenAgeSec,
   circulatingSupply,
+  seedPriceUsd,
 }, ref) => {
   // Multiplier is held in a ref so WS handlers / TV datafeed callbacks
   // registered before /v1/supply resolves still pick up the correct value
@@ -550,6 +614,34 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   const multiplierRef = useRef<number>(
     circulatingSupply && circulatingSupply > 0 ? circulatingSupply : DEFAULT_SUPPLY,
   );
+  const seedPriceUsdRef = useRef<number | null>(seedPriceUsd && seedPriceUsd > 0 ? seedPriceUsd : null);
+
+  useEffect(() => {
+    seedPriceUsdRef.current =
+      seedPriceUsd && seedPriceUsd > 0 ? seedPriceUsd : null;
+  }, [seedPriceUsd]);
+
+  // BNB: seed price often arrives after the first getBars noData — force a repaint.
+  useEffect(() => {
+    if (network !== "bnb" || !seedPriceUsd || seedPriceUsd <= 0) return;
+    if (chartPopulatedRef.current && lastGoodCandlesRef.current.length > 0) return;
+
+    if (lastGoodCandlesRef.current.length === 0) {
+      lastGoodCandlesRef.current = buildBnbSeedCandles(seedPriceUsd);
+    }
+
+    const widget = widgetRef.current;
+    if (!widget) return;
+    widget.onChartReady?.(() => {
+      try {
+        if (!chartPopulatedRef.current) {
+          widget.activeChart?.()?.resetData?.();
+        }
+      } catch {
+        // chart not ready yet
+      }
+    });
+  }, [network, seedPriceUsd]);
 
   // DEBUG: Confirm component is rendering with latest code
 
@@ -1152,9 +1244,26 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     }
 
     onChartMetrics?.(metrics);
+    onDataUpdate?.(lastGoodCandlesRef.current);
 
     if (CHART_DEBUG) console.log("📈 [UPDATE_METRICS] ============= COMPLETE =============");
-  }, [computeMaxMarketCapUsd, onChartMetrics, syncPriceLines]);
+  }, [computeMaxMarketCapUsd, onChartMetrics, onDataUpdate, syncPriceLines]);
+
+  useEffect(() => {
+    if (network !== "bnb") return;
+    let cancelled = false;
+    const refreshBnbUsd = () => {
+      void fetchBnbUsdPrice().then((price) => {
+        if (!cancelled && price && price > 0) bnbUsdRef.current = price;
+      });
+    };
+    refreshBnbUsd();
+    const id = setInterval(refreshBnbUsd, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [network, mint, pairAddress]);
 
   useEffect(() => {
     if (!initialTokenId && (mint || pairAddress)) {
@@ -1167,6 +1276,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   useEffect(() => {
     const currentNetwork = latestParamsRef.current.network;
     const isMonad = currentNetwork === "monad";
+    const isBnb = currentNetwork === "bnb";
     const tokenId = mint || pairAddress;
 
 
@@ -1191,6 +1301,8 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           url.searchParams.set("interval", "1s");
           url.searchParams.set("timeframe", "30d");
           url.searchParams.set("optimize", "true");
+        } else if (isBnb) {
+          url = new URL(buildBnbOhlcUrl(tokenId, "1s", "30d"));
         } else {
           // Solana: use Next.js API proxy (avoids CORS issues)
           // The proxy calls Go service at /v1/ohlcv/{mint}
@@ -1222,7 +1334,10 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         // - Solana API proxy: { success: true, data: { items: [...] } } (transformed from candles)
         // - Solana Go service direct: { success: true, candles: [...] }
         let items: BackendOHLCData[];
-        if (data?.candles && Array.isArray(data.candles)) {
+        if (isBnb && data?.candles && Array.isArray(data.candles)) {
+          const bnbUsd = await fetchBnbUsdPrice();
+          items = transformBnbOhlcCandles(data.candles, bnbUsd);
+        } else if (data?.candles && Array.isArray(data.candles)) {
           // Direct Go service format - transform candles to our format
           items = data.candles.map((c: any) => ({
             unix_time: c.time || c.unix_time,
@@ -1347,7 +1462,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       wsConnectedRef.current = false;
       preloadedDataAppliedRef.current = false;
       chartPopulatedRef.current = false;
-      tvResolutionRef.current = "1S";
+      tvResolutionRef.current = getDefaultTvResolution(network, selectedInterval);
 
       // Widget reuse: clear old token's candle data so getBars waits for new snapshot.
       // Without key={mint}, the component stays mounted — stale data must be purged.
@@ -1700,9 +1815,16 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   const lazyLoadAbortRef = useRef<AbortController | null>(null);
   // Abort controller for predictive scroll-left prefetch (Phase 4: fetches older data before user reaches edge)
   const predictivePrefetchAbortRef = useRef<AbortController | null>(null);
+  const bnbPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bnbUsdRef = useRef(1);
   // Track TradingView's actual current resolution (dropdown selection), separate from React interval prop
   const tvResolutionRef = useRef<string>(
-    (typeof window !== "undefined" && localStorage.getItem("tv_chart_resolution")) || "1S"
+    (() => {
+      const key = getTvResolutionStorageKey(network);
+      const saved =
+        typeof window !== "undefined" ? localStorage.getItem(key) : null;
+      return saved || getDefaultTvResolution(network, selectedInterval);
+    })(),
   );
   // Map of resolution → TradingView's raw onRealtimeCallback.
   // TradingView may reuse old subscriptions without calling subscribeBars again
@@ -2093,6 +2215,16 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         return url;
       }
 
+      if (currentNetwork === "bnb") {
+        const tokenAddress = currentMint || currentPairAddress;
+        if (!tokenAddress) {
+          throw new Error("Cannot build BNB OHLC URL without token address");
+        }
+        return new URL(
+          buildBnbOhlcUrl(tokenAddress, effectiveInterval, effectiveTimeframe),
+        );
+      }
+
       // Use new /v1/ohlcv/{tokenAddress} endpoint for Solana
       // Use pre-aggregated intervals for longer views (TimescaleDB continuous aggregates)
       // For Solana: Always use mint address, never pairAddress (prevents race condition override)
@@ -2233,19 +2365,13 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       network: currentNetwork,
     } = latestParamsRef.current;
 
-    // For Solana: WS snapshot is the sole data source — no HTTP polling needed
-    if (currentNetwork !== "monad") {
+    // Solana/BNB use WS snapshot as the sole data source — HTTP polling only for Monad.
+    if (!isHttpOhlcNetwork(currentNetwork)) {
       return;
     }
 
-    // For Solana: require mint address (don't use pairAddress as it won't have OHLC data)
-    // For Monad: accept either mint or pairAddress
-    if (currentNetwork !== "monad") {
-      if (!currentMint) {
-        // Don't set error - just wait for mint to be resolved
-        return;
-      }
-    } else if (!currentMint && !currentPairAddress) {
+    // Monad/BNB: accept either mint or pairAddress
+    if (!currentMint && !currentPairAddress) {
       setError("No mint or pair address provided");
       setIsLoading(false);
       return;
@@ -2293,14 +2419,22 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         throw new Error(
           body?.message || body?.error || `${r.status} ${r.statusText}`,
         );
-      if (!body?.success)
+      const isBnb = latestParamsRef.current.network === "bnb";
+      if (!isBnb && !body?.success)
         throw new Error(
           body?.message || body?.error || "API returned unsuccessful response",
         );
 
-      // Handle different response formats: Solana uses candles[], Monad uses data.items[]
+      // Handle different response formats: Solana uses candles[], Monad uses data.items[], BNB uses candles[] in BNB
       let items: BackendOHLCData[];
-      if (body.candles && Array.isArray(body.candles)) {
+      if (isBnb) {
+        const bnbUsd = await fetchBnbUsdPrice();
+        items = transformBnbOhlcCandles(body?.candles || [], bnbUsd);
+        if (items.length === 0) {
+          const seed = seedPriceUsdRef.current;
+          if (seed && seed > 0) items = buildBnbSeedCandles(seed);
+        }
+      } else if (body.candles && Array.isArray(body.candles)) {
         // Solana /v1/ohlcv/{tokenAddress} format
         items = body.candles.map((c: any) => ({
           unix_time: c.time || c.unix_time,
@@ -2356,6 +2490,22 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       // This makes max MC line show up instantly, not waiting for websocket
       updateChartMetrics();
       onDataUpdate?.(lastGoodCandlesRef.current);
+
+      if (
+        latestParamsRef.current.network === "bnb" &&
+        widgetRef.current &&
+        !chartPopulatedRef.current
+      ) {
+        widgetRef.current.onChartReady?.(() => {
+          try {
+            if (!chartPopulatedRef.current) {
+              widgetRef.current?.activeChart?.()?.resetData?.();
+            }
+          } catch {
+            // chart not ready
+          }
+        });
+      }
 
       // ✅ INSTANT PRICE LINES: Sync immediately if widget ready, otherwise queue
       if (widgetRef.current) {
@@ -2541,7 +2691,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       // TradingView's setResolution lifecycle (from syncWidgetWithParams effect)
       // handles resolution changes using cached 1s data.
       const currentNetwork = latestParamsRef.current.network;
-      if (currentNetwork === "monad") {
+      if (isHttpOhlcNetwork(currentNetwork)) {
         hasInitializedRef.current = false;
         firstLoadRef.current = true;
         fetchCandles();
@@ -3135,11 +3285,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     };
   }, [network, mint, pairAddress]); // Re-connect when token changes (NOT interval — WS always streams 1s, aggregation is client-side)
 
-  // Solana OHLC WebSocket connection - uses /v1/ws/ohlcv/{mint}?timeframe=1s endpoint
-  // HTTP loads initial data first, then WebSocket takes over for real-time updates only
-  // ROBUST IMPLEMENTATION: Never disconnects - includes heartbeat, exponential backoff, visibility handling
+  // Solana + BNB OHLC WebSocket — snapshot history then live candles on same socket.
+  // HTTP is fallback only for Monad; Solana/BNB rely on WS as primary source.
   useEffect(() => {
-    // Only connect for Solana network (non-monad, non-hyperliquid)
     if (network === "monad" || network === "hyperliquid") {
       return;
     }
@@ -3149,24 +3297,26 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       return;
     }
 
-    // WS connects immediately — no need to wait for HTTP.
-    // The snapshot provides all historical data; HTTP is a background fallback only.
-
-    // Build WebSocket URL for Solana
-    // Use NEXT_PUBLIC_WEBSOCKET_URL which points to the token service
-    const wsBaseUrl =
-      process.env.NEXT_PUBLIC_WEBSOCKET_URL ||
-      "https://token-stage.narrative.trade";
-    const wsInterval = "1s"; // Always use 1s for real-time updates
-    // Compute snapshot resolution: use display interval for history so the snapshot
-    // covers more time (e.g. 500×15m = 5.2 days vs 500×1s = 8 min)
+    const wsInterval = "1s";
     const currentInterval = latestParamsRef.current.interval;
     const snapshotInterval = ["1s", "5s", "15s", "30s"].includes(currentInterval) ? "1s" : currentInterval;
     const snapshotParam = snapshotInterval !== "1s" ? `&snapshot_timeframe=${snapshotInterval}` : "";
-    // Convert http/https to ws/wss for WebSocket
-    const wsProtocol = wsBaseUrl.startsWith("https") ? "wss" : "ws";
-    const wsHost = wsBaseUrl.replace(/^https?:\/\//, "");
-    const wsUrl = `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${tokenAddress}?timeframe=${wsInterval}${snapshotParam}`;
+
+    let wsUrl: string;
+    if (network === "bnb") {
+      wsUrl = buildBnbOhlcWsUrl(
+        tokenAddress,
+        wsInterval,
+        snapshotInterval !== "1s" ? snapshotInterval : undefined,
+      );
+    } else {
+      const wsBaseUrl =
+        process.env.NEXT_PUBLIC_WEBSOCKET_URL ||
+        "https://token-stage.narrative.trade";
+      const wsProtocol = wsBaseUrl.startsWith("https") ? "wss" : "ws";
+      const wsHost = wsBaseUrl.replace(/^https?:\/\//, "");
+      wsUrl = `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${tokenAddress}?timeframe=${wsInterval}${snapshotParam}`;
+    }
 
     // Track if connection was closed by cleanup
     let closedByCleanup = false;
@@ -3216,12 +3366,8 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         // If no cached data, use entire snapshot to populate the chart.
         if (message.type === "snapshot") {
           const snapshotCandles = (message.data as Array<any>) || [];
-          wsGapBridgedRef.current = false; // Reset for the upcoming real-time candles
+          wsGapBridgedRef.current = false;
 
-          // Token-service piggybacks `circulating_supply` onto the snapshot
-          // when the indexer has it. Pre-warming the supply cache here lets
-          // `useTokenSupply` skip the /v1/supply HTTP fetch entirely for
-          // non-pump.fun tokens — chart MC renders correctly on first paint.
           if (message.supply && message.mint) {
             setWsSupply(message.mint, message.supply);
           }
@@ -3253,31 +3399,15 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             return;
           }
 
-          // Convert snapshot to our format, dropping all-zero candles (no trades in
-          // that second). Without this filter, getBars() substitutes MIN_PRICE (1e-7)
-          // which historically multiplied by 1B in MC mode yielded ~100 — creating a
-          // visible green dot. That artifact is gone with DEFAULT_SUPPLY=1 sentinel.
-          // Use `??` (nullish coalescing) instead of `||` so legitimate 0 values
-          // aren't coerced to the alternate field — important for sub-cent tokens
-          // where a momentary 0 in one of the OHLC fields is real, not "missing".
-          const converted: BackendOHLCData[] = snapshotCandles
-            .map((c: any) => ({
-              unix_time: c.unix_time ?? c.time,
-              o: c.o ?? c.open ?? 0,
-              h: c.h ?? c.high ?? 0,
-              l: c.l ?? c.low ?? 0,
-              c: c.c ?? c.close ?? 0,
-              v_usd: c.v_usd ?? c.v ?? c.volume ?? 0,
-            }))
-            .filter((c: BackendOHLCData) => !(c.o === 0 && c.h === 0 && c.l === 0 && c.c === 0));
+          const converted = rawSnapshotToBackendCandles(
+            snapshotCandles,
+            latestParamsRef.current.network,
+            bnbUsdRef.current,
+          );
           // Bug K: defensively dedupe by unix_time, keep last (most-recent) value
-          // per timestamp. Server snapshot path may include duplicates if the
-          // Redis 1s-cache hasn't been deduped server-side yet (token-service
-          // PR #211 fixes that source; this is the client-side defense). Then
-          // re-sort ASC — input may already be sorted, but resort cheaply.
           {
             const dedup: BackendOHLCData[] = [];
-            const seen = new Map<number, number>();   // unix_time -> dedup index
+            const seen = new Map<number, number>();
             for (const bar of converted) {
               const idx = seen.get(bar.unix_time);
               if (idx === undefined) {
@@ -3319,6 +3449,8 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             // preload had populated the cache before WS arrived, the spinner stuck
             // because only the else-branch below called setIsLoading(false).
             setIsLoading(false);
+            updateChartMetrics();
+            onDataUpdate?.(lastGoodCandlesRef.current);
 
             // Always trigger resetData() to re-render with merged data (through getBars → collapseTimeGaps)
             if (!chartPopulatedRef.current) {
@@ -3359,6 +3491,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             hasInitializedRef.current = true;
             firstLoadRef.current = false;
             updateChartMetrics();
+            onDataUpdate?.(lastGoodCandlesRef.current);
 
             // Force TradingView to re-fetch from the now-populated cache
             if (!chartPopulatedRef.current) {
@@ -3406,14 +3539,11 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               cacheSize: lastGoodCandlesRef.current.length,
             });
             const ohlcData = message.data;
-            const oneSecCandle: BackendOHLCData = {
-              unix_time: ohlcData.unix_time ?? ohlcData.time,
-              o: ohlcData.o ?? ohlcData.open ?? 0,
-              h: ohlcData.h ?? ohlcData.high ?? 0,
-              l: ohlcData.l ?? ohlcData.low ?? 0,
-              c: ohlcData.c ?? ohlcData.close ?? 0,
-              v_usd: ohlcData.v_usd ?? ohlcData.v ?? ohlcData.volume ?? 0,
-            };
+            const oneSecCandle = rawRealtimeToBackendCandle(
+              ohlcData,
+              latestParamsRef.current.network,
+              bnbUsdRef.current,
+            );
             // Clamp launch-candle artifacts (l=0) before caching
             if (oneSecCandle.c > 0 && oneSecCandle.l <= 0) {
               oneSecCandle.o = oneSecCandle.c;
@@ -3436,15 +3566,11 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
           const ohlcData = message.data;
 
-          // Convert to our format
-          const oneSecCandle: BackendOHLCData = {
-            unix_time: ohlcData.unix_time || ohlcData.time,
-            o: ohlcData.o || ohlcData.open || 0,
-            h: ohlcData.h || ohlcData.high || 0,
-            l: ohlcData.l || ohlcData.low || 0,
-            c: ohlcData.c || ohlcData.close || 0,
-            v_usd: ohlcData.v_usd || ohlcData.v || ohlcData.volume || 0,
-          };
+          const oneSecCandle = rawRealtimeToBackendCandle(
+            ohlcData,
+            latestParamsRef.current.network,
+            bnbUsdRef.current,
+          );
           // Clamp launch-candle artifacts (l=0) before chart update
           if (oneSecCandle.c > 0 && oneSecCandle.l <= 0) {
             oneSecCandle.o = oneSecCandle.c;
@@ -3543,11 +3669,13 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           // Throttled updateChartMetrics (max once per second from WS)
           if (!metricsThrottleRef.current) {
             updateChartMetrics();
+            onDataUpdate?.(lastGoodCandlesRef.current);
             metricsThrottleRef.current = setTimeout(() => {
               metricsThrottleRef.current = null;
               if (metricsUpdatePendingRef.current) {
                 metricsUpdatePendingRef.current = false;
                 updateChartMetrics();
+                onDataUpdate?.(lastGoodCandlesRef.current);
               }
             }, 1000);
           } else {
@@ -3680,6 +3808,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             hasInitializedRef.current = true;
             firstLoadRef.current = false;
             updateChartMetrics();
+            onDataUpdate?.(lastGoodCandlesRef.current);
 
             // Force TradingView to pick up the data
             if (!chartPopulatedRef.current) {
@@ -3927,8 +4056,8 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
     } = latestParamsRef.current;
 
     // For Solana: require mint (pairAddress won't have OHLC data)
-    // For Monad: accept either
-    if (dfNetwork !== "monad") {
+    // For Monad/BNB: accept either
+    if (!isHttpOhlcNetwork(dfNetwork)) {
       if (!dfMint) {
         return null;
       }
@@ -4095,6 +4224,18 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               break;
             }
           }
+        }
+
+        if (
+          (samplePrice <= MIN_PRICE || samplePrice === 1) &&
+          seedPriceUsdRef.current &&
+          seedPriceUsdRef.current > 0
+        ) {
+          samplePrice = seedPriceUsdRef.current;
+        }
+
+        if (lastGoodCandlesRef.current.length > 0) {
+          const cachedCandles = lastGoodCandlesRef.current;
 
           // If we didn't find a real candle, try the first candle as fallback
           if (samplePrice === 1 && cachedCandles.length > 0) {
@@ -4157,6 +4298,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         // Use latestParamsRef to get the current network value (not closure value)
         const currentNetwork = latestParamsRef.current.network;
         const isMonad = currentNetwork === "monad";
+        const isBnb = currentNetwork === "bnb";
         // Update description based on display mode (USD vs MC)
         // Reuse the 'mode' variable already declared above
         const modeLabel = mode === "MC" ? "Market Cap" : "Price";
@@ -4178,7 +4320,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           session: "24x7",
           timezone: "Etc/UTC",
           ticker: symbolName,
-          exchange: isMonad ? "Monad" : "Solana",
+          exchange: isMonad ? "Monad" : isBnb ? "BNB" : "Solana",
           minmov: 1,
           pricescale: pricescale,
           has_intraday: true,
@@ -4301,7 +4443,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               ? mappedTf as BackendTimeRange
               : latestParamsRef.current.timeframe;
           } else if (
-            latestParamsRef.current.network !== "monad" &&
+            !isHttpOhlcNetwork(latestParamsRef.current.network) &&
             resolution !== "1S"
           ) {
             // Bug: TF-change gap. On a high-volume token, the WS-prefetched 1s
@@ -4442,7 +4584,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         // Await it, using WS readyState to detect health instead of a blind timeout.
         {
           const currentNetwork = latestParamsRef.current.network;
-          if (currentNetwork !== "monad" && !lastGoodCandlesRef.current.length) {
+          if (!isHttpOhlcNetwork(currentNetwork) && !lastGoodCandlesRef.current.length) {
 
             // Wait for WS snapshot via Promise signal (instant wake, no polling jitter).
             // Resolves immediately when snapshot arrives; 1s timeout — backend returns in <300ms.
@@ -4492,7 +4634,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         // creating race conditions that break the chart on rapid MC/USD toggle.
         {
           const net = latestParamsRef.current.network;
-          if (net !== "monad" && lastGoodCandlesRef.current.length > 0 && !cachedTimeframeRef.current) {
+          if (!isHttpOhlcNetwork(net) && lastGoodCandlesRef.current.length > 0 && !cachedTimeframeRef.current) {
             cachedIntervalRef.current = requestedInterval;
             cachedTimeframeRef.current = requestedTimeframe;
           }
@@ -4504,7 +4646,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         const currentNetwork = latestParamsRef.current.network;
         // For Solana: WS always streams 1s candles — TradingView aggregates them to any resolution.
         // Never re-fetch on resolution change; only re-fetch when cache is empty or timeframe changes.
-        const isSolana = currentNetwork !== "monad";
+        const isSolana = !isHttpOhlcNetwork(currentNetwork);
         // Allow Solana interval changes when TV resolution is not the default 1S
         // (i.e., user clicked a time frame button like 7D → resolution "30" → interval "30m")
         const intervalChanged = isSolana
@@ -4577,8 +4719,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           // Only collapse time gaps for Monad — Solana trades 24/7, no session gaps to collapse.
           // Gap collapse + resolution switching causes timestamp mismatches between historical and live bars.
           {
-            const isSolana = latestParamsRef.current.network !== "monad";
-            if (!isSolana) {
+            if (latestParamsRef.current.network === "monad") {
               const resMs = parseResolutionToMs(resolution);
               const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
               gapShiftsRef.current = shifts;
@@ -4639,7 +4780,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             allBars.length > 0 &&
             toMs &&
             toMs <= allBars[0].time &&
-            latestParamsRef.current.network !== "monad"
+            !isHttpOhlcNetwork(latestParamsRef.current.network)
           ) {
             const oldestCachedTime = lastGoodCandlesRef.current[0]?.unix_time ?? 0;
             const tokenAddress = latestParamsRef.current.mint;
@@ -4795,11 +4936,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
                 .filter((bar) => bar.time > 0 && isFinite(bar.time));
               allBars.sort((a, b) => a.time - b.time);
 
-              // Only collapse time gaps for Monad — Solana trades 24/7, no session gaps to collapse.
-              // Gap collapse + resolution switching causes timestamp mismatches between historical and live bars.
+              // Only collapse time gaps for Monad — Solana/BNB trade 24/7, no session gaps to collapse.
               {
-                const isSolana = latestParamsRef.current.network !== "monad";
-                if (!isSolana) {
+                if (latestParamsRef.current.network === "monad") {
                   const resMs = parseResolutionToMs(resolution);
                   const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
                   gapShiftsRef.current = shifts;
@@ -4836,7 +4975,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
 
           const url = buildUrl(requestedInterval, requestedTimeframe);
-          const response = await fetch(url, {
+          const response = await fetch(url.toString(), {
             method: "GET",
             headers: {
               accept: "application/json",
@@ -4850,7 +4989,8 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           }
 
           const body = await response.json();
-          if (!body?.success) {
+          const isBnb = latestParamsRef.current.network === "bnb";
+          if (!isBnb && !body?.success) {
             throw new Error(
               body?.message ||
                 body?.error ||
@@ -4858,8 +4998,15 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
             );
           }
 
-          // Handle different response formats: Solana uses candles[], Monad uses data.items[]
-          if (body.candles && Array.isArray(body.candles)) {
+          // Handle different response formats: Solana uses candles[], Monad uses data.items[], BNB uses candles[] in BNB
+          if (isBnb) {
+            const bnbUsd = await fetchBnbUsdPrice();
+            items = transformBnbOhlcCandles(body?.candles || [], bnbUsd);
+            if (items.length === 0) {
+              const seed = seedPriceUsdRef.current;
+              if (seed && seed > 0) items = buildBnbSeedCandles(seed);
+            }
+          } else if (body.candles && Array.isArray(body.candles)) {
             // Solana /v1/ohlcv/{tokenAddress} format
             items = body.candles.map((c: any) => ({
               unix_time: c.time || c.unix_time,
@@ -5062,8 +5209,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           // Only collapse time gaps for Monad — Solana trades 24/7, no session gaps to collapse.
           // Gap collapse + resolution switching causes timestamp mismatches between historical and live bars.
           {
-            const isSolana = latestParamsRef.current.network !== "monad";
-            if (!isSolana) {
+            if (latestParamsRef.current.network === "monad") {
               const resMs = parseResolutionToMs(resolution);
               const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
               gapShiftsRef.current = shifts;
@@ -5295,11 +5441,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               .filter((bar) => bar.time > 0); // Filter out invalid bars
             allBars.sort((a, b) => a.time - b.time);
 
-            // Only collapse time gaps for Monad — Solana trades 24/7, no session gaps to collapse.
-            // Gap collapse + resolution switching causes timestamp mismatches between historical and live bars.
+            // Only collapse time gaps for Monad — Solana/BNB trade 24/7, no session gaps to collapse.
             {
-              const isSolana = latestParamsRef.current.network !== "monad";
-              if (!isSolana) {
+              if (latestParamsRef.current.network === "monad") {
                 const resMs = parseResolutionToMs(resolution);
                 const { shifts, totalShift } = collapseTimeGaps(allBars, resMs);
                 gapShiftsRef.current = shifts;
@@ -5428,8 +5572,12 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           onRealtimeCallback,
         });
 
-        // For Solana: callback is registered, useEffect WebSocket will use it
-        // Don't create WebSocket here - the Solana useEffect handles it
+        // Solana + BNB: callback registered; useEffect WebSocket streams snapshot + live candles
+        if (currentNetwork === "solana" || currentNetwork === "bnb") {
+          return;
+        }
+
+        // Monad: WebSocket below
         if (currentNetwork !== "monad") {
           return;
         }
@@ -5610,6 +5758,11 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         // activeSubscriberUIDRef and subscribedCallbackRef atomically.
         if (isActive && !isModeToggle) {
           activeSubscriberUIDRef.current = null;
+
+          if (bnbPollIntervalRef.current) {
+            clearInterval(bnbPollIntervalRef.current);
+            bnbPollIntervalRef.current = null;
+          }
 
           // CRITICAL: Abort any in-flight lazy-load fetch immediately.
           // TradingView serializes getBars calls — a pending lazy-load blocks the
@@ -6231,13 +6384,15 @@ Maker: ${walletAddress}`;
         const containerHeight = container.clientHeight || 400;
 
 
-        // Both Monad and Solana use 1s candles as default
+        // Solana defaults to 1S; BNB/Monad use the prop interval (typically 1m)
         const isMonad = network === "monad";
-        // Restore last-used resolution from localStorage, falling back to 1S
-        const savedResolution = typeof window !== "undefined"
-          ? localStorage.getItem("tv_chart_resolution")
-          : null;
-        const initialInterval = savedResolution || "1S";
+        const resolutionKey = getTvResolutionStorageKey(network);
+        const savedResolution =
+          typeof window !== "undefined"
+            ? localStorage.getItem(resolutionKey)
+            : null;
+        const initialInterval =
+          savedResolution || getDefaultTvResolution(network, selectedInterval);
         // Pre-populate candle data from preload to prevent getBars 2s wait loop.
         // The useEffect that normally writes preloadedData → lastGoodCandlesRef may not
         // have fired yet when TradingView synchronously calls getBars on onChartReady.
@@ -6508,7 +6663,7 @@ Maker: ${walletAddress}`;
                 if (range.from < oldest + viewportSpan * 2) {
                   // Skip if already prefetching or lazy-loading
                   if (predictivePrefetchAbortRef.current || lazyLoadAbortRef.current) return;
-                  if (latestParamsRef.current.network === "monad") return;
+                  if (isHttpOhlcNetwork(latestParamsRef.current.network)) return;
 
                   const tokenAddress = latestParamsRef.current.mint || latestParamsRef.current.pairAddress;
                   if (!tokenAddress) return;
@@ -6603,8 +6758,8 @@ Maker: ${walletAddress}`;
               // Explicitly set chart type to candlesticks
               chart.setChartType(1); // 1 = Candles, 2 = Hollow Candles, 3 = Bars, etc.
 
-              // For Monad: Set thin candles configuration (right-alignment happens after data loads)
-              if (network === "monad") {
+              // Solana + BNB + Monad chart styling
+              if (isHttpOhlcNetwork(network) || network === "bnb") {
                 try {
                   // Set thin candles (small barSpacing = thin candles)
                   chart.applyOptions({
@@ -6773,7 +6928,12 @@ Maker: ${walletAddress}`;
               chart.onIntervalChanged().subscribe(null, (interval: string) => {
                 ++lifecycleSeqRef.current;
                 // Persist selected resolution so it survives page refresh
-                try { localStorage.setItem("tv_chart_resolution", interval); } catch {}
+                try {
+                  localStorage.setItem(
+                    getTvResolutionStorageKey(latestParamsRef.current.network),
+                    interval,
+                  );
+                } catch {}
                 const storedEntry = resolutionCallbackMapRef.current.get(interval);
 
                 // TradingView may reuse old subscriber UIDs without calling subscribeBars

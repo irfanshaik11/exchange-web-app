@@ -594,7 +594,7 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
 // Routes that actually render the heavy self-hosted TradingView "Advanced Charts" library (~2.7MB).
 // Trailing slashes intentionally exclude the chart-free index pages (/perpetuals, /predictions).
 // Matches exactly: /trade/[id], /trade/monad/[contractAddress], /perpetuals/[symbol], /predictions/[ticker].
-const TV_CHART_ROUTE_PREFIXES = ['/trade/', '/perpetuals/', '/predictions/'] as const;
+const TV_CHART_ROUTE_PREFIXES = ['/trade/', '/bnb-trade/', '/perpetuals/', '/predictions/'] as const;
 
 const MyApp: AppType = ({ Component, pageProps }) => {
   const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');

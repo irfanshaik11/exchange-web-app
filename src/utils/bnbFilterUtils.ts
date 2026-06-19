@@ -1,4 +1,5 @@
 import type { BnbFilters } from '~/contexts/BnbFiltersContext';
+import { resolveBnbMarketCapUsd } from '~/utils/bnbToken';
 
 const toNum = (v: any): number => {
   const n = Number(v);
@@ -97,7 +98,7 @@ export function applyBnbFilters(tokens: any[], filters: BnbFilters): any[] {
 
     // Market Cap (K)
     if (filters.mktCapMin !== '' || filters.mktCapMax !== '') {
-      const mc = toNum(pick(token.market_cap_usd, token.fully_diluted_value, token.total_fully_diluted_valuation));
+      const mc = resolveBnbMarketCapUsd(token) ?? 0;
       const minK = filters.mktCapMin !== '' ? toNum(filters.mktCapMin) * 1000 : -Infinity;
       const maxK = filters.mktCapMax !== '' ? toNum(filters.mktCapMax) * 1000 : Infinity;
       if (mc < minK || mc > maxK) return false;

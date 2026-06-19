@@ -21,8 +21,8 @@ const supplyPrefetchedMints = new Set<string>();
  * Without this, switching to MC mode showed a vertical disconnect for
  * non-1B-supply tokens (Jupiter at 6.86B was the clearest case).
  */
-function prefetchSupply(mint: string, chain: "sol" | "monad"): void {
-  if (chain === "monad") return; // Monad path doesn't use /v1/supply
+function prefetchSupply(mint: string, chain: "sol" | "monad" | "bnb"): void {
+  if (chain === "monad" || chain === "bnb") return;
   if (!mint || supplyPrefetchedMints.has(mint)) return;
   supplyPrefetchedMints.add(mint);
   const base = process.env.NEXT_PUBLIC_GO_SERVICE_URL || "";
@@ -40,7 +40,7 @@ function prefetchSupply(mint: string, chain: "sol" | "monad"): void {
 export interface PreloadTokenInfo {
   mint: string;
   pairAddress?: string;
-  chain?: "sol" | "monad";
+  chain?: "sol" | "monad" | "bnb";
   name?: string;
   symbol?: string;
   priceUsd?: number;
@@ -85,9 +85,9 @@ export function preloadTradeChart(
 
   const skipWs = options.skipWs ?? chain === "monad";
 
-  // Step 1: WS prefetch — immediate (Solana only)
+  // Step 1: WS prefetch — Solana + BNB (snapshot + live candles on same socket)
   if (!skipWs) {
-    prefetchViaWS(mint);
+    prefetchViaWS(mint, undefined, chain === "bnb" ? "bnb" : "sol");
   }
 
   // Step 1.5: Supply prefetch — fires in parallel with WS prefetch so that by
@@ -105,7 +105,9 @@ export function preloadTradeChart(
       options.tradeUrl ??
       (chain === "monad"
         ? `/trade/monad/${tokenInfo.pairAddress || mint}`
-        : `/trade/${mint}`);
+        : chain === "bnb"
+          ? `/bnb-trade/${mint}`
+          : `/trade/${mint}`);
     options.router.prefetch(url);
   }
 
