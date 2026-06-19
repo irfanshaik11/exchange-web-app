@@ -53,6 +53,10 @@ import { AiOutlineQuestionCircle } from "react-icons/ai";
 import { BsBookmarkX, BsLayoutThreeColumns } from "react-icons/bs";
 import { CiSettings } from "react-icons/ci";
 import posthog from "posthog-js";
+import { computeHashImageUrl } from '~/utils/imageHash';
+import { BNB_CHAIN_ICON } from '~/utils/bnbProtocols';
+
+const BNB_ICON_32 = computeHashImageUrl(BNB_CHAIN_ICON, 32) ?? BNB_CHAIN_ICON;
 
 interface LaunchpadToken {
   mint: string;
@@ -1605,7 +1609,7 @@ function PulsePageInner() {
                     }}
                   >
                     <img
-                      src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png"
+                      src={BNB_ICON_32}
                       alt="BNB Chain"
                       className="h-4 w-4 rounded-full object-cover"
                     />
@@ -2042,7 +2046,7 @@ function PulsePageInner() {
           >
             {/* Header */}
             <div className="mb-4 flex items-center gap-2.5">
-              <img src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" alt="BNB" style={{ width: 20, height: 20, borderRadius: '50%' }} />
+              <img src={BNB_ICON_32} alt="BNB" style={{ width: 20, height: 20, borderRadius: '50%' }} />
               <span className="text-base font-semibold text-white">BNB Chain Access</span>
             </div>
             <p className="mb-4 text-sm" style={{ color: '#94a3b8' }}>

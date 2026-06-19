@@ -10,6 +10,7 @@ import {
   type BnbColumnKey,
 } from '~/contexts/BnbFiltersContext';
 import { BNB_PROTOCOLS } from '~/utils/bnbProtocols';
+import { computeHashImageUrl } from '~/utils/imageHash';
 
 // ─── Design tokens (mirrors PulseTable AX palette) ───────────────────────────
 const C = {
@@ -38,8 +39,10 @@ const LAUNCHPADS_FS_MIG = BNB_PROTOCOLS.filter((p) => !p.newPairsOnly).map(
 );
 
 // All icon URLs use the CoinMarketCap CDN (stable, no hotlink restrictions).
-const CMC = (id: number) =>
-  `https://s2.coinmarketcap.com/static/img/coins/64x64/${id}.png`;
+const CMC = (id: number) => {
+  const raw = `https://s2.coinmarketcap.com/static/img/coins/64x64/${id}.png`;
+  return computeHashImageUrl(raw, 32) ?? raw;
+};
 
 const QUOTE_TOKENS = [
   { label: 'BNB',    value: 'bnb',    color: C.bnb,      icon: CMC(1839)  },
@@ -59,10 +62,6 @@ const QUOTE_TOKENS = [
 // ─── Small helpers ────────────────────────────────────────────────────────────
 type ColTab = BnbColumnKey;
 type ContentTab = 'metrics' | 'socials';
-
-// Sentinel value: launchpads/quoteTokens = [NONE] means "none selected" (all chips grey).
-// Distinct from [] which means "no restriction" (all chips active).
-const NONE = '__none__';
 
 type SavedPreset = { id: string; name: string; draft: Record<ColTab, BnbFilters>; savedAt: string };
 const SAVED_KEY = 'bnb_saved_filters';
@@ -104,7 +103,7 @@ function Pill({
     >
       {icon && (
         <img
-          src={icon}
+          src={computeHashImageUrl(icon, 32) ?? icon}
           alt=""
           aria-hidden
           className="h-3.5 w-3.5 flex-shrink-0 rounded-full object-cover"
@@ -312,6 +311,10 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
     const updated = [...savedPresets, preset];
     setSavedPresets(updated);
     persistPresets(updated);
+    // Save also applies immediately — same pattern as GMGN/Axiom presets
+    setColumnFilters('new', draft.new);
+    setColumnFilters('finalStretch', draft.finalStretch);
+    setColumnFilters('migrated', draft.migrated);
   };
 
   const handleDeletePreset = (id: string) => {
@@ -360,9 +363,8 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
 
   const launchpadList = colTab === 'new' ? LAUNCHPADS_NEW : LAUNCHPADS_FS_MIG;
 
-  // [] = "all selected / no restriction" — all pills glow
-  // [NONE] = sentinel for "none selected" — all pills grey
-  // [...values] = explicit selection — only those glow
+  // [] = "no restriction" — all chips glow, board shows everything
+  // [...values] = explicit selection — only those chips glow
   const lpAllMode = cur.launchpads.length === 0;
   const qtAllMode = cur.quoteTokens.length === 0;
 
@@ -370,12 +372,11 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
     if (lpAllMode) {
       set({ launchpads: launchpadList.map((l) => l.value).filter((v) => v !== value) });
     } else {
-      // Strip NONE sentinel when user explicitly picks a chip
-      const current = cur.launchpads.filter((v) => v !== NONE);
-      const next = current.includes(value)
-        ? current.filter((v) => v !== value)
-        : [...current, value];
-      set({ launchpads: next.length === 0 ? [NONE] : launchpadList.every((l) => next.includes(l.value)) ? [] : next });
+      const next = cur.launchpads.includes(value)
+        ? cur.launchpads.filter((v) => v !== value)
+        : [...cur.launchpads, value];
+      // Last chip deselected → back to "no restriction" (show all)
+      set({ launchpads: next.length === 0 || launchpadList.every((l) => next.includes(l.value)) ? [] : next });
     }
   };
 
@@ -383,16 +384,15 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
     if (qtAllMode) {
       set({ quoteTokens: QUOTE_TOKENS.map((t) => t.value).filter((v) => v !== value) });
     } else {
-      const current = cur.quoteTokens.filter((v) => v !== NONE);
-      const next = current.includes(value)
-        ? current.filter((v) => v !== value)
-        : [...current, value];
-      set({ quoteTokens: next.length === 0 ? [NONE] : QUOTE_TOKENS.every((t) => next.includes(t.value)) ? [] : next });
+      const next = cur.quoteTokens.includes(value)
+        ? cur.quoteTokens.filter((v) => v !== value)
+        : [...cur.quoteTokens, value];
+      set({ quoteTokens: next.length === 0 || QUOTE_TOKENS.every((t) => next.includes(t.value)) ? [] : next });
     }
   };
 
-  const isLpActive = (value: string) => lpAllMode || (cur.launchpads.includes(value) && !cur.launchpads.includes(NONE));
-  const isQtActive = (value: string) => qtAllMode || (cur.quoteTokens.includes(value) && !cur.quoteTokens.includes(NONE));
+  const isLpActive = (value: string) => lpAllMode || cur.launchpads.includes(value);
+  const isQtActive = (value: string) => qtAllMode || cur.quoteTokens.includes(value);
 
   const draftHasActive = hasBnbActiveFilters(cur);
 
@@ -534,11 +534,11 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
                 Launchpads
               </span>
               <button
-                onClick={() => set({ launchpads: lpAllMode ? [NONE] : [] })}
+                onClick={() => set({ launchpads: [] })}
                 className="cursor-pointer rounded px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-white/10"
                 style={{ backgroundColor: C.surface2, color: C.text, border: `1px solid ${C.border}` }}
               >
-                {lpAllMode ? 'Unselect All' : 'Select All'}
+                Select All
               </button>
             </div>
             <div className="grid grid-cols-3 gap-1.5 justify-items-start">
@@ -562,11 +562,11 @@ export function BnbFilterPanel({ isOpen, onClose, initialColumn = 'new' }: BnbFi
                 Quote Tokens
               </span>
               <button
-                onClick={() => set({ quoteTokens: qtAllMode ? [NONE] : [] })}
+                onClick={() => set({ quoteTokens: [] })}
                 className="cursor-pointer rounded px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-white/10"
                 style={{ backgroundColor: C.surface2, color: C.text, border: `1px solid ${C.border}` }}
               >
-                {qtAllMode ? 'Unselect All' : 'Select All'}
+                Select All
               </button>
             </div>
             <div className="grid grid-cols-3 gap-1.5 justify-items-start">

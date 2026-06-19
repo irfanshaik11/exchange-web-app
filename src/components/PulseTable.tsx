@@ -69,8 +69,6 @@ import {
   HiLightningBolt,
   HiSparkles,
   HiOutlineFire,
-  HiVolumeOff,
-  HiVolumeUp,
 } from "react-icons/hi";
 import { HiOutlineRocketLaunch } from "react-icons/hi2";
 import { GoPeople, GoStack } from "react-icons/go";
@@ -136,6 +134,7 @@ import {
   BNB_CHAIN_ICON,
   findBnbProtocol,
 } from "~/utils/bnbProtocols";
+import { computeHashImageUrl } from "~/utils/imageHash";
 import { TokenAge } from "./TokenAge";
 import { TokenCountdown24h } from "./TokenCountdown24h";
 
@@ -168,6 +167,8 @@ import BottomCardInfoHolder from "./BottomCardInfoHolder";
 import InterstateTooltip from "./InterstateTooltip";
 import { useBlacklist } from "~/hooks/useBlacklist";
 import { usePrefetchOrder } from "~/hooks/usePrefetchOrder";
+
+const BNB_ICON_32 = computeHashImageUrl(BNB_CHAIN_ICON, 32) ?? BNB_CHAIN_ICON;
 
 /* ---- Enhanced Monad Green Palette (matching MonadTable) ---- */
 /* ---- JTX-style Dark Palette ---- */
@@ -3205,8 +3206,6 @@ function PulseTable({
   const [activeFilterTab, setActiveFilterTab] = useState("New Pairs");
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isMuteHovered, setIsMuteHovered] = useState(false);
   const [activeCategoryTab, setActiveCategoryTab] = useState("Audit");
   const [selectedPill, setSelectedPill] = useState("P1"); // Each column has its own preset selection
   // Load thunderAmount from localStorage with fallback - separate storage for each column
@@ -6288,7 +6287,7 @@ function PulseTable({
             }}
           >
             {isBnb
-              ? <img src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" alt="BNB" style={{ width: 14, height: 14, flexShrink: 0, borderRadius: '50%' }} />
+              ? <img src={BNB_ICON_32} alt="BNB" style={{ width: 14, height: 14, flexShrink: 0, borderRadius: '50%' }} />
               : <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
             }
             <input
@@ -6428,24 +6427,6 @@ function PulseTable({
               </div>
             ))}
           </div>
-
-          {/* Mute button — BNB only */}
-          {isBnb && (
-            <button
-              className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors duration-200"
-              style={{
-                color: isMuteHovered
-                  ? (isMuted ? AX.bnbGoldHover : '#E6E7EA')
-                  : (isMuted ? AX.bnbGold : '#9CA3AF'),
-              }}
-              onClick={() => setIsMuted(!isMuted)}
-              title={isMuted ? 'Unmute alerts' : 'Mute alerts'}
-              onMouseEnter={() => setIsMuteHovered(true)}
-              onMouseLeave={() => setIsMuteHovered(false)}
-            >
-              {isMuted ? <HiVolumeOff size={14} /> : <HiVolumeUp size={14} />}
-            </button>
-          )}
 
           {/* Filter Controls */}
           <div className="filter-dropdown relative z-[9999] flex-shrink-0">
@@ -9199,6 +9180,7 @@ function PulseTable({
               const currentChain =
                 chainProp || (router.query.chain as string) || "sol";
               const isBnbToken = currentChain === 'bnb';
+              // TODO: replace with internal BNB token page (same route as Solana /trade/{mint}) once built
               const tokenHref = isBnbToken
                 ? `https://dexscreener.com/bsc/${(token as any).pair_address || tokenMint}`
                 : `/trade/${tokenMint}`;
