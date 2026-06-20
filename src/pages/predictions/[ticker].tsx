@@ -1327,7 +1327,7 @@ export default function MarketDetailPage() {
   // Resizable chart state (matching token trade page)
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Data hooks
-  const { user, solBalance, usdcBalance, refreshBalance, primaryWalletAddresses } = useUser();
+  const { user, solBalance, solValueUsd, refreshBalance, primaryWalletAddresses } = useUser();
   const turnkeySigner = useTurnkeySigner();
 
   // dFlow hooks (only when not Polymarket AND router is ready)
@@ -2154,8 +2154,9 @@ export default function MarketDetailPage() {
       return;
     }
 
-    if (usdcBalance !== undefined && amountNumber > usdcBalance) {
-      setTradeError(`Insufficient USDC balance (${usdcBalance.toFixed(2)} available)`);
+    // FIXME: solValueUsd is the USD value of the user's SOL, NOT a USDC token balance. This predictions trade gate/Max has used it as "USDC" since before the usdcBalance->solValueUsd rename. Pre-existing mismatch — should consume a real USDC balance (e.g. tokenBalances['USDC']) in a follow-up.
+    if (solValueUsd !== undefined && amountNumber > solValueUsd) {
+      setTradeError(`Insufficient USDC balance (${solValueUsd.toFixed(2)} available)`);
       return;
     }
 
@@ -3061,7 +3062,7 @@ export default function MarketDetailPage() {
                         <div className="flex items-center gap-3">
                           <span className="text-xs" style={{ color: solBalance < 0.01 ? AX.yellow : AX.muted }}>{solBalance.toFixed(4)} SOL</span>
                           <span style={{ color: AX.border }}>|</span>
-                          <span className="text-xs font-medium" style={{ color: usdcBalance > 0 ? AX.text : AX.muted }}>{(usdcBalance || 0).toFixed(2)} USDC</span>
+                          <span className="text-xs font-medium" style={{ color: solValueUsd > 0 ? AX.text : AX.muted }}>{(solValueUsd || 0).toFixed(2)} USDC</span>
                         </div>
                       </div>
                       {solBalance < 0.01 && (
@@ -3086,7 +3087,7 @@ export default function MarketDetailPage() {
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs" style={{ color: AX.muted }}>Amount (USDC)</span>
-                      {user && usdcBalance > 0 && (<button onClick={() => setAmount(Math.floor(usdcBalance).toString())} className="text-xs hover:opacity-70" style={{ color: AX.mint }}>Max</button>)}
+                      {user && solValueUsd > 0 && (<button onClick={() => setAmount(Math.floor(solValueUsd).toString())} className="text-xs hover:opacity-70" style={{ color: AX.mint }}>Max</button>)}
                     </div>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: AX.muted }}>$</span>

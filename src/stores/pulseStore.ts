@@ -35,32 +35,23 @@ const state: PulseStoreState = {
 // Listeners for reactivity
 const listeners = new Set<Listener>();
 
-// Navigation state - DISABLED for instant updates
-// The previous implementation blocked ALL notifications during navigation,
-// which caused 10+ second delays. React 18 handles rapid updates fine.
-let isNavigating = false;
+// RAF-batched notifications: store state updates are instant, but React re-renders
+// are coalesced to one per animation frame (~16ms). This keeps the main thread free
+// for user input events (clicks, scrolls) between frames, fixing high INP.
+let rafPending = false;
 
-// Pause/resume notifications - NOW NO-OPS for instant updates
-export function pauseNotifications() {
-  // NO-OP - don't block notifications
-  // isNavigating = true;
-}
-
-export function resumeNotifications() {
-  // NO-OP
-  // isNavigating = false;
-}
-
-// INSTANT notifications - no batching, no delays
-// React 18's concurrent features handle rapid updates efficiently
 function notifyListeners() {
-  // INSTANT: Notify all listeners immediately
-  listeners.forEach(listener => {
-    try {
-      listener();
-    } catch (err) {
-      console.error('[pulseStore] Listener error:', err);
-    }
+  if (rafPending) return; // already scheduled for this frame
+  rafPending = true;
+  requestAnimationFrame(() => {
+    rafPending = false;
+    listeners.forEach(listener => {
+      try {
+        listener();
+      } catch (err) {
+        console.error('[pulseStore] Listener error:', err);
+      }
+    });
   });
 }
 
@@ -102,7 +93,3 @@ export function isBackgroundLoaderActive(): boolean {
   return state.connections.new || state.connections.final_stretch || state.connections.migrated;
 }
 
-// Check if navigation is in progress (for components that need to skip updates)
-export function isNavigationInProgress(): boolean {
-  return isNavigating;
-}

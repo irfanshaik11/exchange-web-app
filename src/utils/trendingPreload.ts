@@ -11,7 +11,7 @@
  */
 
 import { isMetadataUrl } from "./images";
-import { computeHashImageUrl } from "./imageHash";
+import { computeHashImageUrl, pickRenderableImageSource } from "./imageHash";
 import { preloadImages } from "./imagePreloader";
 
 // ─── Avatar preload ───────────────────────────────────────────────────────────
@@ -48,9 +48,16 @@ export function deriveTrendingAvatarUrl(
   }
 
   // Past the early return, rawUri is either empty or a direct (non-metadata)
-  // image URL — equivalent to TokenAvatar's `safeUri`.
-  const raw = token.image_url || token.image || token.logo || rawUri;
-  if (!raw || typeof raw !== "string") return null;
+  // image URL — equivalent to TokenAvatar's `safeUri`. Pick the first
+  // renderable candidate, skipping speculative cdn.interstate.so guesses so the
+  // prewarmed URL stays byte-identical to TokenAvatar's branch-4 derivation.
+  const raw = pickRenderableImageSource([
+    token.image_url,
+    token.image,
+    token.logo,
+    rawUri,
+  ]);
+  if (!raw) return null;
   return computeHashImageUrl(raw);
 }
 

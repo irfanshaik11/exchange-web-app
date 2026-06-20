@@ -76,6 +76,7 @@ import {
 } from "~/utils/createSolanaToastHandler";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
 import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
+import { isValidSolanaAddress } from "~/utils/verifySolanaAddress";
 // TODO: SOCIAL LINKS NOT PRESENT FOR NOW
 // import { PiTelegramLogo } from "react-icons/pi";
 // import { TiDocumentText } from "react-icons/ti";
@@ -235,11 +236,11 @@ function normalizeAssetUrl(raw?: string | null): string | null {
   if (s.startsWith("data:")) return s;
   if (s.startsWith("ipfs://")) {
     const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+    return `https://ipfs.io/ipfs/${cid}`;
   }
   if (/^ipfs[/:]/i.test(s)) {
     const cid = s.replace(/^ipfs[/:]/i, "");
-    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+    return `https://ipfs.io/ipfs/${cid}`;
   }
   if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s))
     return `https://arweave.net/${s}`;
@@ -706,6 +707,7 @@ interface SearchModalProps {
   onQueryChange?: (query: string) => void;
   selectedTimeframe?: Timeframe;
   chain?: string;
+  onScanWallet?: (address: string) => void;
 }
 
 // The new inner component that contains the actual modal content and logic
@@ -716,6 +718,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
   onQueryChange,
   selectedTimeframe,
   chain = "sol",
+  onScanWallet,
 }: SearchModalProps) {
   const router = useRouter();
   const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
@@ -2503,6 +2506,30 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           className="mt-1 rounded-full border border-[#7FFFC94D] bg-[#7FFFC914] px-3 py-1 text-xs font-semibold text-[#7FFFC9] transition-colors hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
                         >
                           Clear filters
+                        </button>
+                      </>
+                    ) : onScanWallet &&
+                      activeFilterChips.length === 0 &&
+                      chain !== "monad" &&
+                      isValidSolanaAddress(query.trim()) ? (
+                      <>
+                        <h3 className="text-base font-semibold text-white sm:text-lg">
+                          This could be a wallet
+                        </h3>
+                        <p className="max-w-md px-2 text-xs text-neutral-400 sm:text-sm">
+                          We couldn't find a token matching "
+                          <span className="font-medium text-[#7FFFC9]">
+                            {query}
+                          </span>
+                          ". Scan it as a wallet — or it may be a token that
+                          isn't indexed yet.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => onScanWallet?.(query.trim())}
+                          className="mt-2 rounded-full border border-[#7FFFC94D] bg-[#7FFFC914] px-4 py-1.5 text-xs font-semibold text-[#7FFFC9] transition-colors hover:border-[#7FFFC980] hover:bg-[#7FFFC924]"
+                        >
+                          Scan this wallet →
                         </button>
                       </>
                     ) : (

@@ -253,6 +253,18 @@ const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: '
 const SolIcon = () => <ChainIcon chain="sol" />;
 
 const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity", "Transfers"];
+const TRANSFERS_TAB = spotTabs.indexOf("Transfers");
+
+interface WalletTransfer {
+  direction: "in" | "out";
+  counterparty: string;
+  mint: string;
+  decimals: number;
+  amount: number;
+  timestamp: string;
+  signature: string;
+  program: string;
+}
 
 // Token metadata cache interface
 interface TokenMetadataCache extends UnifiedTokenMetadata {
@@ -344,7 +356,7 @@ export default function PortfolioPage() {
   };
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
+  const { user, loading: userLoading, solBalance, solValueUsd, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList, refreshUser, selectedWalletIds, selectAllWalletsForChain, selectWalletsWithFunds, clearSelectedWallets, setSelectedWalletsForChain } = useUser();
   const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
   const { solPrice: contextSolPrice, monPrice } = useSolPrice();
   const router = useRouter();
@@ -560,18 +572,9 @@ export default function PortfolioPage() {
     return true;
   });
 
-  interface WalletTransfer {
-    direction: "in" | "out";
-    counterparty: string;
-    mint: string;
-    decimals: number;
-    amount: number;
-    timestamp: string;
-    signature: string;
-    program: string;
-  }
   const [transfers, setTransfers] = useState<WalletTransfer[]>([]);
   const [loadingTransfers, setLoadingTransfers] = useState(false);
+  const [transferError, setTransferError] = useState(false);
 
   // Load from cache when cache keys change (e.g., user or chain changes)
   useEffect(() => {
@@ -1483,23 +1486,26 @@ export default function PortfolioPage() {
     return primaryWalletAddresses?.solana || user?.publicKey || null;
   }, [currentChain, primaryWalletAddresses, user?.publicKey]);
 
-  // Fetch wallet transfers from interstate token API when Transfers tab is active
+  // Fetch wallet transfers from the Go service when Transfers tab is active
   useEffect(() => {
     const addr = primaryWalletAddresses?.solana || primarySolAddr;
     if (!addr || currentChain !== "sol") return;
-    if (activeSpotTab !== 3) return;
+    if (activeSpotTab !== TRANSFERS_TAB) return;
+    const baseUrl = (process.env.NEXT_PUBLIC_GO_SERVICE_URL || "").replace(/\/$/, "");
+    if (!baseUrl) { setLoadingTransfers(false); return; }
     let cancelled = false;
     setLoadingTransfers(true);
-    fetch(`https://token.interstate.so/v1/wallet/${addr}/transfers`)
-      .then((r) => r.json())
+    setTransferError(false);
+    fetch(`${baseUrl}/v1/wallet/${addr}/transfers`)
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((data) => {
         if (!cancelled) {
-          setTransfers(Array.isArray(data.transfers) ? data.transfers : []);
+          setTransfers(Array.isArray(data?.transfers) ? data.transfers : []);
           setLoadingTransfers(false);
         }
       })
       .catch(() => {
-        if (!cancelled) setLoadingTransfers(false);
+        if (!cancelled) { setTransferError(true); setLoadingTransfers(false); }
       });
     return () => { cancelled = true; };
   }, [activeSpotTab, primaryWalletAddresses?.solana, primarySolAddr, currentChain]);
@@ -4308,7 +4314,7 @@ export default function PortfolioPage() {
                     )}
                   </div>
                   {/* Transfers tab */}
-                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === 3 ? 'block' : 'none' }}>
+                  <div className="h-full overflow-y-auto scrollbar-hide" style={{ display: activeSpotTab === TRANSFERS_TAB ? 'block' : 'none' }}>
                     {!user?.id && !userLoading ? (
                       <div className="py-8 text-center text-[#52525b] text-sm">
                         Please log in to view your transfers.
@@ -4320,63 +4326,118 @@ export default function PortfolioPage() {
                     ) : (
                       <div className="w-full">
                         {/* Header row */}
-                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_80px] gap-2 px-4 py-2 border-b border-white/[0.06] bg-[#080a0d]/60 sticky top-0 z-10">
+                        <div className="grid grid-cols-[80px_1.1fr_1fr_1.3fr_88px_48px] gap-2 px-4 py-2 border-b border-white/[0.06] bg-[#080a0d]/60 sticky top-0 z-10">
                           <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Type</span>
                           <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Amount</span>
                           <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">From</span>
                           <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">To</span>
-                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide text-right">Time</span>
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Age</span>
+                          <span className="text-[10px] font-semibold text-[#52525b] uppercase tracking-wide">Explorer</span>
                         </div>
                         {loadingTransfers ? (
                           <div className="py-8 text-center text-[#52525b] text-sm">Loading...</div>
+                        ) : transferError ? (
+                          <div className="py-8 text-center text-[#52525b] text-sm">Couldn&apos;t load transfers — try again.</div>
                         ) : transfers.length === 0 ? (
                           <div className="py-8 text-center text-[#52525b] text-sm">No transfers found.</div>
                         ) : (
                           transfers.map((t) => {
                             const walletAddr = primaryWalletAddresses?.solana || primarySolAddr || "";
-                            const fromAddr = t.direction === "out" ? walletAddr : t.counterparty;
-                            const toAddr = t.direction === "in" ? walletAddr : t.counterparty;
+                            const isIn = t.direction === "in";
+                            const fromAddr = isIn ? t.counterparty : walletAddr;
+                            const toAddr = isIn ? walletAddr : t.counterparty;
                             const shortAddr = (addr: string) =>
                               addr ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : "—";
-                            const ts = new Date(t.timestamp);
-                            const timeStr = isNaN(ts.getTime())
-                              ? "—"
-                              : ts.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                            const tsMs = t.timestamp ? new Date(t.timestamp).getTime() : NaN;
+                            const diffMs = Date.now() - tsMs;
+                            const diffMins = Math.floor(diffMs / 60000);
+                            const diffHours = Math.floor(diffMins / 60);
+                            const diffDays = Math.floor(diffHours / 24);
+                            const ageStr = isNaN(tsMs) ? "—"
+                              : diffDays > 0 ? `${diffDays}d`
+                              : diffHours > 0 ? `${diffHours}h`
+                              : diffMins > 0 ? `${diffMins}m`
+                              : "<1m";
+                            const typeColor = isIn ? "text-[#18c48c]" : "text-[#f43f5e]";
+                            const tokenMeta = tokenMetadataCache[t.mint];
+                            const tokenLogo = tokenMeta?.imageUrl;
+                            const amt = Number(t.amount);
+                            const formattedAmt = Number.isFinite(amt) ? amt.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—";
+                            const ExternalLinkIcon = () => (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                              </svg>
+                            );
+                            const CopyIcon = () => (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            );
+                            const AddressCell = ({ addr, isWallet }: { addr: string; isWallet: boolean }) => (
+                              isWallet ? (
+                                <span className={`text-xs font-semibold ${typeColor}`}>Wallet</span>
+                              ) : (
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="text-xs text-[#71717a] font-mono truncate">{shortAddr(addr)}</span>
+                                  <button
+                                    onClick={() => navigator.clipboard.writeText(addr)}
+                                    className="text-[#52525b] hover:text-[#a1a1aa] transition-colors flex-shrink-0"
+                                  >
+                                    <CopyIcon />
+                                  </button>
+                                  <a
+                                    href={`https://solscan.io/account/${addr}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[#52525b] hover:text-[#a1a1aa] transition-colors flex-shrink-0"
+                                  >
+                                    <ExternalLinkIcon />
+                                  </a>
+                                </div>
+                              )
+                            );
                             return (
                               <div
                                 key={t.signature}
-                                className="grid grid-cols-[80px_1fr_1fr_1fr_80px] gap-2 px-4 py-2.5 border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors items-center"
+                                className="grid grid-cols-[80px_1.1fr_1fr_1.3fr_88px_48px] gap-2 px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors items-center"
                               >
-                                <span className={`text-xs font-semibold ${t.direction === "in" ? "text-[#18c48c]" : "text-[#ef4444]"}`}>
-                                  {t.direction === "in" ? "Received" : "Sent"}
-                                </span>
-                                <span className="text-xs text-[#f4f4f5] font-medium">
-                                  {t.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })}
-                                  <span className="ml-1 text-[#71717a] text-[10px]">{t.mint.slice(0, 4)}…</span>
-                                </span>
-                                <a
-                                  href={`https://solscan.io/account/${fromAddr}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-[#71717a] hover:text-[#a1a1aa] font-mono transition-colors"
-                                >
-                                  {shortAddr(fromAddr)}
-                                </a>
-                                <a
-                                  href={`https://solscan.io/account/${toAddr}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-[#71717a] hover:text-[#a1a1aa] font-mono transition-colors"
-                                >
-                                  {shortAddr(toAddr)}
-                                </a>
+                                {/* Type */}
+                                <div className={`flex items-center gap-1 text-xs font-semibold ${typeColor}`}>
+                                  <span>{isIn ? "↓" : "↑"}</span>
+                                  <span>{isIn ? "In" : "Out"}</span>
+                                </div>
+                                {/* Amount */}
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {tokenLogo ? (
+                                    <img src={tokenLogo} alt="" className="w-4 h-4 rounded-full flex-shrink-0" />
+                                  ) : (
+                                    <div className="w-4 h-4 rounded-full bg-white/[0.08] flex-shrink-0" />
+                                  )}
+                                  <span className={`text-xs font-semibold ${typeColor} truncate`}>
+                                    {isIn ? "+" : "-"}{formattedAmt}
+                                  </span>
+                                </div>
+                                {/* From */}
+                                <AddressCell addr={fromAddr} isWallet={fromAddr === walletAddr} />
+                                {/* To */}
+                                <AddressCell addr={toAddr} isWallet={toAddr === walletAddr} />
+                                {/* Age */}
+                                <span className="text-xs text-[#71717a]">{ageStr}</span>
+                                {/* Explorer */}
                                 <a
                                   href={`https://solscan.io/tx/${t.signature}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-[10px] text-[#52525b] hover:text-[#a1a1aa] transition-colors text-right"
+                                  className="text-[#52525b] hover:text-[#a1a1aa] transition-colors"
                                 >
-                                  {timeStr}
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <line x1="10" y1="14" x2="21" y2="3" />
+                                  </svg>
                                 </a>
                               </div>
                             );

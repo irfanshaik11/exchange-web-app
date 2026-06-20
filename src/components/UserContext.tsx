@@ -12,6 +12,7 @@ import Cookies from "js-cookie";
 import { useRouter } from "next/router";
 
 import { getUserById, ApiError, updateUser } from "../utils/api";
+import { getBalances } from "~/utils/balancesApi";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 const USER_CACHE_KEY = "codex_user_info_cache";
 import {
@@ -56,7 +57,13 @@ interface UserContextType {
   user: UserInfo | null;
   loading: boolean;
   solBalance: number;
-  usdcBalance: number;
+  /** USD value of the user's native SOL (price × balance). NOT a USDC token balance. */
+  solValueUsd: number;
+  /** Real token balances per chain: { USDC: { solana, base }, ... }. Zero balances omitted by the backend. */
+  tokenBalances: Record<string, Record<string, number>>;
+  /** True while a token-balance fetch is in flight (drives the holdings skeleton). */
+  tokenBalancesLoading: boolean;
+  refreshTokenBalances: (force?: boolean) => Promise<void>;
   refreshUser: () => Promise<void>;
   refreshBalance: (opts?: {
     chain?: string;
@@ -125,7 +132,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const [loading, setLoading] = useState(true);
   const [solBalance, setSolBalance] = useState(0);
-  const [usdcBalance, setUsdcBalance] = useState(0);
+  const [solValueUsd, setSolValueUsd] = useState(0);
+  const [tokenBalances, setTokenBalances] = useState<
+    Record<string, Record<string, number>>
+  >({});
+  const [tokenBalancesLoading, setTokenBalancesLoading] = useState(false);
   const [lastNotifiedBalance, setLastNotifiedBalance] = useState<
     Record<string, number>
   >({});
@@ -165,6 +176,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return { sol: [], monad: [] };
   });
   const chainBalancesRef = useRef<Record<string, number>>({ sol: 0 });
+  const tokenBalancesInFlightRef = useRef(false);
+  const tokenBalancesFetchedAtRef = useRef(0);
+  const TOKEN_BALANCES_COOLDOWN_MS = 15_000; // skip re-fetch within 15s unless forced
   const batchFetchInProgressRef = useRef(false);
   const lastBatchFetchRef = useRef(0);
   const walletListFetchInProgressRef = useRef(false);
@@ -373,12 +387,42 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [chainBalances]);
 
   useEffect(() => {
-    solUsdBalanceRef.current = usdcBalance;
-  }, [usdcBalance]);
+    solUsdBalanceRef.current = solValueUsd;
+  }, [solValueUsd]);
 
   useEffect(() => {
     solBalanceRef.current = solBalance;
   }, [solBalance]);
+
+  const refreshTokenBalances = useCallback(
+    async (force = false) => {
+      if (!user?.bearerToken) return;
+      // Guard against spam: skip if a fetch is already in flight, or if we
+      // fetched within the cooldown window — unless the caller forces a fresh
+      // read (e.g. right after a bridge completes).
+      if (tokenBalancesInFlightRef.current) return;
+      if (
+        !force &&
+        Date.now() - tokenBalancesFetchedAtRef.current <
+          TOKEN_BALANCES_COOLDOWN_MS
+      ) {
+        return;
+      }
+      tokenBalancesInFlightRef.current = true;
+      setTokenBalancesLoading(true);
+      try {
+        const r = await getBalances(user.bearerToken);
+        if (r.data?.balances) setTokenBalances(r.data.balances);
+      } catch {
+        /* non-critical; keep last-known balances */
+      } finally {
+        tokenBalancesInFlightRef.current = false;
+        setTokenBalancesLoading(false);
+        tokenBalancesFetchedAtRef.current = Date.now();
+      }
+    },
+    [user?.bearerToken],
+  );
 
   useEffect(() => {
     lastNotifiedBalanceRef.current = lastNotifiedBalance;
@@ -768,7 +812,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           }
 
           setSolBalance(newBalance);
-          setUsdcBalance(newUsdBalance);
+          setSolValueUsd(newUsdBalance);
         }
         return { balance: newBalance, usdBalance: newUsdBalance };
       } catch (error) {
@@ -939,7 +983,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           };
           setChainBalances((prev) => ({ ...prev, sol: solData.balance }));
           setSolBalance(solData.balance);
-          setUsdcBalance(solData.usdBalance);
+          setSolValueUsd(solData.usdBalance);
         }
 
         const normalizedMonAddress = normalizeMonadAddress(
@@ -1134,7 +1178,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setPrimaryWalletAddresses({ solana: null, ethereum: null });
       setSolBalance(0);
-      setUsdcBalance(0);
+      setSolValueUsd(0);
       setChainBalances({ sol: 0 });
       setWalletBalances({});
       setWalletList([]);
@@ -1178,8 +1222,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user?.id && user?.bearerToken) {
       refreshWalletList();
+      refreshTokenBalances();
     }
-  }, [user?.id, user?.bearerToken, refreshWalletList]);
+  }, [user?.id, user?.bearerToken, refreshWalletList, refreshTokenBalances]);
 
   useEffect(() => {
     if (user) {
@@ -1208,7 +1253,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             [address]: currentBalance,
           }));
           setSolBalance(currentBalance);
-          setUsdcBalance(currentUsdBalance);
+          setSolValueUsd(currentUsdBalance);
 
           isDev &&
             console.log(
@@ -1501,7 +1546,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       solBalance,
-      usdcBalance,
+      solValueUsd,
+      tokenBalances,
+      tokenBalancesLoading,
+      refreshTokenBalances,
       refreshUser,
       refreshBalance,
       refreshAllBalances,
@@ -1524,7 +1572,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       solBalance,
-      usdcBalance,
+      solValueUsd,
+      tokenBalances,
+      tokenBalancesLoading,
+      refreshTokenBalances,
       refreshUser,
       refreshBalance,
       refreshAllBalances,

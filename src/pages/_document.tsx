@@ -22,7 +22,6 @@ export default function Document() {
         <link rel="dns-prefetch" href="https://arweave.net" />
         <link rel="dns-prefetch" href="https://gateway.irys.xyz" />
         <link rel="dns-prefetch" href="https://pump.mypinata.cloud" />
-        <link rel="dns-prefetch" href="https://cloudflare-ipfs.com" />
         <link rel="dns-prefetch" href="https://ipfs.io" />
         <link rel="dns-prefetch" href="https://dweb.link" />
         {/* Chunk load error recovery — production only.
@@ -157,6 +156,14 @@ export default function Document() {
             }}
           />
         )}
+        {/* Crisp Chatbot */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+window.$crisp=[];window.CRISP_WEBSITE_ID="c1ec6637-ab80-42d4-b17e-f6a8288faf14";(function(){d=document;s=d.createElement("script");s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();
+            `,
+          }}
+        />
       </Head>
       <body>
         <Main />

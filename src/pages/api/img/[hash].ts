@@ -13,6 +13,7 @@ import {
   fetchImageFromCandidates,
   resolveJsonMetadataImage,
   resolveFinalContentType,
+  cfImageResize,
 } from "~/utils/imageProxyHelpers";
 
 // Pin to Node.js runtime — sharp is a native addon and won't run on Edge.
@@ -102,6 +103,88 @@ async function resizeToWebp(
   }
 }
 
+// ─── Cloudflare Edge Cache (Workers Cache API) ───────────────────────────────
+// Repeat /api/img requests were cold-running the Worker + re-fetching upstream
+// on every hit (no `cf-cache-status`), because Cloudflare does NOT auto-cache
+// Worker-generated responses. We use the Workers Cache API to persist a
+// successful image at the colo edge so the next request for the SAME URL is
+// served WITHOUT re-running the resize/fetch pipeline.
+//
+// ZERO-REGRESSION CONTRACT:
+//   • Feature-detected — `caches`/`caches.default` only exist in the Workers
+//     runtime. In local Node dev and `next build` they are undefined, so every
+//     function here is a complete no-op (returns null / does nothing).
+//   • Fully isolated in try/catch — a Cache API failure can NEVER break image
+//     serving; on any error we fall straight through to the normal pipeline.
+//   • Only GET 200s are stored. The cache key is the request URL (deterministic
+//     and immutable: same image → same `/api/img/{md5}?s=&w=` → same key), so
+//     it is byte-identical to what the client requested and the table renders.
+const edgeCache: Cache | null =
+  typeof caches !== "undefined" &&
+  (caches as CacheStorage & { default?: Cache })
+    ? ((caches as CacheStorage & { default?: Cache }).default ?? null)
+    : null;
+
+// Build an absolute, stable cache key from the incoming request URL. Returns
+// null if we can't (no host / no url / not the edge) so callers skip caching.
+function buildEdgeCacheKey(req: NextApiRequest): Request | null {
+  if (!edgeCache) return null;
+  try {
+    const host = req.headers.host;
+    if (!host || !req.url) return null;
+    // req.url is path+query (e.g. /api/img/<md5>?s=...&w=64). The query string
+    // fully determines the image + width, so the URL alone is a complete,
+    // collision-free key. GET method pins it to cacheable requests.
+    const absolute = `https://${host}${req.url}`;
+    return new Request(absolute, { method: "GET" });
+  } catch {
+    return null;
+  }
+}
+
+// Look up a previously edge-cached image. Returns the decoded bytes +
+// content-type on a hit, or null on miss / any failure (always safe to ignore).
+async function getEdgeCached(
+  key: Request | null,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  if (!edgeCache || !key) return null;
+  try {
+    const hit = await edgeCache.match(key);
+    if (!hit) return null;
+    const contentType =
+      hit.headers.get("Content-Type") || "application/octet-stream";
+    const buffer = Buffer.from(await hit.arrayBuffer());
+    return { buffer, contentType };
+  } catch {
+    return null;
+  }
+}
+
+// Store a successful image at the edge. Fire-and-forget: failures are swallowed
+// so they never affect the response already being sent to the client.
+async function putEdgeCached(
+  key: Request | null,
+  buffer: Buffer,
+  contentType: string,
+): Promise<void> {
+  if (!edgeCache || !key) return;
+  try {
+    const body = new Uint8Array(buffer);
+    const response = new Response(body, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        // Edge TTL: matches the browser immutable policy. Cloudflare honors
+        // this for the colo cache entry. Errors are never put here.
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
+    await edgeCache.put(key, response);
+  } catch {
+    // No-op: edge caching is best-effort. The client already has its bytes.
+  }
+}
+
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export default async function handler(
@@ -136,7 +219,24 @@ export default async function handler(
     const normalized = normalizeForHash(originalUrl);
     const expectedHash = computeMd5(normalized);
     if (hash !== expectedHash) {
+      // Short-lived so a poisoning attempt / malformed link is never frozen in
+      // the browser cache; mirrors the non-200 upstream error policy below.
+      setSecurityHeaders(res);
+      res.setHeader("Cache-Control", "public, max-age=10, must-revalidate");
       return sendError(res, 403, "Hash mismatch");
+    }
+
+    // Cloudflare edge cache (Workers Cache API). No-op outside the Workers
+    // runtime. An edge hit serves the bytes WITHOUT re-running the Worker's
+    // fetch/resize pipeline or even touching the in-memory map below — this is
+    // the lever that gives repeat /api/img requests a `cf-cache-status` hit.
+    const edgeKey = buildEdgeCacheKey(req);
+    const edgeHit = await getEdgeCached(edgeKey);
+    if (edgeHit) {
+      setSecurityHeaders(res);
+      res.setHeader("Content-Type", edgeHit.contentType);
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return res.status(200).send(edgeHit.buffer);
     }
 
     // Cache key includes width so different sizes are stored separately.
@@ -145,6 +245,9 @@ export default async function handler(
     // Check in-memory byte cache
     const cached = getCachedImage(cacheKey);
     if (cached) {
+      // Seed the edge so the NEXT request (possibly a cold Worker isolate that
+      // shares no in-memory map) gets an edge hit instead of cold-running.
+      await putEdgeCached(edgeKey, cached.buffer, cached.contentType);
       setSecurityHeaders(res);
       res.setHeader("Content-Type", cached.contentType);
       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
@@ -161,7 +264,12 @@ export default async function handler(
 
     const candidates = buildFetchCandidates(parsed);
 
-    let result: { body: Buffer; contentType: string; status: number };
+    let result: {
+      body: Buffer;
+      contentType: string;
+      status: number;
+      url: string;
+    };
     try {
       result = await fetchImageFromCandidates(candidates);
     } catch (e: unknown) {
@@ -191,10 +299,17 @@ export default async function handler(
 
     let finalBody: Buffer;
     let finalContentType: string;
+    // URL the final image bytes came from — the source for Cloudflare edge
+    // resizing when sharp is unavailable (Workers). Prefer the candidate that
+    // actually succeeded (result.url, post-redirect) so a fallback-gateway win
+    // still resizes even when the primary/original URL was dead; metadata
+    // tokens use the resolved image URL.
+    let finalImageUrl = result.url || originalUrl;
 
     if (metadataResult) {
       finalBody = metadataResult.body;
       finalContentType = metadataResult.contentType;
+      finalImageUrl = metadataResult.sourceUrl;
     } else {
       finalBody = result.body;
       finalContentType = resolveFinalContentType(
@@ -204,17 +319,26 @@ export default async function handler(
     }
 
     // Resize + transcode to WebP unless format is unsuitable (SVG/GIF).
-    // On any sharp failure we fall through to the original bytes.
+    // Primary: sharp (local/Node dev). On Cloudflare Workers sharp is a no-op
+    // and returns null, so fall back to Cloudflare Image Resizing (cf.image),
+    // which resizes at the edge. cfImageResize returns null unless it actually
+    // produced WebP (feature off / non-resizable), in which case we ship the
+    // original bytes — exactly today's behavior. No regression either way.
     if (!shouldSkipResize(finalContentType)) {
-      const resized = await resizeToWebp(finalBody, width);
+      const resized =
+        (await resizeToWebp(finalBody, width)) ??
+        (await cfImageResize(finalImageUrl, width));
       if (resized) {
         finalBody = resized.buffer;
         finalContentType = resized.contentType;
       }
     }
 
-    // Store in byte cache
+    // Store in byte cache (per-isolate) and at the Cloudflare edge (cross-
+    // isolate / cross-request). The edge put is awaited but fully guarded —
+    // it can only no-op or swallow errors, never break the response.
     setCachedImage(cacheKey, finalBody, finalContentType);
+    await putEdgeCached(edgeKey, finalBody, finalContentType);
 
     // Serve with immutable headers — browser will never ask again
     setSecurityHeaders(res);

@@ -253,7 +253,7 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
           <div className="flex items-center gap-2">
             <FaWallet size={16} style={{ color: AX.mint }} />
             <h2 className="text-sm font-semibold" style={{ color: AX.text }}>
-              Monad Wallets
+              EVM Wallets
             </h2>
             <span className="text-[11px]" style={{ color: AX.muted }}>
               {selectedCount}/{totalCount || 0} selected
@@ -341,7 +341,7 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
           ) : wallets.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8">
               <span className="text-sm text-center" style={{ color: AX.muted }}>
-                No Monad wallets found.
+                No EVM wallets found.
               </span>
               <span className="text-xs mt-2 text-center" style={{ color: AX.muted }}>
                 Go to Portfolio page to add wallets.

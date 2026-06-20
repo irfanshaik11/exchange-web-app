@@ -40,7 +40,6 @@ import {
   FaTimes,
   FaFilter,
 } from "react-icons/fa";
-import { GiSeatedMouse } from "react-icons/gi";
 import {
   PiCrownSimpleLight,
   PiFishSimpleLight,
@@ -852,67 +851,6 @@ const SimpleNumber: React.FC<SimpleNumberProps> = ({
   return <span className={className}>{lastValidRef.current}</span>;
 };
 
-// Hook for smooth progress bar animation using requestAnimationFrame
-function useSmoothProgress(
-  targetValue: number,
-  duration: number = 400,
-): number {
-  // Clamp to valid range [0, 1] for progress values
-  const validTarget = Math.max(
-    0,
-    Math.min(1, Number.isFinite(targetValue) ? targetValue : 0),
-  );
-  const [smoothValue, setSmoothValue] = useState(validTarget);
-  const animationRef = useRef<number | undefined>(undefined);
-  const prevTargetRef = useRef<number>(validTarget);
-
-  useEffect(() => {
-    // GUARD: Ignore invalid values
-    if (!Number.isFinite(targetValue) || targetValue < 0) return;
-
-    const clampedTarget = Math.min(targetValue, 1);
-
-    // Skip if change is too small (< 0.1%)
-    if (Math.abs(clampedTarget - prevTargetRef.current) < 0.001) return;
-
-    const startValue = smoothValue;
-    const endValue = clampedTarget;
-    const startTime = performance.now();
-
-    // Cancel any running animation
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-    }
-
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-
-      // Smooth easing - easeOutQuart for natural feeling
-      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
-      const currentValue = startValue + (endValue - startValue) * easeOutQuart;
-
-      setSmoothValue(currentValue);
-
-      if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animate);
-      } else {
-        setSmoothValue(endValue);
-        prevTargetRef.current = endValue;
-      }
-    };
-
-    animationRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [targetValue, duration]);
-
-  return smoothValue;
-}
 
 /**
  * Calculate the best available volume in USD from websocket data.
@@ -2252,8 +2190,10 @@ function TokenImage({
       ? finalProgress
       : Math.min(finalProgress / 0.6, 0.95);
 
-  // Smooth animation for progress bar - uses requestAnimationFrame for buttery transitions
-  const scaledProgress = useSmoothProgress(rawScaledProgress, 400);
+  // CSS transition on strokeDashoffset handles the animation (see the <path> below).
+  // The JS RAF approach (useSmoothProgress) was calling setSmoothValue at 60fps while
+  // pulseStore fires 100+ token updates/sec, overflowing React 19's 25-update batch limit.
+  const scaledProgress = rawScaledProgress;
 
   const handleMouseEnter = () => {
     setShowPreview(true);
@@ -2443,10 +2383,11 @@ function TokenImage({
               />
 
               {/* Progress border - clockwise rounded path starting from bottom-right */}
-              {/* Animation handled by useSmoothProgress hook with requestAnimationFrame */}
+              {/* stroke-dashoffset transition runs on the compositor thread — no RAF/setState needed */}
               <path
                 d="M 66 66 L 8 66 Q 2 66 2 60 L 2 8 Q 2 2 8 2 L 60 2 Q 66 2 66 8 L 66 60 Q 66 66 60 66"
                 fill="none"
+                style={{ transition: 'stroke-dashoffset 400ms cubic-bezier(0, 0, 0.2, 1)' }}
                 // Mayhem Mode hijacks the launchpad-color progress arc and paints it
                 // brand red instead, so the image-loading ring matches the row's red
                 // identity (outline glow, protocol bubble, fire countdown badge).

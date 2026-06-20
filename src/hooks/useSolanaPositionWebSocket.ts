@@ -230,6 +230,9 @@ export function useSolanaPositionWebSocket(
             window.dispatchEvent(new CustomEvent('solanaBalanceUpdate', {
               detail: { solBalance: message.data.solBalance, wallet: message.data.wallet }
             }));
+          } else if (message.type === 'bridge_status' && message.data) {
+            // Relay cross-chain convert progress (submitted / pending / success / failure)
+            window.dispatchEvent(new CustomEvent('bridgeStatusUpdate', { detail: message.data }));
           } else if (message.type === 'positions_changed' && message.data) {
             window.dispatchEvent(new CustomEvent('solanaPositionsChanged', { detail: message.data }));
           } else if (message.type === 'position_update') {

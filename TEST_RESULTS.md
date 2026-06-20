@@ -3,7 +3,7 @@
 ## Test Summary
 **Status: ✅ PASSED** - All tests successful
 
-## Test 1: WebSocket Connection ✅
+## Test 1: WebSocket Connection 
 ```bash
 node websocket-test-script.js
 ```

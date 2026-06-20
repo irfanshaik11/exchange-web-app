@@ -182,7 +182,7 @@ export class ImageSearchService {
       // Handle IPFS URLs
       if (url.startsWith('ipfs://')) {
         const cid = url.replace('ipfs://', '').replace(/^ipfs\//, '');
-        return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+        return `https://ipfs.io/ipfs/${cid}`;
       }
       
       // Handle relative URLs
