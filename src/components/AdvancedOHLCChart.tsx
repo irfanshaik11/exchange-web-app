@@ -116,6 +116,11 @@ const CHART_DEBUG = false; // Set to true only when debugging chart issues
 
 const isHttpOhlcNetwork = (network?: string) => network === "monad";
 
+/** Networks that stream raw 1s candles via WS — TradingView aggregates client-side.
+ *  Add new WS-streamed chains here as they're onboarded. */
+const WS_STREAMED_NETWORKS = new Set(["solana", "bnb"]);
+const isWsStreamedNetwork = (network?: string) => WS_STREAMED_NETWORKS.has(network ?? "");
+
 /** token-bnb WS uses `candles`; Solana token-service uses `data`. */
 function getWsSnapshotCandles(message: any): any[] {
   if (Array.isArray(message?.candles)) return message.candles;
@@ -4731,10 +4736,11 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         const currentNetwork = latestParamsRef.current.network;
         // For Solana: WS always streams 1s candles — TradingView aggregates them to any resolution.
         // Never re-fetch on resolution change; only re-fetch when cache is empty or timeframe changes.
-        const isSolana = !isHttpOhlcNetwork(currentNetwork);
-        // Allow Solana interval changes when TV resolution is not the default 1S
-        // (i.e., user clicked a time frame button like 7D → resolution "30" → interval "30m")
-        const intervalChanged = isSolana
+        const isWsStreamed = isWsStreamedNetwork(currentNetwork);
+        // Allow WS-streamed networks (Solana, BNB, ...) interval changes only when
+        // TV resolution is not the default 1S — WS delivers raw 1s candles and TV
+        // aggregates them client-side, so resolution changes don't need an HTTP fetch.
+        const intervalChanged = isWsStreamed
           ? (resolution !== "1S" && cachedIntervalRef.current !== requestedInterval)
           : cachedIntervalRef.current !== requestedInterval;
         const timeframeChanged =
@@ -5147,7 +5153,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
 
             // Fallback: aggregate 1s WS candles client-side when backend has no pre-aggregated data
             // (common for newer tokens whose TimescaleDB continuous aggregates haven't populated yet)
-            if (isSolana && resolution !== "1S") {
+            if (isWsStreamed && resolution !== "1S") {
               const baseCandles = resolutionCacheRef.current.get("1S");
               if (baseCandles && baseCandles.length > 0) {
                 const aggregated = aggregateCandlesToInterval(baseCandles, requestedInterval);

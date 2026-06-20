@@ -910,7 +910,8 @@ export default function TokenLimitOrders({
                             <FaBan className="opacity-80" />
                             {mevMode}
                           </span>
-                          {isDevSellOrder && order.devWallet && (
+                          {isDevSellOrder && order.devWallet &&
+                            (chain === "bnb" ? isEvmTokenAddress(order.devWallet) : true) && (
                             <a
                               href={
                                 chain === "bnb"

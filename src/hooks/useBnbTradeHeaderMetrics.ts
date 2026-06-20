@@ -6,8 +6,8 @@ import {
   countBnbUniqueTradersFromTrades,
 } from '~/utils/bnbTradesAnalytics';
 import {
+  BNB_USD_FALLBACK,
   fetchBnbDevTokensByCreator,
-  fetchBnbHolderCount,
   fetchBnbTrades,
   fetchBnbUsdPrice,
   resolveBnbCreatorWallet,
@@ -38,15 +38,21 @@ async function fetchBnbTokenDetailProxy(mint: string): Promise<any | null> {
 
 export default function useBnbTradeHeaderMetrics(
   mint: string | undefined,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; holderCountOverride?: number },
 ): BnbTradeHeaderMetrics {
   const enabled = options?.enabled ?? true;
+  const holderCountOverride = options?.holderCountOverride;
   const [holderCount, setHolderCount] = useState<number | undefined>(undefined);
   const [devTokensCreated, setDevTokensCreated] = useState(0);
   const [devTokensMigrated, setDevTokensMigrated] = useState(0);
   const [kolCount, setKolCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const hasLoadedRef = useRef(false);
+  // Ref so load() always reads the latest override without restarting the effect
+  const holderCountOverrideRef = useRef(holderCountOverride);
+  useEffect(() => {
+    holderCountOverrideRef.current = holderCountOverride;
+  }, [holderCountOverride]);
 
   useEffect(() => {
     hasLoadedRef.current = false;
@@ -65,30 +71,23 @@ export default function useBnbTradeHeaderMetrics(
     const load = async () => {
       if (!hasLoadedRef.current) setIsLoading(true);
       try {
-        const [detail, tradeRows, bnbUsd, holdersRes, holderCountDirect] = await Promise.all([
+        const [detail, tradeRows, bnbUsd] = await Promise.all([
           fetchBnbTokenDetailProxy(mint),
           fetchBnbTrades(mint, 500),
           fetchBnbUsdPrice(),
-          fetch(`/api/bnb-token/holders?mint=${encodeURIComponent(mint)}`).catch(() => null),
-          fetchBnbHolderCount(mint),
         ]);
         if (cancelled) return;
 
-        let resolvedHolders = holderCountDirect ?? resolveBnbHolderCount(detail);
-        if (holdersRes?.ok) {
-          const body = await holdersRes.json().catch(() => ({}));
-          const fromApi = Number(body?.total_holders || body?.holder_count || 0);
-          const listLen = Array.isArray(body?.holders) ? body.holders.length : 0;
-          if (fromApi > 0) resolvedHolders = fromApi;
-          else if (listLen > 0 && (resolvedHolders == null || resolvedHolders <= 0)) {
-            resolvedHolders = listLen;
-          }
-        }
+        const overrideNow = holderCountOverrideRef.current;
+        let resolvedHolders: number | undefined =
+          overrideNow != null && overrideNow > 0
+            ? overrideNow
+            : (resolveBnbHolderCount(detail) ?? undefined);
 
         const priceUsd = resolveBnbPriceUsd(detail) ?? 0;
         const { holders: derivedHolders } = aggregateBnbTrades(
           tradeRows,
-          bnbUsd ?? 600,
+          bnbUsd ?? BNB_USD_FALLBACK,
           priceUsd,
         );
         if (resolvedHolders == null || resolvedHolders <= 0) {

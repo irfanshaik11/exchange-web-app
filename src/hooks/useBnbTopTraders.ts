@@ -4,6 +4,7 @@ import {
   type BnbTraderStats,
 } from '~/utils/bnbTradesAnalytics';
 import {
+  BNB_USD_FALLBACK,
   fetchBnbTrades,
   fetchBnbUsdPrice,
   resolveBnbPriceUsd,
@@ -42,7 +43,7 @@ export default function useBnbTopTraders(
         const priceUsd = resolveBnbPriceUsd(detail) ?? 0;
         const { topTraders } = aggregateBnbTrades(
           tradeRows,
-          bnbUsd ?? 600,
+          bnbUsd ?? BNB_USD_FALLBACK,
           priceUsd,
         );
         setTraders(topTraders.slice(0, limit));

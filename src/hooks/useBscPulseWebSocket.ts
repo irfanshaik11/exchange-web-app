@@ -290,13 +290,9 @@ async function fetchTokenDetailEnrichment(
         delete patch[key];
       }
     }
-    IS_DEV &&
-      console.log(
-        `[BscPulse:detail] hit mint=${mint.slice(0, 10)} liq=${patch.liquidity_usd ?? '-'} top10=${patch.top10_holders_pct ?? '-'}`,
-      );
     return Object.keys(patch).length > 0 ? patch : null;
   } catch (err) {
-    IS_DEV && console.warn('[BscPulse:detail] error', mint.slice(0, 10), err);
+    IS_DEV && console.warn('[BscPulse:detail] error', mint.slice(0, 10), err instanceof Error ? err.message : String(err));
     return null;
   }
 }

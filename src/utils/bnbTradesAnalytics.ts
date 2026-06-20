@@ -7,6 +7,7 @@ export interface BnbTradeRow {
   quote_amount?: string | number;
   price_usd?: number;
   block_time?: string;
+  token_decimals?: number;
 }
 
 export interface BnbTraderStats {
@@ -34,6 +35,8 @@ export interface BnbHolderFromTrades {
   lastTradeAt: string;
 }
 
+// NOTE: Assumes 18-decimal BEP-20. Tokens like USDT BSC (6d) or BTCB (8d) will render with
+// incorrect magnitude. Pending token_decimals field on /v1/token/{mint}/trades.
 const parseWeiAmount = (raw: string | number | undefined | null): number => {
   if (raw == null || raw === '') return 0;
   const n = typeof raw === 'string' ? parseFloat(raw) : Number(raw);

@@ -8,6 +8,9 @@ const BNB_UPSTREAM_BASE = (
 /** Server-side / API routes — direct upstream URL. */
 export const BNB_HTTP_BASE = BNB_UPSTREAM_BASE;
 
+/** Fallback BNB/USD price used before CoinGecko resolves. */
+export const BNB_USD_FALLBACK = 600;
+
 /** Browser uses same-origin rewrite; server uses upstream directly. */
 export function getBnbHttpBase(): string {
   if (typeof window !== 'undefined') {
@@ -164,18 +167,37 @@ export function buildBnbHoldersUrl(mint: string, limit = 100): string {
   return `${getBnbHttpBase()}/v1/token/${encodeURIComponent(mint)}/holders?limit=${limit}`;
 }
 
+const _tradeCache = new Map<string, { data: any[]; ts: number }>();
+const _tradeInFlight = new Map<string, Promise<any[]>>();
+const TRADE_CACHE_TTL_MS = 12_000;
+
 export async function fetchBnbTrades(mint: string, limit = 500): Promise<any[]> {
-  try {
-    const response = await fetch(buildBnbTradesUrl(mint, limit), {
-      headers: { Accept: 'application/json' },
-    });
-    if (!response.ok) return [];
-    const body = await response.json();
-    return Array.isArray(body?.trades) ? body.trades : [];
-  } catch {
-    return [];
-  }
+  const key = `${mint}:${limit}`;
+  const cached = _tradeCache.get(key);
+  if (cached && Date.now() - cached.ts < TRADE_CACHE_TTL_MS) return cached.data;
+  const inflight = _tradeInFlight.get(key);
+  if (inflight) return inflight;
+  const promise = (async (): Promise<any[]> => {
+    try {
+      const response = await fetch(buildBnbTradesUrl(mint, limit), {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return [];
+      const body = await response.json();
+      const data: any[] = Array.isArray(body?.trades) ? body.trades : [];
+      _tradeCache.set(key, { data, ts: Date.now() });
+      return data;
+    } catch {
+      return [];
+    } finally {
+      _tradeInFlight.delete(key);
+    }
+  })();
+  _tradeInFlight.set(key, promise);
+  return promise;
 }
+
+const _devTokensInFlight = new Map<string, Promise<any[]>>();
 
 /** Other tokens launched by the same creator (pulse scan). */
 export async function fetchBnbDevTokensByCreator(
@@ -188,8 +210,24 @@ export async function fetchBnbDevTokensByCreator(
 ): Promise<any[]> {
   const creator = creatorWallet.trim().toLowerCase();
   if (!isValidBnbWallet(creator)) return [];
-
   const scanLimit = options?.scanLimit ?? 200;
+  const flightKey = `${creator}:${scanLimit}`;
+  const inflight = _devTokensInFlight.get(flightKey);
+  if (inflight) return inflight;
+  const promise = _fetchBnbDevTokensByCreatorInner(creator, scanLimit, options)
+    .finally(() => _devTokensInFlight.delete(flightKey));
+  _devTokensInFlight.set(flightKey, promise);
+  return promise;
+}
+
+async function _fetchBnbDevTokensByCreatorInner(
+  creator: string,
+  scanLimit: number,
+  options?: {
+    includeMint?: string;
+    includeToken?: Record<string, unknown> | null;
+  },
+): Promise<any[]> {
   const channels: BnbPulseChannel[] = ['new', 'final-stretch', 'migrated'];
   const seen = new Set<string>();
   const results: any[] = [];

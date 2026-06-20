@@ -118,6 +118,8 @@ export default function BnbTrades({ tokenAddress }: BnbTradesProps) {
         {trades.map((trade) => {
           const isBuy = String(trade.side).toLowerCase() === 'buy';
           const color = isBuy ? BNB_GREEN : BNB_RED;
+          // NOTE: Assumes 18-decimal BEP-20. Tokens like USDT BSC (6d) or BTCB (8d) will render
+          // with incorrect magnitude. Pending decimals field on /v1/token/{mint}/trades.
           const tokenAmt = Number(trade.token_amount) / 1e18;
           const priceUsd = Number(trade.price_usd) || 0;
           const totalUsd = tokenAmt > 0 && priceUsd > 0 ? tokenAmt * priceUsd : 0;

@@ -2,14 +2,35 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import {
   BNB_HTTP_BASE,
   fetchBnbHolderCountUpstream,
+  isValidBnbWallet,
   resolveBnbHolderCount,
 } from '~/utils/bnbToken';
 
 const SCAN_API_KEY =
   process.env.BSCSCAN_API_KEY ||
   process.env.ETHERSCAN_API_KEY ||
-  process.env.NEXT_PUBLIC_BSCSCAN_API_KEY ||
   '';
+
+// Sliding-window in-memory rate limiter
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 60;
+const ipHits = new Map<string, number[]>();
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const bucket = (ipHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (bucket.length >= RATE_LIMIT_MAX) {
+    ipHits.set(ip, bucket);
+    return true;
+  }
+  bucket.push(now);
+  ipHits.set(ip, bucket);
+  if (ipHits.size > 500 && Math.random() < 0.02) {
+    for (const [k, v] of ipHits) {
+      if (v.every((t) => now - t >= RATE_LIMIT_WINDOW_MS)) ipHits.delete(k);
+    }
+  }
+  return false;
+}
 
 async function fetchUpstreamHoldersList(
   mint: string,
@@ -69,11 +90,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const ip =
+    (typeof req.headers['x-forwarded-for'] === 'string'
+      ? req.headers['x-forwarded-for'].split(',')[0]
+      : req.socket?.remoteAddress) ?? 'unknown';
+  if (rateLimited(ip)) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+
   const mint = typeof req.query.mint === 'string' ? req.query.mint.trim().toLowerCase() : '';
   const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : 50;
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 50;
 
-  if (!mint) {
+  if (!mint || !isValidBnbWallet(mint)) {
     return res.status(400).json({ error: 'mint parameter is required' });
   }
 
@@ -113,12 +142,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    return res.status(404).json({
-      error: 'Holders not available',
-      hint: 'Use trade-derived holders in UI; set BSCSCAN_API_KEY for on-chain holder list',
-    });
+    return res.status(404).json({ error: 'Holders not available' });
   } catch (error) {
-    console.error('[bnb-token/holders] failed for', mint, error);
+    console.error('[bnb-token/holders] failed', error);
     return res.status(500).json({ error: 'Failed to fetch BNB holders' });
   }
 }

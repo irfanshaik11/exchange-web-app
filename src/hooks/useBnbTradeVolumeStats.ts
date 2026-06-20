@@ -4,6 +4,7 @@ import {
   type BnbTradeRow,
 } from '~/utils/bnbTradesAnalytics';
 import {
+  BNB_USD_FALLBACK,
   type BnbOhlcvTimeRange,
   type BnbOhlcvWindowStats,
   fetchBnbTrades,
@@ -50,7 +51,7 @@ export default function useBnbTradeVolumeStats(
           next[window] = computeBnbTradeWindowStats(
             trades as BnbTradeRow[],
             window,
-            bnbUsd ?? 600,
+            bnbUsd ?? BNB_USD_FALLBACK,
           );
         }
         setStatsByWindow(next);

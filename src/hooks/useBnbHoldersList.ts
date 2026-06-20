@@ -4,6 +4,7 @@ import {
   type BnbHolderFromTrades,
 } from '~/utils/bnbTradesAnalytics';
 import {
+  BNB_USD_FALLBACK,
   fetchBnbTrades,
   fetchBnbUsdPrice,
   resolveBnbPriceUsd,
@@ -74,7 +75,7 @@ export default function useBnbHoldersList(
         const priceUsd = resolveBnbPriceUsd(detail) ?? 0;
         const { holders: derived } = aggregateBnbTrades(
           tradeRows,
-          bnbUsd ?? 600,
+          bnbUsd ?? BNB_USD_FALLBACK,
           priceUsd,
         );
 
@@ -87,7 +88,7 @@ export default function useBnbHoldersList(
           setHolders([]);
         }
       } finally {
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
       }
     };
 

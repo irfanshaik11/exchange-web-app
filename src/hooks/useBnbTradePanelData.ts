@@ -11,7 +11,7 @@ import {
   getTradeActivityByUser,
   getTradeHistoryByTokenAddress,
 } from '~/utils/functions';
-import { fetchBnbTrades, fetchBnbUsdPrice } from '~/utils/bnbToken';
+import { BNB_USD_FALLBACK, fetchBnbTrades, fetchBnbUsdPrice } from '~/utils/bnbToken';
 
 export type BnbTradePosition = BnbWalletPosition;
 
@@ -109,6 +109,9 @@ export default function useBnbTradePanelData(
   const [bnbBalance, setBnbBalance] = useState(0);
   const [position, setPosition] = useState<BnbTradePosition>(EMPTY_POSITION);
   const tokenPriceRef = useRef(tokenPriceUsd);
+  // After the first full refresh cycle returns no activity, skip subsequent
+  // API waterfalls until mint/user changes.
+  const noActivityRef = useRef(false);
 
   useEffect(() => {
     tokenPriceRef.current = tokenPriceUsd;
@@ -169,6 +172,8 @@ export default function useBnbTradePanelData(
       return;
     }
 
+    if (noActivityRef.current) return;
+
     const tokenMint = mint.toLowerCase();
     const priceUsd = tokenPriceRef.current;
     let next = EMPTY_POSITION;
@@ -219,7 +224,7 @@ export default function useBnbTradePanelData(
         const onChainPos = computeBnbWalletPositionFromTrades(
           tradeRows,
           walletAddresses,
-          bnbUsd ?? 600,
+          bnbUsd ?? BNB_USD_FALLBACK,
           priceUsd,
         );
         if (hasPositionActivity(onChainPos)) {
@@ -227,6 +232,9 @@ export default function useBnbTradePanelData(
         }
       }
 
+      if (isEmptyPosition(next)) {
+        noActivityRef.current = true;
+      }
       setPosition((prev) => {
         const unchanged =
           prev.boughtUsd === next.boughtUsd &&
@@ -253,6 +261,11 @@ export default function useBnbTradePanelData(
   }, [enabled, refreshBnbBalance]);
 
   useEffect(() => {
+    // Reset the no-activity guard whenever any position-relevant dep changes
+    // (mint, user, or wallets). Doing this here — not in a separate effect —
+    // also fires void refreshPosition() immediately, matching competitor behaviour
+    // where wallet connect → instant position fetch (not up to 10s wait).
+    noActivityRef.current = false;
     if (!enabled) return;
     void refreshPosition();
     const id = setInterval(refreshPosition, 10_000);

@@ -119,6 +119,7 @@ export default function BnbTradePage() {
     kolCount,
   } = useBnbTradeHeaderMetrics(mintAddress, {
     enabled: Boolean(mintAddress),
+    holderCountOverride: restHoldersCount,
   });
 
   const { statsByWindow: tradeVolumeStats } = useBnbTradeVolumeStats(mintAddress, {
@@ -185,7 +186,7 @@ export default function BnbTradePage() {
       cancelled = true;
       clearInterval(refreshId);
     };
-  }, [router.isReady, mintAddress, optimisticToken]);
+  }, [router.isReady, mintAddress]);
 
   const displayToken = useMemo((): any => {
     const withDetail = mergeBnbTradeToken(optimisticToken, tokenData);
@@ -285,7 +286,16 @@ export default function BnbTradePage() {
       lastMarketCapUsd?: number;
       maxMarketCapUsd?: number;
     }) => {
-      setChartMetrics(metrics);
+      setChartMetrics((prev) => {
+        if (
+          prev?.lastPriceUsd === metrics.lastPriceUsd &&
+          prev?.lastMarketCapUsd === metrics.lastMarketCapUsd &&
+          prev?.maxMarketCapUsd === metrics.maxMarketCapUsd
+        ) {
+          return prev;
+        }
+        return metrics;
+      });
     },
     [],
   );
@@ -539,51 +549,51 @@ export default function BnbTradePage() {
                 />
               </div>
               <div className="relative min-h-[300px] flex-1">
-                <div
-                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Trades' ? '' : 'hidden'}`}
-                >
-                  {canRenderChart && (
-                    <BnbTrades tokenAddress={mintAddress} />
-                  )}
-                </div>
-                <div
-                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Holders' ? '' : 'hidden'}`}
-                >
-                  {canRenderChart && (
-                    <BnbHoldersTable
-                      tokenAddress={mintAddress}
-                      onTotalCountChange={setHoldersTabCount}
-                    />
-                  )}
-                </div>
-                <div
-                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Top Traders' ? '' : 'hidden'}`}
-                >
-                  {canRenderChart && (
-                    <BnbTopTradersTable tokenAddress={mintAddress} />
-                  )}
-                </div>
-                <div
-                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Dev Tokens' ? '' : 'hidden'}`}
-                >
-                  {canRenderChart && (
-                    <BnbDevTokensTable
-                      tokenAddress={mintAddress}
-                      onTotalCountChange={setDevTokensCount}
-                    />
-                  )}
-                </div>
-                <div
-                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Orders' ? '' : 'hidden'}`}
-                >
-                  {canRenderChart && (
-                    <TokenLimitOrders
-                      chain="bnb"
-                      liveMarketCapUsd={priorityMarketCapUsd}
-                      currentTokenAddress={mintAddress}
-                    />
-                  )}
-                </div>
+                {selectedTab === 'Trades' && (
+                  <div className="absolute inset-0 flex flex-col">
+                    {canRenderChart && (
+                      <BnbTrades tokenAddress={mintAddress} />
+                    )}
+                  </div>
+                )}
+                {selectedTab === 'Holders' && (
+                  <div className="absolute inset-0 flex flex-col">
+                    {canRenderChart && (
+                      <BnbHoldersTable
+                        tokenAddress={mintAddress}
+                        onTotalCountChange={setHoldersTabCount}
+                      />
+                    )}
+                  </div>
+                )}
+                {selectedTab === 'Top Traders' && (
+                  <div className="absolute inset-0 flex flex-col">
+                    {canRenderChart && (
+                      <BnbTopTradersTable tokenAddress={mintAddress} />
+                    )}
+                  </div>
+                )}
+                {selectedTab === 'Dev Tokens' && (
+                  <div className="absolute inset-0 flex flex-col">
+                    {canRenderChart && (
+                      <BnbDevTokensTable
+                        tokenAddress={mintAddress}
+                        onTotalCountChange={setDevTokensCount}
+                      />
+                    )}
+                  </div>
+                )}
+                {selectedTab === 'Orders' && (
+                  <div className="absolute inset-0 flex flex-col">
+                    {canRenderChart && (
+                      <TokenLimitOrders
+                        chain="bnb"
+                        liveMarketCapUsd={priorityMarketCapUsd}
+                        currentTokenAddress={mintAddress}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
