@@ -49,7 +49,7 @@ function Logo({ size = 22 }: { size?: number }) {
   return (
     <span className="inline-flex items-center gap-2">
       <img
-        src="/interstate/logo.png"
+        src="/interstate/logo.webp"
         alt="Interstate logo"
         className="inline-block object-contain rounded-full shrink-0"
         style={{ width: size + 6, height: size + 6 }}
@@ -181,9 +181,13 @@ export default function Landing() {
             loop
             muted
             playsInline
+            poster="/videos/landing_hero_poster.jpg"
             className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-            src="/videos/landing_hero_f1-half.mp4"
-          />
+          >
+            <source src="/videos/landing_hero_f1-half.av1.webm" type='video/webm; codecs="av01.0.08M.08"' />
+            <source src="/videos/landing_hero_f1-half.webm" type='video/webm; codecs="vp9"' />
+            <source src="/videos/landing_hero_f1-half.mp4" type="video/mp4" />
+          </video>
           <div
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none"
