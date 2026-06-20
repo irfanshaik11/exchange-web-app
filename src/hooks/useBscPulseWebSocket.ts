@@ -6,13 +6,24 @@ import {
 } from '~/utils/imageHash';
 import {
   needsBnbMarketDataEnrichment,
+  needsBnbDetailEnrichment,
   resolveBnbMarketCapUsd,
   resolveBnbPairAddress,
   resolveBnbPriceUsd,
   resolveBnbVolumeUsd,
+  resolveBnbHolderCount,
+  resolveBnbLiquidityUsd,
+  resolveBnbTop10HoldersPct,
+  resolveBnbDevHoldingPct,
+  resolveBnbSniperPct,
+  resolveBnbCreatorWallet,
+  resolveBnbBondingPct,
   resolveBnbCirculatingSupply,
   toFiniteNumber,
   fetchBnbTokenMetrics,
+  fetchBnbHolderCount,
+  buildBnbDetailPatch,
+  applyBnbDetailPatch,
   fetchBnbPulseTokens,
 } from '~/utils/bnbToken';
 
@@ -31,9 +42,10 @@ export function normalizeBscToken(t: any): any {
   const toNum = toFiniteNumber;
 
   const bondingRaw = t.bonding_curve_progress ?? t.bondingCurveProgress;
-  let bondingPct: number | null = null;
-  if (bondingRaw != null && bondingRaw !== -1) {
-    bondingPct = bondingRaw <= 1.01 ? bondingRaw * 100 : bondingRaw;
+  let bondingPct: number | null = resolveBnbBondingPct(t) ?? null;
+  if (bondingPct == null && bondingRaw != null && bondingRaw !== -1) {
+    const n = typeof bondingRaw === 'string' ? parseFloat(bondingRaw) : Number(bondingRaw);
+    if (Number.isFinite(n) && n >= 0) bondingPct = n <= 1.01 ? n * 100 : n;
   }
   const mintRaw = t.mint ?? t.mint_address ?? t.token_address ?? t.address ?? '';
   const mint = mintRaw ? String(mintRaw).toLowerCase() : '';
@@ -68,12 +80,14 @@ export function normalizeBscToken(t: any): any {
     vol && typeof vol === 'object' && !Array.isArray(vol)
       ? {
           volume_24h: toNum(vol.volume_24h_usd),
-          total_buy_volume_24h: toNum(vol.buy_24h),
-          total_sell_volume_24h: toNum(vol.sell_24h),
           total_buys_24h: toNum(vol.buy_24h),
           total_sells_24h: toNum(vol.sell_24h),
           total_buys_5m: toNum(vol.buy_5m),
           total_sells_5m: toNum(vol.sell_5m),
+          total_buy_volume_5m: toNum(vol.buy_volume_5m ?? vol.buy_5m_usd),
+          total_sell_volume_5m: toNum(vol.sell_volume_5m ?? vol.sell_5m_usd),
+          total_buy_volume_24h: toNum(vol.buy_volume_24h ?? vol.buy_24h),
+          total_sell_volume_24h: toNum(vol.sell_volume_24h ?? vol.sell_24h),
           tx_count_24h: toNum(vol.count_24h),
           tx_count_5m: toNum(vol.count_5m),
         }
@@ -90,8 +104,8 @@ export function normalizeBscToken(t: any): any {
     total_fully_diluted_valuation: marketCap,
     price_usd: priceUsd,
     usd_price: priceUsd,
-    liquidity_usd: pick(t.liquidityUsd, t.liquidity_usd, t.total_liquidity_usd),
-    total_liquidity_usd: pick(t.liquidityUsd, t.liquidity_usd, t.total_liquidity_usd),
+    liquidity_usd: resolveBnbLiquidityUsd(t),
+    total_liquidity_usd: resolveBnbLiquidityUsd(t),
     volume_24h:
       volumeFromNested?.volume_24h ??
       pick(t.volume24h, t.volume_24h, t.volumeUsd24h, typeof vol === 'number' ? vol : undefined),
@@ -103,19 +117,25 @@ export function normalizeBscToken(t: any): any {
       volumeFromNested?.total_sells_24h ?? pick(t.total_sells_24h, t.sells_24h, t.sells24h),
     total_buys_5m: volumeFromNested?.total_buys_5m ?? pick(t.total_buys_5m),
     total_sells_5m: volumeFromNested?.total_sells_5m ?? pick(t.total_sells_5m),
+    total_buy_volume_5m:
+      volumeFromNested?.total_buy_volume_5m ?? pick(t.total_buy_volume_5m),
+    total_sell_volume_5m:
+      volumeFromNested?.total_sell_volume_5m ?? pick(t.total_sell_volume_5m),
     tx_count_24h: volumeFromNested?.tx_count_24h ?? toNum(t.tx_count_24h),
     tx_count_5m: volumeFromNested?.tx_count_5m ?? toNum(t.tx_count_5m),
-    holder_count: pick(t.holderCount, t.holder_count, t.total_holders),
-    total_holders: pick(t.holderCount, t.holder_count, t.total_holders),
+    holder_count: resolveBnbHolderCount(t),
+    total_holders: resolveBnbHolderCount(t),
     bonding_curve_progress: bondingPct,
-    top10_holding_pct: pick(t.top10_holders_pct, t.top10_holding_pct, t.top_10_holder_percent),
-    top10_holders_pct: pick(t.top10_holders_pct, t.top10_holding_pct),
-    dev_holding_pct: pick(t.dev_holding_pct, t.dev_holding, t.creator_holding_pct),
-    dev_holding: pick(t.dev_holding_pct, t.dev_holding),
-    sniper_pct: pick(t.sniper_pct, t.snipers_hold_pct, t.sniper_percent),
-    snipers_hold_pct: pick(t.sniper_pct, t.snipers_hold_pct),
-    creator_wallet: pick(t.creator_wallet, t.creator, t.dev_wallet, t.deployer),
-    dev_wallet: pick(t.dev_wallet, t.creator_wallet, t.creator),
+    top10_holding_pct: resolveBnbTop10HoldersPct(t),
+    top10_holders_pct: resolveBnbTop10HoldersPct(t),
+    dev_holding_pct: resolveBnbDevHoldingPct(t),
+    dev_holding: resolveBnbDevHoldingPct(t),
+    dev_percent: resolveBnbDevHoldingPct(t),
+    sniper_pct: resolveBnbSniperPct(t),
+    snipers_hold_pct: resolveBnbSniperPct(t),
+    sniper_percent: resolveBnbSniperPct(t),
+    creator_wallet: resolveBnbCreatorWallet(t),
+    dev_wallet: resolveBnbCreatorWallet(t),
     created_at: t.created_at ?? t.createdAt ?? t.launch_time ?? t.launchTime,
     launch_time: t.launch_time ?? t.launchTime,
     protocol: t.protocol ?? t.launchpad_protocol,
@@ -184,10 +204,26 @@ function mergePriceOnly(existing: any, update: any): any {
   keepPositive('liquidity_usd');
   keepPositive('total_liquidity_usd');
   keepPositive('volume_24h');
+  keepPositive('holder_count');
+  keepPositive('total_holders');
   keepPositive('tx_count_24h');
   keepPositive('tx_count_5m');
   keepPositive('total_buys_5m');
   keepPositive('total_sells_5m');
+  keepPositive('total_buy_volume_5m');
+  keepPositive('total_sell_volume_5m');
+  keepPositive('total_buy_volume_24h');
+  keepPositive('total_sell_volume_24h');
+  const keepMeaningfulPct = (field: string) => {
+    const next = Number(update[field] ?? -1);
+    const prev = Number(existing[field] ?? -1);
+    if ((!Number.isFinite(next) || next < 0) && Number.isFinite(prev) && prev >= 0) {
+      merged[field] = existing[field];
+    }
+  };
+  keepMeaningfulPct('top10_holders_pct');
+  keepMeaningfulPct('dev_holding_pct');
+  keepMeaningfulPct('sniper_pct');
   if (!update.pair_address && existing.pair_address) {
     merged.pair_address = existing.pair_address;
   }
@@ -242,26 +278,12 @@ async function fetchTokenDetailEnrichment(
       uri: data?.uri ?? hint?.uri,
       logo: data?.logo ?? hint?.logo,
     });
-    const patch: Record<string, any> = {
-      name: normalized.name,
-      symbol: normalized.symbol,
-      launchpad_protocol: normalized.launchpad_protocol,
-      protocol: normalized.protocol,
-      market_cap_usd: normalized.market_cap_usd,
-      fully_diluted_value: normalized.fully_diluted_value,
-      total_fully_diluted_valuation: normalized.total_fully_diluted_valuation,
-      price_usd: normalized.price_usd,
-      usd_price: normalized.usd_price,
-      liquidity_usd: normalized.liquidity_usd,
-      total_liquidity_usd: normalized.total_liquidity_usd,
-      volume_24h: normalized.volume_24h,
-      bonding_curve_progress: normalized.bonding_curve_progress,
-      holder_count: normalized.holder_count,
-      total_holders: normalized.total_holders,
-      image_url: normalized.image_url,
-      image: normalized.image,
-      logo: normalized.logo,
-      uri: normalized.uri ?? hint?.uri,
+    const patch = {
+      ...applyBnbDetailPatch(buildBnbDetailPatch({ ...data, ...hint, mint }, mint)),
+      ...(normalized.image_url ? { image_url: normalized.image_url, image: normalized.image, logo: normalized.logo } : {}),
+      ...(normalized.uri ? { uri: normalized.uri } : {}),
+      ...(normalized.name ? { name: normalized.name } : {}),
+      ...(normalized.symbol ? { symbol: normalized.symbol } : {}),
     };
     for (const key of Object.keys(patch)) {
       if (patch[key] === undefined || patch[key] === null || patch[key] === '') {
@@ -270,7 +292,7 @@ async function fetchTokenDetailEnrichment(
     }
     IS_DEV &&
       console.log(
-        `[BscPulse:detail] hit mint=${mint.slice(0, 10)} name=${patch.name ?? '-'} symbol=${patch.symbol ?? '-'} image=${!!patch.image_url}`,
+        `[BscPulse:detail] hit mint=${mint.slice(0, 10)} liq=${patch.liquidity_usd ?? '-'} top10=${patch.top10_holders_pct ?? '-'}`,
       );
     return Object.keys(patch).length > 0 ? patch : null;
   } catch (err) {
@@ -297,6 +319,8 @@ const _enrichmentInFlight = new Set<string>();
 const _detailFetchedMints = new Set<string>();
 const _metricsFetchedMints = new Set<string>();
 const _metricsInFlight = new Set<string>();
+const _holdersFetchedMints = new Set<string>();
+const _holdersInFlight = new Set<string>();
 const _listeners = new Set<() => void>();
 const _wsRefs: Partial<Record<Channel, WebSocket>> = {};
 const _pingTimers: Partial<Record<Channel, ReturnType<typeof setInterval>>> = {};
@@ -549,8 +573,9 @@ function queueMarketDataEnrichment(token: any, force = false) {
   const existingVol = resolveBnbVolumeUsd(token);
   const needsMc = needsBnbMarketDataEnrichment(token);
   const needsVol = existingVol == null || existingVol <= 0;
+  const needsDetail = needsBnbDetailEnrichment(token);
 
-  if (!needsMc && !needsVol && !force) {
+  if (!needsMc && !needsVol && !needsDetail && !force) {
     _metricsFetchedMints.add(mint);
     return;
   }
@@ -564,36 +589,7 @@ function queueMarketDataEnrichment(token: any, force = false) {
   void fetchBnbTokenMetrics(mint)
     .then((metrics) => {
       if (!metrics) return;
-      const normalized = normalizeBscToken({
-        ...token,
-        mint,
-        price_usd: metrics.priceUsd,
-        market_cap_usd: metrics.marketCapUsd,
-        volume_24h: metrics.volume24hUsd,
-        tx_count_24h: metrics.txCount24h,
-        tx_count_5m: metrics.txCount5m,
-      });
-      const patch: Record<string, any> = {
-        pair_address: normalized.pair_address,
-        circulating_supply: normalized.circulating_supply,
-        liquidity_usd: normalized.liquidity_usd,
-        price_usd: normalized.price_usd ?? metrics.priceUsd,
-        usd_price: normalized.usd_price ?? metrics.priceUsd,
-        market_cap_usd: normalized.market_cap_usd ?? metrics.marketCapUsd,
-        fully_diluted_value: normalized.fully_diluted_value ?? metrics.marketCapUsd,
-        total_fully_diluted_valuation:
-          normalized.total_fully_diluted_valuation ?? metrics.marketCapUsd,
-        volume_24h: normalized.volume_24h ?? metrics.volume24hUsd,
-        tx_count_24h: normalized.tx_count_24h ?? metrics.txCount24h,
-        tx_count_5m: normalized.tx_count_5m ?? metrics.txCount5m,
-      };
-      if (metrics.volume5mUsd != null && metrics.volume5mUsd > 0) {
-        patch.volume = {
-          ...(token?.volume && typeof token.volume === 'object' ? token.volume : {}),
-          volume_5m_usd: metrics.volume5mUsd,
-          volume_24h_usd: metrics.volume24hUsd ?? metrics.volume5mUsd,
-        };
-      }
+      const patch = applyBnbDetailPatch(metrics);
       for (const key of Object.keys(patch)) {
         if (patch[key] === undefined || patch[key] === null || patch[key] === '') {
           delete patch[key];
@@ -610,12 +606,47 @@ function queueMarketDataEnrichment(token: any, force = false) {
     });
 }
 
+function queueHolderEnrichment(token: any, force = false) {
+  if (typeof window === 'undefined') return;
+  const mint = mintKey(token?.mint);
+  if (!mint) return;
+
+  const existing = resolveBnbHolderCount(token);
+  if (existing != null && existing > 0 && !force) {
+    _holdersFetchedMints.add(mint);
+    return;
+  }
+
+  if (_holdersFetchedMints.has(mint) && !force) return;
+  if (_holdersInFlight.has(mint)) return;
+
+  _holdersFetchedMints.add(mint);
+  _holdersInFlight.add(mint);
+
+  void fetchBnbHolderCount(mint)
+    .then((holderCount) => {
+      if (holderCount == null || holderCount <= 0) return;
+      const patch = {
+        holder_count: holderCount,
+        total_holders: holderCount,
+      };
+      const prev = _enrichmentCache.get(mint) ?? {};
+      const merged = { ...prev, ...patch };
+      _enrichmentCache.set(mint, merged);
+      updateTokenEverywhere(mint, merged);
+    })
+    .finally(() => {
+      _holdersInFlight.delete(mint);
+    });
+}
+
 function queueEnrichmentIfNeeded(token: any, force = false) {
   if (typeof window === 'undefined') return;
   const mint = mintKey(token?.mint);
   if (!mint) return;
 
   queueMarketDataEnrichment(token, force);
+  queueHolderEnrichment(token, force);
 
   if (_detailFetchedMints.has(mint) && !force) return;
   const needsMetadata =

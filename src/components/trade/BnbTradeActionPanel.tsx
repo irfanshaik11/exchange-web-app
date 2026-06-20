@@ -12,14 +12,20 @@ import toast from "react-hot-toast";
 import {
   type BnbOhlcItem,
   type BnbOhlcvTimeRange,
+  type BnbOhlcvWindowStats,
   computeBnbOhlcvWindowStats,
   resolveBnbMarketCapUsd,
   resolveBnbPriceFromOhlcCandles,
   resolveBnbPriceUsd,
   resolveBnbCirculatingSupply,
+  resolveBnbTop10HoldersPct,
+  resolveBnbDevHoldingPct,
+  resolveBnbSniperPct,
   fetchBnbUsdPrice,
 } from "~/utils/bnbToken";
 import { BNB_CHAIN_ICON } from "~/utils/bnbProtocols";
+import useBnbTradePanelData from "~/hooks/useBnbTradePanelData";
+import { useUser } from "~/components/UserContext";
 
 type TimeRange = BnbOhlcvTimeRange;
 type TradeTab = "market" | "limit" | "adv";
@@ -63,6 +69,21 @@ const formatCompactNumber = (n: number): string => {
   return Math.round(n).toString();
 };
 
+/** USD amounts for the stats bar — avoid rounding micro-volume to $0. */
+const formatPanelUsd = (n: number): string => {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  const abs = Math.abs(n);
+  if (abs < 0.01) return "<0.01";
+  if (abs < 1) return n.toFixed(2);
+  return formatCompactNumber(Math.round(n));
+};
+
+const formatHolderPct = (val: number): string => {
+  if (!Number.isFinite(val) || val <= 0) return "0%";
+  if (val < 0.01) return "<0.01%";
+  return val >= 10 ? `${val.toFixed(1)}%` : `${val.toFixed(2)}%`;
+};
+
 const prettyAmt = (s: string) => {
   if (!s || s === ".") return "";
   const n = Number(s);
@@ -96,13 +117,25 @@ function getBnbCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
 
   if (volObj && typeof volObj === "object" && !Array.isArray(volObj)) {
     const nestedVol = pickNum(
-      volObj[`${s}_${window}`],
       volObj[`${s}_volume_${window}`],
       volObj[`${s}_${window}_usd`],
+      volObj[`${s}_volume_${window}_usd`],
+      volObj[window === "5m" ? `${s}_5m` : `${s}_${window}`],
     );
     if (nestedVol > 0) volUsd = nestedVol;
-    const nestedCount = pickNum(volObj[`${s}_count_${window}`], volObj[`count_${window}`]);
-    if (nestedCount > 0 && window === "5m") count = nestedCount;
+    const nestedCount = pickNum(
+      volObj[`${s}_count_${window}`],
+      volObj[`${s}s_${window}`],
+      volObj[`count_${s}_${window}`],
+    );
+    if (nestedCount > 0) count = nestedCount;
+  }
+
+  if (volUsd === 0) {
+    volUsd = pickNum(t[`total_${s}_volume_${window}`]);
+  }
+  if (count === 0) {
+    count = pickNum(t[`total_${s}s_${window}`]);
   }
 
   if (window === "24h" && volUsd === 0) {
@@ -193,16 +226,25 @@ const TokenInfoSection: React.FC<{ token: any }> = ({ token }) => {
   };
 
   const top10 = parsePct(
-    token?.top10_holders_pct ??
+    resolveBnbTop10HoldersPct(token) ??
+      token?.top10_holders_pct ??
       token?.top10_holding_pct ??
       token?.top_10_holder_percent ??
       token?.top10_holding_percentage,
   );
   const devH = parsePct(
-    token?.dev_holding_pct ?? token?.dev_holding ?? token?.creator_holding_pct ?? token?.dev_holding_percentage,
+    resolveBnbDevHoldingPct(token) ??
+      token?.dev_holding_pct ??
+      token?.dev_holding ??
+      token?.creator_holding_pct ??
+      token?.dev_holding_percentage,
   );
   const snipers = parsePct(
-    token?.sniper_pct ?? token?.snipers_hold_pct ?? token?.sniper_percent ?? token?.sniper_holding_percentage,
+    resolveBnbSniperPct(token) ??
+      token?.sniper_pct ??
+      token?.snipers_hold_pct ??
+      token?.sniper_percent ??
+      token?.sniper_holding_percentage,
   );
 
   return (
@@ -235,7 +277,7 @@ const TokenInfoSection: React.FC<{ token: any }> = ({ token }) => {
             <div className="flex items-center gap-1.5">
               <BsPersonGear size={16} style={{ color: AX.mint }} />
               <div className="text-[12px] font-bold" style={{ color: AX.mint }}>
-                {top10 > 0 ? `${top10.toFixed(2)}%` : "0%"}
+                {formatHolderPct(top10)}
               </div>
             </div>
             <div className="text-center text-[10px] uppercase leading-tight tracking-wide" style={{ color: AX.muted }}>
@@ -249,7 +291,7 @@ const TokenInfoSection: React.FC<{ token: any }> = ({ token }) => {
             <div className="flex items-center gap-1.5">
               <LuChefHat size={16} style={{ color: "#566cdc" }} />
               <div className="text-[12px] font-bold" style={{ color: "#566cdc" }}>
-                {devH > 0 ? `${devH.toFixed(1)}%` : "0%"}
+                {formatHolderPct(devH)}
               </div>
             </div>
             <div className="text-center text-[10px] uppercase leading-tight tracking-wide" style={{ color: AX.muted }}>
@@ -270,7 +312,7 @@ const TokenInfoSection: React.FC<{ token: any }> = ({ token }) => {
                 <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
               </svg>
               <div className="text-[12px] font-bold" style={{ color: "#f26681" }}>
-                {snipers > 0 ? `${snipers.toFixed(1)}%` : "0%"}
+                {formatHolderPct(snipers)}
               </div>
             </div>
             <div className="text-center text-[10px] uppercase leading-tight tracking-wide" style={{ color: AX.muted }}>
@@ -288,6 +330,7 @@ interface BnbTradeActionPanelProps {
   liveMarketCapUsd?: number | null;
   livePriceUsd?: number | null;
   ohlcCandles?: BnbOhlcItem[] | null;
+  tradeVolumeStats?: Partial<Record<BnbOhlcvTimeRange, BnbOhlcvWindowStats>>;
 }
 
 const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
@@ -295,8 +338,10 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
   liveMarketCapUsd,
   livePriceUsd,
   ohlcCandles,
+  tradeVolumeStats,
 }) => {
   const { presets, activePreset } = useQuickBuy();
+  const { user } = useUser();
 
   const [timeRange, setTimeRange] = useState<TimeRange>("5m");
   const [tab, setTab] = useState<TradeTab>("market");
@@ -361,6 +406,14 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
     return price != null && price > 0 ? price : 0;
   }, [livePriceUsd, ohlcPriceUsd, token]);
 
+  const {
+    selectedWalletCount,
+    bnbBalance,
+    position,
+  } = useBnbTradePanelData(token?.mint, tokenPriceUsd, {
+    enabled: Boolean(token?.mint),
+  });
+
   const supply = useMemo(() => resolveBnbCirculatingSupply(token), [token]);
 
   const ohlcMarketCapUsd = useMemo(() => {
@@ -381,6 +434,11 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
   }, [tab, baseMarketCap, targetMC]);
 
   const realTimeStats = useMemo(() => {
+    const fromTrades = tradeVolumeStats?.[timeRange];
+    if (fromTrades && (fromTrades.volume > 0 || fromTrades.buys > 0 || fromTrades.sells > 0)) {
+      return fromTrades;
+    }
+
     const candles = ohlcCandles ?? [];
     if (candles.length > 0) {
       const fromOhlc = computeBnbOhlcvWindowStats(candles, timeRange);
@@ -420,7 +478,7 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
       buyPercentage: buyPct,
       sellPercentage: sellPct,
     };
-  }, [ohlcCandles, timeRange, token]);
+  }, [ohlcCandles, timeRange, token, tradeVolumeStats]);
 
   const {
     buys,
@@ -432,6 +490,20 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
     buyPercentage,
     sellPercentage,
   } = realTimeStats;
+
+  const positionDisplay = useMemo(() => {
+    const pnlUsd =
+      pnlMode === "unrealized" ? position.unrealizedPnlUsd : position.realizedPnlUsd;
+    const pnlPct =
+      pnlMode === "unrealized" ? position.unrealizedPnlPct : 0;
+    return {
+      bought: formatPanelUsd(position.boughtUsd),
+      sold: formatPanelUsd(position.soldUsd),
+      holding: formatPanelUsd(position.holdingUsd),
+      pnlUsd,
+      pnlPct,
+    };
+  }, [pnlMode, position]);
 
   const handleTrade = () => {
     toast("BNB chain trading is coming soon", { icon: "⏳" });
@@ -491,7 +563,7 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
                 {timeRange} Vol
               </div>
               <div className="whitespace-nowrap text-[11px] text-[#E6E7EA]">
-                ${formatCompactNumber(Math.round(volume || 0))}
+                ${formatPanelUsd(volume || 0)}
               </div>
             </div>
             <div>
@@ -499,7 +571,7 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
               <div className="flex items-baseline gap-0.5 whitespace-nowrap text-[11px] text-[#70E0B0]">
                 <span>{formatCompactNumber(Math.round(buys ?? 0))}</span>
                 <span className="text-[#9CA3AF]">/</span>
-                <span className="text-[#70E0B0]">${formatCompactNumber(Math.round(buyVolume || 0))}</span>
+                <span className="text-[#70E0B0]">${formatPanelUsd(buyVolume || 0)}</span>
               </div>
             </div>
             <div>
@@ -507,7 +579,7 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
               <div className="flex items-baseline gap-0.5 whitespace-nowrap text-[11px] text-[#FF4D7F]">
                 <span>{formatCompactNumber(Math.round(sells ?? 0))}</span>
                 <span className="text-[#9CA3AF]">/</span>
-                <span className="text-[#FF4D7F]">${formatCompactNumber(Math.round(sellVolume || 0))}</span>
+                <span className="text-[#FF4D7F]">${formatPanelUsd(sellVolume || 0)}</span>
               </div>
             </div>
             <div>
@@ -518,7 +590,7 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
                   netVolume >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]",
                 )}
               >
-                {netVolume >= 0 ? "+" : "-"}${formatCompactNumber(Math.round(Math.abs(netVolume)))}
+                {netVolume >= 0 ? "+" : "-"}${formatPanelUsd(Math.abs(netVolume))}
               </div>
             </div>
           </div>
@@ -597,9 +669,9 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
         </div>
         <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium text-[#E6E7EA]" style={{ borderColor: AX.border, backgroundColor: AX.surface }}>
           <FaWallet size={11} className="text-[#9CA3AF]" />
-          <span>0</span>
+          <span>{user ? selectedWalletCount : 0}</span>
           <BnbIcon size={11} />
-          <span>0.00</span>
+          <span>{bnbBalance > 0 ? bnbBalance.toFixed(4).replace(/\.?0+$/, "") : "0.00"}</span>
         </div>
       </div>
 
@@ -955,6 +1027,15 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
           const isPnl = label === "UPnL";
           const color =
             idx === 1 ? AX.sell : idx === 2 ? "#3b82f6" : AX.mint;
+          const valueLabel =
+            label === "Bought"
+              ? positionDisplay.bought
+              : label === "Sold"
+                ? positionDisplay.sold
+                : label === "Holding"
+                  ? positionDisplay.holding
+                  : null;
+          const pnlPositive = positionDisplay.pnlUsd >= 0;
           return (
             <div
               key={label}
@@ -975,8 +1056,12 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
                   </span>
                   <div className="flex items-center gap-1">
                     <BnbIcon size={10} />
-                    <span className="text-[9px] font-semibold" style={{ color: AX.mint }}>
-                      +$0 (+0.0%)
+                    <span
+                      className="text-[9px] font-semibold"
+                      style={{ color: pnlPositive ? AX.mint : AX.sell }}
+                    >
+                      {pnlPositive ? "+" : "-"}${formatPanelUsd(Math.abs(positionDisplay.pnlUsd))}
+                      {pnlMode === "unrealized" ? ` (${pnlPositive ? "+" : ""}${positionDisplay.pnlPct.toFixed(1)}%)` : ""}
                     </span>
                   </div>
                 </button>
@@ -988,7 +1073,7 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
                   <div className="flex items-center gap-1">
                     <BnbIcon size={10} />
                     <span className="text-[10px] font-semibold" style={{ color }}>
-                      $0
+                      ${valueLabel}
                     </span>
                   </div>
                 </>

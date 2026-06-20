@@ -4,6 +4,7 @@ import { getCachedData as getWsPrefetchData } from '~/utils/ohlcPrefetchManager'
 import {
   buildBnbOhlcUrl,
   fetchBnbUsdPrice,
+  resolveBnbTradeMint,
   transformBnbOhlcCandles,
 } from '~/utils/bnbToken';
 
@@ -62,10 +63,16 @@ export default function useBackgroundOHLCPreload(interval: string = '1s', timefr
   // RACE FIX: Compute the current mint synchronously during render (not in effect).
   // router.query updates on the same render as the route change, so this always
   // reflects the current page's token — unlike backgroundData state which lags.
-  const { _mint: qMint, id: qId } = router.query;
-  const renderMint = (typeof qMint === 'string' && qMint.length >= 32)
-    ? qMint
-    : (typeof qId === 'string' && qId.length >= 32 ? qId : null);
+  const renderMint = (() => {
+    if (chain === 'bnb') {
+      const bnbMint = resolveBnbTradeMint(router.query, router.asPath);
+      return bnbMint || null;
+    }
+    const { _mint: qMint, id: qId } = router.query;
+    if (typeof qMint === 'string' && qMint.length >= 32) return qMint;
+    if (typeof qId === 'string' && qId.length >= 32) return qId;
+    return null;
+  })();
 
   useEffect(() => {
     const mintAddress = renderMint;
@@ -142,7 +149,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1s', timefr
               url.searchParams.set('interval', interval);
               url.searchParams.set('timeframe', timeframe);
             } else if (chain === 'bnb') {
-              url = new URL(buildBnbOhlcUrl(mintAddress, '1m', '24h'));
+              url = new URL(buildBnbOhlcUrl(mintAddress, interval, timeframe));
             } else {
               // Solana uses new /v1/ohlcv/{tokenAddress} endpoint
               // Use display resolution for preload so it covers more history
@@ -216,7 +223,7 @@ export default function useBackgroundOHLCPreload(interval: string = '1s', timefr
         fetchRef.current = null;
       }
     };
-  }, [renderMint, interval, timeframe]);
+  }, [renderMint, interval, timeframe, chain, router.asPath]);
 
   // RACE FIX: Synchronous render-time validation. During the first render after
   // token navigation, backgroundData state still holds the OLD token's candles

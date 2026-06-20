@@ -90,6 +90,22 @@ function parseCandle(c: any): OHLCCandle {
   };
 }
 
+function getWsSnapshotPayload(message: any): any[] {
+  if (Array.isArray(message?.candles)) return message.candles;
+  if (Array.isArray(message?.data)) return message.data;
+  return [];
+}
+
+function getWsLivePayload(message: any): any | null {
+  if (message?.candle && typeof message.candle === 'object' && !Array.isArray(message.candle)) {
+    return message.candle;
+  }
+  if (message?.data && typeof message.data === 'object' && !Array.isArray(message.data)) {
+    return message.data;
+  }
+  return null;
+}
+
 /** Write WS snapshot into the global OHLC cache used by useBackgroundOHLCPreload. */
 function writeToGlobalCache(mint: string, data: OHLCCandle[], chain: OhlcPrefetchChain): void {
   const interval = chain === 'bnb' ? '1s' : '1h';
@@ -186,7 +202,7 @@ export function prefetchViaWS(
           if (message.type === 'pong') return;
 
           if (message.type === 'snapshot') {
-            const candles = parseCandlesFromSnapshot(message.data, chain).sort(
+            const candles = parseCandlesFromSnapshot(getWsSnapshotPayload(message), chain).sort(
               (a, b) => a.unix_time - b.unix_time,
             );
             snapshotData = candles;
@@ -214,8 +230,10 @@ export function prefetchViaWS(
             return;
           }
 
-          if (message.type === 'candle' && message.data) {
-            realtimeBuffer.push(parseRealtimeCandle(message.data, chain));
+          if (message.type === 'candle') {
+            const liveCandle = getWsLivePayload(message);
+            if (!liveCandle) return;
+            realtimeBuffer.push(parseRealtimeCandle(liveCandle, chain));
             return;
           }
         } catch {
@@ -346,8 +364,10 @@ export function handoffConnection(
         handedWs.send(JSON.stringify({ type: 'pong' }));
         return;
       }
-      if (message.type === 'candle' && message.data) {
-        realtimeBuffer.push(parseCandle(message.data));
+      if (message.type === 'candle') {
+        const liveCandle = getWsLivePayload(message);
+        if (!liveCandle) return;
+        realtimeBuffer.push(parseRealtimeCandle(liveCandle, currentChain));
       }
     } catch {}
   };

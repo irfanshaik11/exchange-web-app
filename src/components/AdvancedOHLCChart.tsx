@@ -13,6 +13,7 @@ import {
   buildBnbOhlcUrl,
   buildBnbOhlcWsUrl,
   buildBnbSeedCandles,
+  fetchBnbOhlcvCandles,
   fetchBnbUsdPrice,
   transformBnbOhlcCandles,
 } from "../utils/bnbToken";
@@ -114,6 +115,23 @@ const DEFAULT_SUPPLY = 1;
 const CHART_DEBUG = false; // Set to true only when debugging chart issues
 
 const isHttpOhlcNetwork = (network?: string) => network === "monad";
+
+/** token-bnb WS uses `candles`; Solana token-service uses `data`. */
+function getWsSnapshotCandles(message: any): any[] {
+  if (Array.isArray(message?.candles)) return message.candles;
+  if (Array.isArray(message?.data)) return message.data;
+  return [];
+}
+
+function getWsLiveCandle(message: any): any | null {
+  if (message?.candle && typeof message.candle === "object" && !Array.isArray(message.candle)) {
+    return message.candle;
+  }
+  if (message?.data && typeof message.data === "object" && !Array.isArray(message.data)) {
+    return message.data;
+  }
+  return null;
+}
 
 function rawSnapshotToBackendCandles(
   raw: any[],
@@ -1264,6 +1282,49 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
       clearInterval(id);
     };
   }, [network, mint, pairAddress]);
+
+  // BNB: HTTP bootstrap on mount so first click (no hover prefetch) still paints immediately.
+  useEffect(() => {
+    if (network !== "bnb") return;
+    const tokenId = mint || pairAddress;
+    if (!tokenId || lastGoodCandlesRef.current.length > 0) return;
+
+    let cancelled = false;
+    const { interval: currentInterval, timeframe: currentTimeframe } =
+      latestParamsRef.current;
+
+    void (async () => {
+      const items = await fetchBnbOhlcvCandles(
+        tokenId,
+        currentInterval,
+        currentTimeframe,
+      );
+      if (cancelled || items.length === 0) return;
+      lastGoodCandlesRef.current = items;
+      cachedIntervalRef.current = currentInterval;
+      cachedTimeframeRef.current = currentTimeframe;
+      setCandles(items);
+      setIsLoading(false);
+      hasInitializedRef.current = true;
+      firstLoadRef.current = false;
+      updateChartMetrics();
+      onDataUpdate?.(items);
+      if (!chartPopulatedRef.current && widgetRef.current) {
+        widgetRef.current.onChartReady?.(() => {
+          try {
+            widgetRef.current?.activeChart?.()?.resetData?.();
+            chartPopulatedRef.current = true;
+          } catch {
+            // chart not ready
+          }
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [network, mint, pairAddress, onDataUpdate, updateChartMetrics]);
 
   useEffect(() => {
     if (!initialTokenId && (mint || pairAddress)) {
@@ -3365,7 +3426,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         // If HTTP/preloaded data exists, merge newer candles.
         // If no cached data, use entire snapshot to populate the chart.
         if (message.type === "snapshot") {
-          const snapshotCandles = (message.data as Array<any>) || [];
+          const snapshotCandles = getWsSnapshotCandles(message);
           wsGapBridgedRef.current = false;
 
           if (message.supply && message.mint) {
@@ -3524,7 +3585,9 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         }
 
         // Handle real-time candle updates - this is what we care about
-        if (message.type === "candle" && message.data) {
+        if (message.type === "candle") {
+          const ohlcData = getWsLiveCandle(message);
+          if (!ohlcData) return;
           // WS is providing live data — stop HTTP polling
           wsConnectedRef.current = true;
 
@@ -3538,7 +3601,6 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
               tvResolution: tvResolutionRef.current,
               cacheSize: lastGoodCandlesRef.current.length,
             });
-            const ohlcData = message.data;
             const oneSecCandle = rawRealtimeToBackendCandle(
               ohlcData,
               latestParamsRef.current.network,
@@ -3563,8 +3625,6 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
           // Throttle WS candle logs (~every 10th candle) to reduce console noise
           wsLogCountRef.current++;
           const shouldLogWs = wsLogCountRef.current % 10 === 0;
-
-          const ohlcData = message.data;
 
           const oneSecCandle = rawRealtimeToBackendCandle(
             ohlcData,
@@ -4593,28 +4653,53 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
                 // Bail out immediately if data arrived between the outer check and here
                 if (lastGoodCandlesRef.current.length) { resolve(); return; }
                 snapshotResolverRef.current = resolve;
+                const waitMs =
+                  latestParamsRef.current.network === "bnb" ? 1200 : 400;
                 setTimeout(() => {
                   snapshotResolverRef.current = null;
                   resolve();
-                }, 400);
+                }, waitMs);
               });
             }
 
-            // If still no data, check WS health (dedicated OR persistent connection)
+            // If still no data, bootstrap from HTTP (BNB) or seed price before zero placeholder.
             if (!lastGoodCandlesRef.current.length) {
-              const dedicatedWsOpen = wsRef.current && wsRef.current.readyState === WebSocket.OPEN;
-              const wsOpen = dedicatedWsOpen;
-              if (wsOpen) {
-                // WS is healthy — server had 1s to send snapshot but didn't → token has no data
-              } else {
-                // WS not connected — connection failed or still connecting
+              const currentNetwork = latestParamsRef.current.network;
+              if (currentNetwork === "bnb") {
+                const tokenId =
+                  latestParamsRef.current.mint ||
+                  latestParamsRef.current.pairAddress;
+                if (tokenId) {
+                  const items = await fetchBnbOhlcvCandles(
+                    tokenId,
+                    requestedInterval,
+                    requestedTimeframe,
+                  );
+                  if (items.length > 0) {
+                    lastGoodCandlesRef.current = items;
+                  }
+                }
               }
 
-              const now = Math.floor(Date.now() / 1000);
-              const placeholderCandle: BackendOHLCData = {
-                unix_time: now, o: 0, h: 0, l: 0, c: 0, v_usd: 0,
-              };
-              lastGoodCandlesRef.current = [placeholderCandle];
+              if (!lastGoodCandlesRef.current.length) {
+                const seed = seedPriceUsdRef.current;
+                if (currentNetwork === "bnb" && seed && seed > 0) {
+                  lastGoodCandlesRef.current = buildBnbSeedCandles(seed);
+                } else {
+                  const now = Math.floor(Date.now() / 1000);
+                  lastGoodCandlesRef.current = [
+                    {
+                      unix_time: now,
+                      o: 0,
+                      h: 0,
+                      l: 0,
+                      c: 0,
+                      v_usd: 0,
+                    },
+                  ];
+                }
+              }
+
               cachedIntervalRef.current = requestedInterval;
               cachedTimeframeRef.current = requestedTimeframe;
             }

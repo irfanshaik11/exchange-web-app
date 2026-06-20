@@ -12,7 +12,7 @@ import {
 } from "~/contexts/PulseFiltersContext";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
-import { resolveBnbMarketCapUsd, resolveBnbVolumeUsd } from "~/utils/bnbToken";
+import { resolveBnbMarketCapUsd, resolveBnbVolumeUsd, resolveBnbHolderCount, resolveBnbLiquidityUsd, resolveBnbTop10HoldersPct, resolveBnbDevHoldingPct, resolveBnbSniperPct } from "~/utils/bnbToken";
 import {
   FaUser,
   FaGlobe,
@@ -5133,7 +5133,9 @@ function PulseTable({
           ? parseFloat(filters.top10HoldersPercent)
           : NaN;
       filtered = filtered.filter((token) => {
-        const pct = (token as any).top10_holders_pct ?? 0;
+        const pct = isBnbChainToken(token)
+          ? (resolveBnbTop10HoldersPct(token) ?? 0)
+          : ((token as any).top10_holders_pct ?? 0);
         if (!isNaN(minPct) && pct < minPct) return false;
         if (!isNaN(maxPct) && pct > maxPct) return false;
         return true;
@@ -5183,10 +5185,11 @@ function PulseTable({
     if (filters.minLiquidity) {
       const minLiq = parseFloat(filters.minLiquidity);
       filtered = filtered.filter((token) => {
-        const liquidity =
-          (token as any).total_liquidity_usd ??
-          (token as any).liquidity_usd ??
-          0;
+        const liquidity = isBnbChainToken(token)
+          ? (resolveBnbLiquidityUsd(token) ?? 0)
+          : ((token as any).total_liquidity_usd ??
+              (token as any).liquidity_usd ??
+              0);
         return liquidity >= minLiq;
       });
     }
@@ -5194,10 +5197,11 @@ function PulseTable({
     if (filters.maxLiquidity) {
       const maxLiq = parseFloat(filters.maxLiquidity);
       filtered = filtered.filter((token) => {
-        const liquidity =
-          (token as any).total_liquidity_usd ??
-          (token as any).liquidity_usd ??
-          0;
+        const liquidity = isBnbChainToken(token)
+          ? (resolveBnbLiquidityUsd(token) ?? 0)
+          : ((token as any).total_liquidity_usd ??
+              (token as any).liquidity_usd ??
+              0);
         return liquidity <= maxLiq;
       });
     }
@@ -9192,6 +9196,25 @@ function PulseTable({
                 ? `/bnb-trade/${tokenMint}${queryParamsStr ? `?${queryParamsStr}` : ""}`
                 : `/trade/${tokenMint}`;
 
+              const runTradePreload = () => {
+                preloadTradeChart(
+                  {
+                    mint: tokenMint,
+                    pairAddress,
+                    chain: isBnbToken ? "bnb" : undefined,
+                    name: (token as any)?.name,
+                    symbol: (token as any)?.symbol,
+                    priceUsd:
+                      (token as any)?.price_usd ||
+                      (token as any)?.priceUsd,
+                    marketCapUsd: mcVal > 0 ? mcVal : undefined,
+                    image: extractTokenImage(token as any) || "",
+                    launchpadProtocol: (token as any)?.launchpad_protocol,
+                  },
+                  { router, tradeUrl: tokenHref },
+                );
+              };
+
               return (
                 <div key={tokenMint} style={style}>
                   <div style={{ height: '100%', paddingBottom: "4px" }}>
@@ -9216,23 +9239,7 @@ function PulseTable({
                         }
 
                         // Full preload pipeline: WS + route + metadata + OHLC + trades
-                        preloadTradeChart(
-                          {
-                            mint: tokenMint,
-                            pairAddress,
-                            chain: isBnbToken ? "bnb" : undefined,
-                            name: (token as any)?.name,
-                            symbol: (token as any)?.symbol,
-                            priceUsd:
-                              (token as any)?.price_usd ||
-                              (token as any)?.priceUsd,
-                            marketCapUsd: mcVal > 0 ? mcVal : undefined,
-                            image: extractTokenImage(token as any) || "",
-                            launchpadProtocol: (token as any)
-                              ?.launchpad_protocol,
-                          },
-                          { router, tradeUrl: tokenHref },
-                        );
+                        runTradePreload();
 
                         // Prefetch buy order so quick-buy click gets a cached order (<1ms vs ~700ms)
                         if (tokenMint && thunderAmount) {
@@ -9242,6 +9249,9 @@ function PulseTable({
                             side: "buy",
                           });
                         }
+                      }}
+                      onMouseDown={() => {
+                        runTradePreload();
                       }}
                       onMouseLeave={(e) => {
                         // PHASE 3: Use CSS class instead of inline style
@@ -9832,10 +9842,12 @@ function PulseTable({
                                         />
                                         <span className="text-[10px] text-white">
                                           {formatHolderCount(
-                                            token.holder_count ??
-                                              token.total_holders ??
-                                              token.unique_wallets_24h ??
-                                              0,
+                                            isBnbChainToken(token)
+                                              ? (resolveBnbHolderCount(token) ?? 0)
+                                              : (token.holder_count ??
+                                                  token.total_holders ??
+                                                  token.unique_wallets_24h ??
+                                                  0),
                                           )}
                                         </span>
                                         {/* Holder Count Tooltip */}

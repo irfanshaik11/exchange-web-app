@@ -1,5 +1,14 @@
 import type { BnbFilters } from '~/contexts/BnbFiltersContext';
-import { resolveBnbMarketCapUsd } from '~/utils/bnbToken';
+import {
+  resolveBnbMarketCapUsd,
+  resolveBnbLiquidityUsd,
+  resolveBnbVolumeUsd,
+  resolveBnbHolderCount,
+  resolveBnbDevHoldingPct,
+  resolveBnbTop10HoldersPct,
+  resolveBnbSniperPct,
+  resolveBnbCreatorWallet,
+} from '~/utils/bnbToken';
 
 const toNum = (v: any): number => {
   const n = Number(v);
@@ -55,12 +64,7 @@ export function applyBnbFilters(tokens: any[], filters: BnbFilters): any[] {
         .split(',')
         .map((w) => w.trim().toLowerCase())
         .filter(Boolean);
-      const devWallet = (
-        token.dev_wallet ??
-        token.creator_wallet ??
-        token.creator ??
-        ''
-      ).toLowerCase();
+      const devWallet = (resolveBnbCreatorWallet(token) ?? '').toLowerCase();
       if (wallets.length && !wallets.some((w) => devWallet.includes(w))) return false;
     }
 
@@ -90,7 +94,7 @@ export function applyBnbFilters(tokens: any[], filters: BnbFilters): any[] {
 
     // Liquidity (stored in USD; filter is in K)
     if (filters.liquidityMin !== '' || filters.liquidityMax !== '') {
-      const liq = toNum(pick(token.liquidity_usd, token.total_liquidity_usd, token.liquidityUsd));
+      const liq = resolveBnbLiquidityUsd(token) ?? 0;
       const minK = filters.liquidityMin !== '' ? toNum(filters.liquidityMin) * 1000 : -Infinity;
       const maxK = filters.liquidityMax !== '' ? toNum(filters.liquidityMax) * 1000 : Infinity;
       if (liq < minK || liq > maxK) return false;
@@ -106,7 +110,7 @@ export function applyBnbFilters(tokens: any[], filters: BnbFilters): any[] {
 
     // Volume (K)
     if (filters.volumeMin !== '' || filters.volumeMax !== '') {
-      const vol = toNum(pick(token.volume_24h, token.volumeUsd24h));
+      const vol = resolveBnbVolumeUsd(token) ?? 0;
       const minK = filters.volumeMin !== '' ? toNum(filters.volumeMin) * 1000 : -Infinity;
       const maxK = filters.volumeMax !== '' ? toNum(filters.volumeMax) * 1000 : Infinity;
       if (vol < minK || vol > maxK) return false;
@@ -132,19 +136,19 @@ export function applyBnbFilters(tokens: any[], filters: BnbFilters): any[] {
 
     // Total Holders
     if (filters.totalHoldersMin !== '' || filters.totalHoldersMax !== '') {
-      const holders = toNum(pick(token.total_holders, token.holder_count, token.holderCount));
+      const holders = resolveBnbHolderCount(token) ?? 0;
       if (!inRange(holders, filters.totalHoldersMin, filters.totalHoldersMax)) return false;
     }
 
     // Dev Holding %
     if (filters.devHoldingMin !== '' || filters.devHoldingMax !== '') {
-      const dh = toNum(pick(token.dev_holding_pct, token.dev_holding, token.creator_holding_pct));
+      const dh = resolveBnbDevHoldingPct(token) ?? 0;
       if (!inRange(dh, filters.devHoldingMin, filters.devHoldingMax)) return false;
     }
 
     // Top 10 Holding %
     if (filters.top10HoldingMin !== '' || filters.top10HoldingMax !== '') {
-      const t10 = toNum(pick(token.top10_holding_pct, token.top_10_holder_percent));
+      const t10 = resolveBnbTop10HoldersPct(token) ?? 0;
       if (!inRange(t10, filters.top10HoldingMin, filters.top10HoldingMax)) return false;
     }
 
@@ -162,7 +166,7 @@ export function applyBnbFilters(tokens: any[], filters: BnbFilters): any[] {
 
     // Snipers Hold %
     if (filters.snipersHoldMin !== '' || filters.snipersHoldMax !== '') {
-      const sn = toNum(pick(token.snipers_hold_pct, token.sniper_percent));
+      const sn = resolveBnbSniperPct(token) ?? 0;
       if (!inRange(sn, filters.snipersHoldMin, filters.snipersHoldMax)) return false;
     }
 

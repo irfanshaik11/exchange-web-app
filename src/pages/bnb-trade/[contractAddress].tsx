@@ -8,8 +8,13 @@ import TradeHeader from '../../components/trade/TradeHeader';
 import TradeTabs from '../../components/trade/TradeTabs';
 import AdvancedOHLCChart from '../../components/AdvancedOHLCChart';
 import useBackgroundOHLCPreload from '../../hooks/useBackgroundOHLCPreload';
+import useBnbHoldersRest from '../../hooks/useBnbHoldersRest';
+import useBnbTradeHeaderMetrics from '../../hooks/useBnbTradeHeaderMetrics';
+import useBnbTradeVolumeStats from '../../hooks/useBnbTradeVolumeStats';
 import { formatMarketCap } from '../../utils/formatPrice';
-import { normalizeBscToken } from '../../hooks/useBscPulseWebSocket';
+import {
+  normalizeBscToken,
+} from '../../hooks/useBscPulseWebSocket';
 import {
   type BnbOhlcItem,
   resolveBnbCirculatingSupply,
@@ -17,9 +22,28 @@ import {
   resolveBnbPriceUsd,
   fetchBnbTokenWithMetrics,
   mergeBnbTradeToken,
+  resolveBnbTradeMint,
+  buildBnbDetailPatch,
+  applyBnbDetailPatch,
 } from '../../utils/bnbToken';
 
 const BnbTrades = dynamic(() => import('../../components/trade/BnbTrades'), {
+  ssr: false,
+});
+
+const BnbTopTradersTable = dynamic(() => import('../../components/trade/BnbTopTradersTable'), {
+  ssr: false,
+});
+
+const BnbHoldersTable = dynamic(() => import('../../components/trade/BnbHoldersTable'), {
+  ssr: false,
+});
+
+const BnbDevTokensTable = dynamic(() => import('../../components/trade/BnbDevTokensTable'), {
+  ssr: false,
+});
+
+const TokenLimitOrders = dynamic(() => import('../../components/trade/TokenLimitOrders'), {
   ssr: false,
 });
 
@@ -68,6 +92,8 @@ export default function BnbTradePage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedTab, setSelectedTab] = useState('Trades');
+  const [devTokensCount, setDevTokensCount] = useState<number | undefined>(undefined);
+  const [holdersTabCount, setHoldersTabCount] = useState<number | undefined>(undefined);
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
   const [chartMetrics, setChartMetrics] = useState<{
@@ -77,10 +103,27 @@ export default function BnbTradePage() {
   }>({});
   const [ohlcCandles, setOhlcCandles] = useState<BnbOhlcItem[] | null>(null);
 
-  const mintAddress = useMemo(() => {
-    if (typeof _mint === 'string' && _mint.trim()) return _mint.trim();
-    return typeof contractAddress === 'string' ? contractAddress.trim() : '';
-  }, [_mint, contractAddress]);
+  const mintAddress = useMemo(
+    () => resolveBnbTradeMint(router.query, router.asPath),
+    [router.query, router.asPath],
+  );
+
+  const { totalHolders: restHoldersCount } = useBnbHoldersRest(mintAddress, {
+    enabled: Boolean(mintAddress),
+  });
+
+  const {
+    holderCount: headerHolderCount,
+    devTokensCreated,
+    devTokensMigrated,
+    kolCount,
+  } = useBnbTradeHeaderMetrics(mintAddress, {
+    enabled: Boolean(mintAddress),
+  });
+
+  const { statsByWindow: tradeVolumeStats } = useBnbTradeVolumeStats(mintAddress, {
+    enabled: Boolean(mintAddress),
+  });
 
   const optimisticToken = useMemo(() => {
     if (!_name && !_symbol && !_mint && !contractAddress) return null;
@@ -109,15 +152,19 @@ export default function BnbTradePage() {
     }
 
     let cancelled = false;
+    const optimisticRef = optimisticToken;
 
-    const loadToken = async () => {
-      setLoading(true);
+    const loadToken = async (showLoading = false) => {
+      if (showLoading) setLoading(true);
       try {
         const enriched = await fetchBnbTokenWithMetrics(mintAddress);
-        const normalized = enriched
-          ? normalizeBscToken({ ...enriched, mint: mintAddress })
+        const detailPatch = enriched
+          ? applyBnbDetailPatch(buildBnbDetailPatch({ ...enriched, mint: mintAddress }, mintAddress))
           : null;
-        const found = mergeBnbTradeToken(optimisticToken, normalized);
+        const normalized = enriched
+          ? normalizeBscToken({ ...enriched, ...detailPatch, mint: mintAddress })
+          : null;
+        const found = mergeBnbTradeToken(optimisticRef, normalized);
 
         if (!cancelled) {
           setTokenData(found);
@@ -126,19 +173,35 @@ export default function BnbTradePage() {
         console.error('[BnbTradePage] failed to load token', error);
         if (!cancelled) setTokenData(null);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && showLoading) setLoading(false);
       }
     };
 
-    void loadToken();
+    void loadToken(true);
+    const refreshId = setInterval(() => {
+      void loadToken(false);
+    }, 30_000);
     return () => {
       cancelled = true;
+      clearInterval(refreshId);
     };
   }, [router.isReady, mintAddress, optimisticToken]);
 
   const displayToken = useMemo((): any => {
-    const base = mergeBnbTradeToken(optimisticToken, tokenData);
-    if (!base) return null;
+    const withDetail = mergeBnbTradeToken(optimisticToken, tokenData);
+    if (!withDetail) return null;
+
+    const volumePatch: Record<string, number> = {};
+    for (const window of ['5m', '1h', '6h', '24h'] as const) {
+      const stats = tradeVolumeStats?.[window];
+      if (!stats) continue;
+      volumePatch[`total_buys_${window}`] = stats.buys;
+      volumePatch[`total_sells_${window}`] = stats.sells;
+      volumePatch[`total_buy_volume_${window}`] = stats.buyVolume;
+      volumePatch[`total_sell_volume_${window}`] = stats.sellVolume;
+    }
+
+    const base = { ...withDetail, ...volumePatch };
     const marketCap = resolveBnbMarketCapUsd(base);
     return {
       ...base,
@@ -148,12 +211,55 @@ export default function BnbTradePage() {
       fully_diluted_value: marketCap ?? base.fully_diluted_value,
       total_fully_diluted_valuation:
         marketCap ?? base.total_fully_diluted_valuation,
+      dev_tokens_created: devTokensCreated,
+      dev_tokens_migrated: devTokensMigrated,
+      kol_count: kolCount,
+      holder_count: headerHolderCount ?? base.holder_count,
+      total_holders: headerHolderCount ?? base.total_holders,
       chart_live_price_usd: chartMetrics.lastPriceUsd ?? null,
       chart_live_market_cap_usd: chartMetrics.lastMarketCapUsd ?? null,
       max_market_cap_usd: chartMetrics.maxMarketCapUsd ?? null,
       _chain: 'bnb',
     };
-  }, [chartMetrics, mintAddress, optimisticToken, tokenData]);
+  }, [
+    chartMetrics,
+    devTokensCreated,
+    devTokensMigrated,
+    headerHolderCount,
+    kolCount,
+    mintAddress,
+    optimisticToken,
+    tokenData,
+    tradeVolumeStats,
+  ]);
+
+  const bnbWsTokenInfo = useMemo(
+    () => ({
+      name: displayToken?.name,
+      symbol: displayToken?.symbol,
+      mint: mintAddress,
+      created_at: displayToken?.created_at || displayToken?.launch_time,
+      dev_tokens_created: devTokensCreated,
+      dev_tokens_migrated: devTokensMigrated,
+    }),
+    [
+      displayToken?.created_at,
+      displayToken?.launch_time,
+      displayToken?.name,
+      displayToken?.symbol,
+      devTokensCreated,
+      devTokensMigrated,
+      mintAddress,
+    ],
+  );
+
+  const bnbHolderSummary = useMemo(
+    () => ({
+      kol_count: kolCount,
+      total_holders: headerHolderCount,
+    }),
+    [headerHolderCount, kolCount],
+  );
 
   const priorityMarketCapUsd = useMemo(
     () =>
@@ -272,7 +378,7 @@ export default function BnbTradePage() {
     return () => window.removeEventListener('resize', handleResize);
   }, [topPanePx, getResponsiveLimits]);
 
-  const canRenderChart = mintAddress && mintAddress.length >= 20;
+  const canRenderChart = Boolean(mintAddress) && /^0x[a-f0-9]{40}$/.test(mintAddress);
 
   const closeModal = useCallback(() => {
     setIsClosingModal(true);
@@ -335,6 +441,9 @@ export default function BnbTradePage() {
                   livePriceUsd={chartMetrics.lastPriceUsd}
                   liveMarketCapUsd={priorityMarketCapUsd}
                   circulatingSupply={circulatingSupply}
+                  wsTokenInfo={bnbWsTokenInfo as any}
+                  holderSummary={bnbHolderSummary as any}
+                  restHoldersCount={headerHolderCount ?? restHoldersCount}
                 />
               </div>
 
@@ -371,7 +480,7 @@ export default function BnbTradePage() {
                     className="flex h-full items-center justify-center"
                     style={{ color: AX.muted }}
                   >
-                    Chart data not available for this BNB token
+                    {!mintAddress ? 'Loading chart…' : 'Chart data not available for this BNB token'}
                   </div>
                 )}
               </div>
@@ -425,6 +534,8 @@ export default function BnbTradePage() {
                 <TradeTabs
                   selectedTab={selectedTab}
                   setSelectedTab={setSelectedTab}
+                  holdersCount={holdersTabCount ?? headerHolderCount ?? restHoldersCount}
+                  devTokensCount={devTokensCount}
                 />
               </div>
               <div className="relative min-h-[300px] flex-1">
@@ -435,11 +546,44 @@ export default function BnbTradePage() {
                     <BnbTrades tokenAddress={mintAddress} />
                   )}
                 </div>
-                {selectedTab !== 'Trades' && (
-                  <div className="flex h-full items-center justify-center text-xs text-neutral-500">
-                    {selectedTab} — coming soon for BNB
-                  </div>
-                )}
+                <div
+                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Holders' ? '' : 'hidden'}`}
+                >
+                  {canRenderChart && (
+                    <BnbHoldersTable
+                      tokenAddress={mintAddress}
+                      onTotalCountChange={setHoldersTabCount}
+                    />
+                  )}
+                </div>
+                <div
+                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Top Traders' ? '' : 'hidden'}`}
+                >
+                  {canRenderChart && (
+                    <BnbTopTradersTable tokenAddress={mintAddress} />
+                  )}
+                </div>
+                <div
+                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Dev Tokens' ? '' : 'hidden'}`}
+                >
+                  {canRenderChart && (
+                    <BnbDevTokensTable
+                      tokenAddress={mintAddress}
+                      onTotalCountChange={setDevTokensCount}
+                    />
+                  )}
+                </div>
+                <div
+                  className={`absolute inset-0 flex flex-col ${selectedTab === 'Orders' ? '' : 'hidden'}`}
+                >
+                  {canRenderChart && (
+                    <TokenLimitOrders
+                      chain="bnb"
+                      liveMarketCapUsd={priorityMarketCapUsd}
+                      currentTokenAddress={mintAddress}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -456,6 +600,7 @@ export default function BnbTradePage() {
                   liveMarketCapUsd={priorityMarketCapUsd}
                   livePriceUsd={chartMetrics.lastPriceUsd}
                   ohlcCandles={ohlcCandles}
+                  tradeVolumeStats={tradeVolumeStats}
                 />
               )}
             </div>
@@ -513,6 +658,7 @@ export default function BnbTradePage() {
                   liveMarketCapUsd={priorityMarketCapUsd}
                   livePriceUsd={chartMetrics.lastPriceUsd}
                   ohlcCandles={ohlcCandles}
+                  tradeVolumeStats={tradeVolumeStats}
                 />
               </div>
             </div>

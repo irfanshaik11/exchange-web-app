@@ -575,3 +575,18 @@ export async function getMonadBalance(address: string) {
     return null;
   }
 }
+
+export async function getBnbBalance(address: string) {
+  const rpcUrl =
+    process.env.BSC_RPC_URL ||
+    process.env.NEXT_PUBLIC_BSC_RPC_URL ||
+    "https://bsc-dataseed.binance.org";
+  try {
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const weiBalance = await provider.getBalance(address);
+    return Number(weiBalance) / 1e18;
+  } catch (error) {
+    console.error("Failed to fetch BNB balance:", error);
+    return null;
+  }
+}
