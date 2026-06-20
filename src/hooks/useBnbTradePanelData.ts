@@ -79,7 +79,10 @@ function positionFromActiveRow(
   const soldTokens = Number(row.sold) || 0;
   const boughtUsd = Number(row.boughtUsdValue) || 0;
   const soldUsd = Number(row.soldUsdValue) || 0;
-  const holdingTokens = Number(row.remaining) ?? Math.max(0, boughtTokens - soldTokens);
+  const holdingTokensRaw = Number(row.remaining);
+  const holdingTokens = Number.isFinite(holdingTokensRaw) && holdingTokensRaw >= 0
+    ? holdingTokensRaw
+    : Math.max(0, boughtTokens - soldTokens);
   const holdingUsd =
     Number(row.remainingUsdValue) ||
     (priceUsd > 0 && holdingTokens > 0

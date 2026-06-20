@@ -1877,7 +1877,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
   // Abort controller for predictive scroll-left prefetch (Phase 4: fetches older data before user reaches edge)
   const predictivePrefetchAbortRef = useRef<AbortController | null>(null);
   const bnbPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const bnbUsdRef = useRef(1);
+  const bnbUsdRef = useRef(600); // fallback until fetchBnbUsdPrice resolves; backend should send bnb_usd in WS snapshot
   // Track TradingView's actual current resolution (dropdown selection), separate from React interval prop
   const tvResolutionRef = useRef<string>(
     (() => {

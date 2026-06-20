@@ -225,9 +225,16 @@ let globalReconnectAttempt = 0;
 let globalIsConnecting = false;
 let globalIsConnected = false;
 let globalRestFetched = false; // Track whether initial REST fetch was done
+let globalNotifyPending = false;
 
 function notifyListeners() {
-  globalListeners.forEach((fn) => fn());
+  if (globalNotifyPending) return;
+  globalNotifyPending = true;
+  Promise.resolve().then(() => {
+    globalNotifyPending = false;
+    const snapshot = Array.from(globalListeners);
+    snapshot.forEach((fn) => fn());
+  });
 }
 
 // Phase 1: Fetch initial data via REST (fast, from Redis).

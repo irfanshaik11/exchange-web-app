@@ -999,7 +999,7 @@ const BnbTradeActionPanel: React.FC<BnbTradeActionPanelProps> = ({
             color: "#030304",
             boxShadow: mode === "buy" ? `0 0 20px ${AX.mintGlow}` : `0 0 20px ${AX.sellGlow}`,
           }}
-          disabled={!amount}
+          disabled={!(Number(amount) > 0)}
           onClick={handleTrade}
         >
           {isSniperMode ? (

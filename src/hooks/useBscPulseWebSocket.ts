@@ -332,7 +332,8 @@ function notify() {
   _notifyPending = true;
   Promise.resolve().then(() => {
     _notifyPending = false;
-    _listeners.forEach((l) => l());
+    const snapshot = Array.from(_listeners);
+    snapshot.forEach((l) => l());
   });
 }
 
