@@ -855,7 +855,22 @@ export const resolveBnbVolumeUsd = (
     const windowKey = `volume_${window}_usd` as const;
     const fromWindow = toFiniteNumber(vol[windowKey]);
     if (fromWindow != null && fromWindow > 0) return fromWindow;
+  }
 
+  // Flat top-level 5m fields
+  // Check before the cross-window nested fallback so a 5m request never silently returns 24h data.
+  if (window === '5m') {
+    const flat5m = toFiniteNumber(pick(
+      token?.volume_5m_usd,
+      token?.total_buy_volume_5m != null && token?.total_sell_volume_5m != null
+        ? (Number(token.total_buy_volume_5m) + Number(token.total_sell_volume_5m)) || undefined
+        : undefined,
+    ));
+    if (flat5m != null && flat5m > 0) return flat5m;
+  }
+
+  // Cross-window nested fallback — only reached when the window-specific key is missing.
+  if (vol && typeof vol === 'object' && !Array.isArray(vol)) {
     for (const fallback of ['volume_24h_usd', 'volume_6h_usd', 'volume_1h_usd', 'volume_5m_usd'] as const) {
       const n = toFiniteNumber(vol[fallback]);
       if (n != null && n > 0) return n;

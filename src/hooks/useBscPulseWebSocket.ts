@@ -108,9 +108,13 @@ export function normalizeBscToken(t: any): any {
     total_liquidity_usd: resolveBnbLiquidityUsd(t),
     volume_24h:
       volumeFromNested?.volume_24h ??
-      pick(t.volume24h, t.volume_24h, t.volumeUsd24h, typeof vol === 'number' ? vol : undefined),
-    total_buy_volume_24h: volumeFromNested?.total_buy_volume_24h ?? pick(t.total_buy_volume_24h),
-    total_sell_volume_24h: volumeFromNested?.total_sell_volume_24h ?? pick(t.total_sell_volume_24h),
+      pick(t.volume24h, t.volume_24h, t.volume_24h_usd, t.volumeUsd24h, typeof vol === 'number' ? vol : undefined),
+    total_buy_volume_24h:
+      volumeFromNested?.total_buy_volume_24h ??
+      pick(t.total_buy_volume_24h, t.buy_volume_24h_usd, t.buy_volume_24h),
+    total_sell_volume_24h:
+      volumeFromNested?.total_sell_volume_24h ??
+      pick(t.total_sell_volume_24h, t.sell_volume_24h_usd, t.sell_volume_24h),
     total_buys_24h:
       volumeFromNested?.total_buys_24h ?? pick(t.total_buys_24h, t.buys_24h, t.buys24h),
     total_sells_24h:
@@ -118,11 +122,13 @@ export function normalizeBscToken(t: any): any {
     total_buys_5m: volumeFromNested?.total_buys_5m ?? pick(t.total_buys_5m),
     total_sells_5m: volumeFromNested?.total_sells_5m ?? pick(t.total_sells_5m),
     total_buy_volume_5m:
-      volumeFromNested?.total_buy_volume_5m ?? pick(t.total_buy_volume_5m),
+      volumeFromNested?.total_buy_volume_5m ??
+      pick(t.total_buy_volume_5m, t.buy_volume_5m_usd, t.buy_volume_5m),
     total_sell_volume_5m:
-      volumeFromNested?.total_sell_volume_5m ?? pick(t.total_sell_volume_5m),
-    tx_count_24h: volumeFromNested?.tx_count_24h ?? toNum(t.tx_count_24h),
-    tx_count_5m: volumeFromNested?.tx_count_5m ?? toNum(t.tx_count_5m),
+      volumeFromNested?.total_sell_volume_5m ??
+      pick(t.total_sell_volume_5m, t.sell_volume_5m_usd, t.sell_volume_5m),
+    tx_count_24h: volumeFromNested?.tx_count_24h ?? toNum(t.tx_count_24h ?? t.count_24h),
+    tx_count_5m: volumeFromNested?.tx_count_5m ?? toNum(t.tx_count_5m ?? t.count_5m),
     holder_count: resolveBnbHolderCount(t),
     total_holders: resolveBnbHolderCount(t),
     bonding_curve_progress: bondingPct,
