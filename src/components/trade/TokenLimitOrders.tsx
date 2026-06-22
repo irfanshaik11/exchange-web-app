@@ -11,6 +11,10 @@ import { dispatchBalanceRefresh } from "~/utils/balanceEvents";
 import { formatMarketCap } from "~/utils/formatPrice";
 import { extractTokenImage, normalizeImageUrl } from "~/utils/images";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
+import {
+  buildBnbDetailPatch,
+  fetchBnbTokenDetail,
+} from "~/utils/bnbToken";
 
 type LimitOrderStatus = "Active" | "Cancelled" | "Completed" | "Failed";
 
@@ -56,6 +60,42 @@ const DEFAULT_PROTOCOL_COLOR = "#22c55e";
 const DEFAULT_PROTOCOL_ICON =
   "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
 const BADGE_PROTOCOLS = ["meteora", "bonk", "bags", "moonit", "moonshot", "moonshoot"];
+
+type OrderChain = "sol" | "bnb";
+
+function isEvmTokenAddress(address?: string | null): boolean {
+  return typeof address === "string" && /^0x[0-9a-fA-F]{40}$/.test(address);
+}
+
+function normalizeTokenAddress(address?: string | null): string {
+  if (!address) return "";
+  return isEvmTokenAddress(address) ? address.toLowerCase() : address;
+}
+
+function addressesMatch(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  return normalizeTokenAddress(a) === normalizeTokenAddress(b);
+}
+
+function filterOrdersForChain(
+  orders: LimitOrder[],
+  chain: OrderChain,
+  currentTokenAddress?: string | null,
+): LimitOrder[] {
+  let filtered = orders.filter((order) =>
+    chain === "bnb"
+      ? isEvmTokenAddress(order.tokenAddress)
+      : !isEvmTokenAddress(order.tokenAddress),
+  );
+
+  if (chain === "bnb" && currentTokenAddress) {
+    filtered = filtered.filter((order) =>
+      addressesMatch(order.tokenAddress, currentTokenAddress),
+    );
+  }
+
+  return filtered;
+}
 
 function formatAmount(value: number, maximumFractionDigits = 4) {
   if (!Number.isFinite(value)) return "—";
@@ -272,9 +312,14 @@ function mergeTokenMeta(...sources: TokenMetaInfo[]): TokenMetaInfo {
 interface TokenLimitOrdersProps {
   liveMarketCapUsd?: number | null;
   currentTokenAddress?: string | null;
+  chain?: OrderChain;
 }
 
-export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress }: TokenLimitOrdersProps) {
+export default function TokenLimitOrders({
+  liveMarketCapUsd,
+  currentTokenAddress,
+  chain = "sol",
+}: TokenLimitOrdersProps) {
   const router = useRouter();
   const { user } = useUser();
   const [orders, setOrders] = useState<LimitOrder[]>([]);
@@ -292,12 +337,18 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
 
   const hasAuth = Boolean(user?.bearerToken);
 
+  const nativeCurrency = chain === "bnb" ? "BNB" : "SOL";
+
   const activeOrders = useMemo(
     () =>
-      orders.filter(
-        (order) => order.status !== "Cancelled" && order.status !== "Failed",
+      filterOrdersForChain(
+        orders.filter(
+          (order) => order.status !== "Cancelled" && order.status !== "Failed",
+        ),
+        chain,
+        currentTokenAddress,
       ),
-    [orders],
+    [orders, chain, currentTokenAddress],
   );
 
   const hasOrders = activeOrders.length > 0;
@@ -328,7 +379,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
               const symbolLabel = meta.symbol || meta.name || "Tokens";
               const amountLabel =
                 order.type === "Buy"
-                  ? `${formatAmount(Number(order.solAmount))} SOL`
+                  ? `${formatAmount(Number(order.solAmount))} ${nativeCurrency}`
                   : `${formatAmount(Number(order.tokenAmount))} ${symbolLabel}`;
               const targetLabel = getOrderTargetLabel(order);
 
@@ -358,9 +409,13 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
         previousStatusesRef.current = nextStatuses;
 
             const activeStatuses: LimitOrderStatus[] = ["Active", "Failed"];
-        const filteredOrders = rawOrders.filter((order: LimitOrder) =>
-              activeStatuses.includes(order.status)
-            );
+        const filteredOrders = filterOrdersForChain(
+          rawOrders.filter((order: LimitOrder) =>
+            activeStatuses.includes(order.status),
+          ),
+          chain,
+          currentTokenAddress,
+        );
             setOrders(filteredOrders);
       } catch (error: any) {
         console.error("[TokenLimitOrders] Failed to fetch orders:", error);
@@ -373,7 +428,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
         setLoading(false);
       }
     },
-    [hasAuth, user],
+    [hasAuth, user, chain, currentTokenAddress, nativeCurrency],
   );
 
   const fetchTokenMetadata = useCallback(
@@ -390,6 +445,30 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
       try {
         let combinedMeta: TokenMetaInfo = {};
 
+        if (chain === "bnb") {
+          const detail = await fetchBnbTokenDetail(address);
+          if (detail) {
+            const patch = buildBnbDetailPatch(detail, address);
+            combinedMeta = {
+              name: patch.name,
+              symbol: patch.symbol,
+              image:
+                typeof detail?.image === "string"
+                  ? detail.image
+                  : typeof detail?.logo === "string"
+                  ? detail.logo
+                  : typeof patch.uri === "string"
+                  ? patch.uri
+                  : undefined,
+              protocol:
+                typeof patch.launchpadProtocol === "string"
+                  ? patch.launchpadProtocol.toLowerCase()
+                  : "bnb",
+              marketCap: patch.marketCapUsd,
+              pairAddress: patch.pairAddress,
+            };
+          }
+        } else {
         // Fetch search (metadata) and OHLC (market cap) in parallel
         const [searchResponse, ohlcResponse] = await Promise.allSettled([
           fetch(
@@ -432,6 +511,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
             }
           }
         }
+        }
 
         metaFetchedAtRef.current[address] = Date.now();
 
@@ -453,7 +533,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
         });
       }
     },
-    [metaLoading, tokenMetaMap],
+    [metaLoading, tokenMetaMap, chain],
   );
 
   useEffect(() => {
@@ -527,7 +607,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
       (order?.tokenAddress ? `${order.tokenAddress.slice(0, 4)}…${order.tokenAddress.slice(-4)}` : "Token");
     const amountLabel =
       order?.type === "Buy"
-        ? `${formatAmount(Number(order?.solAmount))} SOL`
+        ? `${formatAmount(Number(order?.solAmount))} ${nativeCurrency}`
         : `${formatAmount(Number(order?.tokenAmount))} ${meta.symbol || meta.name || "Tokens"}`;
     const targetLabel = order ? getOrderTargetLabel(order) : "—";
 
@@ -646,7 +726,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
                   const isDevSellOrder = order.triggerType === "devSell";
                   const amount =
                     order.type === "Buy"
-                      ? `${formatAmount(Number(order.solAmount))} SOL`
+                      ? `${formatAmount(Number(order.solAmount))} ${nativeCurrency}`
                       : isDevSellOrder
                       ? `${formatAmount(Number(order.tokenAmount))}%`
                       : `${formatAmount(Number(order.tokenAmount))} Tokens`;
@@ -658,7 +738,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
                     : isDevSellOrder
                     ? "—"
                     : formatMarketCap(Number(order.targetMC));
-                  const liveMC = currentTokenAddress && order.tokenAddress === currentTokenAddress
+                  const liveMC = currentTokenAddress && addressesMatch(order.tokenAddress, currentTokenAddress)
                     ? liveMarketCapUsd
                     : null;
                   const currentMCDisplay = formatMarketCap(
@@ -702,7 +782,7 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
                           preloadTradeChart({
                             mint: order.tokenAddress,
                             pairAddress: navigateAddress,
-                            chain: 'sol',
+                            chain,
                             name: meta.name,
                             symbol: meta.symbol,
                             marketCapUsd: meta.marketCap ? Number(meta.marketCap) : undefined,
@@ -779,7 +859,11 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
                                 const navigateAddress = order.tokenAddress || meta.pairAddress || order.pairAddress;
                                 if (!navigateAddress) return;
 
-                                router.push(`/trade/${navigateAddress}`);
+                                router.push(
+                                  chain === "bnb"
+                                    ? `/bnb-trade/${navigateAddress}`
+                                    : `/trade/${navigateAddress}`,
+                                );
                               }}
                               className="text-sm font-semibold text-white hover:text-[#70E0B0] transition-colors cursor-pointer text-left"
                             >
@@ -816,19 +900,24 @@ export default function TokenLimitOrders({ liveMarketCapUsd, currentTokenAddress
                           </span>
                           <span className="flex items-center gap-1 text-neutral-400">
                             <FaGasPump className="opacity-80" />
-                            {priorityFee != null ? `${formatAmount(priorityFee, 6)} SOL` : "—"}
+                            {priorityFee != null ? `${formatAmount(priorityFee, 6)} ${nativeCurrency}` : "—"}
                           </span>
                           <span className="flex items-center gap-1 text-neutral-400">
                             <FaCoins className="opacity-80" />
-                            {bribe != null ? `${formatAmount(bribe, 6)} SOL` : "—"}
+                            {bribe != null ? `${formatAmount(bribe, 6)} ${nativeCurrency}` : "—"}
                           </span>
                           <span className="flex items-center gap-1 text-neutral-400">
                             <FaBan className="opacity-80" />
                             {mevMode}
                           </span>
-                          {isDevSellOrder && order.devWallet && (
+                          {isDevSellOrder && order.devWallet &&
+                            (chain === "bnb" ? isEvmTokenAddress(order.devWallet) : true) && (
                             <a
-                              href={`https://solscan.io/account/${order.devWallet}`}
+                              href={
+                                chain === "bnb"
+                                  ? `https://bscscan.com/address/${order.devWallet}`
+                                  : `https://solscan.io/account/${order.devWallet}`
+                              }
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center gap-1 text-neutral-400 hover:text-[#70E0B0] transition-colors cursor-pointer"

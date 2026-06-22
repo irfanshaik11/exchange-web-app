@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getSolBalance, getMonadBalance } from "~/utils/functions";
+import { getSolBalance, getMonadBalance, getBnbBalance } from "~/utils/functions";
+import { fetchBnbUsdPrice } from "~/utils/bnbToken";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only allow GET requests
@@ -43,6 +44,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       balance = await getMonadBalance(addr);
       // TODO: replace with real MON/USD price feed when available
       // For now we leave usdBalance = 0
+    } else if (chain === 'bnb' || chain === 'bsc') {
+      balance = await getBnbBalance(addr);
+      if (balance !== null) {
+        const bnbUsd = await fetchBnbUsdPrice();
+        usdBalance = bnbUsd && bnbUsd > 0 ? bnbUsd * balance : 0;
+      }
     } else {
       return res.status(400).json({ error: 'Unsupported chain' });
     }

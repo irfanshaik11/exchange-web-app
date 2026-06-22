@@ -226,6 +226,14 @@ const config = {
         source: "/ingest/:path*",
         destination: "https://us.i.posthog.com/:path*",
       },
+      {
+        source: "/bnb-token-service/:path*",
+        destination: "https://token-bnb.interstate.so/:path*",
+      },
+      {
+        source: "/trade/bnb/:contractAddress",
+        destination: "/bnb-trade/:contractAddress",
+      },
     ];
   },
   skipTrailingSlashRedirect: true,

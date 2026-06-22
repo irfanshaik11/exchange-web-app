@@ -12,6 +12,7 @@ import {
 } from "~/contexts/PulseFiltersContext";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
+import { resolveBnbMarketCapUsd, resolveBnbVolumeUsd, resolveBnbHolderCount, resolveBnbLiquidityUsd, resolveBnbTop10HoldersPct, resolveBnbDevHoldingPct, resolveBnbSniperPct } from "~/utils/bnbToken";
 import {
   FaUser,
   FaGlobe,
@@ -347,25 +348,7 @@ const isBnbChainToken = (token: any): boolean =>
   token?._chain === "bnb" || token?.chain === "bnb";
 
 const getBnbVolumeUsd = (token: any): number => {
-  const parseVol = (val: string | number | undefined | null): number => {
-    if (val === undefined || val === null) return 0;
-    if (typeof val === "number") return isFinite(val) && val > 0 ? val : 0;
-    const parsed = parseFloat(val);
-    return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
-  };
-
-  const vol = token?.volume;
-  if (vol && typeof vol === "object" && !Array.isArray(vol)) {
-    return (
-      parseVol(vol.volume_24h_usd) ||
-      parseVol(vol.volume_6h_usd) ||
-      parseVol(vol.volume_1h_usd) ||
-      parseVol(vol.volume_5m_usd) ||
-      0
-    );
-  }
-
-  return parseVol(token?.volume_24h) || 0;
+  return resolveBnbVolumeUsd(token) ?? 0;
 };
 
 const getBuySellData = (token: Token): { buys: number; sells: number } => {
@@ -623,6 +606,10 @@ const getTokenTimestamp = (token: any, fields: readonly string[]): number => {
  */
 const getTokenMarketCap = (token: any): number => {
   if (!token) return 0;
+
+  if (isBnbChainToken(token)) {
+    return resolveBnbMarketCapUsd(token) ?? 0;
+  }
 
   // Helper to safely parse value (handles strings, numbers, null, undefined)
   const parseValue = (val: any): number => {
@@ -5087,7 +5074,9 @@ function PulseTable({
           ? parseFloat(filters.top10HoldersPercent)
           : NaN;
       filtered = filtered.filter((token) => {
-        const pct = (token as any).top10_holders_pct ?? 0;
+        const pct = isBnbChainToken(token)
+          ? (resolveBnbTop10HoldersPct(token) ?? 0)
+          : ((token as any).top10_holders_pct ?? 0);
         if (!isNaN(minPct) && pct < minPct) return false;
         if (!isNaN(maxPct) && pct > maxPct) return false;
         return true;
@@ -5137,10 +5126,11 @@ function PulseTable({
     if (filters.minLiquidity) {
       const minLiq = parseFloat(filters.minLiquidity);
       filtered = filtered.filter((token) => {
-        const liquidity =
-          (token as any).total_liquidity_usd ??
-          (token as any).liquidity_usd ??
-          0;
+        const liquidity = isBnbChainToken(token)
+          ? (resolveBnbLiquidityUsd(token) ?? 0)
+          : ((token as any).total_liquidity_usd ??
+              (token as any).liquidity_usd ??
+              0);
         return liquidity >= minLiq;
       });
     }
@@ -5148,10 +5138,11 @@ function PulseTable({
     if (filters.maxLiquidity) {
       const maxLiq = parseFloat(filters.maxLiquidity);
       filtered = filtered.filter((token) => {
-        const liquidity =
-          (token as any).total_liquidity_usd ??
-          (token as any).liquidity_usd ??
-          0;
+        const liquidity = isBnbChainToken(token)
+          ? (resolveBnbLiquidityUsd(token) ?? 0)
+          : ((token as any).total_liquidity_usd ??
+              (token as any).liquidity_usd ??
+              0);
         return liquidity <= maxLiq;
       });
     }
@@ -9113,23 +9104,63 @@ function PulseTable({
               // Skip tokens without mint (can't navigate properly)
               if (!tokenMint) return null;
 
-              // Build query params for optimistic UI + cache lookup
-              // Include chain parameter to preserve chain selection
-              // Use prop from parent (more reliable) or fallback to router.query
               const currentChain =
                 chainProp || (router.query.chain as string) || "sol";
               const isBnbToken = currentChain === 'bnb';
-              // TODO: replace with internal BNB token page (same route as Solana /trade/{mint}) once built
+              const queryParams = new URLSearchParams();
+              if ((token as any)?.name)
+                queryParams.set("_name", String((token as any).name));
+              if ((token as any)?.symbol)
+                queryParams.set("_symbol", String((token as any).symbol));
+              const mcVal = getTokenMarketCap(token);
+              if (mcVal > 0) queryParams.set("_mcap", String(mcVal));
+              const priceVal =
+                (token as any)?.price_usd ?? (token as any)?.priceUsd;
+              if (priceVal) queryParams.set("_price", String(priceVal));
+              const imageVal = extractTokenImage(token as any);
+              if (imageVal) queryParams.set("_image", imageVal);
+              if (tokenMint) queryParams.set("_mint", tokenMint);
+              if ((token as any)?.launchpad_protocol)
+                queryParams.set(
+                  "_launchpad_protocol",
+                  String((token as any).launchpad_protocol),
+                );
+              if ((token as any)?.liquidity_usd)
+                queryParams.set(
+                  "_liquidity",
+                  String((token as any).liquidity_usd),
+                );
+              if ((token as any)?.created_at)
+                queryParams.set("_created_at", String((token as any).created_at));
+              const queryParamsStr = queryParams.toString();
               const tokenHref = isBnbToken
-                ? `https://dexscreener.com/bsc/${(token as any).pair_address || tokenMint}`
+                ? `/bnb-trade/${tokenMint}${queryParamsStr ? `?${queryParamsStr}` : ""}`
                 : `/trade/${tokenMint}`;
+
+              const runTradePreload = () => {
+                preloadTradeChart(
+                  {
+                    mint: tokenMint,
+                    pairAddress,
+                    chain: isBnbToken ? "bnb" : undefined,
+                    name: (token as any)?.name,
+                    symbol: (token as any)?.symbol,
+                    priceUsd:
+                      (token as any)?.price_usd ||
+                      (token as any)?.priceUsd,
+                    marketCapUsd: mcVal > 0 ? mcVal : undefined,
+                    image: extractTokenImage(token as any) || "",
+                    launchpadProtocol: (token as any)?.launchpad_protocol,
+                  },
+                  { router, tradeUrl: tokenHref },
+                );
+              };
 
               return (
                 <div key={tokenMint} style={style}>
                   <div style={{ height: '100%', paddingBottom: "4px" }}>
                     <Link
                       href={tokenHref}
-                      {...(isBnbToken ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                       className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 rounded-lg px-2 py-1.5 text-sm"
                       style={{
                         color: AX.text,
@@ -9149,24 +9180,7 @@ function PulseTable({
                         }
 
                         // Full preload pipeline: WS + route + metadata + OHLC + trades
-                        preloadTradeChart(
-                          {
-                            mint: tokenMint,
-                            pairAddress,
-                            name: (token as any)?.name,
-                            symbol: (token as any)?.symbol,
-                            priceUsd:
-                              (token as any)?.price_usd ||
-                              (token as any)?.priceUsd,
-                            marketCapUsd:
-                              (token as any)?.market_cap_usd ||
-                              (token as any)?.marketCapUSD,
-                            image: extractTokenImage(token as any) || "",
-                            launchpadProtocol: (token as any)
-                              ?.launchpad_protocol,
-                          },
-                          { router, tradeUrl: `/trade/${tokenMint}` },
-                        );
+                        runTradePreload();
 
                         // Prefetch buy order so quick-buy click gets a cached order (<1ms vs ~700ms)
                         if (tokenMint && thunderAmount) {
@@ -9176,6 +9190,9 @@ function PulseTable({
                             side: "buy",
                           });
                         }
+                      }}
+                      onMouseDown={() => {
+                        runTradePreload();
                       }}
                       onMouseLeave={(e) => {
                         // PHASE 3: Use CSS class instead of inline style
@@ -9766,10 +9783,12 @@ function PulseTable({
                                         />
                                         <span className="text-[10px] text-white">
                                           {formatHolderCount(
-                                            token.holder_count ??
-                                              token.total_holders ??
-                                              token.unique_wallets_24h ??
-                                              0,
+                                            isBnbChainToken(token)
+                                              ? (resolveBnbHolderCount(token) ?? 0)
+                                              : (token.holder_count ??
+                                                  token.total_holders ??
+                                                  token.unique_wallets_24h ??
+                                                  0),
                                           )}
                                         </span>
                                         {/* Holder Count Tooltip */}
@@ -9903,22 +9922,7 @@ function PulseTable({
                                   </div>
                                 </div>
                                 <div className="flex items-center justify-end gap-2 text-xs">
-                                  {isBnbToken ? (
-                                    <InterstateTooltip label="Bonding curve progress">
-                                      <div
-                                        className="flex cursor-default flex-row items-center gap-1"
-                                        style={{ color: AX.muted }}
-                                      >
-                                        <span className="text-xs">%</span>
-                                        <span
-                                          className="number-font text-xs font-medium"
-                                          style={{ color: "#ffffff" }}
-                                        >
-                                          {formatBnbBondingPct(token)}
-                                        </span>
-                                      </div>
-                                    </InterstateTooltip>
-                                  ) : (
+                                  {!isBnbToken && (
                                   <InterstateTooltip label="Global Fees Paid">
                                     <div
                                       className="flex cursor-default flex-row items-center gap-1"
@@ -10027,7 +10031,6 @@ function PulseTable({
                                     className="flex flex-row items-center gap-1"
                                     style={{ color: AX.muted }}
                                   >
-                                    {/* PHASE 4 (C2): Replaced IIFEs with module-level helpers */}
                                     {(() => {
                                       const { buys, sells } =
                                         getBuySellData(token);

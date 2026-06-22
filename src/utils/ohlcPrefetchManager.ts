@@ -8,6 +8,13 @@
 
 import { globalOHLCCache } from '~/hooks/useBackgroundOHLCPreload';
 import { setWsSupply } from '~/utils/wsSupplyCache';
+import {
+  buildBnbOhlcWsUrl,
+  fetchBnbUsdPrice,
+  transformBnbOhlcCandles,
+} from '~/utils/bnbToken';
+
+export type OhlcPrefetchChain = 'sol' | 'bnb';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -27,6 +34,8 @@ type PrefetchStatus = 'idle' | 'connecting' | 'connected' | 'closed';
 // ── Module-level singleton state ─────────────────────────────────────────
 
 let currentMint: string | null = null;
+let currentChain: OhlcPrefetchChain = 'sol';
+let bnbUsdFactor = 1;
 let ws: WebSocket | null = null;
 let snapshotData: OHLCCandle[] = [];
 let realtimeBuffer: OHLCCandle[] = [];
@@ -36,17 +45,38 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function buildWsUrl(mint: string, snapshotTimeframe?: string): string {
+function buildWsUrl(mint: string, snapshotTimeframe?: string, chain: OhlcPrefetchChain = 'sol'): string {
+  if (chain === 'bnb') {
+    const snap =
+      snapshotTimeframe && !['1s', '5s', '15s', '30s'].includes(snapshotTimeframe)
+        ? snapshotTimeframe
+        : undefined;
+    return buildBnbOhlcWsUrl(mint, '1s', snap);
+  }
   const wsBaseUrl =
     process.env.NEXT_PUBLIC_WEBSOCKET_URL ||
     'https://token-stage.narrative.trade';
   const wsProtocol = wsBaseUrl.startsWith('https') ? 'wss' : 'ws';
   const wsHost = wsBaseUrl.replace(/^https?:\/\//, '');
-  // Add snapshot_timeframe for display-resolution snapshots (skip sub-minute — no backend tables)
   const snapshotParam = snapshotTimeframe && !['1s', '5s', '15s', '30s'].includes(snapshotTimeframe)
     ? `&snapshot_timeframe=${snapshotTimeframe}`
     : '';
   return `${wsProtocol}://${wsHost}/v1/ws/ohlcv/${mint}?timeframe=1s${snapshotParam}`;
+}
+
+function parseCandlesFromSnapshot(raw: any[], chain: OhlcPrefetchChain): OHLCCandle[] {
+  if (chain === 'bnb') {
+    return transformBnbOhlcCandles(Array.isArray(raw) ? raw : [], bnbUsdFactor);
+  }
+  return (Array.isArray(raw) ? raw : []).map(parseCandle);
+}
+
+function parseRealtimeCandle(raw: any, chain: OhlcPrefetchChain): OHLCCandle {
+  if (chain === 'bnb') {
+    const [converted] = transformBnbOhlcCandles([raw], bnbUsdFactor);
+    return converted ?? parseCandle(raw);
+  }
+  return parseCandle(raw);
 }
 
 function parseCandle(c: any): OHLCCandle {
@@ -60,9 +90,26 @@ function parseCandle(c: any): OHLCCandle {
   };
 }
 
+function getWsSnapshotPayload(message: any): any[] {
+  if (Array.isArray(message?.candles)) return message.candles;
+  if (Array.isArray(message?.data)) return message.data;
+  return [];
+}
+
+function getWsLivePayload(message: any): any | null {
+  if (message?.candle && typeof message.candle === 'object' && !Array.isArray(message.candle)) {
+    return message.candle;
+  }
+  if (message?.data && typeof message.data === 'object' && !Array.isArray(message.data)) {
+    return message.data;
+  }
+  return null;
+}
+
 /** Write WS snapshot into the global OHLC cache used by useBackgroundOHLCPreload. */
-function writeToGlobalCache(mint: string, data: OHLCCandle[]): void {
-  const cacheKey = `${mint}:1h:30d`;
+function writeToGlobalCache(mint: string, data: OHLCCandle[], chain: OhlcPrefetchChain): void {
+  const interval = chain === 'bnb' ? '1s' : '1h';
+  const cacheKey = `${mint}:${interval}:30d`;
   globalOHLCCache.set(cacheKey, { data, timestamp: Date.now(), mint });
 }
 
@@ -82,6 +129,8 @@ function cleanupInternal(): void {
     ws = null;
   }
   currentMint = null;
+  currentChain = 'sol';
+  bnbUsdFactor = 1;
   snapshotData = [];
   realtimeBuffer = [];
   status = 'idle';
@@ -93,10 +142,15 @@ function cleanupInternal(): void {
  * Open an OHLC WS for `mint` (150ms debounced).
  * Closes any existing prefetch connection first — only one at a time.
  */
-export function prefetchViaWS(mint: string, snapshotTimeframe?: string): void {
-  // Same mint already being prefetched or connected
+export function prefetchViaWS(
+  mint: string,
+  snapshotTimeframe?: string,
+  chain: OhlcPrefetchChain = 'sol',
+): void {
+  // Same mint + chain already being prefetched or connected
   if (
     currentMint === mint &&
+    currentChain === chain &&
     (status === 'connecting' || status === 'connected')
   ) {
     return;
@@ -116,20 +170,16 @@ export function prefetchViaWS(mint: string, snapshotTimeframe?: string): void {
     }
 
     currentMint = mint;
+    currentChain = chain;
     status = 'connecting';
     snapshotData = [];
     realtimeBuffer = [];
 
-    // Cancel any handoff cleanup timer
-    if (cleanupTimer) {
-      clearTimeout(cleanupTimer);
-      cleanupTimer = null;
-    }
-
-    try {
-      const wsUrl = buildWsUrl(mint, snapshotTimeframe);
-      const newWs = new WebSocket(wsUrl);
-      ws = newWs;
+    const openWs = () => {
+      try {
+        const wsUrl = buildWsUrl(mint, snapshotTimeframe, chain);
+        const newWs = new WebSocket(wsUrl);
+        ws = newWs;
 
       newWs.onopen = () => {
         if (ws !== newWs) return; // stale
@@ -152,14 +202,14 @@ export function prefetchViaWS(mint: string, snapshotTimeframe?: string): void {
           if (message.type === 'pong') return;
 
           if (message.type === 'snapshot') {
-            const candles = (message.data as Array<any>) || [];
-            snapshotData = candles.map(parseCandle).sort(
+            const candles = parseCandlesFromSnapshot(getWsSnapshotPayload(message), chain).sort(
               (a, b) => a.unix_time - b.unix_time,
             );
+            snapshotData = candles;
 
             // Bridge: write into globalOHLCCache so useBackgroundOHLCPreload picks it up
             if (snapshotData.length > 0) {
-              writeToGlobalCache(mint, snapshotData);
+              writeToGlobalCache(mint, snapshotData, chain);
             }
 
             // Token-service piggybacks circulating_supply onto the snapshot
@@ -180,8 +230,10 @@ export function prefetchViaWS(mint: string, snapshotTimeframe?: string): void {
             return;
           }
 
-          if (message.type === 'candle' && message.data) {
-            realtimeBuffer.push(parseCandle(message.data));
+          if (message.type === 'candle') {
+            const liveCandle = getWsLivePayload(message);
+            if (!liveCandle) return;
+            realtimeBuffer.push(parseRealtimeCandle(liveCandle, chain));
             return;
           }
         } catch {
@@ -209,6 +261,22 @@ export function prefetchViaWS(mint: string, snapshotTimeframe?: string): void {
     } catch (e) {
       isDev && console.log('[OHLCPrefetch] Failed to create WS:', e);
       status = 'idle';
+    }
+    };
+
+    // Cancel any handoff cleanup timer
+    if (cleanupTimer) {
+      clearTimeout(cleanupTimer);
+      cleanupTimer = null;
+    }
+
+    if (chain === 'bnb') {
+      void fetchBnbUsdPrice().then((price) => {
+        if (price && price > 0) bnbUsdFactor = price;
+        openWs();
+      });
+    } else {
+      openWs();
     }
   }, 20);
 }
@@ -296,8 +364,10 @@ export function handoffConnection(
         handedWs.send(JSON.stringify({ type: 'pong' }));
         return;
       }
-      if (message.type === 'candle' && message.data) {
-        realtimeBuffer.push(parseCandle(message.data));
+      if (message.type === 'candle') {
+        const liveCandle = getWsLivePayload(message);
+        if (!liveCandle) return;
+        realtimeBuffer.push(parseRealtimeCandle(liveCandle, currentChain));
       }
     } catch {}
   };

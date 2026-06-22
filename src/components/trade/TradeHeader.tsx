@@ -1753,18 +1753,32 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, livePriceUsd, liveMark
 											return null; // Hide all icons for Monad tokens
 										}
 
-										// Get dev token stats from wsTokenInfo
-										const devCreated = wsTokenInfo?.dev_tokens_created ?? 0;
-										const devMigrated = wsTokenInfo?.dev_tokens_migrated ?? 0;
+										// Get dev token stats from wsTokenInfo or token prop (BNB REST)
+										const devCreated =
+											wsTokenInfo?.dev_tokens_created ??
+											(token as any)?.dev_tokens_created ??
+											0;
+										const devMigrated =
+											wsTokenInfo?.dev_tokens_migrated ??
+											(token as any)?.dev_tokens_migrated ??
+											0;
 										const devMigratedPct = devCreated > 0 ? Math.round((devMigrated / devCreated) * 100) : 0;
 
 										// Get kol_count from holderSummary (priority) or token
 										const kolCount = holderSummary?.kol_count ?? token?.kol_count ?? 0;
 
-										// BANDAID: WS holderSummary chain disabled, using REST prop instead.
-										// To restore: replace `restHoldersCount ?? 0` with the commented chain below.
-										// const totalHolders = holderSummary?.total_holders ?? wsTokenInfo?.holder_count ?? token?.holder_count ?? token?.total_holders ?? (token as any)?.unique_wallets_24h ?? 0;
-										const totalHolders = restHoldersCount ?? 0;
+										const totalHolders =
+											(restHoldersCount != null && restHoldersCount > 0
+												? restHoldersCount
+												: undefined) ??
+											(holderSummary?.total_holders != null && holderSummary.total_holders > 0
+												? holderSummary.total_holders
+												: undefined) ??
+											(token as any)?.holder_count ??
+											(token as any)?.total_holders ??
+											restHoldersCount ??
+											holderSummary?.total_holders ??
+											0;
 
 										return (
 											<>
