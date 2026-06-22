@@ -92,6 +92,11 @@ export default function BnbTradePage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedTab, setSelectedTab] = useState('Trades');
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(() => new Set(['Trades']));
+  const handleTabChange = useCallback((tab: string) => {
+    setSelectedTab(tab);
+    setMountedTabs((prev) => { const next = new Set(prev); next.add(tab); return next; });
+  }, []);
   const [devTokensCount, setDevTokensCount] = useState<number | undefined>(undefined);
   const [holdersTabCount, setHoldersTabCount] = useState<number | undefined>(undefined);
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
@@ -543,38 +548,39 @@ export default function BnbTradePage() {
               <div className="flex-shrink-0">
                 <TradeTabs
                   selectedTab={selectedTab}
-                  setSelectedTab={setSelectedTab}
+                  setSelectedTab={handleTabChange}
                   holdersCount={holdersTabCount ?? headerHolderCount ?? restHoldersCount}
                   devTokensCount={devTokensCount}
                 />
               </div>
               <div className="relative min-h-[300px] flex-1">
-                {selectedTab === 'Trades' && (
-                  <div className="absolute inset-0 flex flex-col">
+                {mountedTabs.has('Trades') && (
+                  <div className={`absolute inset-0 flex flex-col${selectedTab !== 'Trades' ? ' hidden' : ''}`}>
                     {canRenderChart && (
                       <BnbTrades tokenAddress={mintAddress} />
                     )}
                   </div>
                 )}
-                {selectedTab === 'Holders' && (
-                  <div className="absolute inset-0 flex flex-col">
+                {mountedTabs.has('Holders') && (
+                  <div className={`absolute inset-0 flex flex-col${selectedTab !== 'Holders' ? ' hidden' : ''}`}>
                     {canRenderChart && (
                       <BnbHoldersTable
                         tokenAddress={mintAddress}
                         onTotalCountChange={setHoldersTabCount}
+                        enabled={selectedTab === 'Holders'}
                       />
                     )}
                   </div>
                 )}
-                {selectedTab === 'Top Traders' && (
-                  <div className="absolute inset-0 flex flex-col">
+                {mountedTabs.has('Top Traders') && (
+                  <div className={`absolute inset-0 flex flex-col${selectedTab !== 'Top Traders' ? ' hidden' : ''}`}>
                     {canRenderChart && (
-                      <BnbTopTradersTable tokenAddress={mintAddress} />
+                      <BnbTopTradersTable tokenAddress={mintAddress} enabled={selectedTab === 'Top Traders'} />
                     )}
                   </div>
                 )}
-                {selectedTab === 'Dev Tokens' && (
-                  <div className="absolute inset-0 flex flex-col">
+                {mountedTabs.has('Dev Tokens') && (
+                  <div className={`absolute inset-0 flex flex-col${selectedTab !== 'Dev Tokens' ? ' hidden' : ''}`}>
                     {canRenderChart && (
                       <BnbDevTokensTable
                         tokenAddress={mintAddress}
@@ -583,8 +589,8 @@ export default function BnbTradePage() {
                     )}
                   </div>
                 )}
-                {selectedTab === 'Orders' && (
-                  <div className="absolute inset-0 flex flex-col">
+                {mountedTabs.has('Orders') && (
+                  <div className={`absolute inset-0 flex flex-col${selectedTab !== 'Orders' ? ' hidden' : ''}`}>
                     {canRenderChart && (
                       <TokenLimitOrders
                         chain="bnb"

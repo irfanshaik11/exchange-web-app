@@ -907,7 +907,6 @@ async function fetchBnbHolderCountFromScan(mint: string): Promise<number | undef
   const apiKey =
     process.env.BSCSCAN_API_KEY ||
     process.env.ETHERSCAN_API_KEY ||
-    process.env.NEXT_PUBLIC_BSCSCAN_API_KEY ||
     '';
   if (!apiKey) return undefined;
 

@@ -110,8 +110,10 @@ export default function useBnbTradePanelData(
   const [position, setPosition] = useState<BnbTradePosition>(EMPTY_POSITION);
   const tokenPriceRef = useRef(tokenPriceUsd);
   // After the first full refresh cycle returns no activity, skip subsequent
-  // API waterfalls until mint/user changes.
+  // API waterfalls for 60s before retrying — prevents a permanent blank position
+  // panel if the user makes a trade after the initial no-activity check.
   const noActivityRef = useRef(false);
+  const noActivitySinceRef = useRef(0);
 
   useEffect(() => {
     tokenPriceRef.current = tokenPriceUsd;
@@ -172,7 +174,7 @@ export default function useBnbTradePanelData(
       return;
     }
 
-    if (noActivityRef.current) return;
+    if (noActivityRef.current && Date.now() - noActivitySinceRef.current < 60_000) return;
 
     const tokenMint = mint.toLowerCase();
     const priceUsd = tokenPriceRef.current;
@@ -234,6 +236,11 @@ export default function useBnbTradePanelData(
 
       if (isEmptyPosition(next)) {
         noActivityRef.current = true;
+        noActivitySinceRef.current = Date.now();
+      } else {
+        // Activity found — clear the latch so normal 10s polling resumes
+        noActivityRef.current = false;
+        noActivitySinceRef.current = 0;
       }
       setPosition((prev) => {
         const unchanged =
