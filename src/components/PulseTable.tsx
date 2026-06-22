@@ -10348,6 +10348,34 @@ function PulseTable({
                             return null;
                           })()}
                         </div>
+                        {isBnbToken && (
+                        <div className="badges-scroll absolute bottom-1 left-[76px] flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto overflow-y-hidden">
+                          <BottomCardInfoHolder
+                            PassedIcon={BsPersonGear}
+                            token={token}
+                            wsField="top10_holders_pct"
+                            httpField="top10_holders_pct"
+                            iconColor={AX.aiGreen}
+                            tooltip="Top 10 Holders %"
+                          />
+                          <BottomCardInfoHolder
+                            PassedIcon={LuChefHat}
+                            token={token}
+                            wsField="dev_holding_pct"
+                            httpField="dev_holding_pct"
+                            iconColor="#566cdc"
+                            tooltip="Dev Holding"
+                          />
+                          <BottomCardInfoHolder
+                            PassedIcon={SnipperIcon}
+                            token={token}
+                            wsField="sniper_pct"
+                            httpField="sniper_pct"
+                            green={false}
+                            tooltip="Sniper Holding"
+                          />
+                        </div>
+                        )}
                         {!isBnbToken && (
                         <div className="badges-scroll absolute bottom-1 left-[76px] flex max-w-[calc(100%-6rem)] flex-row items-center gap-1 overflow-x-auto overflow-y-hidden">
                           <BottomCardInfoHolder

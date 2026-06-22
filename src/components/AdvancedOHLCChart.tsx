@@ -119,6 +119,9 @@ const isHttpOhlcNetwork = (network?: string) => network === "monad";
 /** Networks that stream raw 1s candles via WS — TradingView aggregates client-side.
  *  Add new WS-streamed chains here as they're onboarded. */
 const WS_STREAMED_NETWORKS = new Set(["solana", "bnb"]);
+/** WS message types that carry a live (real-time) candle update.
+ *  Add new chain types here as they're onboarded. */
+const WS_LIVE_CANDLE_TYPES = new Set(["candle", "bsc:events:ohlc_candle"]);
 const isWsStreamedNetwork = (network?: string) => WS_STREAMED_NETWORKS.has(network ?? "");
 
 /** token-bnb WS uses `candles`; Solana token-service uses `data`. */
@@ -134,6 +137,10 @@ function getWsLiveCandle(message: any): any | null {
   }
   if (message?.data && typeof message.data === "object" && !Array.isArray(message.data)) {
     return message.data;
+  }
+  // BNB WS sends live candle updates as a single-item candles array (same key as snapshot)
+  if (Array.isArray(message?.candles) && message.candles.length > 0) {
+    return message.candles[message.candles.length - 1];
   }
   return null;
 }
@@ -3590,7 +3597,7 @@ const AdvancedOHLCChart = forwardRef<AdvancedOHLCChartHandle, AdvancedOHLCChartP
         }
 
         // Handle real-time candle updates - this is what we care about
-        if (message.type === "candle") {
+        if (WS_LIVE_CANDLE_TYPES.has(message.type)) {
           const ohlcData = getWsLiveCandle(message);
           if (!ohlcData) return;
           // WS is providing live data — stop HTTP polling
