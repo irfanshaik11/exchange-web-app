@@ -6,6 +6,7 @@ import { FaRunning, FaGasPump, FaCoins, FaBan, FaWallet } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import toast from "react-hot-toast";
 import { BNB_CHAIN_ICON } from "~/utils/bnbProtocols";
+import type { BnbTokenDetailPatch } from "~/utils/bnbToken";
 
 type TradeTab = "market" | "limit" | "adv";
 type TradeMode = "buy" | "sell";
@@ -60,7 +61,7 @@ function BnbIcon({ size = 16, className = "" }: { size?: number; className?: str
 }
 
 export interface BnbTradeFormPanelProps {
-  token: any;
+  token: BnbTokenDetailPatch & { [key: string]: any };
   mode: TradeMode;
   setMode: (m: TradeMode) => void;
   tab: TradeTab;

@@ -88,7 +88,7 @@ export default function useBnbHoldersList(
           setHolders([]);
         }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
