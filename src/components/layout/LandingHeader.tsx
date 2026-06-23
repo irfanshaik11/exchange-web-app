@@ -18,9 +18,9 @@ const LandingHeader = () => {
                 <h3 className="text-3xl md:text-4xl md:font-bold tracking-tight text-[#CBD0EB]">Interstate</h3>
             </Link>
             <div className="flex items-center gap-2 lg:gap-3">
-                <Link href="/docs" className="hidden sm:inline-block bg-white/[0.08] text-[#ededf0] border border-white/10 backdrop-blur-md tracking-[0] text-md rounded-xl py-2 lg:py-2.5 px-5 font-normal leading-6 cursor-pointer hover:bg-white/[0.14] transition-all">
+                <a href="https://docs.interstate.so" target="_blank" rel="noopener noreferrer" className="hidden sm:inline-block bg-white/[0.08] text-[#ededf0] border border-white/10 backdrop-blur-md tracking-[0] text-md rounded-xl py-2 lg:py-2.5 px-5 font-normal leading-6 cursor-pointer hover:bg-white/[0.14] transition-all">
                     Docs
-                </Link>
+                </a>
                 <a href="https://app.interstate.so" target="_blank" rel="noopener noreferrer" className="whitespace-nowrap bg-[#04977c] text-white tracking-[0] text-md rounded-xl py-2 lg:py-2.5 px-5 font-normal leading-6 overflow-hidden shadow-[0_1px_2px_#8750ff0d] cursor-pointer hover:brightness-110 transition-all">
                     Trade Now
                 </a>
