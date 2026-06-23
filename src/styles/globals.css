@@ -104,6 +104,18 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-orbitron: "Orbitron", sans-serif;
   --font-geist: "Geist", sans-serif;
+  
+
+  --animate-marquee: marquee 25s linear infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
 }
 
 @theme inline {
@@ -568,6 +580,25 @@ input[type="number"] {
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Continuous, GPU-composited rotation. will-change + translateZ promote the
+   element to its own layer so the compositor just spins a cached bitmap —
+   no per-frame repaint, so no jitter. */
+.animate-spin-slow {
+  animation: spinSlow 28s linear infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-slow { animation: none; }
 }
 
 @keyframes fadeIn {
