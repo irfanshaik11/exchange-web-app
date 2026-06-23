@@ -10,7 +10,7 @@ const navColumns = [
     title: "Company",
     order: "sm:order-3",
     links: [
-      { label: "Documentation", href: "#" },
+      { label: "Documentation", href: "https://docs.interstate.so" },
       { label: "Privacy Policy", href: "#" },
       { label: "Terms of Service", href: "#" },
     ],
@@ -24,15 +24,15 @@ const navColumns = [
     title: "Socials",
     order: "sm:order-2",
     links: [
-      { label: "Twitter", href: "#" },
-      { label: "Telegram", href: "#" },
+      { label: "Twitter", href: "https://x.com/interstatefdn" },
+      { label: "Telegram", href: "https://t.me/+DDXGrsJoe3szYTAx" },
     ],
   },
 ];
 
 const socials = [
-  { label: "X", href: "#", icon: FaXTwitter },
-  { label: "Telegram", href: "#", icon: FaTelegram },
+  { label: "X", href: "https://x.com/interstatefdn", icon: FaXTwitter },
+  { label: "Telegram", href: "https://t.me/+DDXGrsJoe3szYTAx", icon: FaTelegram },
 ];
 
 /* ----------------------------- components ----------------------------- */
@@ -48,6 +48,8 @@ function NavGroup({ group }: { group: (typeof navColumns)[number] }) {
           <li key={l.label}>
             <a
               href={l.href}
+              target={l.href.startsWith("http") ? "_blank" : undefined}
+              rel={l.href.startsWith("http") ? "noopener noreferrer" : undefined}
               className="text-sm text-white/60 transition-colors duration-200 hover:text-white"
             >
               {l.label}

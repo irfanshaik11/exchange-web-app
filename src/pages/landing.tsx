@@ -23,14 +23,11 @@ const testimonials = [
 ];
 
 const press = [
-  { name: "Bloomberg",     src: "/static/icons/brand_logos/bloomberg-logomark.webp",     h: "h-5 lg:h-7",      href: "https://www.bloomberg.com/news/newsletters/2026-03-17/permissionless-works-both-ways-in-decentralized-finance-defi" },
-  { name: "Fortune",       src: "/static/icons/brand_logos/fortune-logomark.webp",       h: "h-[18px] lg:h-6", href: "https://fortune.com/2026/04/28/liquid-18-million-leveraged-trading/" },
-  { name: "WSJ Pro",       src: "/static/icons/brand_logos/wsjpro-logomark.webp",        h: "h-5 lg:h-7",      href: "https://createsend.com/t/d-DADD75CDBC1772642540EF23F30FEDED" },
-  { name: "Axios",         src: "/static/icons/brand_logos/axios-logomark.webp",         h: "h-4 lg:h-6",      href: "https://www.axios.com/newsletters/axios-pro-rata" },
-  { name: "The Block",     src: "/static/icons/brand_logos/the-block-logomark.webp",     h: "h-5 lg:h-7",      href: "https://www.theblock.co/post/377341/paradigm-leads-funding-perp-dex-aggregator-liquid" },
-  { name: "Decrypt",       src: "/static/icons/brand_logos/decrypt-logomark.svg",        h: "h-6 lg:h-8",      href: "https://decrypt.co/347272/morning-minute-crypto-slides-into-extreme-fear-as-bitcoin-tumbles" },
-  { name: "CoinMarketCap", src: "/static/icons/brand_logos/coinmarketcap-logomark.webp", h: "h-7 lg:h-10",     href: "https://coinmarketcap.com/community/articles/690a09326d591f7d463e263a/" },
-  { name: "TradingView",   src: "/static/icons/brand_logos/tradingview-logomark.webp",   h: "h-5 lg:h-7",      href: "https://www.tradingview.com/news/the_block:54bc6f289094b:0-paradigm-leads-7-6-million-seed-funding-round-for-perp-dex-aggregator-liquid/" },
+  // Heights tuned per logo so all three read at a similar letter size: the ultra-wide
+  // "Business Insider" wordmark is kept shortest, the compact stacked "USA Today" tallest.
+  { name: "Apple News",       src: "/static/icons/brand_logos/apple-news.webp",       h: "h-6 lg:h-8",  href: "#" },
+  { name: "Business Insider", src: "/static/icons/brand_logos/buisness-insider.webp", h: "h-4 lg:h-6",  href: "#" },
+  { name: "USA Today",        src: "/static/icons/brand_logos/usa-today.webp",        h: "h-9 lg:h-12", href: "#" },
 ];
 
 // Cap how many testimonial cards show at each grid width so rows stay balanced:
@@ -202,38 +199,36 @@ export default function Landing() {
             }}
           />
           <div className="relative z-10 flex flex-col items-center gap-5 lg:gap-8">
-            <div className="flex flex-col gap-2 items-center text-center pt-10 px-6 lg:pt-20">
-              <h1 className='text-5xl mb-2 md:text-9xl text-white !font-bold uppercase'>Interstate</h1>
+            <div className="flex flex-col gap-2 items-center text-center pt-10 px-2 mt-12 md:mt-0 md:px-6 lg:pt-20">
+              <h1 className='text-5xl mb-56 md:text-9xl text-white !font-bold uppercase'>Interstate</h1>
               <h1 className="text-[24px] leading-6 lg:text-[40px] text-[#EAEDFF] text-center lg:leading-12 tracking-tighter">
-                where traders become legends.
+                The Fastest Trading.
               </h1>
-              <p className="lg:text-[22px] text-[#D1D8FF99] text-center lg:leading-6 tracking-tight">
-                From memecoins to viral tokens, trade any crypto in seconds.
+              <p className="lg:text-[22px] text-[#EAEDFF] text-center lg:leading-6 tracking-tight">
+                Trade 500+ markets, from DOGECOIN and TRUMP to GOLD to FX and stocks, in seconds.
               </p>
             </div>
             <div className="flex gap-2 lg:hidden w-full justify-center px-8">
-              <a
-                href=""
+              <Link
+                href="/pulse"
                 className="text-center z-2 bg-white/12 w-full backdrop-blur-md border border-bg-tertiary rounded-xl text-lg font-bold md:w-50 py-3"
-                target="_blank"
-                rel="noopener noreferrer"
               >
                 Sign up
-              </a>
+              </Link>
             </div>
             <div className="hidden lg:flex gap-3">
-              <button className="group relative flex items-center justify-center overflow-hidden bg-[#04977c] hover:bg-[#037f68] transition-all duration-300 py-3 w-50 h-13 rounded-xl text-lg font-bold shadow-sm text-white z-10 cursor-pointer">
+              <Link href="/pulse" className="group relative flex items-center justify-center overflow-hidden bg-[#04977c] hover:bg-[#037f68] transition-all duration-300 py-3 w-50 h-13 rounded-xl text-lg font-bold shadow-sm text-white z-10 cursor-pointer">
                 <div className="flex items-center justify-center gap-1.5 translate-x-3 group-hover:translate-x-0 transition-transform duration-300 ease-out">
                   <span>Start trading</span>
                   <ArrowRight className="size-5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 ease-out shrink-0" />
                 </div>
-              </button>
-              <button className="group relative flex items-center justify-center overflow-hidden bg-white/12 hover:bg-white/20 backdrop-blur-md transition-all duration-300 border border-white/10 rounded-xl text-lg font-bold w-50 h-13 z-10 cursor-pointer">
+              </Link>
+              <Link href="/pulse" className="group relative flex items-center justify-center overflow-hidden bg-white/12 hover:bg-white/20 backdrop-blur-md transition-all duration-300 border border-white/10 rounded-xl text-lg font-bold w-50 h-13 z-10 cursor-pointer">
                 <div className="flex items-center justify-center gap-1.5 -translate-x-3 group-hover:translate-x-0 transition-transform duration-300 ease-out">
                   <UserPlus className="size-5 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 ease-out shrink-0" />
                   <span>Sign up</span>
                 </div>
-              </button>
+              </Link>
             </div>
           </div>
           <div className="pointer-events-none absolute bottom-0 left-0 w-full h-16 z-10 bg-gradient-to-t from-black to-transparent" />
@@ -331,9 +326,12 @@ export default function Landing() {
           </div>
 
           {/* Press / as seen in */}
-          <div className="border-t border-white/5 py-8 md:py-10">
-            <div className="flex flex-col items-center gap-5 lg:gap-8">
-              <div className="flex flex-wrap items-center justify-center gap-6 gap-y-8 [&>a]:w-[calc(33%_-_16px)] md:[&>a]:w-[calc(25%_-_18px)] lg:[&>a]:w-auto lg:flex-nowrap lg:gap-12">
+          <div className="border-t border-white/5 py-4 md:py-4">
+            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 sm:gap-x-14 lg:gap-x-20">
+              <p className="shrink-0 text-lg font-medium uppercase tracking-[0.2em] text-white/40 lg:text-xl">
+                As seen in
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-7 sm:gap-x-14 lg:gap-x-20">
                 {press.map((p) => (
                   <a
                     key={p.name}
@@ -354,11 +352,10 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Self-custody / Security */}
-          <div className="py-[60px] md:py-[90px] border-t border-white/5">
+          {/* Self-custody / Security || Needs Rework */}
+          {/* <div className="py-[60px] md:py-[90px] border-t border-white/5">
             <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-2 lg:gap-20">
 
-              {/* Visual — privacy circle */}
               <div className="relative flex items-center justify-center">
                 <img
                   src="/privacy-circle.avif"
@@ -368,7 +365,6 @@ export default function Landing() {
                 />
               </div>
 
-              {/* Content */}
               <div className="flex flex-col gap-8">
                 <div className="flex items-center gap-2 text-sm font-medium text-[#8a8a93]">
                   <span>Secured by</span>
@@ -393,7 +389,6 @@ export default function Landing() {
                   </p>
                 </div>
 
-                {/* feature grid */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {[
                     { icon: <Cpu className="h-5 w-5" />, label: "Trusted Hardware" },
@@ -412,7 +407,7 @@ export default function Landing() {
                 </div>
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* CTA */}
           <section className="relative py-20 md:py-28 lg:py-32 overflow-hidden border-t border-white/5">

@@ -32,7 +32,7 @@ type Tab = "all" | "crypto" | "meme" | "rwa";
 const TAB_LABELS: Record<Tab, string> = {
   all: "All",
   crypto: "Crypto",
-  meme: "Meme coins",
+  meme: "Meme Coins",
   rwa: "Real World",
 };
 
