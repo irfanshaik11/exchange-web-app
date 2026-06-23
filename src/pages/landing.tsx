@@ -211,7 +211,7 @@ function MiniAssetList() {
 
 function MiniOrder() {
   return (
-    <div className="relative w-[200px] bg-[#0c0e12] border border-white/[0.12] rounded-[22px] pb-3.5 shadow-[0_24px_50px_rgba(0,0,0,0.5)] overflow-hidden">
+    <div className="relative w-full bg-[#0c0e12] border border-white/[0.12] rounded-[22px] pb-3.5 shadow-[0_24px_50px_rgba(0,0,0,0.5)] overflow-hidden">
       <div className="w-14 h-[5px] rounded-full bg-white/[0.14] mx-auto mt-2.5" />
       <div className="flex items-center justify-between px-3.5 pt-3 pb-1.5 text-[13px] text-[#ededf0]">
         <span className="inline-flex items-center gap-1.5">
@@ -384,7 +384,7 @@ export default function Landing() {
               <div className="bg-[#0b0c0f] border border-white/5 rounded-2xl overflow-hidden min-h-[360px] relative">
                 <MiniAssetList />
               </div>
-              <div className="bg-transparent border-0 rounded-2xl overflow-hidden min-h-[360px] relative flex items-center justify-center">
+              <div className="bg-transparent border-0 rounded-2xl overflow-hidden relative flex items-center justify-center">
                 <MiniOrder />
               </div>
             </div>
