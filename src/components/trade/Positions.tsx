@@ -19,7 +19,8 @@ import PositionDetailModal from './PositionDetailModal';
 import toast from 'react-hot-toast';
 import { validateSolanaSell, showTradeValidationError } from '~/utils/preTradeValidation';
 import { useQuickBuy, type QuickBuySettings } from '~/components/QuickBuyContext';
-import { SOL_MINT_ADDRESS, tradeMonadSell, tradeSellPercentage, resolvePool } from '~/utils/api';
+import { tradeMonadSell, tradeSellPercentage, resolvePool } from '~/utils/api';
+import { QUOTE_MINTS } from '~/utils/quoteCurrency';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
@@ -104,7 +105,7 @@ const Positions: React.FC<PositionsProps> = ({
   isCacheValid,
   fallbackPositions
 }) => {
-  const { selectedWalletIds, user, primaryWalletAddresses } = useUser();
+  const { selectedWalletIds, user, primaryWalletAddresses, quoteCurrency } = useUser();
   const { requestSnapshot, connected: wsConnected } = useSolanaPositionWebSocketContext();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
@@ -610,7 +611,7 @@ const Positions: React.FC<PositionsProps> = ({
               : 0;
           const primarySolAddr = primaryWalletAddresses.solana || "";
 
-          __sellMarkId = insertOptimisticMarker({
+          __sellMarkId = insertOptimisticMarker({ quoteCurrency,
             mint: position.tokenAddress,
             walletAddress: primarySolAddr,
             side: "sell",
@@ -623,7 +624,8 @@ const Positions: React.FC<PositionsProps> = ({
               percentageToSell: percent,
               poolAddress: verifiedPoolAddress,
               baseMint: position.tokenAddress,
-              quoteMint: SOL_MINT_ADDRESS,
+              quoteMint: QUOTE_MINTS[quoteCurrency],
+              quoteCurrency,
               poolType,
               originalPairAddress: verifiedPoolAddress,
               slippage: (quickSellSettings?.maxSlippage || 0.2) * 100,
@@ -631,7 +633,10 @@ const Positions: React.FC<PositionsProps> = ({
               bribe: quickSellSettings?.bribe ?? 0.05,
             },
             bearerToken,
-            estSolOut > 0 && primarySolAddr
+            // Only a SOL sell credits the SOL header balance. A USDC sell
+            // delivers USDC (not SOL), so it must NOT optimistically increment
+            // the SOL header — skip the optimistic credit entirely.
+            quoteCurrency === "SOL" && estSolOut > 0 && primarySolAddr
               ? { solOut: estSolOut, walletAddress: primarySolAddr }
               : undefined,
           );
@@ -746,6 +751,7 @@ const Positions: React.FC<PositionsProps> = ({
       createQuickTradeToast,
       presets,
       quickSellInputs,
+      quoteCurrency,
       refreshPositions,
       resolveMonadLaunchpad,
       setSellingForToken,

@@ -53,7 +53,7 @@ const fetchWithTimeout = async (
 
 export default function WalletTrackerContent() {
   const router = useRouter();
-  const { user, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { user, walletList, walletBalances, selectedWalletIds, quoteCurrency, walletUsdcBalances, solBalance } = useUser();
   const {
     wsConnected,
     latestTrades,
@@ -595,12 +595,14 @@ export default function WalletTrackerContent() {
       side: "buy",
       settings,
       user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: 0,
+      solBalance: Number(solBalance || 0),
       solPriceUsd: 150,
+      quoteCurrency,
       walletContext: {
         selectedWalletIds: selectedWalletIds?.sol || [],
         walletList: walletList || [],
         walletBalances: walletBalances || {},
+        walletUsdcBalances,
         chain: selectedChain,
       },
       onSuccess: () => {

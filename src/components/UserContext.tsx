@@ -12,6 +12,7 @@ import Cookies from "js-cookie";
 import { useRouter } from "next/router";
 
 import { getUserById, ApiError, updateUser } from "../utils/api";
+import { getUsdcSplBalance } from "../utils/functions";
 import { getBalances } from "~/utils/balancesApi";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 const USER_CACHE_KEY = "codex_user_info_cache";
@@ -27,6 +28,7 @@ import type {
 import { useTurnkey } from "@turnkey/react-wallet-kit";
 import next from "next";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
+import { type QuoteCurrency, parseQuoteCurrency } from "../utils/quoteCurrency";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -59,6 +61,10 @@ interface UserContextType {
   solBalance: number;
   /** USD value of the user's native SOL (price × balance). NOT a USDC token balance. */
   solValueUsd: number;
+  /** Real USDC SPL balance (token units) for the active/primary Solana wallet, used for trade funding. */
+  usdcSplBalance: number;
+  /** USDC SPL balances by wallet address (mirrors walletBalances for the SOL path). */
+  walletUsdcBalances: Record<string, number>;
   /** Real token balances per chain: { USDC: { solana, base }, ... }. Zero balances omitted by the backend. */
   tokenBalances: Record<string, Record<string, number>>;
   /** True while a token-balance fetch is in flight (drives the holdings skeleton). */
@@ -75,6 +81,10 @@ interface UserContextType {
     wallets: Array<{ address: string; chain: string }>,
     force?: boolean,
   ) => Promise<void>;
+  /** Refresh the active/primary Solana wallet's USDC SPL balance (mirrors refreshBalance for SOL). */
+  refreshUsdcBalance: (address?: string) => Promise<void>;
+  /** Refresh USDC SPL balances for a set of wallet addresses (mirrors refreshAllBalances for SOL). */
+  refreshUsdcBalancesForWallets: (addresses: string[]) => Promise<void>;
   setUser: (user: UserInfo | null) => void;
   logout: () => void;
   primaryWalletAddresses: {
@@ -98,6 +108,9 @@ interface UserContextType {
     minimumBalance?: number,
   ) => void;
   clearSelectedWallets: (chain?: "sol" | "monad") => void;
+  /** Global quote currency the user trades in (Axiom-style). Default 'SOL'. Solana-only; UI hides the toggle off-Solana. */
+  quoteCurrency: QuoteCurrency;
+  setQuoteCurrency: (c: QuoteCurrency) => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -133,6 +146,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [solBalance, setSolBalance] = useState(0);
   const [solValueUsd, setSolValueUsd] = useState(0);
+  const [usdcSplBalance, setUsdcSplBalance] = useState(0);
+  const [walletUsdcBalances, setWalletUsdcBalances] = useState<
+    Record<string, number>
+  >({});
   const [tokenBalances, setTokenBalances] = useState<
     Record<string, Record<string, number>>
   >({});
@@ -174,6 +191,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       // ignore parsing errors
     }
     return { sol: [], monad: [] };
+  });
+  const [quoteCurrency, setQuoteCurrencyState] = useState<QuoteCurrency>(() => {
+    if (typeof window === "undefined") return "SOL";
+    try {
+      return parseQuoteCurrency(window.localStorage.getItem("quoteCurrency"));
+    } catch {
+      return "SOL";
+    }
   });
   const chainBalancesRef = useRef<Record<string, number>>({ sol: 0 });
   const tokenBalancesInFlightRef = useRef(false);
@@ -382,6 +407,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
     [persistSelectedWallets],
   );
 
+  const setQuoteCurrency = useCallback((c: QuoteCurrency) => {
+    setQuoteCurrencyState(c);
+    try {
+      if (typeof window !== "undefined")
+        window.localStorage.setItem("quoteCurrency", c);
+    } catch {
+      // ignore persistence errors
+    }
+  }, []);
+
   useEffect(() => {
     chainBalancesRef.current = chainBalances;
   }, [chainBalances]);
@@ -393,6 +428,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     solBalanceRef.current = solBalance;
   }, [solBalance]);
+
+  // Seed usdcSplBalance from the already-fetched token-balance feed whenever it
+  // changes. tokenBalances.USDC.solana is fetched on login by refreshTokenBalances;
+  // this keeps the USDC trade-funding balance in sync without an extra fetch.
+  // Additive — does not touch tokenBalances or any SOL state.
+  useEffect(() => {
+    const seeded = tokenBalances?.USDC?.solana;
+    if (typeof seeded === "number") {
+      setUsdcSplBalance(seeded);
+    }
+  }, [tokenBalances]);
 
   const refreshTokenBalances = useCallback(
     async (force = false) => {
@@ -1009,6 +1055,87 @@ export function UserProvider({ children }: { children: ReactNode }) {
     [primaryWalletAddresses.solana, primaryWalletAddresses.ethereum],
   );
 
+  // Refresh the active/primary Solana wallet's USDC SPL balance. Mirrors the
+  // SOL-funding read in refreshBalance: resolves the same primary/override
+  // Solana address, hits the same /api/get-sol-bal route with token=USDC.
+  // Additive — does NOT touch solBalance / solValueUsd / tokenBalances.
+  const refreshUsdcBalance = useCallback(
+    async (address?: string): Promise<void> => {
+      // Note: usdcSplBalance is also kept in sync with the bridge token-balance
+      // feed by a separate effect; this fetches the authoritative SPL balance.
+      const fallbackAddress = primaryWalletAddresses.solana || user?.publicKey;
+      const targetAddress = normalizeAddressForChain(
+        address || fallbackAddress,
+        "sol",
+      );
+      if (!targetAddress) return;
+
+      try {
+        const response = await fetch(
+          `/api/get-sol-bal?chain=sol&address=${encodeURIComponent(
+            targetAddress,
+          )}&token=USDC`,
+        );
+        if (!response.ok) {
+          console.warn(
+            "Failed to fetch USDC balance:",
+            response.status,
+            response.statusText,
+          );
+          return;
+        }
+        const data = await response.json();
+        const balance = data?.data?.balance;
+        setUsdcSplBalance(typeof balance === "number" ? balance : 0);
+        setWalletUsdcBalances((prev) => ({
+          ...prev,
+          [targetAddress]: typeof balance === "number" ? balance : 0,
+        }));
+      } catch (error) {
+        console.error("Failed to refresh USDC balance:", error);
+      }
+    },
+    [primaryWalletAddresses.solana, user?.publicKey],
+  );
+
+  // Refresh USDC SPL balances for a set of wallet addresses (mirrors
+  // refreshAllBalances for SOL). Uses the client reader getUsdcSplBalance.
+  const refreshUsdcBalancesForWallets = useCallback(
+    async (addresses: string[]): Promise<void> => {
+      if (!Array.isArray(addresses) || addresses.length === 0) return;
+      const uniqueAddresses = Array.from(
+        new Set(
+          addresses
+            .map((addr) => normalizeAddressForChain(addr, "sol"))
+            .filter((addr): addr is string => Boolean(addr)),
+        ),
+      );
+      if (uniqueAddresses.length === 0) return;
+
+      try {
+        const results = await Promise.all(
+          uniqueAddresses.map(async (addr) => {
+            try {
+              const bal = await getUsdcSplBalance(addr);
+              return [addr, typeof bal === "number" ? bal : 0] as const;
+            } catch (err) {
+              console.warn(`Failed to fetch USDC balance for ${addr}:`, err);
+              return [addr, 0] as const;
+            }
+          }),
+        );
+        const map: Record<string, number> = {};
+        for (const [addr, bal] of results) {
+          map[addr] = bal;
+        }
+        setWalletUsdcBalances((prev) => ({ ...prev, ...map }));
+      } catch (error) {
+        console.error("Failed to batch fetch USDC balances:", error);
+      }
+    },
+    [],
+  );
+
   // Removed redundant balance-fetch effect that raced with initializeAndStartPolling below.
   // That effect called refreshBalance without force:true, claimed balanceCheckInProgressRef,
   // and blocked the init effect (which has the correct flags) from updating chainBalances.
@@ -1223,8 +1350,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (user?.id && user?.bearerToken) {
       refreshWalletList();
       refreshTokenBalances();
+      refreshUsdcBalance();
     }
-  }, [user?.id, user?.bearerToken, refreshWalletList, refreshTokenBalances]);
+  }, [
+    user?.id,
+    user?.bearerToken,
+    refreshWalletList,
+    refreshTokenBalances,
+    refreshUsdcBalance,
+  ]);
 
   useEffect(() => {
     if (user) {
@@ -1328,6 +1462,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
             );
           },
         );
+        // Additive: refresh USDC alongside SOL after a trade dispatches a
+        // balance-refresh event (USDC may have been spent/received).
+        refreshUsdcBalance().catch((err) => {
+          console.warn(
+            "[UserContext] Failed to refresh USDC balance from event:",
+            err,
+          );
+        });
       }, 75);
     };
     window.addEventListener("balance-refresh", handleBalanceRefresh);
@@ -1335,7 +1477,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("balance-refresh", handleBalanceRefresh);
       if (debounceTimer) clearTimeout(debounceTimer);
     };
-  }, [user?.publicKey, refreshBalance]);
+  }, [user?.publicKey, refreshBalance, refreshUsdcBalance]);
 
   // gRPC push: instant SOL balance updates via WebSocket (bypasses 20s cooldown).
   // Must update chainBalances + walletBalances in addition to solBalance because
@@ -1347,11 +1489,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const { solBalance: newBal, wallet } =
         (event as CustomEvent).detail || {};
       if (
-        !(
-          typeof newBal === "number" &&
-          Number.isFinite(newBal) &&
-          newBal >= 0
-        )
+        !(typeof newBal === "number" && Number.isFinite(newBal) && newBal >= 0)
       ) {
         return;
       }
@@ -1430,7 +1568,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setWalletBalances((prev) => {
         const next = { ...prev };
         for (const { address, deltaSol } of perWalletDeltas) {
-          if (!address || !Number.isFinite(deltaSol) || deltaSol === 0) continue;
+          if (!address || !Number.isFinite(deltaSol) || deltaSol === 0)
+            continue;
           const current = next[address] ?? 0;
           baselines[address] = current;
           next[address] = Math.max(0, current + deltaSol);
@@ -1453,7 +1592,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
 
       // TTL: if gRPC/REST never arrives, force-refresh and drop the optimistic.
-      const ttl = Math.max(0, (expiresAt ?? 0) - Date.now()) || OPTIMISTIC_TTL_MS;
+      const ttl =
+        Math.max(0, (expiresAt ?? 0) - Date.now()) || OPTIMISTIC_TTL_MS;
       const timerId = setTimeout(() => {
         const existing = pendingOptimisticDeltasRef.current.get(tradeId);
         if (!existing) return;
@@ -1488,7 +1628,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setWalletBalances((prev) => {
         const next = { ...prev };
         for (const { address, deltaSol } of entry.perWalletDeltas) {
-          if (!address || !Number.isFinite(deltaSol) || deltaSol === 0) continue;
+          if (!address || !Number.isFinite(deltaSol) || deltaSol === 0)
+            continue;
           const current = next[address] ?? 0;
           next[address] = Math.max(0, current - deltaSol);
           if (primary && address === primary) primaryDelta += deltaSol;
@@ -1547,12 +1688,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
       loading,
       solBalance,
       solValueUsd,
+      usdcSplBalance,
+      walletUsdcBalances,
       tokenBalances,
       tokenBalancesLoading,
       refreshTokenBalances,
       refreshUser,
       refreshBalance,
       refreshAllBalances,
+      refreshUsdcBalance,
+      refreshUsdcBalancesForWallets,
       setUser,
       logout,
       primaryWalletAddresses,
@@ -1567,18 +1712,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
       selectAllWalletsForChain,
       selectWalletsWithFunds,
       clearSelectedWallets,
+      quoteCurrency,
+      setQuoteCurrency,
     }),
     [
       user,
       loading,
       solBalance,
       solValueUsd,
+      usdcSplBalance,
+      walletUsdcBalances,
       tokenBalances,
       tokenBalancesLoading,
       refreshTokenBalances,
       refreshUser,
       refreshBalance,
       refreshAllBalances,
+      refreshUsdcBalance,
+      refreshUsdcBalancesForWallets,
       setUser,
       logout,
       primaryWalletAddresses,
@@ -1593,6 +1744,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       selectAllWalletsForChain,
       selectWalletsWithFunds,
       clearSelectedWallets,
+      quoteCurrency,
+      setQuoteCurrency,
     ],
   );
 

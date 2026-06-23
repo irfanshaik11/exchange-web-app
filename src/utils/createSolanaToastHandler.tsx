@@ -8,6 +8,7 @@ import { showEnhancedToast } from "./enhancedToast";
 import { SOL_MINT_ADDRESS } from "./api";
 import { getPoolTypeFromToken } from "./poolTypeDetection";
 import { mapTradeErrorMessage } from "./tradeErrorMessages";
+import type { QuoteCurrency } from "./quoteCurrency";
 import type { Token } from "./db";
 import type { QuickBuySettings } from "~/components/QuickBuyContext";
 import { fetchVerifiedPairAddress } from "~/hooks/useSingleTokenPolling";
@@ -184,11 +185,13 @@ export async function executeSolanaBuyWithToast({
   authToken,
   walletList,
   walletBalances,
+  walletUsdcBalances,
   selectedWalletIds,
   pendingRef,
   poolAddress,
   baseMint,
   quoteMint,
+  quoteCurrency = "SOL",
 }: {
   token: Token;
   amount: number;
@@ -196,28 +199,35 @@ export async function executeSolanaBuyWithToast({
   authToken: string;
   walletList?: WalletListItem[];
   walletBalances?: Record<string, number>;
+  /** Per-wallet USDC balances — required when `quoteCurrency === 'USDC'`. */
+  walletUsdcBalances?: Record<string, number>;
   selectedWalletIds?: string[];
   pendingRef: PendingSolanaToastRef;
   poolAddress?: string;
   baseMint?: string;
   quoteMint?: string;
+  /** Currency the user is spending. Default 'SOL'. */
+  quoteCurrency?: QuoteCurrency;
 }): Promise<{ success: boolean; error?: any }> {
   const poolType = getPoolTypeFromToken(token);
 
-  // Pre-calculate which wallets will actually be used (have sufficient balance)
+  // Pre-calculate which wallets will actually be used (have sufficient balance).
+  // For USDC trades, balance lookups use the USDC balance map.
+  const balancesForAllocation = quoteCurrency === "USDC" ? walletUsdcBalances : walletBalances;
   const { allocations, total } = buildSolanaWalletAllocations({
     amount,
     walletList,
-    walletBalances,
+    walletBalances: balancesForAllocation,
     selectedWalletIds: selectedWalletIds || [],
     priorityFee: settings.priority || 0.0001,
     bribe: settings.bribe || 0,
+    quoteCurrency,
   });
   const walletsWithBalance = allocations.length;
   const isMultiWallet = walletsWithBalance > 1;
 
   // Pre-validate before showing toast
-  const validation = validateSolanaBuy(amount, allocations, walletBalances, walletList, selectedWalletIds || [], settings.priority, settings.bribe);
+  const validation = validateSolanaBuy(amount, allocations, balancesForAllocation, walletList, selectedWalletIds || [], settings.priority, settings.bribe, undefined, quoteCurrency);
   if (!validation.valid) {
     const tokenImage = getResolvedTokenImage(token);
     const tokenName = token.symbol || token.name || 'Token';
@@ -256,6 +266,7 @@ export async function executeSolanaBuyWithToast({
       baseMint: effectiveBaseMint,
       quoteMint: effectiveQuoteMint,
       amountSOL: amount,
+      quoteCurrency,
       poolType,
       originalPairAddress: effectivePoolAddress,
       slippage: settings.maxSlippage,
@@ -270,6 +281,7 @@ export async function executeSolanaBuyWithToast({
       authToken,
       walletList,
       walletBalances,
+      walletUsdcBalances,
       selectedWalletIds: selectedWalletIds || [],
       onTxHash: ({ txHash }) => {
         if (pendingRef.current?.id === toastId && txHash) {

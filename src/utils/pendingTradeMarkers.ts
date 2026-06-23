@@ -26,6 +26,7 @@ export interface PendingTradeMarker {
   side: "buy" | "sell";
   amountSol?: number;
   amountToken?: number;
+  quoteCurrency?: string; // "SOL" | "USDC" — so the chart total isn't mis-scaled for USDC
   priceUsd?: number;
   timestamp: number; // ms epoch
   signature?: string;
@@ -256,6 +257,7 @@ export interface InsertOptimisticMarkerArgs {
   amountSol?: number;
   amountToken?: number;
   priceUsd?: number;
+  quoteCurrency?: string; // "SOL" | "USDC" — so the chart total isn't mis-scaled for USDC
 }
 
 export interface InsertOptimisticMarkerResult {
@@ -290,6 +292,7 @@ export function insertOptimisticMarker(
     amountSol: args.amountSol,
     amountToken: args.amountToken,
     priceUsd: args.priceUsd,
+    quoteCurrency: args.quoteCurrency,
     timestamp: Date.now() - 500,
     status: "pending",
     createdAt: Date.now(),

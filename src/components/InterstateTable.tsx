@@ -59,6 +59,7 @@ import AvatarImage from "~/components/AvatarImage";
 import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
 import { copyToClipboard } from "~/utils/clipboard";
+import { useUser } from "~/components/UserContext";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -2968,6 +2969,7 @@ const TableRow: React.FC<{
   onHover?: () => void;
   isDiscoverPage?: boolean;
   chain?: string; // 'sol' | 'monad' - chain identifier
+  quoteCurrency?: string;
   tableType?: "trending" | "newPairs" | "xStocks" | "dexscreener";
   solPrice?: number;
 }> = React.memo(
@@ -2983,6 +2985,7 @@ const TableRow: React.FC<{
     onHover,
     isDiscoverPage = false,
     chain = "sol",
+    quoteCurrency = "SOL",
     tableType = "trending",
     solPrice = 0,
   }) => {
@@ -3236,7 +3239,7 @@ const TableRow: React.FC<{
             >
               <HiLightningBolt size={14} style={{ color: "#85d99f" }} />
               <span style={{ color: "#85d99f" }}>
-                {quickBuyAmount} {chain === "monad" ? "MON" : "SOL"}
+                {quickBuyAmount} {chain === "monad" ? "MON" : quoteCurrency}
               </span>
             </button>
           ) : (
@@ -3246,7 +3249,7 @@ const TableRow: React.FC<{
               className="w-full !px-3 !py-2 text-sm font-medium"
               onClick={handleQuickBuy}
             >
-              Buy {quickBuyAmount} {chain === "monad" ? "MON" : "SOL"}
+              Buy {quickBuyAmount} {chain === "monad" ? "MON" : quoteCurrency}
             </InterstateButton>
           )}
         </td>
@@ -3280,6 +3283,7 @@ export default function InterstateTable({
   const prevValuesRef = useRef<Record<string, number>>({});
 
   // Memoized filtered and sorted rows
+  const { quoteCurrency } = useUser();
   const sortedRows = useMemo(() => {
     //console.log('', {});
 
@@ -3626,6 +3630,7 @@ export default function InterstateTable({
                       onHover={handleTokenHover}
                       isDiscoverPage={isDiscoverPage}
                       chain={chain}
+                      quoteCurrency={quoteCurrency}
                       tableType={tableType}
                       solPrice={solPrice}
                     />

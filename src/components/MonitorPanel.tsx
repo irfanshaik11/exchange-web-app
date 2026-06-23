@@ -15,6 +15,7 @@ import {
 } from "~/components/LiveTradesPanel";
 import type { TradeEvent } from "~/utils/walletTracking";
 import type { Wallet } from "~/utils/functions";
+import { useUser } from "~/components/UserContext";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -386,6 +387,7 @@ export default function MonitorPanel({
 }: MonitorPanelProps) {
   const router = useRouter();
   const { solPrice } = useSolPrice();
+  const { quoteCurrency } = useUser();
   const [now, setNow] = useState(() => Date.now());
 
   // Refresh "Last TX" / "Time in Trade" labels every 5s without re-aggregating.
@@ -847,7 +849,7 @@ export default function MonitorPanel({
                   e.currentTarget.style.backgroundColor = "#1a1b1f";
                   e.currentTarget.style.color = "#86efac";
                 }}
-                title={`Quick buy ${quickBuyAmount} SOL`}
+                title={`Quick buy ${quickBuyAmount} ${quoteCurrency}`}
               >
                 <HiLightningBolt className="h-3.5 w-3.5" style={{ color: "inherit" }} />
                 <span>{quickBuyAmount}</span>

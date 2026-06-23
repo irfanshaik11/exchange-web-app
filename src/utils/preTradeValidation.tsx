@@ -9,6 +9,12 @@
 
 import React from "react";
 import toast from "react-hot-toast";
+import {
+  type QuoteCurrency,
+  QUOTE_MIN_TRADE,
+  quoteSymbol,
+  QUOTE_MAX_TRADE,
+} from "./quoteCurrency";
 
 // ── Constants (aligned with backend validation.ts, but slightly lower to avoid false rejections) ──
 
@@ -46,19 +52,39 @@ export function showTradeValidationError(
   tokenName?: string,
 ) {
   toast(
-    () => (
-      <div className="flex items-center gap-3">
+    (t) => (
+      <div className="flex w-full items-start gap-2.5">
         {tokenImage && (
           <img
             src={tokenImage}
             alt={tokenName || "Token"}
-            className="h-6 w-6 flex-shrink-0 rounded-full"
+            className="mt-0.5 h-6 w-6 flex-shrink-0 rounded-full"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
             }}
           />
         )}
-        <span className="truncate text-sm text-red-400">{errorMsg}</span>
+        <span className="min-w-0 flex-1 break-words text-sm leading-snug text-red-400">
+          {errorMsg}
+        </span>
+        <button
+          type="button"
+          aria-label="Dismiss"
+          onClick={() => toast.dismiss(t.id)}
+          className="-m-1.5 flex flex-shrink-0 cursor-pointer items-center justify-center rounded p-1.5 text-neutral-500 transition-colors hover:text-neutral-200"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
       </div>
     ),
     {
@@ -67,7 +93,8 @@ export function showTradeValidationError(
         background: "#1a1a1a",
         border: "1px solid #ef4444",
         borderRadius: "8px",
-        padding: "12px",
+        padding: "12px 14px",
+        width: "340px",
       },
     },
   );
@@ -84,12 +111,22 @@ export function validateSolanaBuy(
   priorityFee?: number,
   bribe?: number,
   ataExists?: boolean | null, // null = unknown, true = exists, false = needs creation
+  quoteCurrency: QuoteCurrency = "SOL",
+  solBalanceForGas?: number,
 ): ValidationResult {
-  if (!Number.isFinite(amount) || amount < MIN_TRADE_AMOUNT) {
-    return { valid: false, error: `Minimum trade amount is ${MIN_TRADE_AMOUNT} SOL` };
+  const minAmount = QUOTE_MIN_TRADE[quoteCurrency];
+  if (!Number.isFinite(amount) || amount < minAmount) {
+    return {
+      valid: false,
+      error: `Minimum trade amount is ${minAmount} ${quoteSymbol(quoteCurrency)}`,
+    };
   }
-  if (amount > MAX_TRADE_AMOUNT) {
-    return { valid: false, error: `Maximum trade amount is ${MAX_TRADE_AMOUNT} SOL` };
+  const maxTrade = QUOTE_MAX_TRADE[quoteCurrency];
+  if (amount > maxTrade) {
+    return {
+      valid: false,
+      error: `Maximum trade amount is ${maxTrade} ${quoteSymbol(quoteCurrency)}`,
+    };
   }
   if (allocations.length === 0) {
     return {
@@ -99,13 +136,52 @@ export function validateSolanaBuy(
   }
 
   // Direct balance check via sumWalletBalances (same pattern as validateMonadBuy)
-  const { total, foundCount } = sumWalletBalances(walletBalances, walletList, selectedWalletIds, "solana");
+  const { total, foundCount } = sumWalletBalances(
+    walletBalances,
+    walletList,
+    selectedWalletIds,
+    "solana",
+  );
   if (foundCount > 0) {
-    const ataBuffer = ataExists === false ? FE_SOL_ATA_RENT : FE_SOL_SAFETY_BUFFER;
-    const fees = (priorityFee || 0) + (bribe || 0) + FE_SOL_NETWORK_FEE + ataBuffer + FE_SOL_WALLET_RESERVE;
-    const totalRequired = amount + fees;
-    if (total < totalRequired) {
-      return { valid: false, error: "Insufficient balance available!" };
+    if (quoteCurrency === "SOL") {
+      const ataBuffer =
+        ataExists === false ? FE_SOL_ATA_RENT : FE_SOL_SAFETY_BUFFER;
+      const fees =
+        (priorityFee || 0) +
+        (bribe || 0) +
+        FE_SOL_NETWORK_FEE +
+        ataBuffer +
+        FE_SOL_WALLET_RESERVE;
+      const totalRequired = amount + fees;
+      if (total < totalRequired) {
+        return { valid: false, error: "Insufficient balance available!" };
+      }
+    } else {
+      // USDC: first ensure enough USDC for the spend amount.
+      if (total < amount) {
+        return {
+          valid: false,
+          error: `Insufficient USDC — you have $${total.toFixed(2)}, need $${amount.toFixed(2)}.`,
+        };
+      }
+      // USDC trades still pay network/priority fees in SOL — surface a specific,
+      // actionable message (not the generic one) when SOL can't cover gas.
+      if (typeof solBalanceForGas === "number") {
+        const ataBuffer =
+          ataExists === false ? FE_SOL_ATA_RENT : FE_SOL_SAFETY_BUFFER;
+        const gasNeeded =
+          (priorityFee || 0) +
+          (bribe || 0) +
+          FE_SOL_NETWORK_FEE +
+          ataBuffer +
+          FE_SOL_WALLET_RESERVE;
+        if (solBalanceForGas < gasNeeded) {
+          return {
+            valid: false,
+            error: `Not enough SOL for gas fees. Add ~${gasNeeded.toFixed(3)} SOL — USDC trades still pay network fees in SOL.`,
+          };
+        }
+      }
     }
   }
   // If foundCount === 0: no cached balance data — skip check, let backend validate
@@ -115,9 +191,7 @@ export function validateSolanaBuy(
 
 // ── Solana Sell Validation ──
 
-export function validateSolanaSell(
-  percentage: number,
-): ValidationResult {
+export function validateSolanaSell(percentage: number): ValidationResult {
   if (!Number.isFinite(percentage) || percentage <= 0) {
     return { valid: false, error: "Enter a valid sell percentage" };
   }
@@ -137,10 +211,16 @@ export function validateMonadBuy(
   gasPrice?: number,
 ): ValidationResult {
   if (!Number.isFinite(amount) || amount < MIN_TRADE_AMOUNT) {
-    return { valid: false, error: `Minimum trade amount is ${MIN_TRADE_AMOUNT} MON` };
+    return {
+      valid: false,
+      error: `Minimum trade amount is ${MIN_TRADE_AMOUNT} MON`,
+    };
   }
   if (amount > MAX_TRADE_AMOUNT) {
-    return { valid: false, error: `Maximum trade amount is ${MAX_TRADE_AMOUNT} MON` };
+    return {
+      valid: false,
+      error: `Maximum trade amount is ${MAX_TRADE_AMOUNT} MON`,
+    };
   }
 
   const { total, foundCount } = sumWalletBalances(
@@ -155,7 +235,8 @@ export function validateMonadBuy(
     return { valid: true };
   }
 
-  const gasCost = ((gasPrice || MONAD_DEFAULT_GAS_GWEI) * MONAD_GAS_UNITS) / 1e9;
+  const gasCost =
+    ((gasPrice || MONAD_DEFAULT_GAS_GWEI) * MONAD_GAS_UNITS) / 1e9;
   const totalRequired = amount + gasCost + FE_MONAD_BUFFER;
 
   if (total < totalRequired && total > 0) {
@@ -213,7 +294,8 @@ export function sumWalletBalances(
 
     // Try lowercase first (Monad addresses are stored lowercase in walletBalances),
     // then original case as fallback
-    const bal = walletBalances[lowerAddr] ?? walletBalances[rawAddr] ?? undefined;
+    const bal =
+      walletBalances[lowerAddr] ?? walletBalances[rawAddr] ?? undefined;
     if (bal !== undefined) {
       total += bal;
       foundCount++;

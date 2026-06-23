@@ -27,6 +27,7 @@ import {
 } from "~/utils/preTradeValidation";
 import { checkAtaExists } from "~/utils/ataCheck";
 import { buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { quoteAwareBuyGate } from "~/utils/quoteBuyGate";
 import { getResolvedTokenImage } from "~/utils/images";
 import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { useUser } from "./UserContext";
@@ -55,7 +56,7 @@ export default function DiscoverContent() {
   const { filter } = useFilter();
   const [localFilters, setLocalFilters] = useState(filter);
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds, quoteCurrency, walletUsdcBalances, usdcSplBalance, tokenBalances } =
     useUser();
 
   // Load quickBuyAmount from localStorage with fallback
@@ -774,31 +775,29 @@ export default function DiscoverContent() {
 
     const settings = preset.quickBuySettings;
 
-    // Pre-validate balance before showing animated toast
-    const { allocations } = buildSolanaWalletAllocations({
-      amount: buyAmount,
-      walletList: walletList || [],
-      walletBalances: walletBalances || {},
-      selectedWalletIds: selectedWalletIds?.sol || [],
-      priorityFee: settings.priority || 0.0001,
-      bribe: settings.bribe || 0,
-    });
+    // Pre-validate via the shared currency-aware gate (SOL or USDC).
     const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(
       () => null,
     );
-    const buyValidation = validateSolanaBuy(
-      buyAmount,
-      allocations,
-      walletBalances || {},
-      walletList || [],
-      selectedWalletIds?.sol || [],
-      settings.priority,
-      settings.bribe,
+    const gate = quoteAwareBuyGate({
+      amount: buyAmount,
+      quoteCurrency,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      walletUsdcBalances,
+      usdcSplBalance,
+      tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+      primaryAddress: (walletList || []).find((w: any) => w.isPrimary)
+        ?.solanaAddress,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority,
+      bribe: settings.bribe,
       ataExists,
-    );
-    if (!buyValidation.valid) {
+      solBalance,
+    });
+    if (!gate.valid) {
       showTradeValidationError(
-        buyValidation.error,
+        gate.error,
         getResolvedTokenImage(token),
         token.symbol || token.name || "Token",
       );
@@ -813,10 +812,12 @@ export default function DiscoverContent() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150,
+      quoteCurrency,
       walletContext: {
         selectedWalletIds: selectedWalletIds?.sol || [],
         walletList: walletList || [],
         walletBalances: walletBalances || {},
+        walletUsdcBalances,
         chain: "sol",
       },
       onSuccess: () => isDev && console.log("Quick Buy successful"),

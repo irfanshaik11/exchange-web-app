@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { FaTimes, FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { formatSmartNumber } from "~/utils/db";
-import { tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { tradeSellPercentage, ApiError } from "~/utils/api";
+import { QUOTE_MINTS, quoteSymbol } from "~/utils/quoteCurrency";
 import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import {
@@ -54,7 +55,7 @@ const AX = {
 const sellPresets = [10, 25, 50, 100];
 
 const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenMetadata, onSellSuccess }) => {
-  const { user, primaryWalletAddresses } = useUser();
+  const { user, primaryWalletAddresses, quoteCurrency } = useUser();
   const { presets, activePreset } = useQuickBuy();
   const { solPrice } = useSolPrice();
   const { prefetch, prefetchImmediate } = usePrefetchOrder();
@@ -300,7 +301,8 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
         percentageToSell: Number(amount),
         poolAddress: verifiedPoolAddress,
         baseMint: position.tokenAddress,
-        quoteMint: SOL_MINT_ADDRESS,
+        quoteMint: QUOTE_MINTS[quoteCurrency],
+        quoteCurrency,
         poolType,
         originalPairAddress: verifiedPoolAddress, // Use verified address
         // Preset trading parameters
@@ -322,7 +324,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
           : 0;
       const primarySolAddr = primaryWalletAddresses.solana || "";
 
-      __sellMarkId = insertOptimisticMarker({
+      __sellMarkId = insertOptimisticMarker({ quoteCurrency,
         mint: position.tokenAddress,
         walletAddress: primarySolAddr,
         side: "sell",
@@ -332,7 +334,10 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
       const result = await tradeSellPercentage(
         sellParams,
         user.bearerToken,
-        estSolOut > 0 && primarySolAddr
+        // Only a SOL sell credits the SOL header balance. A USDC sell delivers
+        // USDC (not SOL), so it must NOT optimistically increment the SOL header
+        // — skip the optimistic credit entirely for USDC.
+        quoteCurrency === "SOL" && estSolOut > 0 && primarySolAddr
           ? { solOut: estSolOut, walletAddress: primarySolAddr }
           : undefined,
       );
@@ -402,7 +407,11 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
           errorMessage = `❌ Trade failed. Try adjusting slippage.`;
           toast.error('Trade failed. Try adjusting slippage.', { duration: 4000 });
         } else if (error.code === 'INSUFFICIENT_BALANCE' || error.code === 'INSUFFICIENT_SOL_FOR_FEES') {
-          errorMessage = `⚠️ Low SOL balance — deposit SOL to sell`;
+          // USDC sells still need a little SOL for gas; the proceeds are USDC.
+          errorMessage =
+            quoteCurrency === "USDC"
+              ? `⚠️ Low SOL balance — you still need a little SOL for gas fees`
+              : `⚠️ Low SOL balance — deposit SOL to sell`;
           toast.error('Low SOL balance. Deposit SOL to cover fees.', { duration: 4000 });
         } else if (error.code === 'INVALID_POOL_TYPE') {
           errorMessage = `⚠️ Pool type not supported`;
@@ -575,7 +584,9 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
                 : 'bg-[#FF4D7F] hover:bg-[#E63E6B]'
             }`}
           >
-            {`Sell ${amount ? amount + '%' : ''}`}
+            {quoteCurrency === "USDC"
+              ? `Sell ${amount ? amount + "% " : ""}for ${quoteSymbol(quoteCurrency)}`
+              : `Sell ${amount ? amount + "%" : ""}`}
           </button>
         </div>
       </div>

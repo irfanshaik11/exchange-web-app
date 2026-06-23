@@ -26,6 +26,7 @@ interface LimitOrder {
   direction: "Above" | "Below";
   targetMC: number | string;
   solAmount: number | string;
+  quoteCurrency?: string;
   tokenAmount: number | string;
   status: LimitOrderStatus;
   createdAt?: string;
@@ -379,7 +380,7 @@ export default function TokenLimitOrders({
               const symbolLabel = meta.symbol || meta.name || "Tokens";
               const amountLabel =
                 order.type === "Buy"
-                  ? `${formatAmount(Number(order.solAmount))} ${nativeCurrency}`
+                  ? `${formatAmount(Number(order.solAmount))} ${order.quoteCurrency === 'USDC' ? 'USDC' : nativeCurrency}`
                   : `${formatAmount(Number(order.tokenAmount))} ${symbolLabel}`;
               const targetLabel = getOrderTargetLabel(order);
 
@@ -607,7 +608,7 @@ export default function TokenLimitOrders({
       (order?.tokenAddress ? `${order.tokenAddress.slice(0, 4)}…${order.tokenAddress.slice(-4)}` : "Token");
     const amountLabel =
       order?.type === "Buy"
-        ? `${formatAmount(Number(order?.solAmount))} ${nativeCurrency}`
+        ? `${formatAmount(Number(order?.solAmount))} ${order?.quoteCurrency === 'USDC' ? 'USDC' : nativeCurrency}`
         : `${formatAmount(Number(order?.tokenAmount))} ${meta.symbol || meta.name || "Tokens"}`;
     const targetLabel = order ? getOrderTargetLabel(order) : "—";
 
@@ -726,7 +727,7 @@ export default function TokenLimitOrders({
                   const isDevSellOrder = order.triggerType === "devSell";
                   const amount =
                     order.type === "Buy"
-                      ? `${formatAmount(Number(order.solAmount))} ${nativeCurrency}`
+                      ? `${formatAmount(Number(order.solAmount))} ${order.quoteCurrency === 'USDC' ? 'USDC' : nativeCurrency}`
                       : isDevSellOrder
                       ? `${formatAmount(Number(order.tokenAmount))}%`
                       : `${formatAmount(Number(order.tokenAmount))} Tokens`;

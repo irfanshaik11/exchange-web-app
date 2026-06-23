@@ -148,6 +148,7 @@ import {
   updateTransactionToast,
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
+import { quoteAwareBuyGate } from "~/utils/quoteBuyGate";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import {
   executeSolanaMultiBuy,
@@ -3846,7 +3847,7 @@ function PulseTable({
   const router = useRouter();
 
   // Quick buy functionality
-  const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds, quoteCurrency, walletUsdcBalances, usdcSplBalance, tokenBalances } =
     useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
 
@@ -3955,35 +3956,31 @@ function PulseTable({
     const settings = preset.quickBuySettings;
     const poolType = getPoolTypeFromToken(token);
 
-    // Pre-calculate which wallets will actually be used (have sufficient balance)
-    const { allocations, total } = buildSolanaWalletAllocations({
-      amount: buyAmount,
-      walletList,
-      walletBalances,
-      selectedWalletIds: selectedWalletIds?.sol || [],
-      priorityFee: settings.priority || 0.0001,
-      bribe: settings.bribe || 0,
-    });
-    const walletsWithBalance = allocations.length;
-    const isMultiWallet = walletsWithBalance > 1;
-
-    // Pre-validate before showing toast
+    // Pre-validate via the shared currency-aware gate (SOL or USDC).
     const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(
       () => null,
     );
-    const validation = validateSolanaBuy(
-      buyAmount,
-      allocations,
-      walletBalances,
+    const gate = quoteAwareBuyGate({
+      amount: buyAmount,
+      quoteCurrency,
       walletList,
-      selectedWalletIds?.sol || [],
-      settings.priority,
-      settings.bribe,
+      walletBalances,
+      walletUsdcBalances,
+      usdcSplBalance,
+      tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+      primaryAddress: walletList?.find((w: any) => w.isPrimary)?.solanaAddress,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority,
+      bribe: settings.bribe,
       ataExists,
-    );
-    if (!validation.valid) {
+      solBalance,
+    });
+    const { allocations, total } = gate;
+    const walletsWithBalance = gate.walletsWithBalance;
+    const isMultiWallet = walletsWithBalance > 1;
+    if (!gate.valid) {
       showTradeValidationError(
-        validation.error,
+        gate.error,
         getResolvedTokenImage(token),
         token.symbol || token.name || "Token",
       );
@@ -4139,7 +4136,7 @@ function PulseTable({
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
-      __markId = insertOptimisticMarker({
+      __markId = insertOptimisticMarker({ quoteCurrency,
         mint: baseMint,
         walletAddress:
           walletList?.find((w) => w.isPrimary)?.solanaAddress ??
@@ -4175,6 +4172,8 @@ function PulseTable({
         walletList,
         walletBalances,
         selectedWalletIds: selectedWalletIds?.sol || [],
+        quoteCurrency,
+        walletUsdcBalances: gate.effectiveWalletUsdcBalances,
         onTxHash: ({ txHash }) => {
           if (
             pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId &&
@@ -10139,7 +10138,7 @@ function PulseTable({
                                   <span className="number-font">
                                     {thunderAmount || "0"}
                                   </span>
-                                  <span>Buy</span>
+                                  <span>{isBnbToken ? "BNB" : quoteCurrency}</span>
                                 </button>
                               </div>
                             </div>

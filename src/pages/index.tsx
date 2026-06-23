@@ -41,6 +41,7 @@ import {
 } from "~/utils/preTradeValidation";
 import { checkAtaExists } from "~/utils/ataCheck";
 import { buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { quoteAwareBuyGate } from "~/utils/quoteBuyGate";
 import { getResolvedTokenImage } from "~/utils/images";
 import { env } from "../env";
 
@@ -85,6 +86,11 @@ export default function Home() {
     walletList,
     walletBalances,
     selectedWalletIds,
+    quoteCurrency,
+    walletUsdcBalances,
+    solBalance,
+    usdcSplBalance,
+    tokenBalances,
   } = useUser();
 
   // Redirect based on auth state: logged in → /pulse, not logged in → /learn
@@ -298,31 +304,29 @@ export default function Home() {
 
     const settings = presets[activePreset].quickBuySettings;
 
-    // Pre-validate balance before showing animated toast
-    const { allocations } = buildSolanaWalletAllocations({
-      amount: quickBuyAmount,
-      walletList: walletList || [],
-      walletBalances: walletBalances || {},
-      selectedWalletIds: selectedWalletIds?.sol || [],
-      priorityFee: settings.priority || 0.0001,
-      bribe: settings.bribe || 0,
-    });
+    // Pre-validate via the shared currency-aware gate (SOL or USDC).
     const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(
       () => null,
     );
-    const buyValidation = validateSolanaBuy(
-      quickBuyAmount,
-      allocations,
-      walletBalances || {},
-      walletList || [],
-      selectedWalletIds?.sol || [],
-      settings.priority,
-      settings.bribe,
+    const gate = quoteAwareBuyGate({
+      amount: quickBuyAmount,
+      quoteCurrency,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      walletUsdcBalances,
+      usdcSplBalance,
+      tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+      primaryAddress: (walletList || []).find((w: any) => w.isPrimary)
+        ?.solanaAddress,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority,
+      bribe: settings.bribe,
       ataExists,
-    );
-    if (!buyValidation.valid) {
+      solBalance,
+    });
+    if (!gate.valid) {
       showTradeValidationError(
-        buyValidation.error,
+        gate.error,
         getResolvedTokenImage(token),
         token.symbol || token.name || "Token",
       );
@@ -338,10 +342,12 @@ export default function Home() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      quoteCurrency,
       walletContext: {
         selectedWalletIds: selectedWalletIds?.sol || [],
         walletList: walletList || [],
         walletBalances: walletBalances || {},
+        walletUsdcBalances,
         chain: currentChain === "monad" ? "monad" : "sol",
       },
       refreshBalance,

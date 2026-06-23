@@ -66,6 +66,7 @@ import {
   executeSolanaMultiBuy,
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
+import { quoteAwareBuyGate } from "~/utils/quoteBuyGate";
 import {
   validateSolanaBuy,
   showTradeValidationError,
@@ -96,6 +97,7 @@ import {
 } from "react-icons/fi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
+import QuoteCurrencyToggle from "./QuoteCurrencyToggle";
 import FastImage from "./FastImage";
 import UpdatesModal from "./UpdatesModal";
 import UsernameEditModal from "./UsernameEditModal";
@@ -444,6 +446,9 @@ export default function Header({
     walletList,
     walletBalances,
     selectedWalletIds,
+    quoteCurrency,
+    walletUsdcBalances,
+    usdcSplBalance,
     logout,
   } = useUser();
 
@@ -1312,7 +1317,7 @@ export default function Header({
     }
 
     if (!quickBuyAmount || quickBuyAmount <= 0) {
-      const currency = currentChain === "monad" ? "MON" : "SOL";
+      const currency = currentChain === "monad" ? "MON" : quoteCurrency;
       toast.error(`Set a buy amount first (use the preset buttons)`, {
         duration: 3000,
         style: {
@@ -1412,18 +1417,6 @@ export default function Header({
     const settings = preset.quickBuySettings;
     const poolType = getPoolTypeFromToken(token);
 
-    // Pre-calculate wallet allocations
-    const { allocations, total } = buildSolanaWalletAllocations({
-      amount: quickBuyAmount,
-      walletList: walletList || [],
-      walletBalances: walletBalances || {},
-      selectedWalletIds: selectedWalletIds?.sol || [],
-      priorityFee: settings.priority || 0.0001,
-      bribe: settings.bribe || 0,
-    });
-    const walletsWithBalance = allocations.length;
-    const isMultiWallet = walletsWithBalance > 1;
-
     // Pre-validate before showing toast
     const tokenMint = (token as any).mint || "";
     if (!tokenMint) {
@@ -1440,19 +1433,28 @@ export default function Header({
     const ataExists = await checkAtaExists(tokenMint, user?.publicKey).catch(
       () => null,
     );
-    const validation = validateSolanaBuy(
-      quickBuyAmount,
-      allocations,
-      walletBalances || {},
-      walletList || [],
-      selectedWalletIds?.sol || [],
-      settings.priority,
-      settings.bribe,
+    const gate = quoteAwareBuyGate({
+      amount: quickBuyAmount,
+      quoteCurrency,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      walletUsdcBalances,
+      usdcSplBalance,
+      tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+      primaryAddress: (walletList || []).find((w: any) => w.isPrimary)
+        ?.solanaAddress,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority,
+      bribe: settings.bribe,
       ataExists,
-    );
-    if (!validation.valid) {
+      solBalance,
+    });
+    const { allocations, total } = gate;
+    const walletsWithBalance = gate.walletsWithBalance;
+    const isMultiWallet = walletsWithBalance > 1;
+    if (!gate.valid) {
       showTradeValidationError(
-        validation.error,
+        gate.error,
         getResolvedTokenImage(token),
         token.symbol || token.name || "Token",
       );
@@ -1601,7 +1603,7 @@ export default function Header({
       const baseMint = tokenMint;
       const quoteMint = SOL_MINT_ADDRESS;
 
-      __markId = insertOptimisticMarker({
+      __markId = insertOptimisticMarker({ quoteCurrency,
         mint: baseMint,
         walletAddress:
           walletList?.find((w) => w.isPrimary)?.solanaAddress ??
@@ -1637,6 +1639,8 @@ export default function Header({
         walletList: walletList || [],
         walletBalances: walletBalances || {},
         selectedWalletIds: selectedWalletIds?.sol || [],
+        quoteCurrency,
+        walletUsdcBalances: gate.effectiveWalletUsdcBalances,
         onTxHash: ({ txHash }) => {
           if (
             pendingSolanaQuickBuyToastRef.current?.id === uniqueToastId &&
@@ -2376,7 +2380,7 @@ export default function Header({
                             className="pr-1.5 text-[10px] font-medium sm:pr-2"
                             style={{ color: "#85d99f", opacity: 0.6 }}
                           >
-                            {currentChain === "monad" ? "MON" : "SOL"}
+                            {currentChain === "monad" ? "MON" : quoteCurrency}
                           </span>
                         </>
                       ) : (
@@ -2406,7 +2410,7 @@ export default function Header({
                               className="text-[10px] font-medium"
                               style={{ color: "#85d99f", opacity: 0.6 }}
                             >
-                              {currentChain === "monad" ? "MON" : "SOL"}
+                              {currentChain === "monad" ? "MON" : quoteCurrency}
                             </span>
                           </button>
                           {/* Pencil — opens edit mode */}
@@ -2528,6 +2532,13 @@ export default function Header({
                 <div className="hidden min-[420px]:block">
                   <BlockchainSwitcher />
                 </div>
+              </div>
+            )}
+
+            {/* Global SOL/USDC quote-currency toggle (Solana-only) */}
+            {user && !userLoading && currentChain === "sol" && (
+              <div className="hidden sm:flex">
+                <QuoteCurrencyToggle />
               </div>
             )}
 

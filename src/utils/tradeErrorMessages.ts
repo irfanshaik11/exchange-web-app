@@ -6,6 +6,18 @@ export function mapTradeErrorMessage(error: any): string {
   const errorCode = error?.code || error?.response?.data?.code || '';
   const rawMessage = error?.message || error?.error || error?.response?.data?.error || '';
   const raw = rawMessage.toLowerCase();
+  const httpStatus = error?.status ?? error?.response?.status;
+
+  // USDC quote-currency unroutable (fail-closed): the backend can't route a
+  // non-SOL trade for this token and returns HTTP 502 with an "unroutable" /
+  // QUOTE_CURRENCY_FALLBACK_UNSUPPORTED signal. Tell the user to switch to SOL.
+  if (
+    errorCode === 'QUOTE_CURRENCY_FALLBACK_UNSUPPORTED' ||
+    raw.includes('unroutable') ||
+    raw.includes('quote_currency_fallback_unsupported') ||
+    (httpStatus === 502 && raw.includes('usdc'))
+  )
+    return 'USDC unavailable for this token — switch to SOL to trade it.';
 
   // Insufficient funds
   if (

@@ -4,6 +4,7 @@ import {
   SOL_MINT_ADDRESS,
   ApiError,
 } from "./api";
+import type { QuoteCurrency } from "./quoteCurrency";
 import type { Token } from "./db";
 import {
   showEnhancedToast,
@@ -134,6 +135,12 @@ export interface EnhancedTradeParams {
   user: { bearerToken: string; id: string | number };
   solBalance: number;
   solPriceUsd?: number;
+  /**
+   * Currency the user is spending (buy) or receiving (sell). Default 'SOL'.
+   * When 'USDC', `amount` is interpreted in USDC units and the backend's
+   * Jupiter Ultra path uses USDC as input/output mint.
+   */
+  quoteCurrency?: QuoteCurrency;
   walletContext?: {
     selectedWalletIds: string[];
     walletList: Array<{
@@ -146,6 +153,8 @@ export interface EnhancedTradeParams {
       isArchived?: boolean;
     }>;
     walletBalances: Record<string, number>;
+    /** Per-wallet USDC balances — required for USDC trades' multi-wallet split. */
+    walletUsdcBalances?: Record<string, number>;
     chain?: "sol" | "monad";
   };
   onSuccess?: (txHash: string, stats: TradeStats) => void;
@@ -247,7 +256,11 @@ export async function executeEnhancedTrade(
       params.walletContext?.walletList?.[0]?.solanaAddress ||
       null;
     let deltaSol = 0;
-    if (side === "buy") {
+    // For USDC trades we don't decrement the displayed SOL balance — the spend
+    // is in USDC, and SOL only moves by gas-dust amounts that are too small to
+    // matter at header-display resolution.
+    const isUsdcTrade = (params.quoteCurrency ?? "SOL") === "USDC";
+    if (side === "buy" && !isUsdcTrade) {
       // Lean estimate: swap amount + Jito bribe. Priority-fee actual
       // deduction is typically a small fraction of the ceiling set by
       // the user, and ATA rent (~0.002) only applies for first-time
@@ -295,6 +308,7 @@ export async function executeEnhancedTrade(
         side,
         amountSol: side === "buy" ? amount : undefined,
         amountToken: side === "sell" ? amount : undefined,
+        quoteCurrency: params.quoteCurrency ?? "SOL",
         priceUsd: token.usd_price,
         timestamp: markerTs,
         status: "pending",
@@ -317,6 +331,7 @@ export async function executeEnhancedTrade(
   let walletAllocations: WalletAllocation[] = [];
   let walletsConsidered = 0;
   if (side === "buy" && chain === "sol" && params.walletContext) {
+    const isUsdcTrade = (params.quoteCurrency ?? "SOL") === "USDC";
     const availableWallets =
       params.walletContext.walletList?.filter(
         (w) => !w.isArchived && (w.solanaAddress || w.address),
@@ -348,19 +363,23 @@ export async function executeEnhancedTrade(
           .map((wallet) => {
             const address = getAddressForChain(wallet, "sol");
             const addressKey = address?.trim();
-            const balance = addressKey
-              ? (params.walletContext!.walletBalances[addressKey] ??
-                wallet.balance ??
-                0)
-              : (wallet.balance ?? 0);
+            const balance = isUsdcTrade
+              ? addressKey
+                ? (params.walletContext!.walletUsdcBalances?.[addressKey] ?? 0)
+                : 0
+              : addressKey
+                ? (params.walletContext!.walletBalances[addressKey] ??
+                  wallet.balance ??
+                  0)
+                : (wallet.balance ?? 0);
 
             const balanceWarning = checkBalanceSufficiency(
               balance,
               perWalletAmount,
-              dynamicPriorityFee,
-              settings.bribe || 0,
+              isUsdcTrade ? 0 : dynamicPriorityFee,
+              isUsdcTrade ? 0 : settings.bribe || 0,
               false,
-              0.0001,
+              isUsdcTrade ? 0 : 0.0001,
               ataExists,
             );
 
@@ -397,11 +416,15 @@ export async function executeEnhancedTrade(
       const fallback = availableWallets[0];
       const address = getAddressForChain(fallback, "sol");
       const addressKey = address?.trim();
-      const balance = addressKey
-        ? (params.walletContext.walletBalances[addressKey] ??
-          fallback.balance ??
-          0)
-        : (fallback.balance ?? 0);
+      const balance = isUsdcTrade
+        ? addressKey
+          ? (params.walletContext.walletUsdcBalances?.[addressKey] ?? 0)
+          : 0
+        : addressKey
+          ? (params.walletContext.walletBalances[addressKey] ??
+            fallback.balance ??
+            0)
+          : (fallback.balance ?? 0);
       walletAllocations = [
         {
           walletId: fallback.id,
@@ -667,10 +690,14 @@ export async function executeEnhancedTrade(
 
     // Step 4: Execute trade - support multi-wallet (equal split) for Solana buys
     // Note: If effectivePoolAddress is missing, backend will use pool discovery
+    const effectiveQuoteCurrency: QuoteCurrency = params.quoteCurrency ?? "SOL";
     const baseTradeParams: any = {
       poolAddress: effectivePoolAddress || undefined, // Allow undefined - backend will discover
       baseMint: token.mint,
+      // quoteMint left as wSOL for back-compat with any backend version that still reads it;
+      // the new contract is `quoteCurrency`, which the controller uses to derive the actual mint.
       quoteMint: SOL_MINT_ADDRESS,
+      quoteCurrency: effectiveQuoteCurrency,
       amount,
       mevProtection: (settings.mevMode === "off" ? 0 : 1) as 0 | 1,
       poolType: poolType || undefined, // Always send poolType if detected (helps backend with discovery)

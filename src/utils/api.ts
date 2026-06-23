@@ -9,6 +9,7 @@ import {
   dispatchOptimisticRollback,
   newTradeId,
 } from "./optimisticBalance";
+import type { QuoteCurrency } from "./quoteCurrency";
 
 // Constants
 export const SOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112";
@@ -394,6 +395,12 @@ export interface CreateLimitOrderParams {
   autoFee?: boolean;
   maxFee?: number;
   rpc?: string;
+  /**
+   * Currency the order is denominated in. Default 'SOL' for back-compat.
+   * For Buy orders, `amount` is the quantity of this currency to spend.
+   * For Sell orders, `amount` remains a token percentage — currency selects what's received.
+   */
+  quoteCurrency?: QuoteCurrency;
 }
 
 type LimitOrderStatus = "Active" | "Cancelled" | "Completed" | "Failed";
@@ -702,6 +709,11 @@ export type BuyParams = {
   tokenName?: string;
   tokenSymbol?: string;
   imageUrl?: string;
+  /**
+   * Currency the user is spending. Default 'SOL' for back-compat.
+   * When 'USDC', `amount` is interpreted as USDC units (6 decimals).
+   */
+  quoteCurrency?: QuoteCurrency;
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) => {
@@ -734,6 +746,11 @@ export type SellPercentageParams = {
   slippage?: number; // Percentage value (0.01-100), e.g., 20 for 20%
   priorityFee?: number; // in SOL, e.g., 0.001
   bribe?: number; // in SOL, e.g., 0.001
+  /**
+   * Currency to receive on sell. Default 'SOL' for back-compat.
+   * When 'USDC', Jupiter delivers USDC directly to the user's wallet.
+   */
+  quoteCurrency?: QuoteCurrency;
 };
 
 export type TradeSellOptimistic = {
@@ -791,6 +808,8 @@ type SellExactAmountParams = {
   solPrice: number;
   marketCap: number;
   tokenPrice: number;
+  /** Currency to receive on sell. Default 'SOL'. */
+  quoteCurrency?: QuoteCurrency;
 };
 
 export const tradeSellExactAmount = (params: SellExactAmountParams) =>

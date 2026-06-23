@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import { FaTimes, FaRunning, FaGasPump, FaEye, FaBan, FaSpinner, FaCheckCircle, FaExternalLinkAlt } from 'react-icons/fa';
 import { LuPencil, LuCheck } from 'react-icons/lu';
 import { useUser } from '~/components/UserContext';
+import { useQuote } from '~/hooks/useQuote';
 import {
   confirmOptimisticMarker,
   insertOptimisticMarker,
@@ -29,7 +30,7 @@ import useMonadPositionWebSocket from '~/hooks/useMonadPositionWebSocket';
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from '~/utils/solanaWalletAllocation';
 import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from '~/utils/preTradeValidation';
 import { checkAtaExists } from '~/utils/ataCheck';
-import { SOL_MINT_ADDRESS } from '~/utils/api';
+import { QUOTE_MINTS, QUOTE_BUY_PRESETS, type QuoteCurrency } from '~/utils/quoteCurrency';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { mapTradeErrorMessage } from '~/utils/tradeErrorMessages';
 import { showEnhancedToast } from '~/utils/enhancedToast';
@@ -51,7 +52,7 @@ const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 
 const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token, liveLiquidityUsd }) => {
   const router = useRouter();
-  const { user, solBalance, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds, primaryWalletAddresses } = useUser();
+  const { user, solBalance, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds, primaryWalletAddresses, quoteCurrency, usdcSplBalance, walletUsdcBalances, tokenBalances, refreshUsdcBalance } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Check if we're on a Monad trade page
@@ -62,6 +63,10 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     walletBalances: walletBalances || {},
     chain: (isMonad ? 'monad' : 'sol') as 'sol' | 'monad',
   }), [selectedWalletIds?.sol, selectedWalletIds?.monad, walletList, walletBalances, isMonad]);
+
+  // Sourced from the Money Brain (useQuote) — one seed, shared with TradeActionPanel.
+  const quote = useQuote();
+  const effectiveWalletUsdcBalances = quote.usdcBalances;
   
   // Ref to track pending toast for WebSocket txHash update
   const pendingToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
@@ -181,6 +186,15 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
   const [buyPresets, setBuyPresets] = useState<number[]>([0.01, 0.1, 1, 10]);
   // Sell presets (percentages) - editable
   const [sellPresets, setSellPresets] = useState<number[]>([10, 25, 50, 100]);
+
+  // When the quote currency switches to a non-SOL currency (e.g. USDC), reset
+  // the buy presets to that currency's sensible defaults. The SOL path is left
+  // untouched so its saved/default presets behave exactly as before.
+  useEffect(() => {
+    if (isMonad) return;
+    if (quoteCurrency === 'SOL') return;
+    setBuyPresets(QUOTE_BUY_PRESETS[quoteCurrency]);
+  }, [quoteCurrency, isMonad]);
 
   // Load presets from localStorage or use defaults
   useEffect(() => {
@@ -353,8 +367,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         window.dispatchEvent(new CustomEvent('monadPresetsUpdated', {
           detail: { presets: updated }
         }));
-      } else {
-        // For Solana, use existing keys
+      } else if (quoteCurrency === "SOL") {
+        // For Solana, use existing keys (USDC presets are defaults, not persisted)
         localStorage.setItem('tradeActionPanelBuyPresets', JSON.stringify(next));
         localStorage.setItem('instantTradeBuyPresets', JSON.stringify(next));
         
@@ -749,10 +763,12 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     const { allocations } = buildSolanaWalletAllocations({
       amount,
       walletList,
-      walletBalances,
+      walletBalances:
+        quoteCurrency === "USDC" ? effectiveWalletUsdcBalances : walletBalances,
       selectedWalletIds: selectedWalletIds?.sol || [],
       priorityFee: settings.priority,
       bribe: settings.bribe,
+      quoteCurrency,
     });
     const walletsWithBalance = allocations.length;
     const total = (selectedWalletIds?.sol || []).length || 1;
@@ -760,7 +776,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
     // Pre-validate before showing toast
     const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
-    const validation = validateSolanaBuy(amount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
+    const validation = validateSolanaBuy(amount, allocations, quoteCurrency === "USDC" ? effectiveWalletUsdcBalances : walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists, quoteCurrency, solBalance);
     if (!validation.valid) {
       toast.error(validation.error || 'Insufficient balance', { duration: 5000 });
       return { success: false };
@@ -894,9 +910,9 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         }
       }
       const baseMint = token.mint || '';
-      const quoteMint = SOL_MINT_ADDRESS;
+      const quoteMint = QUOTE_MINTS[quoteCurrency];
 
-      __markId = insertOptimisticMarker({
+      __markId = insertOptimisticMarker({ quoteCurrency,
         mint: baseMint,
         walletAddress: primaryWalletAddresses?.solana ?? walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
         side: "buy",
@@ -910,6 +926,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         baseMint,
         quoteMint,
         amountSOL: amount,
+        quoteCurrency,
+        walletUsdcBalances,
         poolType,
         originalPairAddress: token.pair_address,
         slippage: getEffectiveSlippage(settings.maxSlippage, true),
@@ -970,6 +988,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
       // Refresh header SOL balance
       dispatchBalanceRefresh('sol');
+      if (quoteCurrency === "USDC") void refreshUsdcBalance?.();
       broadcastTradeCompleted({ tokenAddress: token.mint, tradeType: 'buy', chain: 'sol', tokenName: token.name, tokenSymbol: token.symbol, imageUrl: tokenImage || undefined, solAmountSpent: amount });
 
       // Refresh token balance after 2s
@@ -1065,21 +1084,25 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       const { allocations } = buildSolanaWalletAllocations({
         amount: requested,
         walletList,
-        walletBalances,
+        walletBalances:
+          quoteCurrency === "USDC" ? effectiveWalletUsdcBalances : walletBalances,
         selectedWalletIds: selectedWalletIds?.sol || [],
         priorityFee,
         bribe,
+        quoteCurrency,
       });
 
       const clientValidation = validateSolanaBuy(
         requested,
         allocations,
-        walletBalances,
+        quoteCurrency === "USDC" ? effectiveWalletUsdcBalances : walletBalances,
         walletList,
         selectedWalletIds?.sol || [],
         priorityFee,
         bribe,
         null, // ataExists unknown at this pre-validation checkpoint
+        quoteCurrency,
+        solBalance,
       );
 
       if (!clientValidation.valid) {
@@ -1489,7 +1512,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
         try {
           const poolType = getPoolTypeFromToken(token);
 
-          __sellMarkId = insertOptimisticMarker({
+          __sellMarkId = insertOptimisticMarker({ quoteCurrency,
             mint: tokenAddress,
             walletAddress: primaryWalletAddresses?.solana ?? walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
             side: "sell",
@@ -1533,7 +1556,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               percentageToSell: percentage,
               poolAddress: effectivePoolAddress || undefined,
               baseMint: tokenAddress,
-              quoteMint: SOL_MINT_ADDRESS,
+              quoteMint: QUOTE_MINTS[quoteCurrency],
+              quoteCurrency,
               poolType,
               // originalPairAddress is for tracking history (always the original
               // pair_address), distinct from the execution poolAddress above.
@@ -1543,7 +1567,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               bribe: sellSettings.bribe ?? 0,
             },
             user.bearerToken,
-            estSolOut > 0 && primarySolAddr
+            quoteCurrency === "SOL" && estSolOut > 0 && primarySolAddr
               ? { solOut: estSolOut, walletAddress: primarySolAddr }
               : undefined
           );
@@ -1587,6 +1611,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
             // Refresh SOL balance immediately
             dispatchBalanceRefresh('sol');
+            if (quoteCurrency === "USDC") void refreshUsdcBalance?.();
 
             // Refresh position data after 2s
             setTimeout(async () => {
@@ -1811,6 +1836,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             user: { bearerToken: user.bearerToken, id: user.id },
             solBalance: Number(solBalance),
             solPriceUsd: 150,
+            quoteCurrency,
             walletContext,
             refreshBalance,
             onSuccess: async (txHash, stats) => {
@@ -1969,9 +1995,41 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
   const tokenValueUsd = tokensToSell * tokenPriceUsd;
   const solValue = tokensToSell * solPrice;
   const SOL_LOGO_URL = "/solana.png";
+  // Matches the USDC logo URL used in ConvertPanel.
+  const USDC_LOGO_URL = "https://assets.coingecko.com/coins/images/6319/small/usdc.png";
   const MONAD_LOGO_URL = "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1";
   const LOGO_URL = isMonad ? MONAD_LOGO_URL : SOL_LOGO_URL;
   const LOGO_ALT = isMonad ? "Monad" : "Solana";
+
+  // Buy-amount currency display. On Solana the spend currency follows the
+  // active quoteCurrency (USDC vs SOL); Monad always spends MON. The SOL path
+  // resolves to the same logo/label as before, so it is unchanged.
+  const isUsdcQuote = !isMonad && quoteCurrency === "USDC";
+  const buyCurrencyLogoUrl = isUsdcQuote ? USDC_LOGO_URL : LOGO_URL;
+  const buyCurrencyLabel = isMonad ? "MON" : quoteCurrency;
+  // Sell proceeds currency: USDC mode shows the USDC logo + USD-denominated value
+  // (USDC ≈ $1); otherwise the SOL/MON logo + native value. Unchanged for SOL/Monad.
+  const sellProceedsLogoUrl = isUsdcQuote ? USDC_LOGO_URL : LOGO_URL;
+  const sellProceedsLogoAlt = isUsdcQuote ? "USDC" : LOGO_ALT;
+  const sellProceedsValue = isUsdcQuote ? tokenValueUsd : solValue;
+
+  // Wallet balance shown for the spend currency. For USDC prefer the primary
+  // wallet's per-wallet USDC balance (keyed by solana address), falling back to
+  // the SPL trade-funding balance; for SOL show the header SOL balance
+  // (existing behavior, unchanged).
+  const primarySolanaAddress =
+    primaryWalletAddresses?.solana ||
+    walletList?.find((w) => w.isPrimary)?.solanaAddress ||
+    walletList?.[0]?.solanaAddress ||
+    "";
+  const primaryWalletUsdc = primarySolanaAddress
+    ? walletUsdcBalances[primarySolanaAddress]
+    : undefined;
+  const buyWalletBalance = isUsdcQuote
+    ? typeof primaryWalletUsdc === "number"
+      ? primaryWalletUsdc
+      : usdcSplBalance
+    : Number(solBalance) || 0;
 
   // Render warning dialogs using React Portal at body level to ensure they're above everything
   const warningDialogsPortal = typeof document !== 'undefined' && document.body ? (
@@ -2091,8 +2149,8 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-white">Buy</span>
               <img
-                src={LOGO_URL}
-                alt={LOGO_ALT}
+                src={buyCurrencyLogoUrl}
+                alt={buyCurrencyLabel}
                 className={`w-4 h-4 opacity-90 ${isMonad ? 'rounded-full object-cover' : ''}`}
               />
               {token && (
@@ -2104,6 +2162,21 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
                 </span>
               )}
             </div>
+            {isUsdcQuote && (
+              <div className="flex items-center gap-1 text-xs text-[#9CA3AF]">
+                <img
+                  src={buyCurrencyLogoUrl}
+                  alt={buyCurrencyLabel}
+                  className="w-3.5 h-3.5 opacity-90"
+                />
+                <span 
+                  className="text-[#E6E7EA] tabular-nums"
+                  style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                >
+                  {formatSmartNumber(buyWalletBalance)} {buyCurrencyLabel}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Buy preset buttons */}
@@ -2195,15 +2268,15 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
                 </span>
                 <span className="flex items-center gap-1">
                   <img
-                    src={LOGO_URL}
-                    alt={LOGO_ALT}
+                    src={sellProceedsLogoUrl}
+                    alt={sellProceedsLogoAlt}
                     className={`w-3.5 h-3.5 opacity-90 ${isMonad ? 'rounded-full object-cover' : ''}`}
                   />
                   <span 
                     className="text-[#E6E7EA] tabular-nums"
                     style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
                   >
-                    {formatSmartNumber(solValue)}
+                    {formatSmartNumber(sellProceedsValue)}
                   </span>
                 </span>
               </div>

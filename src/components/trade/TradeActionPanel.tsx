@@ -25,12 +25,16 @@ import { showEnhancedToast } from "~/utils/enhancedToast";
 import { showOrderToast, ORDER_TOAST_STYLE } from "~/utils/tradeToast";
 import { useUser } from "~/components/UserContext";
 import { executeSolanaMultiBuy, formatSolanaTxSummary, buildSolanaWalletAllocations } from "~/utils/solanaWalletAllocation";
+import { QUOTE_MINTS, QUOTE_BUY_PRESETS, quoteSymbol, type QuoteCurrency } from "~/utils/quoteCurrency";
 import { validateSolanaBuy, validateSolanaSell, showTradeValidationError } from "~/utils/preTradeValidation";
 import { checkAtaExists, getCachedAtaExists, prefetchAtaCheck } from "~/utils/ataCheck";
+import { estimateTradeOverheadSol } from "~/utils/tradeFeeEstimate";
 import { useTxHashCallback } from "~/contexts/SolanaPositionWebSocketContext";
 import type { SolanaTokenVolume, FirstBuyer, FirstBuyersSummary } from "~/hooks/useSolanaTokenWebSocket";
 import { extractTokenImage, getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import { SiSolana } from "react-icons/si";
+import CurrencyMark from "~/components/CurrencyMark";
+import { useQuote } from "~/hooks/useQuote";
 
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { mapTradeErrorMessage } from "~/utils/tradeErrorMessages";
@@ -1263,6 +1267,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     setSelectedWalletsForChain,
     selectAllWalletsForChain,
     selectWalletsWithFunds,
+    quoteCurrency,
+    setQuoteCurrency,
+    usdcSplBalance,
+    walletUsdcBalances,
+    refreshUsdcBalancesForWallets,
+    refreshUsdcBalance,
+    tokenBalances,
   } = useUser();
 
   // Wallet picker (Solana) — selection state lives in UserContext, this just wires
@@ -1282,6 +1293,27 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     () => new Set<string>(selectedWalletIds?.sol || []),
     [selectedWalletIds?.sol]
   );
+  // The quote-currency (SOL | USDC) toggle is Solana-only. This panel is the
+  // Solana trade surface (MonadTradeActionPanel is separate), so the only
+  // non-Solana case that can leak here is an EVM-style 0x token mint — mirror
+  // the 0x-mint detector used in Positions.tsx and hide the toggle for those.
+  const isSolanaChain = useMemo(
+    () => !(token?.mint || "").trim().toLowerCase().startsWith("0x"),
+    [token?.mint]
+  );
+  // Addresses of the currently-selected Solana wallets — used to warm the
+  // per-wallet USDC balance map before a USDC buy.
+  const selectedSolanaWalletAddresses = useMemo(
+    () =>
+      solWallets
+        .filter((w: any) => selectedWalletSet.has(w.id))
+        .map((w: any) => (w.solanaAddress || "").trim())
+        .filter(Boolean),
+    [solWallets, selectedWalletSet]
+  );
+  // Sourced from the Money Brain (useQuote) — one seed, no per-surface drift.
+  const quote = useQuote();
+  const effectiveWalletUsdcBalances = quote.usdcBalances;
   const selectedWalletCount = solWallets.filter((w: any) => selectedWalletSet.has(w.id)).length;
   const allWalletsSelected = solWallets.length > 0 && selectedWalletCount === solWallets.length;
   const totalSelectedSolBalance = solWallets
@@ -1289,6 +1321,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     .reduce((acc: number, w: any) => {
       const addr = (w.solanaAddress || "").trim();
       const bal = addr ? walletBalances?.[addr] ?? w.balance ?? 0 : 0;
+      return acc + (bal || 0);
+    }, 0);
+  const totalSelectedUsdcBalance = solWallets
+    .filter((w: any) => selectedWalletSet.has(w.id))
+    .reduce((acc: number, w: any) => {
+      const addr = (w.solanaAddress || "").trim();
+      const bal = addr ? effectiveWalletUsdcBalances?.[addr] ?? 0 : 0;
       return acc + (bal || 0);
     }, 0);
 
@@ -1306,6 +1345,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       refreshAllBalances(wallets);
     }
   }, [solWallets, refreshAllBalances]);
+
+  // When the user is spending USDC, populate the per-wallet USDC balance map for
+  // the selected Solana wallets so the picker shows real balances and the buy
+  // path can size allocations against on-chain USDC. No-op for the SOL path.
+  useEffect(() => {
+    if (quoteCurrency !== "USDC") return;
+    if (selectedSolanaWalletAddresses.length === 0) return;
+    refreshUsdcBalancesForWallets?.(selectedSolanaWalletAddresses);
+  }, [quoteCurrency, selectedSolanaWalletAddresses, refreshUsdcBalancesForWallets]);
 
   // Default-select the primary wallet on first load so the pill shows the user's
   // balance instead of 0/0.00 before they open the picker. Runs only while the
@@ -1687,6 +1735,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     ? limitTokenPriceInSol
     : liveTokenPriceInSol;
 
+  // Token price denominated in the active quote currency: SOL keeps price-in-SOL,
+  // USDC uses price-in-USD (priceInSol * solPrice) so the buy estimate divides the
+  // spend amount by the correct unit price (fixes USDC showing SOL-priced token counts).
+  const quoteUnitTokenPrice =
+    quoteCurrency === "USDC"
+      ? effectiveBuyTokenPrice * (liveSolPrice > 0 ? liveSolPrice : 0)
+      : effectiveBuyTokenPrice;
+
   const sliderBaseMarketCap = useMemo(() => {
     if (baseMarketCap > 0) {
       return baseMarketCap;
@@ -1955,12 +2011,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   
   // Update presets when mode changes OR when buyPresets/sellPresets change (from InstantTradeModal)
   useEffect(() => {
-    const newPresets = mode === "sell" ? sellPresets : buyPresets;
+    const newPresets =
+      mode === "sell"
+        ? sellPresets
+        : quoteCurrency === "SOL"
+          ? buyPresets
+          : QUOTE_BUY_PRESETS[quoteCurrency];
     setAmountPresets(newPresets);
     setPresetDrafts(newPresets.map(String));
     // Only clear amount when switching modes, not when presets update
     // setAmount(""); // Commented out to preserve user input when presets change
-  }, [mode, buyPresets, sellPresets]);
+  }, [mode, buyPresets, sellPresets, quoteCurrency]);
   
   // Clear amount only when mode changes (not when presets update)
   const prevModeRef = useRef<"buy" | "sell">(mode);
@@ -2086,7 +2147,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
             const amountLabel =
               orderType === "Buy"
-                ? `${resolvedSol.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+                ? `${resolvedSol.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${quoteCurrency}`
                 : `${resolvedTokens.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbolLabel}`;
 
             const descriptionParts = [amountLabel];
@@ -2170,7 +2231,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       showEnhancedToast("error", "Enter a valid sniper amount", {
         title: "Invalid Amount",
         description: mode === "buy" 
-          ? "Provide a positive SOL amount before arming the sniper."
+          ? `Provide a positive ${quoteCurrency} amount before arming the sniper.`
           : "Provide a percentage between 1 and 100 before arming the sniper.",
       });
       return;
@@ -2222,7 +2283,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     const latestMarketCap = baseMarketCap;
 
     const formattedAmount = mode === "buy"
-      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${quoteCurrency}`
       : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
 
     const tokenName = token.symbol || token.name || "Token";
@@ -2255,6 +2316,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           autoFee: autoFeeValue,
           maxFee: maxFeeValue,
           rpc: rpcValue,
+          quoteCurrency,
         },
         user.bearerToken
       );
@@ -2324,7 +2386,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         title: "Invalid Amount",
         description: mode === "sell"
           ? "Provide a percentage between 1 and 100 before arming the dev mirror."
-          : "Provide a positive SOL amount before arming the dev mirror.",
+          : `Provide a positive ${quoteCurrency} amount before arming the dev mirror.`,
       });
       return;
     }
@@ -2370,7 +2432,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
     const actionLabel = mode === "buy" ? "Buy on Dev Sell" : "Sell on Dev Sell";
     const formattedAmount = mode === "buy"
-      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${quoteCurrency}`
       : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
     const shortDev = creatorAddress.length > 12
       ? `${creatorAddress.slice(0, 4)}...${creatorAddress.slice(-4)}`
@@ -2405,6 +2467,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           autoFee: autoFeeValue,
           maxFee: maxFeeValue,
           rpc: rpcValue,
+          quoteCurrency,
         },
         user.bearerToken
       );
@@ -2499,16 +2562,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           const { allocations: preAllocations } = buildSolanaWalletAllocations({
             amount: buyAmountPreCheck,
             walletList,
-            walletBalances,
+            walletBalances:
+              quoteCurrency === "USDC" ? effectiveWalletUsdcBalances : walletBalances,
             selectedWalletIds: selectedWalletIds?.sol || [],
             priorityFee: settings.priority || 0.0001,
             bribe: settings.bribe || 0,
+            quoteCurrency,
           });
           // Use cached ATA result if available, otherwise assume it doesn't exist (overestimates cost)
           const cachedAta = getCachedAtaExists(token?.mint, user?.publicKey) ?? false;
           const preValidation = validateSolanaBuy(
-            buyAmountPreCheck, preAllocations, walletBalances, walletList,
-            selectedWalletIds?.sol || [], settings.priority, settings.bribe, cachedAta
+            buyAmountPreCheck,
+            preAllocations,
+            quoteCurrency === "USDC" ? effectiveWalletUsdcBalances : walletBalances,
+            walletList,
+            selectedWalletIds?.sol || [],
+            settings.priority,
+            settings.bribe,
+            cachedAta,
+            quoteCurrency,
+            solBalance,
           );
           if (!preValidation.valid) {
             showTradeValidationError(preValidation.error, getResolvedTokenImage(token), token?.symbol || token?.name || 'Token');
@@ -2611,7 +2684,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           })();
           const formattedAmount =
             mode === "buy"
-              ? `${Number.isFinite(numericAmount) ? numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 }) : amount} SOL`
+              ? `${Number.isFinite(numericAmount) ? numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 }) : amount} ${quoteCurrency}`
               : `${Number.isFinite(numericAmount) ? numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 }) : amount}%`;
           const formattedTarget =
             Number.isFinite(numericTargetMc)
@@ -2682,6 +2755,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               autoFee: autoFeeValue,
               maxFee: maxFeeValue,
               rpc: rpcValue,
+              quoteCurrency,
             },
             user.bearerToken
           );
@@ -2730,7 +2804,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         if (!requested || requested <= 0) {
           setIsLoading(false);
           setSuccessMessage(null);
-          showEnhancedToast("error", "Please enter a valid SOL amount", {
+          showEnhancedToast("error", `Please enter a valid ${quoteCurrency} amount`, {
             title: "Invalid Amount",
           });
           return;
@@ -2914,15 +2988,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               percentageToSell: sellPercentage,
               poolAddress: resolvedPoolAddress,
               baseMint: token.mint || '',
-              quoteMint: SOL_MINT_ADDRESS,
+              // Receive currency follows the selected quote currency (SOL default).
+              quoteMint: QUOTE_MINTS[quoteCurrency],
               poolType,
               originalPairAddress: resolvedPoolAddress,
               slippage: (settings.maxSlippage || 0.2) * 100,
               priorityFee: settings.priority ?? 0.0001,
               bribe: settings.bribe ?? 0,
+              quoteCurrency,
             },
             user.bearerToken,
-            estSolOut > 0 && primarySolAddr
+            quoteCurrency === "SOL" && estSolOut > 0 && primarySolAddr
               ? { solOut: estSolOut, walletAddress: primarySolAddr }
               : undefined
           );
@@ -2981,6 +3057,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
             // Refresh header + portfolio balance immediately
             dispatchBalanceRefresh('sol');
+            if (quoteCurrency === "USDC") void refreshUsdcBalance?.();
 
             // Refresh position data for the token detail page's position card
             setTimeout(async () => {
@@ -3071,10 +3148,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       const { allocations, total } = buildSolanaWalletAllocations({
         amount: buyAmount,
         walletList,
-        walletBalances,
+        walletBalances:
+          quoteCurrency === "USDC" ? effectiveWalletUsdcBalances : walletBalances,
         selectedWalletIds: selectedWalletIds?.sol || [],
         priorityFee: settings.priority || 0.0001,
         bribe: settings.bribe || 0,
+        quoteCurrency,
       });
       const walletsWithBalance = allocations.length;
       const totalSelectedWallets = (selectedWalletIds?.sol || []).length || 1;
@@ -3082,7 +3161,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       // Pre-validate before showing toast
       const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(() => null);
-      const buyValidation = validateSolanaBuy(buyAmount, allocations, walletBalances, walletList, selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
+      const buyValidation = validateSolanaBuy(
+        buyAmount,
+        allocations,
+        quoteCurrency === "USDC" ? effectiveWalletUsdcBalances : walletBalances,
+        walletList,
+        selectedWalletIds?.sol || [],
+        settings.priority,
+        settings.bribe,
+        ataExists,
+        quoteCurrency,
+        solBalance,
+      );
       if (!buyValidation.valid) {
         showTradeValidationError(buyValidation.error, getResolvedTokenImage(token), token.symbol || token.name || 'Token');
         setIsLoading(false);
@@ -3217,7 +3307,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       try {
         const poolAddress = resolvedPoolAddress;
         const baseMint = token.mint || '';
-        const quoteMint = SOL_MINT_ADDRESS;
+        // Quote mint follows the selected quote currency (SOL default).
+        const quoteMint = QUOTE_MINTS[quoteCurrency];
 
         const buyMarkerPrimaryAddr = primaryWalletAddresses.solana || "";
         if (buyMarkerPrimaryAddr && baseMint) {
@@ -3227,6 +3318,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             walletAddress: buyMarkerPrimaryAddr.toLowerCase(),
             side: "buy",
             amountSol: buyAmount,
+            quoteCurrency,
             priceUsd: token.usd_price,
             timestamp: Date.now() - 500,
             status: "pending",
@@ -3241,6 +3333,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           baseMint,
           quoteMint,
           amountSOL: buyAmount,
+          quoteCurrency,
           poolType,
         originalPairAddress: token.pair_address || resolvedPoolAddress,
         slippage: settings.maxSlippage,
@@ -3256,6 +3349,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           authToken: user.bearerToken,
           walletList,
           walletBalances,
+          walletUsdcBalances: effectiveWalletUsdcBalances,
           selectedWalletIds: selectedWalletIds?.sol || [],
           onTxHash: ({ txHash }) => {
             if (pendingSolanaToastRef.current?.id === uniqueToastId && txHash) {
@@ -3385,6 +3479,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       user,
       effectivePoolAddress,
       monitorLimitOrderExecution,
+      quoteCurrency,
+      usdcSplBalance,
+      walletUsdcBalances,
+      effectiveWalletUsdcBalances,
+      tokenBalances,
     ]
   );
 
@@ -3414,6 +3513,28 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, []);
 
   const isSniperMode = tab === "adv" && migrationMode;
+
+  // Pre-trade fee/overhead estimate (SOL) — single source: estimateTradeOverheadSol.
+  // Estimate only ("~"): Jupiter Ultra may use adaptive priority, so actuals vary.
+  const feeSpendAmount = Number(isSniperMode ? sniperAmount : amount) || 0;
+  // USDC spend converted to a SOL-equivalent; null while the SOL price is still
+  // loading so the row hides rather than showing a wildly wrong figure.
+  const feeSolEquivSpend =
+    quoteCurrency === "USDC"
+      ? liveSolPrice > 0
+        ? feeSpendAmount / liveSolPrice
+        : null
+      : feeSpendAmount;
+  const estTradeFeeSol =
+    feeSolEquivSpend === null
+      ? 0
+      : estimateTradeOverheadSol({
+          solEquivSpend: feeSolEquivSpend,
+          prioritySol: settings.priority,
+          bribeSol: settings.bribe,
+          ataExists: getCachedAtaExists(token?.mint, user?.publicKey),
+        });
+  const estTradeFeeUsd = liveSolPrice > 0 ? estTradeFeeSol * liveSolPrice : 0;
   const isDevSellMode = tab === "adv" && devSellMode;
 
   return (
@@ -3551,6 +3672,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               </button>
             </div>
           </div>
+
         </div>
       </div>
 
@@ -3608,8 +3730,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               <span>{selectedWalletCount}</span>
             </span>
             <span className="flex items-center gap-1">
-              <SiSolana size={11} style={{ fill: "url(#sol-gradient-trade)" }} />
-              <span>{totalSelectedSolBalance.toFixed(2)}</span>
+              {quoteCurrency === "USDC" ? (
+                <>
+                  <span>{totalSelectedUsdcBalance.toFixed(2)}</span>
+                  <span className="text-[9px] font-semibold" style={{ color: AX.muted }}>
+                    USDC
+                  </span>
+                </>
+              ) : (
+                <>
+                  <SiSolana size={11} style={{ fill: "url(#sol-gradient-trade)" }} />
+                  <span>{totalSelectedSolBalance.toFixed(2)}</span>
+                </>
+              )}
             </span>
           </button>
           {/* Shared SVG gradient definition for SiSolana icons inside the wallet picker */}
@@ -3682,6 +3815,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     const balance = address
                       ? walletBalances?.[address] ?? wallet.balance ?? 0
                       : wallet.balance ?? 0;
+                    // When spending USDC, show the wallet's USDC balance instead of
+                    // SOL. Prefer the per-wallet map; fall back to the primary
+                    // wallet's USDC SPL balance for the primary address.
+                    const isUsdc = quoteCurrency === "USDC";
+                    const usdcBalance = address
+                      ? walletUsdcBalances?.[address] ??
+                        (wallet.isPrimary ? usdcSplBalance ?? 0 : 0)
+                      : 0;
+                    const displayBalance = isUsdc ? usdcBalance : balance;
                     const truncated =
                       address && address.length > 8
                         ? `${address.slice(0, 4)}...${address.slice(-4)}`
@@ -3744,8 +3886,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                           className="flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px]"
                           style={{ backgroundColor: AX.surface, color: AX.text }}
                         >
-                          <SiSolana size={10} style={{ fill: "url(#sol-gradient-trade)" }} />
-                          <span>{(balance || 0).toFixed(2)}</span>
+                          {isUsdc ? (
+                            <>
+                              <span>{(displayBalance || 0).toFixed(2)}</span>
+                              <span className="text-[9px] font-semibold" style={{ color: AX.muted }}>
+                                USDC
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <SiSolana size={10} style={{ fill: "url(#sol-gradient-trade)" }} />
+                              <span>{(displayBalance || 0).toFixed(2)}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -3864,38 +4017,29 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     const minAmount = minimums[poolType] ?? 0.0001;
 
                     if (value < minAmount) {
-                      showEnhancedToast('error', `Minimum trade size is ${minAmount} SOL`, {
-                        title: 'Amount Too Small',
-                        description: `Increase the amount to at least ${minAmount} SOL before placing the order.`,
-                      });
+                      showEnhancedToast(
+                        'error',
+                        `Minimum trade size is ${minAmount} ${quoteSymbol(quoteCurrency)}`,
+                        {
+                          title: 'Amount Too Small',
+                          description: `Increase the amount to at least ${minAmount} ${quoteSymbol(quoteCurrency)} before placing the order.`,
+                        }
+                      );
                     }
                   }
                 }}
               />
             </div>
-            <div className="flex items-center justify-center w-5 h-5">
+            <div
+              className={cx(
+                "flex h-5 items-center justify-center",
+                mode === "buy" ? "w-auto" : "w-5"
+              )}
+            >
               {mode === "sell" ? (
                 <span className="text-[14px] font-semibold" style={{ color: AX.text }}>%</span>
               ) : (
-                <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
-                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
-                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear)"/>
-                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear)"/>
-                  <defs>
-                    <linearGradient id="paint0_linear" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                    <linearGradient id="paint1_linear" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                    <linearGradient id="paint2_linear" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
+                <CurrencyMark currency={quoteCurrency} size={16} showLabel />
               )}
             </div>
           </div>
@@ -3905,7 +4049,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           {/* Presets */}
           {(() => {
             const isSellWithPosition = mode === "sell" && positionData && positionData.remaining > 0;
-            const isBuyWithPrice = mode === "buy" && effectiveBuyTokenPrice > 0;
+            const isBuyWithPrice = mode === "buy" && quoteUnitTokenPrice > 0;
             const showSubtext = isSellWithPosition || isBuyWithPrice;
             const presetRowHeight = showSubtext ? "h-9" : "h-7";
             return (
@@ -3917,7 +4061,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 const tokenAmountForPreset = isSellWithPosition
                   ? (opt / 100) * positionData.remaining
                   : isBuyWithPrice
-                    ? opt / effectiveBuyTokenPrice
+                    ? opt / quoteUnitTokenPrice
                     : null;
                 if (editingPresets) {
                   return (
@@ -4249,29 +4393,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </>
               ) : (
                 <>
-                  <div className="inline-block w-3 h-3 ml-1 align-middle">
-                    <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
-                      <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
-                      <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
-                      <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
-                      <defs>
-                        <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                          <stop offset="0" stopColor="#00FFA3"/>
-                          <stop offset="1" stopColor="#DC1FFF"/>
-                        </linearGradient>
-                        <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                          <stop offset="0" stopColor="#00FFA3"/>
-                          <stop offset="1" stopColor="#DC1FFF"/>
-                        </linearGradient>
-                        <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                          <stop offset="0" stopColor="#00FFA3"/>
-                          <stop offset="1" stopColor="#DC1FFF"/>
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                  </div>
-                  {effectiveBuyTokenPrice > 0 && Number(amount) > 0 && (
-                    <span className="text-[#9CA3AF]"> (~{formatCompactNumber(Number(amount) / effectiveBuyTokenPrice)} tokens)</span>
+                  <CurrencyMark currency={quoteCurrency} size={12} showLabel className="ml-1" />
+                  {quoteUnitTokenPrice > 0 && Number(amount) > 0 && (
+                    <span className="text-[#9CA3AF]"> (~{formatCompactNumber(Number(amount) / quoteUnitTokenPrice)} tokens)</span>
                   )}
                 </>
               )}
@@ -4281,11 +4405,28 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       )}
 
       {/* Est. receive row for buy mode */}
-      {mode === "buy" && effectiveBuyTokenPrice > 0 && Number(isSniperMode ? sniperAmount : amount) > 0 && (
+      {mode === "buy" && quoteUnitTokenPrice > 0 && Number(isSniperMode ? sniperAmount : amount) > 0 && (
         <div className="mx-3 mt-1 flex items-center justify-between rounded-lg px-3 py-1.5" style={{ backgroundColor: AX.surface2 }}>
           <span className="text-[11px]" style={{ color: AX.muted }}>Est. receive</span>
           <span className="text-[12px] font-semibold tabular-nums" style={{ color: AX.text }}>
-            ~{formatCompactNumber(Number(isSniperMode ? sniperAmount : amount) / effectiveBuyTokenPrice)} {token.symbol}
+            ~{formatCompactNumber(Number(isSniperMode ? sniperAmount : amount) / quoteUnitTokenPrice)} {token.symbol}
+          </span>
+        </div>
+      )}
+
+      {/* Est. fees/overhead row for buy mode — pre-trade estimate */}
+      {mode === "buy" && feeSpendAmount > 0 && estTradeFeeSol > 0 && (
+        <div
+          className="mx-3 mt-1 flex items-center justify-between rounded-lg px-3 py-1.5"
+          style={{ backgroundColor: AX.surface2 }}
+          title="Estimated platform + network fees, paid in SOL. Actual network cost varies with congestion."
+        >
+          <span className="text-[11px]" style={{ color: AX.muted }}>
+            Est. fees{quoteCurrency === "USDC" ? " (in SOL)" : ""}
+          </span>
+          <span className="text-[12px] font-medium tabular-nums" style={{ color: AX.muted }}>
+            ~{estTradeFeeSol.toFixed(4)} SOL
+            {estTradeFeeUsd >= 0.005 ? ` (~$${estTradeFeeUsd.toFixed(2)})` : ""}
           </span>
         </div>
       )}
@@ -4337,7 +4478,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   <>
                     {" "}{prettyAmt(sniperAmount)}
                     {mode === "buy" ? (
-                      <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                      <CurrencyMark currency={quoteCurrency} size={15} showLabel className="-mt-px" />
                     ) : (
                       <span className="ml-0.5">%</span>
                     )}
@@ -4354,7 +4495,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 {prettyAmt(amount) && (
                   <>
                     {" "}{prettyAmt(amount)}
-                    {mode === "sell" ? <span>%</span> : <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />}
+                    {mode === "sell" ? <span>%</span> : <CurrencyMark currency={quoteCurrency} size={15} showLabel className="-mt-px" />}
                   </>
                 )}
               </span>
@@ -4365,8 +4506,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               {mode === "sell" && positionData && positionData.remaining > 0 && Number(amount) > 0 && (
                 <> {formatCompactNumber((Number(amount) / 100) * positionData.remaining)}</>
               )}
-              {mode === "buy" && effectiveBuyTokenPrice > 0 && Number(amount) > 0 && (
-                <> ~{formatCompactNumber(Number(amount) / effectiveBuyTokenPrice)}</>
+              {mode === "buy" && quoteUnitTokenPrice > 0 && Number(amount) > 0 && (
+                <> ~{formatCompactNumber(Number(amount) / quoteUnitTokenPrice)}</>
               )}
               {" "}{token.symbol}
               {prettyAmt(amount) && (
@@ -4375,7 +4516,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   {mode === "sell" ? (
                     <span>%</span>
                   ) : (
-                    <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                    <CurrencyMark currency={quoteCurrency} size={15} showLabel className="-mt-px" />
                   )}
                 </>
               )}

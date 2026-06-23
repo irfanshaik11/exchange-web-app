@@ -3,6 +3,7 @@ import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, NATIVE_MINT } from "@solana/spl-token";
 import { ethers } from "ethers";
 import Cookies from "js-cookie";
+import { QUOTE_MINTS } from "./quoteCurrency";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -13,7 +14,8 @@ const isDev = process.env.NODE_ENV !== "production";
  * Returns an empty object when no token is present (logged-out / SSR).
  */
 function authHeaders(): Record<string, string> {
-  const token = typeof window !== "undefined" ? Cookies.get("token") : undefined;
+  const token =
+    typeof window !== "undefined" ? Cookies.get("token") : undefined;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -158,7 +160,10 @@ export async function fetchActivePositions(
       blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
     const res = await fetch(
       `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}${blockchainParam}`,
-      { headers: authHeaders(), ...(controller ? { signal: controller.signal } : {}) },
+      {
+        headers: authHeaders(),
+        ...(controller ? { signal: controller.signal } : {}),
+      },
     );
     if (!res.ok) {
       return { ok: false, data: null, error: `http_${res.status}` };
@@ -221,7 +226,10 @@ export async function getTradeHistoryByUser(
       blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
     const res = await fetch(
       `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}${blockchainParam}`,
-      { headers: authHeaders(), ...(controller ? { signal: controller.signal } : {}) },
+      {
+        headers: authHeaders(),
+        ...(controller ? { signal: controller.signal } : {}),
+      },
     );
     if (!res.ok) {
       throw new Error(
@@ -271,7 +279,10 @@ export async function fetchTradeActivity(
       blockchain && blockchain !== "all" ? `&blockchain=${blockchain}` : "";
     const res = await fetch(
       `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}${blockchainParam}`,
-      { headers: authHeaders(), ...(controller ? { signal: controller.signal } : {}) },
+      {
+        headers: authHeaders(),
+        ...(controller ? { signal: controller.signal } : {}),
+      },
     );
     if (!res.ok) {
       return { ok: false, data: null, error: `http_${res.status}` };
@@ -556,6 +567,35 @@ export async function getSolBalance(address: string, isDevnet = false) {
   } catch (error) {
     console.error("Failed to fetch balance:", error);
     return null;
+  }
+}
+
+/**
+ * Read a wallet's USDC SPL balance (UI units) from its associated token account.
+ *
+ * Mirrors getSolBalance's RPC setup. An absent USDC ATA means the wallet has
+ * never held USDC, which is a zero balance — not an error — so we return 0 in
+ * that case and on any failure (no throwing, server-side use only).
+ */
+export async function getUsdcSplBalance(address: string): Promise<number> {
+  try {
+    // Use the configured private RPC, falling back to public mainnet-beta.
+    const rpcUrl = env.NEXT_PUBLIC_SOLANA_RPC
+      ? env.NEXT_PUBLIC_SOLANA_RPC
+      : clusterApiUrl("mainnet-beta");
+    const connection = new Connection(rpcUrl, "confirmed");
+
+    const ata = getAssociatedTokenAddressSync(
+      new PublicKey(QUOTE_MINTS.USDC),
+      new PublicKey(address),
+    );
+
+    const { value } = await connection.getTokenAccountBalance(ata);
+    // USDC has 6 decimals: raw micro-USDC -> UI units.
+    return Number(value.amount) / 1e6;
+  } catch (error) {
+    // Absent ATA or RPC failure both resolve to a 0 balance.
+    return 0;
   }
 }
 

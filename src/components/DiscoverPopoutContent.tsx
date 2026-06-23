@@ -214,6 +214,8 @@ export default function DiscoverPopoutContent() {
     walletList,
     walletBalances,
     selectedWalletIds,
+    quoteCurrency,
+    walletUsdcBalances,
   } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
@@ -1899,7 +1901,7 @@ export default function DiscoverPopoutContent() {
 
     const buyAmount = parseFloat(quickBuyAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
-      const currency = currentChain === "monad" ? "MON" : "SOL";
+      const currency = currentChain === "monad" ? "MON" : quoteCurrency;
       showEnhancedToast(
         "warning",
         `Please enter a valid ${currency} amount (minimum 0.001 ${currency})`,
@@ -2200,6 +2202,7 @@ export default function DiscoverPopoutContent() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150, // TODO: Get real SOL price
+      quoteCurrency,
       walletContext: {
         selectedWalletIds:
           currentChain === "monad"
@@ -2207,6 +2210,7 @@ export default function DiscoverPopoutContent() {
             : selectedWalletIds?.sol || [],
         walletList: walletList || [],
         walletBalances: walletBalances || {},
+        walletUsdcBalances,
         chain: currentChain === "monad" ? "monad" : "sol",
       },
       refreshBalance,

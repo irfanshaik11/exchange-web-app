@@ -57,6 +57,7 @@ import {
   executeSolanaMultiBuy,
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
+import { quoteAwareBuyGate } from "~/utils/quoteBuyGate";
 import {
   broadcastTradeCompleted,
   notifyTradePending,
@@ -721,7 +722,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
   onScanWallet,
 }: SearchModalProps) {
   const router = useRouter();
-  const { user, solBalance, walletList, walletBalances, selectedWalletIds } =
+  const { user, solBalance, walletList, walletBalances, selectedWalletIds, quoteCurrency, walletUsdcBalances, usdcSplBalance, tokenBalances } =
     useUser();
   const { solPrice } = useSolPrice();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
@@ -1228,36 +1229,33 @@ const SearchModalContent = React.memo(function SearchModalContent({
       const settings = preset.quickBuySettings;
       const poolType = getPoolTypeFromToken(token as any);
 
-      // Pre-calculate wallet allocations
-      const { allocations, total } = buildSolanaWalletAllocations({
-        amount: buyAmount,
-        walletList: walletList || [],
-        walletBalances: walletBalances || {},
-        selectedWalletIds: selectedWalletIds?.sol || [],
-        priorityFee: settings.priority || 0.0001,
-        bribe: settings.bribe || 0,
-      });
-      const walletsWithBalance = allocations.length;
-      const isMultiWallet = walletsWithBalance > 1;
-
-      // Pre-validate before showing toast
+      // Pre-validate via the shared currency-aware gate (SOL or USDC).
       const ataExists = await checkAtaExists(
         token.mint,
         (user as any)?.publicKey,
       ).catch(() => null);
-      const validation = validateSolanaBuy(
-        buyAmount,
-        allocations,
-        walletBalances || {},
-        walletList || [],
-        selectedWalletIds?.sol || [],
-        settings.priority,
-        settings.bribe,
+      const gate = quoteAwareBuyGate({
+        amount: buyAmount,
+        quoteCurrency,
+        walletList: walletList || [],
+        walletBalances: walletBalances || {},
+        walletUsdcBalances,
+        usdcSplBalance,
+        tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+        primaryAddress: (walletList || []).find((w: any) => w.isPrimary)
+          ?.solanaAddress,
+        selectedWalletIds: selectedWalletIds?.sol || [],
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
         ataExists,
-      );
-      if (!validation.valid) {
+        solBalance,
+      });
+      const { allocations, total } = gate;
+      const walletsWithBalance = gate.walletsWithBalance;
+      const isMultiWallet = walletsWithBalance > 1;
+      if (!gate.valid) {
         showTradeValidationError(
-          validation.error,
+          gate.error,
           getResolvedTokenImage(token as any),
           token.symbol || token.name || "Token",
         );
@@ -1404,7 +1402,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         const baseMint = tokenMint;
         const quoteMint = SOL_MINT_ADDRESS;
 
-        __markId = insertOptimisticMarker({
+        __markId = insertOptimisticMarker({ quoteCurrency,
           mint: baseMint,
           walletAddress:
             walletList?.find((w) => w.isPrimary)?.solanaAddress ??
@@ -1440,6 +1438,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
           walletList: walletList || [],
           walletBalances: walletBalances || {},
           selectedWalletIds: selectedWalletIds?.sol || [],
+          quoteCurrency,
+          walletUsdcBalances: gate.effectiveWalletUsdcBalances,
           onTxHash: ({ txHash }) => {
             if (txHash) {
               const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -1523,6 +1523,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
       walletList,
       walletBalances,
       selectedWalletIds,
+      quoteCurrency,
+      walletUsdcBalances,
+      usdcSplBalance,
+      tokenBalances,
+      solBalance,
     ],
   );
 
@@ -1912,7 +1917,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                       localStorage.setItem("quickBuyAmount", String(n));
                   } catch {}
                 }}
-                aria-label="Quick buy amount in SOL"
+                aria-label={`Quick buy amount in ${quoteCurrency}`}
                 className="w-8 bg-transparent text-xs font-semibold text-white outline-none"
               />
               <span className="text-[10px] font-medium text-[#8A9099]">
@@ -1992,7 +1997,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                       localStorage.setItem("quickBuyAmount", String(n));
                   } catch {}
                 }}
-                aria-label="Quick buy amount in SOL"
+                aria-label={`Quick buy amount in ${quoteCurrency}`}
                 title="Quick buy amount (SOL)"
                 className="w-9 bg-transparent text-sm font-semibold text-white outline-none"
               />

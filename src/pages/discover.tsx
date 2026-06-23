@@ -79,6 +79,7 @@ import {
   executeSolanaMultiBuy,
   buildSolanaWalletAllocations,
 } from "~/utils/solanaWalletAllocation";
+import { quoteAwareBuyGate } from "~/utils/quoteBuyGate";
 import {
   validateSolanaBuy,
   validateMonadBuy,
@@ -383,6 +384,10 @@ export function DiscoverPageContent({
     walletList,
     walletBalances,
     selectedWalletIds,
+    quoteCurrency,
+    walletUsdcBalances,
+    usdcSplBalance,
+    tokenBalances,
   } = useUser();
 
   // Use same React Query hooks as pulse page for independent new pairs data
@@ -2860,35 +2865,32 @@ export function DiscoverPageContent({
     const settings = preset.quickBuySettings;
     const poolType = getPoolTypeFromToken(token);
 
-    // Pre-calculate which wallets will actually be used (have sufficient balance)
-    const { allocations, total } = buildSolanaWalletAllocations({
-      amount: buyAmount,
-      walletList: walletList || [],
-      walletBalances: walletBalances || {},
-      selectedWalletIds: selectedWalletIds?.sol || [],
-      priorityFee: settings.priority || 0.0001,
-      bribe: settings.bribe || 0,
-    });
-    const walletsWithBalance = allocations.length;
-    const isMultiWallet = walletsWithBalance > 1;
-
-    // Pre-validate before showing toast
+    // Pre-validate via the shared currency-aware gate (SOL or USDC).
     const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(
       () => null,
     );
-    const validation = validateSolanaBuy(
-      buyAmount,
-      allocations,
-      walletBalances || {},
-      walletList || [],
-      selectedWalletIds?.sol || [],
-      settings.priority,
-      settings.bribe,
+    const gate = quoteAwareBuyGate({
+      amount: buyAmount,
+      quoteCurrency,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      walletUsdcBalances,
+      usdcSplBalance,
+      tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+      primaryAddress: (walletList || []).find((w: any) => w.isPrimary)
+        ?.solanaAddress,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority,
+      bribe: settings.bribe,
       ataExists,
-    );
-    if (!validation.valid) {
+      solBalance,
+    });
+    const { allocations, total } = gate;
+    const walletsWithBalance = gate.walletsWithBalance;
+    const isMultiWallet = walletsWithBalance > 1;
+    if (!gate.valid) {
       showTradeValidationError(
-        validation.error,
+        gate.error,
         getResolvedTokenImage(token),
         token.symbol || token.name || "Token",
       );
@@ -3023,7 +3025,7 @@ export function DiscoverPageContent({
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
-      __markId = insertOptimisticMarker({
+      __markId = insertOptimisticMarker({ quoteCurrency,
         mint: baseMint,
         walletAddress:
           walletList?.find((w) => w.isPrimary)?.solanaAddress ??
@@ -3059,6 +3061,8 @@ export function DiscoverPageContent({
         walletList: walletList || [],
         walletBalances: walletBalances || {},
         selectedWalletIds: selectedWalletIds?.sol || [],
+        quoteCurrency,
+        walletUsdcBalances: gate.effectiveWalletUsdcBalances,
         onTxHash: ({ txHash }) => {
           if (txHash) {
             const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -3194,35 +3198,32 @@ export function DiscoverPageContent({
     // PumpLive tokens are always Pumpfun type
     const poolType = "Pumpfun" as const;
 
-    // Pre-calculate which wallets will actually be used (have sufficient balance)
-    const { allocations, total } = buildSolanaWalletAllocations({
-      amount: buyAmount,
-      walletList: walletList || [],
-      walletBalances: walletBalances || {},
-      selectedWalletIds: selectedWalletIds?.sol || [],
-      priorityFee: settings.priority || 0.0001,
-      bribe: settings.bribe || 0,
-    });
-    const walletsWithBalance = allocations.length;
-    const isMultiWallet = walletsWithBalance > 1;
-
-    // Pre-validate before showing toast
+    // Pre-validate via the shared currency-aware gate (SOL or USDC).
     const ataExists = await checkAtaExists(token.mint, user?.publicKey).catch(
       () => null,
     );
-    const pumpValidation = validateSolanaBuy(
-      buyAmount,
-      allocations,
-      walletBalances || {},
-      walletList || [],
-      selectedWalletIds?.sol || [],
-      settings.priority,
-      settings.bribe,
+    const gate = quoteAwareBuyGate({
+      amount: buyAmount,
+      quoteCurrency,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      walletUsdcBalances,
+      usdcSplBalance,
+      tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+      primaryAddress: (walletList || []).find((w: any) => w.isPrimary)
+        ?.solanaAddress,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority,
+      bribe: settings.bribe,
       ataExists,
-    );
-    if (!pumpValidation.valid) {
+      solBalance,
+    });
+    const { allocations, total } = gate;
+    const walletsWithBalance = gate.walletsWithBalance;
+    const isMultiWallet = walletsWithBalance > 1;
+    if (!gate.valid) {
       showTradeValidationError(
-        pumpValidation.error,
+        gate.error,
         getResolvedTokenImage(token),
         token.symbol || token.name || "Token",
       );
@@ -3350,7 +3351,7 @@ export function DiscoverPageContent({
       const baseMint = token.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
-      __markId = insertOptimisticMarker({
+      __markId = insertOptimisticMarker({ quoteCurrency,
         mint: baseMint,
         walletAddress:
           walletList?.find((w) => w.isPrimary)?.solanaAddress ??
@@ -3386,6 +3387,8 @@ export function DiscoverPageContent({
         walletList: walletList || [],
         walletBalances: walletBalances || {},
         selectedWalletIds: selectedWalletIds?.sol || [],
+        quoteCurrency,
+        walletUsdcBalances: gate.effectiveWalletUsdcBalances,
         onTxHash: ({ txHash }) => {
           if (txHash) {
             const linkEl = document.getElementById(`link-${uniqueToastId}`);

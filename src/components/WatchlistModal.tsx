@@ -23,6 +23,7 @@ import toast from 'react-hot-toast';
 import { tradeMonadBuy, SOL_MINT_ADDRESS } from '~/utils/api';
 import { executeMonadMultiBuy, formatMonadTxSummary, buildMonadWalletAllocations } from '~/utils/monadWalletAllocation';
 import { executeSolanaMultiBuy, buildSolanaWalletAllocations } from '~/utils/solanaWalletAllocation';
+import { quoteAwareBuyGate } from '~/utils/quoteBuyGate';
 import { getPoolTypeFromToken } from '~/utils/poolTypeDetection';
 import { fetchVerifiedPairAddress } from '~/hooks/useSingleTokenPolling';
 import { validateSolanaBuy, validateMonadBuy, showTradeValidationError } from '~/utils/preTradeValidation';
@@ -352,13 +353,13 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   const [show, setShow] = useState(false);
   const { watchlist, removeFromWatchlist, refreshWatchlistToken } = useWatchlist();
   const router = useRouter();
-  const { user, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds } = useUser();
+  const { user, refreshBalance, chainBalances, walletList, walletBalances, selectedWalletIds, quoteCurrency, walletUsdcBalances, solBalance, usdcSplBalance, tokenBalances } = useUser();
   const { presets, activePreset } = useQuickBuy();
   const hasMonadTokens = useMemo(
     () => watchlist.some((token) => isMonadToken(token)),
     [watchlist]
   );
-  const amountUnit = hasMonadTokens ? 'MON' : 'SOL';
+  const amountUnit = hasMonadTokens ? 'MON' : quoteCurrency;
   const [quickBuyAmount, setQuickBuyAmountState] = useState(getQuickBuyAmount);
   const [customAmountInput, setCustomAmountInput] = useState<string>('');
 
@@ -628,23 +629,28 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       const settings = presets[activePreset].quickBuySettings;
       const poolType = getPoolTypeFromToken(token);
 
-      // Pre-calculate which wallets will actually be used (have sufficient balance)
-      const { allocations, total } = buildSolanaWalletAllocations({
+      // Pre-validate via the shared currency-aware gate (SOL or USDC).
+      const ataExists = await checkAtaExists((token as any).mint, user?.publicKey).catch(() => null);
+      const gate = quoteAwareBuyGate({
         amount: quickBuyAmount,
+        quoteCurrency,
         walletList: walletList || [],
         walletBalances: walletBalances || {},
+        walletUsdcBalances,
+        usdcSplBalance,
+        tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+        primaryAddress: (walletList || []).find((w: any) => w.isPrimary)?.solanaAddress,
         selectedWalletIds: selectedWalletIds?.sol || [],
-        priorityFee: settings.priority || 0.0001,
-        bribe: settings.bribe || 0,
+        priorityFee: settings.priority,
+        bribe: settings.bribe,
+        ataExists,
+        solBalance,
       });
-      const walletsWithBalance = allocations.length;
+      const { allocations, total } = gate;
+      const walletsWithBalance = gate.walletsWithBalance;
       const isMultiWallet = walletsWithBalance > 1;
-
-      // Pre-validate before showing toast
-      const ataExists = await checkAtaExists((token as any).mint, user?.publicKey).catch(() => null);
-      const solValidation = validateSolanaBuy(quickBuyAmount, allocations, walletBalances || {}, walletList || [], selectedWalletIds?.sol || [], settings.priority, settings.bribe, ataExists);
-      if (!solValidation.valid) {
-        showTradeValidationError(solValidation.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
+      if (!gate.valid) {
+        showTradeValidationError(gate.error, getResolvedTokenImage(token as any), token.symbol || token.name || 'Token');
         return;
       }
 
@@ -769,7 +775,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
         const baseMint = tokenMint;
         const quoteMint = SOL_MINT_ADDRESS;
 
-        __markId = insertOptimisticMarker({
+        __markId = insertOptimisticMarker({ quoteCurrency,
           mint: baseMint,
           walletAddress: walletList?.find((w) => w.isPrimary)?.solanaAddress ?? walletList?.[0]?.solanaAddress,
           side: "buy",
@@ -798,6 +804,8 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           walletList: walletList || [],
           walletBalances: walletBalances || {},
           selectedWalletIds: selectedWalletIds?.sol || [],
+          quoteCurrency,
+          walletUsdcBalances: gate.effectiveWalletUsdcBalances,
           onTxHash: ({ txHash }) => {
             if (txHash) {
               const linkEl = document.getElementById(`link-${uniqueToastId}`);
@@ -1140,7 +1148,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                       <HiLightningBolt size={14} style={{ color: '#85d99f' }} />
                       <span>
                         {quickBuyAmount > 0 
-                          ? `Buy ${quickBuyAmount} ${isMonadToken(token) ? 'MON' : 'SOL'}`
+                          ? `Buy ${quickBuyAmount} ${isMonadToken(token) ? 'MON' : quoteCurrency}`
                           : 'Buy'
                         }
                       </span>

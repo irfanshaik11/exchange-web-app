@@ -866,11 +866,13 @@ export default function TradePage() {
         // Compute total_usd so the chart tooltip shows the correct value:
         // amountSol × SOL/USD price, or amountToken × per-token USD price.
         total_usd:
-          p.amountSol && currentSolPriceUsd
-            ? p.amountSol * currentSolPriceUsd
-            : p.amountToken && p.priceUsd
-              ? p.amountToken * p.priceUsd
-              : undefined,
+          p.amountSol && p.quoteCurrency === "USDC"
+            ? p.amountSol
+            : p.amountSol && currentSolPriceUsd
+              ? p.amountSol * currentSolPriceUsd
+              : p.amountToken && p.priceUsd
+                ? p.amountToken * p.priceUsd
+                : undefined,
         __optimistic: true,
         __optimisticId: p.id,
         // createdAt — used by fuzzy-match guard to reject WS trades older

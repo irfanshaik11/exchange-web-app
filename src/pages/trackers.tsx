@@ -84,6 +84,7 @@ import {
   buildSolanaWalletAllocations,
   executeSolanaMultiBuy,
 } from "~/utils/solanaWalletAllocation";
+import { quoteAwareBuyGate } from "~/utils/quoteBuyGate";
 import { getResolvedTokenImage, resolveTokenImage } from "~/utils/images";
 import hotToast from "react-hot-toast";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
@@ -364,7 +365,11 @@ export default function TrackersPage() {
     walletList,
     walletBalances,
     selectedWalletIds,
+    quoteCurrency,
+    walletUsdcBalances,
     refreshBalance,
+    usdcSplBalance,
+    tokenBalances,
   } = useUser();
   const {
     wsConnected,
@@ -1608,33 +1613,32 @@ export default function TrackersPage() {
     const settings = preset.quickBuySettings;
 
     // Pre-validate balance before showing animated toast
-    const { allocations, total } = buildSolanaWalletAllocations({
-      amount: buyAmount,
-      walletList: walletList || [],
-      walletBalances: walletBalances || {},
-      selectedWalletIds: selectedWalletIds?.sol || [],
-      priorityFee: settings.priority || 0.0001,
-      bribe: settings.bribe || 0,
-    });
-    const walletsWithBalance = allocations.length;
-    const isMultiWallet = walletsWithBalance > 1;
     const ataExists = await checkAtaExists(trade.mint, user?.publicKey).catch(
       () => null,
     );
-    const buyValidation = validateSolanaBuy(
-      buyAmount,
-      allocations,
-      walletBalances || {},
-      walletList || [],
-      selectedWalletIds?.sol || [],
-      settings.priority,
-      settings.bribe,
+    const gate = quoteAwareBuyGate({
+      amount: buyAmount,
+      quoteCurrency,
+      walletList: walletList || [],
+      walletBalances: walletBalances || {},
+      walletUsdcBalances,
+      usdcSplBalance,
+      tokenBalancesUsdcSol: (tokenBalances as any)?.USDC?.solana,
+      primaryAddress: (walletList || []).find((w: any) => w.isPrimary)
+        ?.solanaAddress,
+      selectedWalletIds: selectedWalletIds?.sol || [],
+      priorityFee: settings.priority,
+      bribe: settings.bribe,
       ataExists,
-    );
-    if (!buyValidation.valid) {
+      solBalance,
+    });
+    const { allocations, total } = gate;
+    const walletsWithBalance = gate.walletsWithBalance;
+    const isMultiWallet = walletsWithBalance > 1;
+    if (!gate.valid) {
       const token = tokenMetadata.get(trade.mint);
       showTradeValidationError(
-        buyValidation.error,
+        gate.error,
         getResolvedTokenImage(token as any),
         trade.symbol || token?.symbol || "Token",
       );
@@ -1837,7 +1841,7 @@ export default function TrackersPage() {
       const baseMint = trade.mint || "";
       const quoteMint = SOL_MINT_ADDRESS;
 
-      __markId = insertOptimisticMarker({
+      __markId = insertOptimisticMarker({ quoteCurrency,
         mint: baseMint,
         walletAddress:
           walletList?.find((w) => w.isPrimary)?.solanaAddress ??
@@ -1874,6 +1878,8 @@ export default function TrackersPage() {
         walletList: walletList || [],
         walletBalances: walletBalances || {},
         selectedWalletIds: selectedWalletIds?.sol || [],
+        quoteCurrency,
+        walletUsdcBalances: gate.effectiveWalletUsdcBalances,
         onTxHash: ({ txHash }) => {
           if (txHash) {
             const linkEl = document.getElementById(`link-${uniqueToastId}`);

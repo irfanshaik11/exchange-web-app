@@ -10,6 +10,7 @@ import { preloadTradeChart } from "~/utils/preloadTradeChart";
 import { useSolPrice } from "~/components/SolPriceContext";
 import type { TradeEvent } from "~/utils/walletTracking";
 import type { Wallet } from "~/utils/functions";
+import { useUser } from "~/components/UserContext";
 
 // ── Helper functions (shared, formerly duplicated) ──────────────────────
 
@@ -102,6 +103,7 @@ export default function LiveTradesPanel({
 }: LiveTradesPanelProps) {
   const router = useRouter();
   const { solPrice } = useSolPrice();
+  const { quoteCurrency } = useUser();
 
   // Token metadata: fetched per mint from Go service
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(
@@ -570,7 +572,7 @@ export default function LiveTradesPanel({
                       }}
                     >
                       <HiLightningBolt className="h-3.5 w-3.5" style={{ color: "inherit" }} />
-                      <span>{quickBuyAmount} SOL</span>
+                      <span>{quickBuyAmount} {quoteCurrency}</span>
                     </button>
                   </div>
                 </td>

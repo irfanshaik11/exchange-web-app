@@ -7,6 +7,7 @@ import {
   dispatchOptimisticRollback,
   newTradeId,
 } from "./optimisticBalance";
+import { QUOTE_MIN_TRADE, type QuoteCurrency } from "./quoteCurrency";
 
 type WalletListItem = {
   id: string;
@@ -27,10 +28,22 @@ export type SolanaWalletAllocation = {
 type AllocationInput = {
   amount: number;
   walletList?: WalletListItem[];
+  /**
+   * Per-wallet balances **in the same currency as `amount`**. Callers should
+   * pass SOL balances for SOL trades, USDC balances for USDC trades.
+   * The function itself is currency-agnostic — the safety buffer is the only
+   * SOL-specific piece, and it's bypassed for non-SOL currencies.
+   */
   walletBalances?: Record<string, number>;
   selectedWalletIds?: string[];
   priorityFee?: number;
   bribe?: number;
+  /**
+   * Currency being spent. Affects safety-buffer logic — SOL trades reserve
+   * `priorityFee + bribe + 0.0001` from the wallet balance for gas, while
+   * USDC trades don't (gas is paid in SOL out-of-band).
+   */
+  quoteCurrency?: QuoteCurrency;
 };
 
 const getSolanaAddress = (wallet: WalletListItem): string | undefined => {
@@ -52,9 +65,12 @@ export function buildSolanaWalletAllocations({
   selectedWalletIds = [],
   priorityFee = 0.0001,
   bribe = 0,
+  quoteCurrency = "SOL",
 }: AllocationInput): { allocations: SolanaWalletAllocation[]; total: number } {
   const amountValue = Math.max(Number(amount) || 0, 0);
-  const MIN_TRADE_AMOUNT = 0.0001;
+  // Per-currency minimum. SOL minimum covers fees; USDC has its own dust minimum.
+  const MIN_TRADE_AMOUNT =
+    quoteCurrency === "SOL" ? 0.0001 : QUOTE_MIN_TRADE[quoteCurrency];
   if (amountValue < MIN_TRADE_AMOUNT) {
     return { allocations: [], total: 0 };
   }
@@ -89,9 +105,12 @@ export function buildSolanaWalletAllocations({
   let workingWallets = [...chosenWallets];
   let allocations: SolanaWalletAllocation[] = [];
 
-  // Safety buffer for gas fees and transaction costs
-  // Solana: ~0.001 SOL for priority fee + network fee + bribe
-  const SAFETY_BUFFER = priorityFee + bribe + 0.0001; // network fee estimate
+  // Safety buffer for gas fees and transaction costs.
+  // SOL trades: priorityFee + bribe + ~0.0001 network fee, all denominated in SOL.
+  // USDC trades: zero buffer in the quote currency — gas is paid in SOL separately,
+  //              so a wallet only needs `amount` USDC to qualify for allocation.
+  const SAFETY_BUFFER =
+    quoteCurrency === "SOL" ? priorityFee + bribe + 0.0001 : 0;
   const requiredBalanceFull = amountValue + SAFETY_BUFFER;
 
   // Build candidate list with normalized balance knowledge
@@ -325,7 +344,14 @@ type MultiBuyParams = {
   poolAddress?: string;
   baseMint: string;
   quoteMint: string;
+  /**
+   * Amount to spend, in UI units of `quoteCurrency`. Name kept as `amountSOL`
+   * for caller back-compat — value is interpreted via `quoteCurrency`
+   * (SOL = SOL units, USDC = USDC units).
+   */
   amountSOL: number;
+  /** Currency the user is spending. Default 'SOL'. */
+  quoteCurrency?: QuoteCurrency;
   poolType?: "PumpAmm" | "Raydium" | "Raydium CPMM" | "Raydium CLMM" | "Raydium Launchpad" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "Meteora" | "bags" | "MoonShoot" | "Orca" | "";
   originalPairAddress?: string;
   slippage?: number;
@@ -341,6 +367,12 @@ type MultiBuyParams = {
   authToken: string;
   walletList?: WalletListItem[];
   walletBalances?: Record<string, number>;
+  /**
+   * Per-wallet USDC balances. Required when `quoteCurrency === 'USDC'` so the
+   * wallet split picks wallets with USDC inventory. Optional otherwise; an
+   * empty map (the default) leaves the SOL path completely unaffected.
+   */
+  walletUsdcBalances?: Record<string, number>;
   selectedWalletIds?: string[];
   onWalletStart?: (ctx: {
     allocation: SolanaWalletAllocation;
@@ -375,6 +407,7 @@ export async function executeSolanaMultiBuy({
   baseMint,
   quoteMint,
   amountSOL,
+  quoteCurrency = "SOL",
   poolType,
   originalPairAddress,
   slippage,
@@ -390,15 +423,20 @@ export async function executeSolanaMultiBuy({
   authToken,
   walletList = [],
   walletBalances = {},
+  walletUsdcBalances = {},
   selectedWalletIds = [],
   onWalletStart,
   onWalletSuccess,
   onWalletError,
   onTxHash,
 }: MultiBuyParams) {
-  const MIN_TRADE_AMOUNT = 0.0001;
+  // Per-currency minimum trade. SOL minimum covers fees; USDC has its own dust minimum.
+  const MIN_TRADE_AMOUNT =
+    quoteCurrency === "SOL" ? 0.0001 : QUOTE_MIN_TRADE[quoteCurrency];
   if (amountSOL < MIN_TRADE_AMOUNT) {
-    throw new Error(`Trade amount must be at least ${MIN_TRADE_AMOUNT} SOL`);
+    throw new Error(
+      `Trade amount must be at least ${MIN_TRADE_AMOUNT} ${quoteCurrency}`
+    );
   }
 
   // Normalize slippage: settings store decimals (0.2 = 20%), backend expects percentage
@@ -407,25 +445,36 @@ export async function executeSolanaMultiBuy({
       ? slippage * 100
       : slippage;
 
+  // For USDC trades, the wallet split must look at USDC balances (not SOL).
+  // The function name still says "Sol" because every existing caller uses SOL —
+  // we feed it the right balance map per currency. Default empty USDC map keeps
+  // the SOL path byte-identical.
+  const balancesForAllocation =
+    quoteCurrency === "SOL" ? walletBalances : walletUsdcBalances;
   const { allocations, total } = buildSolanaWalletAllocations({
     amount: amountSOL,
     walletList,
-    walletBalances,
+    walletBalances: balancesForAllocation,
     selectedWalletIds,
     priorityFee,
     bribe,
+    quoteCurrency,
   });
 
   // Optimistic header balance — dispatch per-wallet debits now so the UI
   // reflects the click before the backend responds. queueMicrotask defers
   // the dispatch off the sync trade path; the POST proceeds at native speed.
+  //
+  // For USDC trades we skip the optimistic SOL debit entirely; the header
+  // SOL balance is untouched (gas dust is too small to matter at header-display
+  // resolution), so this leaves the optimistic SOL ledger unaffected.
   const __optimisticTradeId = newTradeId();
   let __optimisticDispatched = false;
   const __rollbackOptimistic = () => {
     if (!__optimisticDispatched) return;
     queueMicrotask(() => dispatchOptimisticRollback(__optimisticTradeId));
   };
-  if (allocations.length > 0) {
+  if (allocations.length > 0 && quoteCurrency === "SOL") {
     // Lean estimate: per-wallet swap amount + bribe only. Priority fee
     // actual deduction is typically a small fraction of the ceiling,
     // and ATA rent (~0.002 SOL) only applies on first buy of a token.
@@ -468,6 +517,7 @@ export async function executeSolanaMultiBuy({
           baseMint,
           quoteMint,
           amount: amountSOL,
+          quoteCurrency,
           poolType,
           originalPairAddress,
           slippage: normalizedSlippage,
@@ -558,7 +608,11 @@ export async function executeSolanaMultiBuy({
   // Validate balance ONLY for sequential mode (single wallet or fallback)
   if (allocations.length === 0) {
     __rollbackOptimistic();
-    throw new Error('Insufficient balance — no selected wallets have enough SOL for this trade amount and fees');
+    throw new Error(
+      quoteCurrency === "SOL"
+        ? 'Insufficient balance — no selected wallets have enough SOL for this trade amount and fees'
+        : `Insufficient balance — no selected wallets have enough ${quoteCurrency} for this trade amount`
+    );
   }
 
   const allocationsToUse =
@@ -595,6 +649,7 @@ export async function executeSolanaMultiBuy({
           baseMint,
           quoteMint,
           amount: allocation.amount,
+          quoteCurrency,
           walletId: allocation.walletId,
           poolType,
           originalPairAddress,
@@ -640,6 +695,7 @@ export async function executeSolanaMultiBuy({
                 baseMint,
                 quoteMint,
                 amount: allocation.amount,
+                quoteCurrency,
                 walletId: allocation.walletId,
                 poolType: retryWith.poolType,
                 originalPairAddress,
