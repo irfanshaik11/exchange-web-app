@@ -532,23 +532,28 @@ function ReferralTracker() {
 
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
+  const router = useRouter();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  
+
+  // Pages that should be viewable without logging in
+  const publicPages = ["/landing"];
+  const isPublicPage = publicPages.includes(router.pathname);
+
   // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
     setIsMounted(true);
   }, []);
-  
+
   useEffect(() => {
     if (!isMounted) return;
-    if (enforceLogin && !userLoading && !user) {
+    if (enforceLogin && !userLoading && !user && !isPublicPage) {
       setLoginOpen(true);
     }
-    if (user && loginOpen) {
+    if ((user || isPublicPage) && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
+  }, [user, userLoading, enforceLogin, loginOpen, isMounted, isPublicPage]);
   
   // Prevent closing if not logged in
   const handleLoginClose = () => {

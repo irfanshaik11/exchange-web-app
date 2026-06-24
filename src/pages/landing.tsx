@@ -26,7 +26,7 @@ export default function Landing() {
               priority
             />
           </Link>
-          <Link href="/" className="landing-cta-sm">
+          <Link href="/pulse" className="landing-cta-sm">
             Start trading <FaArrowRight className="landing-cta-arrow" />
           </Link>
         </nav>
@@ -71,7 +71,7 @@ export default function Landing() {
             </span>
           </div>
 
-          <Link href="/" className="landing-cta-lg">
+          <Link href="/pulse" className="landing-cta-lg">
             Start trading <FaArrowRight className="landing-cta-arrow" />
           </Link>
         </section>

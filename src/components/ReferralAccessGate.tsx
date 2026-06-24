@@ -161,7 +161,7 @@ export function ReferralAccessGate({
   const silentProcessingAttemptedRef = useRef(false);
 
   // Public routes that should never be gated by referral access
-  const isPublicRoute = router.pathname === "/learn" || router.pathname === "/support";
+  const isPublicRoute = router.pathname === "/learn" || router.pathname === "/support" || router.pathname === "/landing";
 
   const requireReferralAccess = isPublicRoute
     ? false

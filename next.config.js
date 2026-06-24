@@ -234,7 +234,7 @@ const config = {
     return [
       {
         source: "/",
-        destination: "/pulse?chain=sol",
+        destination: "/landing",
         permanent: false,
       },
       {
