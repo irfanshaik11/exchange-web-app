@@ -13,21 +13,20 @@ import LandingFooter from '~/components/layout/footer/LandingFooter';
 
 const testimonials = [
   { id: "2032596038352252962" },
-  { id: "2066467204070293555" },
-  { id: "2066802889452872170" },
   { id: "2067885952081834364" },
   { id: "2067921762197868814" },
-  { id: "2066802889452872170" },
-  { id: "2066802889452872170" },
+  { id: "2066467204070293555" },
+  { id: "2029347157057085809" },
+  { id: "1900579320977850626" },
+  { id: "2067207103043817897" },
   { id: "2066802889452872170" },
 ];
 
 const press = [
-  // Heights tuned per logo so all three read at a similar letter size: the ultra-wide
-  // "Business Insider" wordmark is kept shortest, the compact stacked "USA Today" tallest.
-  { name: "Apple News",       src: "/static/icons/brand_logos/apple-news.webp",       h: "h-6 lg:h-8",  href: "#" },
-  { name: "Business Insider", src: "/static/icons/brand_logos/buisness-insider.webp", h: "h-4 lg:h-6",  href: "#" },
-  { name: "USA Today",        src: "/static/icons/brand_logos/usa-today.webp",        h: "h-9 lg:h-12", href: "#" },
+  // All logos render at the same height (set on the link below).
+  { name: "Apple News", src: "/static/icons/brand_logos/apple-news.webp", href: "#" },
+  { name: "Business Insider", src: "/static/icons/brand_logos/business-insider.webp", href: "#" },
+  { name: "USA Today", src: "/static/icons/brand_logos/usa-today.webp", href: "#" },
 ];
 
 // Cap how many testimonial cards show at each grid width so rows stay balanced:
@@ -61,26 +60,117 @@ function Logo({ size = 22 }: { size?: number }) {
   );
 }
 
+// OHLC candles (arbitrary price units): tight consolidation then a sharp
+// breakout → renders as a mini candlestick chart inside the "See it" card.
+const WIF_CANDLES = [
+  { o: 50, c: 49, h: 52, l: 48 },
+  { o: 49, c: 51, h: 53, l: 47 },
+  { o: 51, c: 50, h: 53, l: 49 },
+  { o: 50, c: 48, h: 52, l: 47 },
+  { o: 48, c: 51, h: 52, l: 46 },
+  { o: 51, c: 49, h: 53, l: 48 },
+  { o: 49, c: 52, h: 54, l: 48 },
+  { o: 52, c: 50, h: 54, l: 49 },
+  { o: 50, c: 53, h: 55, l: 49 },
+  { o: 53, c: 58, h: 60, l: 52 },
+  { o: 58, c: 66, h: 68, l: 57 },
+  { o: 66, c: 63, h: 69, l: 62 },
+  { o: 63, c: 74, h: 76, l: 62 },
+  { o: 74, c: 82, h: 85, l: 73 },
+  { o: 82, c: 79, h: 88, l: 78 },
+  { o: 79, c: 90, h: 93, l: 78 },
+];
+
 function MiniTrading() {
+  const W = 328;
+  const H = 152;
+  const pad = 14;
+  const slot = W / WIF_CANDLES.length;
+  const bodyW = slot * 0.52;
+  const minV = Math.min(...WIF_CANDLES.map((d) => d.l));
+  const maxV = Math.max(...WIF_CANDLES.map((d) => d.h));
+  const yOf = (v: number) => pad + ((maxV - v) / (maxV - minV)) * (H - pad * 2);
+  const xOf = (i: number) => i * slot + slot / 2;
+  const UP = "#18c48c";
+  const DOWN = "#f0616d";
+  const lastY = yOf(WIF_CANDLES[WIF_CANDLES.length - 1].c);
+
   return (
-    <div className="p-3 h-full flex flex-col">
-      <div className="flex items-center justify-between text-[11px] text-[#8a8a93] mb-2">
-        <Logo size={12} />
-        <span className="inline-flex items-center gap-1.5 text-[#ededf0]">
-          <i className="w-3 h-3 rounded-full inline-block" style={{ background: "#e8b98a" }} />
-          WIF
+    <div className="flex h-full flex-col p-4">
+      {/* header */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2.5">
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold text-[#231706]"
+            style={{ background: "#e8b98a" }}
+          >
+            WIF
+          </span>
+          <div className="leading-tight">
+            <div className="text-[13px] font-semibold text-[#ededf0]">
+              WIF<span className="text-[#5f5f68]">/USD</span>
+            </div>
+            <div className="text-[11px] text-[#8a8a93]">dogwifhat</div>
+          </div>
+        </div>
+        <div className="text-right leading-tight">
+          <div className="text-[15px] font-semibold text-[#ededf0]">$1.8420</div>
+          <div className="text-[11px] font-semibold text-[#18c48c]">▲ 5.12%</div>
+        </div>
+      </div>
+
+      {/* candlestick chart */}
+      <div className="relative mt-3 flex-1">
+        <div className="pointer-events-none absolute bottom-1.5 left-0.5 opacity-[0.06]">
+          <Logo size={12} />
+        </div>
+        <svg className="h-full w-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+          {/* faint horizontal grid */}
+          {[0, 1, 2, 3].map((i) => {
+            const gy = pad + (i / 3) * (H - pad * 2);
+            return <line key={i} x1="0" y1={gy} x2={W} y2={gy} stroke="#ffffff" strokeOpacity="0.045" strokeWidth="1" />;
+          })}
+          {/* candles */}
+          {WIF_CANDLES.map((d, i) => {
+            const color = d.c >= d.o ? UP : DOWN;
+            const cx = xOf(i);
+            const top = yOf(Math.max(d.o, d.c));
+            const bottom = yOf(Math.min(d.o, d.c));
+            return (
+              <g key={i}>
+                <line x1={cx} y1={yOf(d.h)} x2={cx} y2={yOf(d.l)} stroke={color} strokeWidth="1.1" />
+                <rect x={cx - bodyW / 2} y={top} width={bodyW} height={Math.max(bottom - top, 1.5)} rx="1.2" fill={color} />
+              </g>
+            );
+          })}
+          {/* current price line */}
+          <line x1="0" y1={lastY} x2={W} y2={lastY} stroke={UP} strokeWidth="1" strokeDasharray="2 3" strokeOpacity="0.7" />
+        </svg>
+        {/* current price tag */}
+        <div
+          className="absolute right-0 -translate-y-1/2 rounded bg-[#18c48c] px-1.5 py-[3px] text-[10px] font-bold text-[#04130d]"
+          style={{ top: `${(lastY / H) * 100}%` }}
+        >
+          1.8420
+        </div>
+      </div>
+
+      {/* timeframe row */}
+      <div className="mt-3 flex items-center gap-1">
+        {["1m", "5m", "15m", "1H", "4H"].map((t, i) => (
+          <span
+            key={t}
+            className={`rounded-md px-2 py-1 text-[10px] font-medium ${i === 1 ? "bg-white/[0.08] text-[#ededf0]" : "text-[#5f5f68]"
+              }`}
+          >
+            {t}
+          </span>
+        ))}
+        <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-medium text-[#8a8a93]">
+          <i className="h-1.5 w-1.5 rounded-full bg-[#18c48c]" />
+          Live
         </span>
       </div>
-      <svg className="flex-1 w-full" viewBox="0 0 300 130" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="mini1" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#18c48c" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#18c48c" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d="M0,100 L30,92 L60,96 L90,72 L120,80 L150,56 L180,64 L210,40 L240,48 L270,28 L300,34" stroke="#18c48c" strokeWidth="1.6" fill="none" />
-        <path d="M0,100 L30,92 L60,96 L90,72 L120,80 L150,56 L180,64 L210,40 L240,48 L270,28 L300,34 L300,130 L0,130 Z" fill="url(#mini1)" />
-      </svg>
     </div>
   );
 }
@@ -121,7 +211,7 @@ function MiniAssetList() {
 
 function MiniOrder() {
   return (
-    <div className="relative w-[200px] bg-[#0c0e12] border border-white/[0.12] rounded-[22px] pb-3.5 shadow-[0_24px_50px_rgba(0,0,0,0.5)] overflow-hidden">
+    <div className="relative w-full bg-[#0c0e12] border border-white/[0.12] rounded-[22px] pb-3.5 shadow-[0_24px_50px_rgba(0,0,0,0.5)] overflow-hidden">
       <div className="w-14 h-[5px] rounded-full bg-white/[0.14] mx-auto mt-2.5" />
       <div className="flex items-center justify-between px-3.5 pt-3 pb-1.5 text-[13px] text-[#ededf0]">
         <span className="inline-flex items-center gap-1.5">
@@ -205,7 +295,7 @@ export default function Landing() {
                 The Fastest Trading.
               </h1>
               <p className="lg:text-[22px] text-[#EAEDFF] text-center lg:leading-6 tracking-tight">
-                Trade 500+ markets, from DOGECOIN and TRUMP to GOLD to FX and stocks, in seconds.
+                Trade Memecoins, Trending and Newly Launched tokens At Light speed. Discover Prediction Markets, Perps and More.
               </p>
             </div>
             <div className="flex gap-2 lg:hidden w-full justify-center px-8">
@@ -294,7 +384,7 @@ export default function Landing() {
               <div className="bg-[#0b0c0f] border border-white/5 rounded-2xl overflow-hidden min-h-[360px] relative">
                 <MiniAssetList />
               </div>
-              <div className="bg-transparent border-0 rounded-2xl overflow-hidden min-h-[360px] relative flex items-center justify-center">
+              <div className="bg-transparent border-0 rounded-2xl overflow-hidden relative flex items-center justify-center">
                 <MiniOrder />
               </div>
             </div>
@@ -326,19 +416,19 @@ export default function Landing() {
           </div>
 
           {/* Press / as seen in */}
-          <div className="border-t border-white/5 py-4 md:py-4">
-            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 sm:gap-x-14 lg:gap-x-20">
-              <p className="shrink-0 text-lg font-medium uppercase tracking-[0.2em] text-white/40 lg:text-xl">
+          <div className="border-t border-white/5 py-6 md:py-4">
+            <div className="flex flex-col items-center gap-y-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-10 sm:gap-y-6 lg:gap-x-14">
+              <p className="shrink-0 font-medium uppercase leading-none tracking-[0.2em] text-white/40 text-xs sm:text-xl lg:text-2xl">
                 As seen in
               </p>
-              <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-7 sm:gap-x-14 lg:gap-x-20">
+              <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-6 sm:gap-x-10 lg:gap-x-14">
                 {press.map((p) => (
                   <a
                     key={p.name}
                     href={p.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex items-center justify-center transition-opacity hover:opacity-70 ${p.h}`}
+                    className="flex h-7 items-center justify-center transition-opacity hover:opacity-70 lg:h-9"
                   >
                     <img
                       src={p.src}
