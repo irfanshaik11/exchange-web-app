@@ -93,7 +93,7 @@ export default function Home() {
     tokenBalances,
   } = useUser();
 
-  // Redirect based on auth state: logged in → /pulse, not logged in → /learn
+  // Redirect based on auth state: logged in → /pulse, not logged in → /landing
   useEffect(() => {
     if (!router.isReady || userLoading) return;
     if (router.pathname !== "/" || router.query.search || router.query.chain)
@@ -111,8 +111,8 @@ export default function Home() {
         shallow: false,
       });
     } else {
-      // Not logged in: go to learn page
-      router.replace("/learn", undefined, { shallow: false });
+      // Not logged in: go to landing page
+      router.replace("/landing", undefined, { shallow: false });
     }
   }, [
     router.isReady,

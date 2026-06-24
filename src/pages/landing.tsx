@@ -257,8 +257,22 @@ export default function Landing() {
         />
       </Head>
 
-      <main className="min-h-screen w-full bg-[#000] text-zinc-100">
-        <LandingHeader />
+      <div className="landing-root">
+        {/* Nav */}
+        <nav className="landing-nav">
+          <Link href="/" className="landing-logo-link">
+            <Image
+              src="/interstate-logo.png"
+              alt="Interstate"
+              width={130}
+              height={28}
+              priority
+            />
+          </Link>
+          <Link href="/pulse" className="landing-cta-sm">
+            Start trading <FaArrowRight className="landing-cta-arrow" />
+          </Link>
+        </nav>
 
         {/* Hero */}
         <section className='relative flex flex-col items-center justify-center flex-1 h-screen w-full overflow-hidden bg-[#000]'>
@@ -327,6 +341,10 @@ export default function Landing() {
             <div className="pointer-events-none absolute right-0 top-0 z-20 h-full w-5 sm:w-10 lg:w-16 bg-gradient-to-l from-black via-black/80 to-transparent" />
             <SimpleMarquee forceWhite={true} />
           </div>
+
+          <Link href="/pulse" className="landing-cta-lg">
+            Start trading <FaArrowRight className="landing-cta-arrow" />
+          </Link>
         </section>
 
         {/* Content sections */}
