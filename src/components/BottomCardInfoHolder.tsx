@@ -114,8 +114,15 @@ const BottomCardHolderInfo: React.FC<BottomCardInfoHolderProps> = ({
 
   // Determine the color to use - prioritize explicit iconColor, then risk colors, then legacy green/red
   const color = iconColor || riskColors.text || (green ? "#31e3ac" : "#f26681");
-  const bgColor = "#101114";
-  const borderColor = useRiskColors && !iconColor ? riskColors.border : "#27282e";
+  const bgColor =
+    useRiskColors && riskLevel !== "neutral"
+      ? riskColors.bg
+      : "rgba(255,255,255,0.03)";
+  const borderColor = iconColor
+    ? "rgba(255,255,255,0.08)"
+    : useRiskColors && riskLevel !== "neutral"
+      ? riskColors.border
+      : "rgba(255,255,255,0.07)";
 
   // Update tooltip position when shown
   useEffect(() => {
@@ -187,16 +194,16 @@ const BottomCardHolderInfo: React.FC<BottomCardInfoHolderProps> = ({
       onMouseLeave={() => setShowTooltip(false)}
     >
       <span
-        className="number-font flex flex-shrink-0 cursor-help items-center justify-center gap-1 rounded border px-2 py-1"
+        className="number-font flex flex-shrink-0 cursor-help items-center justify-center gap-1 rounded-md border px-1.5"
         style={{
           color: color,
-          fontSize: "11px",
-          fontWeight: "500",
+          fontSize: "10.5px",
+          fontWeight: "600",
           borderColor: borderColor,
           backgroundColor: bgColor,
           whiteSpace: "nowrap",
-          minWidth: "62px",
-          height: "24px",
+          minWidth: "0",
+          height: "22px",
         }}
       >
         <span className="flex h-[13px] w-[13px] items-center justify-center">

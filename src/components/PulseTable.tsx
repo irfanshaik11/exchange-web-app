@@ -3708,7 +3708,7 @@ function PulseTable({
     connected: directConnected,
   } = usePulseFromQueryCache({ channel });
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ══════════════════��════════════════════════════════════════════════════════
   // REMOVED: wsTokens sync effect - was causing progressive latency!
   // The effect was calling setWsTokens() on every WebSocket message, creating
   // duplicate state updates. Now we use directNewTokens/directFinalStretchTokens/
@@ -9163,8 +9163,16 @@ function PulseTable({
                       className="token-row group relative flex w-full max-w-full shrink-0 cursor-pointer flex-row items-start gap-2 rounded-lg px-2 py-1.5 text-sm"
                       style={{
                         color: AX.text,
-                        backgroundColor: "#13151b",
                         height: '100%',
+                        ["--row-accent" as any]: title
+                          .toLowerCase()
+                          .includes("migrated")
+                          ? AX.bnbGold
+                          : title.toLowerCase().includes("final") ||
+                              title.toLowerCase().includes("stretch") ||
+                              title.toLowerCase().includes("almost bonded")
+                            ? AX.warning
+                            : AX.mint,
                       }}
                       onMouseEnter={(e) => {
                         // PHASE 3: Use CSS class instead of inline style (GPU-accelerated)

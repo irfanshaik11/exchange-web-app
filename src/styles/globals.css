@@ -439,23 +439,45 @@ input[type="number"] {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .token-row {
-  background-color: transparent;
-  border: none !important;
-  border-radius: var(--radius-md);
+  background-color: #101218;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 10px;
   margin-bottom: 0;
-  transition: background-color 100ms ease-out !important;
+  transition: border-color 130ms ease-out, transform 130ms ease-out,
+    box-shadow 130ms ease-out, background-color 130ms ease-out !important;
   max-width: 100%;
   width: 100%;
   overflow: visible;
   box-sizing: border-box;
+  position: relative;
 }
 
-.token-row.row-hovered {
-  background-color: var(--bg-hover) !important;
+/* Colored left accent bar (color set per-column via --row-accent) */
+.token-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--row-accent, transparent);
+  opacity: 0.8;
+  transition: opacity 130ms ease-out;
+  pointer-events: none;
 }
 
+.token-row.row-hovered,
 .token-row:hover {
-  background: linear-gradient(90deg, transparent 0%, var(--accent-primary-glow) 50%, transparent 100%);
+  background-color: #151822 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.token-row.row-hovered::before,
+.token-row:hover::before {
+  opacity: 1;
 }
 
 /* Status popup visibility */
@@ -472,7 +494,7 @@ input[type="number"] {
 
 /* ═══════════════════════════════════════════════════════════════════════════
    INTERSTATE OVERLAY/POPOUT STYLES
-   ══════════════════════════════════════════════════════════════════════��════ */
+   ══════════════════��═══════════════════════════════════════════════════��════ */
 
 .interstate-overlay {
   position: fixed;
